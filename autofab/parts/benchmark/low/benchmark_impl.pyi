@@ -65,6 +65,7 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
         antigravity_dispatch: str = "message",
         baseline: bool = False,
         pretense: bool = False,
+        method: Optional[str] = None,
     ) -> benchmark.FlightRecord:
         """Executes a benchmark flight for a designated model and unit.
 
@@ -79,9 +80,11 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
         - MUST execute the flight under the requested harness or simulation mode.
         - WHEN baseline is True and harness is 'loop', MUST raise ValueError rejecting loop harness.
         - WHEN baseline is True, MUST record exactly one execution round under baseline role.
-        - WHEN baseline is True, MUST route execution through the unified Autofab clean orchestrator targeting the fused role (pretense_baseline or baseline) and record methodology accordingly.
+        - WHEN baseline is True, MUST route execution through the unified Autofab clean orchestrator targeting the fused role (combined_baseline, pretense_baseline, or baseline) and record methodology accordingly.
         - WHEN pretense is True, MUST execute synthesis and verification using Pretense state machines, fakes, and property fuzzing.
         - WHEN baseline is True and pretense is True, MUST evaluate verification gates with pretense and record methodology as pretense_baseline.
+        - WHEN method is 'combined' (or when combined is requested), MUST execute synthesis and verification using both standard unit testing and Pretense fuzzing, evaluate composite verification gates, and record methodology as combined (or combined_baseline when baseline is True).
+        - WHEN baseline is True and method is 'combined', MUST evaluate composite verification gates and record methodology as combined_baseline.
         - WHEN harness is not 'antigravity', MUST announce headless coordination initiation banner and stream real-time execution progress to standard output.
         - WHEN harness is 'antigravity' and ANTIGRAVITY_AGENT is not present in the environment, MUST raise ValueError rejecting execution.
         - MUST harvest telemetry and evaluate verification gates.
@@ -222,7 +225,7 @@ def __orphan__() -> None:
     - MUST provide benchmark evaluation suites categorized by suite identifiers derived from benchmark part directories.
     - MUST harvest empirical measurements including token counts, step latencies, and role execution rounds from runner log files and transcripts, distinguishing coordinator and baseline developer subagent transcripts from individual role worker transcripts and parent caller sessions.
     - MUST tally role execution rounds exclusively across target role workers based on worker dispatch waves while excluding coordinator sessions from role rounds.
-    - MUST provision a concise sequential ephemeral flight scope directory (e.g. benchmark_1), rewrite copied benchmark imports, disallow bare parts imports, mark specifications clean up to specification QA, and copy scope methodology configuration.
+    - MUST provision a concise sequential ephemeral flight scope directory (e.g. benchmark_1), explicitly configure methodology pipeline as pretense, combined, or standard, rewrite copied benchmark imports, disallow bare parts imports, mark specifications clean up to specification QA, and copy scope methodology configuration.
     - WHEN an evaluated flight scope index does not exist in the repository root, MUST purge any orphaned role workspaces matching that index to permit sequential reuse.
     - MUST clean up orphaned flight scope directories and associated role workspaces from prior flights.
     - MUST tear down the ephemeral flight scope directory and associated provisioned role workspaces upon flight completion, deleting them for successful flights and preserving the flight scope directory as <flight_scope>.failed along with associated role workspaces under <flight_scope>.failed/<role_workspaces> (derived from the active role workspaces container) on failure.
@@ -232,7 +235,7 @@ def __orphan__() -> None:
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-19T18:45:00Z
-# LAST_CHANGED: 2026-11-03T09:10:00Z
-# CHANGE: Remove pretense2 benchmark evaluation pipeline
+# LAST_CHANGED: 2026-11-04T11:30:00Z
+# CHANGE: Support --method combined, pretense, standard and combined_baseline fused role
 # SPEC_QA_AUDIT: 2026-10-19T19:35:00Z
 # --- END CLEANROOM METADATA ---

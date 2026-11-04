@@ -123,6 +123,7 @@ class BenchmarkEvaluator(Singleton[SystemTier], Protocol):
         antigravity_dispatch: str = "message",
         baseline: bool = False,
         pretense: bool = False,
+        method: Optional[str] = None,
     ) -> FlightRecord:
         """Executes a benchmark flight for a designated model and unit.
 
@@ -133,6 +134,8 @@ class BenchmarkEvaluator(Singleton[SystemTier], Protocol):
         - WHEN baseline is True, MUST record exactly one execution round under baseline role.
         - WHEN pretense is True, MUST execute synthesis and verification using Pretense state machines, fakes, and property fuzzing.
         - WHEN baseline is True and pretense is True, MUST provision pretense/ and guides/pretense.md, scaffold starter pretense suite, instruct the agent to author pretense state machine/fakes/fuzz tests, evaluate verification gates with pretense, and record methodology as pretense_baseline.
+        - WHEN method is 'combined' (or when combined is requested), MUST execute synthesis and verification using both standard unit testing and Pretense fuzzing, evaluate composite verification gates, and record methodology as combined (or combined_baseline when baseline is True).
+        - WHEN baseline is True and method is 'combined', MUST route execution through the unified Autofab clean orchestrator targeting the fused role combined_baseline, evaluate composite verification gates, and record methodology as combined_baseline.
         - MUST harvest telemetry and evaluate verification gates.
         - MUST return a flight record with complete empirical measurements.
         """
@@ -218,7 +221,7 @@ class BenchmarkEvaluator(Singleton[SystemTier], Protocol):
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-19T18:45:00Z
-# LAST_CHANGED: 2026-11-03T09:10:00Z
-# CHANGE: Remove pretense2 benchmark evaluation pipeline
+# LAST_CHANGED: 2026-11-04T11:30:00Z
+# CHANGE: Support --method combined, pretense, standard and combined_baseline fused role
 # SPEC_QA_AUDIT: 2026-10-19T18:45:00Z
 # --- END CLEANROOM METADATA ---

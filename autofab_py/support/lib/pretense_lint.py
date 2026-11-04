@@ -1568,6 +1568,110 @@ def _default_arg_val(arg_name: str, arg_type: str = "") -> str:
     return _default_domain_arg(arg_name, arg_type)
 
 
+def _discover_package_initializers(
+    pyi_path: str,
+    lib_dir: str | None = None,
+    impl_path: str | None = None,
+    impl_stem: str = "",
+    has_singleton: bool = False,
+) -> list[str]:
+    """Inspects target unit directory (pyi_path / lib_dir) for all sibling modules defining __initialize__."""
+    dirs_to_check: list[str] = []
+    if lib_dir and os.path.isdir(lib_dir):
+        cand = os.path.abspath(lib_dir)
+        if cand not in dirs_to_check:
+            dirs_to_check.append(cand)
+    if impl_path and os.path.isfile(impl_path):
+        cand = os.path.dirname(os.path.abspath(impl_path))
+        if cand not in dirs_to_check and os.path.isdir(cand):
+            dirs_to_check.append(cand)
+    if pyi_path and os.path.isfile(pyi_path):
+        pyi_dir = os.path.dirname(os.path.abspath(pyi_path))
+        if pyi_dir not in dirs_to_check and os.path.isdir(pyi_dir):
+            dirs_to_check.append(pyi_dir)
+        if os.path.basename(pyi_dir) == "low":
+            sibling_lib = os.path.join(os.path.dirname(pyi_dir), "lib")
+            if sibling_lib not in dirs_to_check and os.path.isdir(sibling_lib):
+                dirs_to_check.append(sibling_lib)
+
+    stems_with_init: set[str] = set()
+    if has_singleton and impl_stem:
+        stems_with_init.add(impl_stem)
+
+    for d in dirs_to_check:
+        try:
+            for entry in os.listdir(d):
+                if entry.startswith((".", "_")) or entry == "__init__.py":
+                    continue
+                if not (entry.endswith(".py") or entry.endswith(".pyi")):
+                    continue
+                m_stem = entry[:-3] if entry.endswith(".py") else entry[:-4]
+                if m_stem.startswith("_") or m_stem.endswith(("_test", "_pretense", "_ext")):
+                    continue
+                file_full = os.path.join(d, entry)
+                if not os.path.isfile(file_full):
+                    continue
+
+                has_init = False
+                if entry.endswith(".py"):
+                    try:
+                        content = read_text(file_full)
+                        if "def __initialize__" in content or "singleton_type" in content:
+                            tree = ast.parse(content, filename=file_full)
+                            for node in tree.body:
+                                if isinstance(node, ast.FunctionDef) and node.name == "__initialize__":
+                                    has_init = True
+                                    break
+                                elif isinstance(node, ast.ClassDef):
+                                    for dec in node.decorator_list:
+                                        dec_name = ""
+                                        if isinstance(dec, ast.Name):
+                                            dec_name = dec.id
+                                        elif isinstance(dec, ast.Call) and isinstance(dec.func, ast.Name):
+                                            dec_name = dec.func.id
+                                        if dec_name == "singleton_type":
+                                            has_init = True
+                                            break
+                                    if has_init:
+                                        break
+                    except Exception:
+                        pass
+                elif entry.endswith(".pyi"):
+                    try:
+                        elems = extract_pyi_elements(file_full)
+                        if elems.get("has_singleton") or m_stem.endswith(("_impl", "_asm")):
+                            has_init = True
+                    except Exception:
+                        pass
+
+                if has_init:
+                    stems_with_init.add(m_stem)
+        except OSError:
+            pass
+
+    return sorted(stems_with_init)
+
+
+def _generate_init_alias(stem: str, used_aliases: set[str]) -> str:
+    clean = stem.replace("_impl", "").replace("_asm", "")
+    parts = [p for p in clean.split("_") if p]
+    initials = "".join(p[0] for p in parts)
+    candidate = f"_{initials}_initialize" if initials else f"_{stem}_initialize"
+    if candidate not in used_aliases:
+        used_aliases.add(candidate)
+        return candidate
+    fallback = f"_{clean}_initialize"
+    if fallback not in used_aliases:
+        used_aliases.add(fallback)
+        return fallback
+    idx = 2
+    while f"_{initials}_{idx}_initialize" in used_aliases:
+        idx += 1
+    alias = f"_{initials}_{idx}_initialize"
+    used_aliases.add(alias)
+    return alias
+
+
 def generate_pretense_scaffold(
     pyi_path: str,
     stem: str,
@@ -1575,11 +1679,26 @@ def generate_pretense_scaffold(
     lib_pkg: str,
     impl_path: str | None = None,
     is_interface: bool | None = None,
+    lib_dir: str | None = None,
 ) -> str:
     """Generates canonical Pretense state machine, fake, unit tests, and fuzzing skeleton."""
     elements = extract_pyi_elements(pyi_path)
     classes = elements["classes"]
     has_singleton = elements["has_singleton"] or impl_stem.endswith("_impl")
+
+    package_inits = _discover_package_initializers(
+        pyi_path=pyi_path,
+        lib_dir=lib_dir,
+        impl_path=impl_path,
+        impl_stem=impl_stem,
+        has_singleton=has_singleton,
+    ) if has_singleton else []
+
+    init_aliases: dict[str, str] = {}
+    if len(package_inits) > 1:
+        used_al: set[str] = set()
+        for mod in package_inits:
+            init_aliases[mod] = _generate_init_alias(mod, used_al)
 
     # Filter service classes (exclude error, message, config, event, spec, state types)
     service_classes = [
@@ -1943,9 +2062,13 @@ def generate_pretense_scaffold(
         if not import_classes:
             import_classes = [target_cls_name]
         import_symbols = list(import_classes)
-        if has_singleton:
+        if has_singleton and not init_aliases:
             import_symbols.append("__initialize__")
         lines.append(f"from {import_module} import {', '.join(import_symbols)}")
+        if init_aliases:
+            for mod, alias in init_aliases.items():
+                m_imp = f"{lib_pkg}.{mod}" if lib_pkg else mod
+                lines.append(f"from {m_imp} import __initialize__ as {alias}")
 
         lines.extend([
             "",
@@ -2037,7 +2160,13 @@ def generate_pretense_scaffold(
         if has_singleton:
             lines.extend([
                 "        self.registry = LifecycleRegistry()",
-                "        __initialize__(self.registry)",
+            ])
+            if init_aliases:
+                for alias in init_aliases.values():
+                    lines.append(f"        {alias}(self.registry)")
+            else:
+                lines.append("        __initialize__(self.registry)")
+            lines.extend([
                 "        self.phase_scope = enter_phase(system, registry=self.registry)",
                 "        self.phase_scope.__enter__()",
             ])
@@ -2130,7 +2259,13 @@ def generate_pretense_scaffold(
             if has_singleton:
                 lines.extend([
                     "    registry = LifecycleRegistry()",
-                    "    __initialize__(registry)",
+                ])
+                if init_aliases:
+                    for alias in init_aliases.values():
+                        lines.append(f"    {alias}(registry)")
+                else:
+                    lines.append("    __initialize__(registry)")
+                lines.extend([
                     "    scope = enter_phase(system, registry=registry)",
                     "    scope.__enter__()",
                     f"    return get_singleton({single_cls})",
@@ -2196,9 +2331,13 @@ def generate_pretense_scaffold(
     if not import_classes:
         import_classes = [target_cls_name]
     import_symbols = list(import_classes)
-    if has_singleton:
+    if has_singleton and not init_aliases:
         import_symbols.append("__initialize__")
     lines.append(f"from {import_module} import {', '.join(import_symbols)}")
+    if init_aliases:
+        for mod, alias in init_aliases.items():
+            m_imp = f"{lib_pkg}.{mod}" if lib_pkg else mod
+            lines.append(f"from {m_imp} import __initialize__ as {alias}")
 
     sm_cls_name = f"{pascal_name}StateMachine"
 
@@ -2247,7 +2386,13 @@ def generate_pretense_scaffold(
         if has_singleton:
             lines.extend([
                 "        self.registry = LifecycleRegistry()",
-                "        __initialize__(self.registry)",
+            ])
+            if init_aliases:
+                for alias in init_aliases.values():
+                    lines.append(f"        {alias}(self.registry)")
+            else:
+                lines.append("        __initialize__(self.registry)")
+            lines.extend([
                 "        self.phase_scope = enter_phase(system, registry=self.registry)",
                 "        self.phase_scope.__enter__()",
             ])
@@ -2407,7 +2552,13 @@ def generate_pretense_scaffold(
     if has_singleton:
         lines.extend([
             "        self.registry = LifecycleRegistry()",
-            "        __initialize__(self.registry)",
+        ])
+        if init_aliases:
+            for alias in init_aliases.values():
+                lines.append(f"        {alias}(self.registry)")
+        else:
+            lines.append("        __initialize__(self.registry)")
+        lines.extend([
             "        self.phase_scope = enter_phase(system, registry=self.registry)",
             "        self.phase_scope.__enter__()",
         ])
@@ -2471,7 +2622,13 @@ def generate_pretense_scaffold(
         if has_singleton:
             lines.extend([
                 "    registry = LifecycleRegistry()",
-                "    __initialize__(registry)",
+            ])
+            if init_aliases:
+                for alias in init_aliases.values():
+                    lines.append(f"    {alias}(registry)")
+            else:
+                lines.append("    __initialize__(registry)")
+            lines.extend([
                 "    scope = enter_phase(system, registry=registry)",
                 "    scope.__enter__()",
                 f"    return get_singleton({single_cls})",
@@ -2627,6 +2784,7 @@ def main() -> int:
             lib_pkg=lib_pkg,
             impl_path=args.impl or None,
             is_interface=is_interface,
+            lib_dir=lib_dir,
         )
         if dir_name:
             os.makedirs(dir_name, exist_ok=True)

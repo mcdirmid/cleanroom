@@ -133,6 +133,26 @@ class WorkspaceRolesImplTest(unittest.TestCase):
             self.assertIn("test", std_names)
             self.assertNotIn("pretense", std_names)
 
+            # Unconfigured scope defaults to standard pipeline
+            unconf_dir = os.path.join(tmp_dir, "unconf_scope")
+            os.makedirs(unconf_dir)
+            unconf_roles = self.resolver.list_roles(repo_root=tmp_dir, dir_scope="unconf_scope")
+            unconf_names = [r.role_name for r in unconf_roles]
+            self.assertIn("lib", unconf_names)
+            self.assertIn("test", unconf_names)
+            self.assertNotIn("pretense", unconf_names)
+
+            # Combined pipeline
+            comb_dir = os.path.join(tmp_dir, "comb_scope")
+            os.makedirs(comb_dir)
+            with open(os.path.join(comb_dir, app_info.DEFAULT_CONFIG_FILE), "w", encoding="utf-8") as f:
+                f.write('pipeline = "combined"\n')
+            comb_roles = self.resolver.list_roles(repo_root=tmp_dir, dir_scope="comb_scope")
+            comb_names = [r.role_name for r in comb_roles]
+            self.assertIn("lib", comb_names)
+            self.assertIn("test", comb_names)
+            self.assertIn("pretense", comb_names)
+
     def test_src_patterns_parsing_and_dependency_propagation(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             toml_path = os.path.join(tmp_dir, app_info.DEFAULT_ROLES_FILE)

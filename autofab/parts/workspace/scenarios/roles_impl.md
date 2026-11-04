@@ -24,6 +24,12 @@ Given: a methodology defining universal roles (`lib`), standard roles (`test`), 
 1. The caller lists roles for the directory scope.
    Observed: the resolver discovers the active pipeline for the directory scope and returns universal and pretense roles while excluding standard roles.
 
+2. The caller lists roles for an unconfigured directory scope without an explicit pipeline configuration.
+   Observed: the resolver defaults the active pipeline to standard and returns universal and standard roles while excluding pretense roles.
+
+3. The caller lists roles for a directory scope configured with `pipeline = "combined"`.
+   Observed: the resolver returns universal, standard, and pretense roles.
+
 ## Scenario 4 — Parsing multi-pattern source declarations
 
 Given: a TOML configuration file declaring role `baseline_a` with `src_patterns = ['{unit_dir}/lib_a/{unit_name}.py', '{unit_dir}/tests_a/{unit_name}_fixed_test.py']` and role `dependent` depending on `baseline_a`.
@@ -36,6 +42,6 @@ Given: a TOML configuration file declaring role `baseline_a` with `src_patterns 
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-11-03T09:10:00Z
-CHANGE: Remove pretense2 active pipeline handling
+LAST_CHANGED: 2026-11-04T10:33:00Z
+CHANGE: Default active pipeline to standard when no pipeline is explicitly configured
 -->

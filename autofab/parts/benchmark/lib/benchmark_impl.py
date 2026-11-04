@@ -727,21 +727,26 @@ class _VerificationGate:
         unit: benchmark.BenchmarkUnit,
         run_mutation: bool = False,
         use_pretense: bool = False,
+        method: Optional[str] = None,
     ) -> benchmark.VerificationOutcomes:
         outcomes = benchmark.VerificationOutcomes()
+        effective_method = method if method is not None else ("pretense" if use_pretense else "standard")
 
         extra_paths: list[Path] = []
         unit_full_path = repo_root / unit.unit_dir
-        if unit_full_path.is_dir():
-            for sub_p in unit_full_path.iterdir():
-                if sub_p.is_dir() and not sub_p.name.startswith((".", "__")):
-                    extra_paths.append(sub_p)
-        if unit_full_path.parent.parent.is_dir():
-            extra_paths.append(unit_full_path.parent.parent)
-        if unit_full_path.parent.is_dir():
-            extra_paths.append(unit_full_path.parent)
-        if unit_full_path.is_dir():
-            extra_paths.append(unit_full_path)
+        if (unit_full_path / "lib").is_dir():
+            # Cleanroom part layout: package root container is parent (e.g. parts/)
+            if unit_full_path.parent.is_dir():
+                extra_paths.append(unit_full_path.parent)
+            if unit_full_path.parent.parent.is_dir():
+                extra_paths.append(unit_full_path.parent.parent)
+        else:
+            if unit_full_path.is_dir():
+                extra_paths.append(unit_full_path)
+            if unit_full_path.parent.is_dir():
+                extra_paths.append(unit_full_path.parent)
+            if unit_full_path.parent.parent.is_dir():
+                extra_paths.append(unit_full_path.parent.parent)
 
         env = dict(os.environ)
         env["PYTHONPATH"] = app_info.assemble_pythonpath_str(
@@ -765,10 +770,14 @@ class _VerificationGate:
         lib_path = repo_root / unit.unit_dir / "lib"
         if lib_path.is_dir():
             paths_to_typecheck.append(str(lib_path))
-        if use_pretense:
+        if effective_method in ("pretense", "combined"):
             pretense_path = repo_root / unit.unit_dir / "pretense"
             if pretense_path.is_dir():
                 paths_to_typecheck.append(str(pretense_path))
+        if effective_method in ("standard", "combined"):
+            test_path = repo_root / unit.unit_dir / "tests"
+            if test_path.is_dir():
+                paths_to_typecheck.append(str(test_path))
         if paths_to_typecheck:
             proc = subprocess.run(
                 ["uv", "run", "pyright"] + paths_to_typecheck,
@@ -785,7 +794,53 @@ class _VerificationGate:
             outcomes.pyright_errors = 0
 
         target_stem = unit.target_address.split("#")[-1] if "#" in unit.target_address else unit.task_id
-        if use_pretense:
+        if effective_method == "combined":
+            pre_passed, pre_failed, pre_cov = 0, 0, 0.0
+            pretense_path = repo_root / unit.unit_dir / "pretense"
+            if pretense_path.is_dir():
+                target_pretense_file = pretense_path / f"{target_stem}_pretense.py"
+                run_target = str(target_pretense_file) if target_pretense_file.is_file() else str(pretense_path)
+                proc = subprocess.run(
+                    ["uv", "run", "pretense", run_target, "--no-fuzz", "--cov"],
+                    cwd=repo_root,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                )
+                pass_match = re.search(r"(\d+)\s+passed", proc.stdout)
+                fail_match = re.search(r"(\d+)\s+failed", proc.stdout)
+                cov_match = re.search(r"TOTAL\s+\d+\s+\d+\s+(\d+)%", proc.stdout)
+                pre_passed = int(pass_match.group(1)) if pass_match else 0
+                pre_failed = int(fail_match.group(1)) if fail_match else 0
+                pre_cov = float(cov_match.group(1)) if cov_match else (100.0 if (proc.returncode == 0 and pre_passed > 0) else 0.0)
+                if pre_failed > 0 or (pre_passed == 0 and proc.returncode != 0):
+                    print(f"[VERIFY GATE] Pretense verification failed:\n{proc.stdout}\n{proc.stderr}".strip(), file=sys.stderr)
+
+            std_passed, std_failed = 0, 0
+            test_path = repo_root / unit.unit_dir / "tests"
+            if test_path.is_dir():
+                target_test_file = test_path / f"{target_stem}_test.py"
+                run_target = str(target_test_file) if target_test_file.is_file() else str(test_path)
+                proc = subprocess.run(
+                    ["uv", "run", "pytest", run_target, "-q"],
+                    cwd=repo_root,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                )
+                pass_match = re.search(r"(\d+)\s+passed", proc.stdout)
+                fail_match = re.search(r"(\d+)\s+failed", proc.stdout)
+                std_passed = int(pass_match.group(1)) if pass_match else 0
+                std_failed = int(fail_match.group(1)) if fail_match else 0
+                if std_failed > 0 or (std_passed == 0 and proc.returncode != 0):
+                    print(f"[VERIFY GATE] Unit tests failed:\n{proc.stdout}\n{proc.stderr}".strip(), file=sys.stderr)
+
+            outcomes.unit_tests_passed = pre_passed + std_passed
+            outcomes.unit_tests_failed = pre_failed + std_failed
+            cov_val = pre_cov if (outcomes.unit_tests_failed == 0 and outcomes.unit_tests_passed > 0) else 0.0
+            outcomes.line_coverage_pct = cov_val
+            outcomes.branch_coverage_pct = cov_val
+        elif effective_method == "pretense":
             pretense_path = repo_root / unit.unit_dir / "pretense"
             if pretense_path.is_dir():
                 target_pretense_file = pretense_path / f"{target_stem}_pretense.py"
@@ -878,42 +933,52 @@ def _delete_directory_safely(path: Path) -> None:
     shutil.rmtree(str(path), ignore_errors=True)
 
 
-def _has_materialized_artifacts(unit_dir: Path, use_pretense: bool = False) -> bool:
+def _has_materialized_artifacts(unit_dir: Path, use_pretense: bool = False, method: Optional[str] = None) -> bool:
     """Checks whether non-empty library and unit test/pretense artifacts have been synthesized on disk."""
-    if use_pretense:
-        lib_dir = unit_dir / "lib"
-        pretense_dir = unit_dir / "pretense"
-        if not (lib_dir.is_dir() and pretense_dir.is_dir()):
+    effective_method = method if method is not None else ("pretense" if use_pretense else "standard")
+    lib_dir = unit_dir / "lib"
+    if not lib_dir.is_dir():
+        return False
+    try:
+        has_lib = any(
+            f.is_file() and f.suffix == ".py" and not f.name.startswith("__") and f.stat().st_size > 0
+            for f in lib_dir.iterdir()
+        )
+        if not has_lib:
             return False
-        try:
-            has_lib = any(
-                f.is_file() and f.suffix == ".py" and not f.name.startswith("__") and f.stat().st_size > 0
-                for f in lib_dir.iterdir()
-            )
-            has_test = any(
-                f.is_file() and f.name.endswith("_pretense.py") and f.stat().st_size > 0
-                for f in pretense_dir.iterdir()
-            )
-            return has_lib and has_test
-        except OSError:
-            return False
-    else:
-        lib_dir = unit_dir / "lib"
-        tests_dir = unit_dir / "tests"
-        if not (lib_dir.is_dir() and tests_dir.is_dir()):
-            return False
-        try:
-            has_lib = any(
-                f.is_file() and f.suffix == ".py" and not f.name.startswith("__") and f.stat().st_size > 0
-                for f in lib_dir.iterdir()
-            )
-            has_test = any(
+
+        if effective_method == "combined":
+            tests_dir = unit_dir / "tests"
+            pretense_dir = unit_dir / "pretense"
+            if not (tests_dir.is_dir() and pretense_dir.is_dir()):
+                return False
+            has_tests = any(
                 f.is_file() and f.name.endswith("_test.py") and f.stat().st_size > 0
                 for f in tests_dir.iterdir()
             )
-            return has_lib and has_test
-        except OSError:
-            return False
+            has_pretense = any(
+                f.is_file() and f.name.endswith("_pretense.py") and f.stat().st_size > 0
+                for f in pretense_dir.iterdir()
+            )
+            return has_tests and has_pretense
+        elif effective_method == "pretense":
+            pretense_dir = unit_dir / "pretense"
+            if not pretense_dir.is_dir():
+                return False
+            return any(
+                f.is_file() and f.name.endswith("_pretense.py") and f.stat().st_size > 0
+                for f in pretense_dir.iterdir()
+            )
+        else:
+            tests_dir = unit_dir / "tests"
+            if not tests_dir.is_dir():
+                return False
+            return any(
+                f.is_file() and f.name.endswith("_test.py") and f.stat().st_size > 0
+                for f in tests_dir.iterdir()
+            )
+    except OSError:
+        return False
 
 
 def _get_role_workspace_bases(repo_root: Path) -> List[Path]:
@@ -923,10 +988,18 @@ def _get_role_workspace_bases(repo_root: Path) -> List[Path]:
     return bases
 
 
-def _get_execution_stages(repo_root: Path, methodology: str, pretense: bool, baseline: bool) -> List[str]:
+def _get_execution_stages(
+    repo_root: Path,
+    methodology: str,
+    pretense: bool = False,
+    baseline: bool = False,
+    method: Optional[str] = None,
+) -> List[str]:
     """Dynamically resolves the execution stages for the active methodology from roles configuration."""
+    effective_method = method if method is not None else ("pretense" if pretense else "standard")
     if baseline:
         return ["baseline"]
+
     for r_name in app_info.get_roles_filenames():
         r_path = repo_root / r_name
         if r_path.is_file():
@@ -934,11 +1007,19 @@ def _get_execution_stages(repo_root: Path, methodology: str, pretense: bool, bas
                 import tomllib
                 with open(r_path, "rb") as f:
                     r_data = tomllib.load(f)
-                pipe = "pretense" if pretense else "standard"
                 stages: List[str] = []
-                for role_block in r_data.get("roles", []):
+                roles_dict = r_data.get("roles", {})
+                roles_iter = roles_dict.values() if isinstance(roles_dict, dict) else r_data.get("roles", [])
+                for role_block in roles_iter:
                     r_pipe = role_block.get("pipeline")
-                    if r_pipe == pipe or (not r_pipe and pipe == "standard"):
+                    include = False
+                    if effective_method == "combined":
+                        include = (r_pipe in (None, "", "standard", "pretense"))
+                    elif effective_method == "pretense":
+                        include = (r_pipe == "pretense")
+                    else:
+                        include = (r_pipe in (None, "", "standard"))
+                    if include:
                         name = role_block.get("name")
                         if name and name not in ("high", "scenario", "planning", "low", "spec_qa"):
                             stages.append(name)
@@ -946,7 +1027,12 @@ def _get_execution_stages(repo_root: Path, methodology: str, pretense: bool, bas
                     return stages
             except Exception:
                 pass
-    return ["lib", "pretense", "pretense_qa", "pretense_coverage"] if pretense else ["lib", "test", "qa", "coverage"]
+    if effective_method == "combined":
+        return ["lib", "test", "qa", "coverage", "pretense", "pretense_qa", "pretense_coverage"]
+    elif effective_method == "pretense":
+        return ["lib", "pretense", "pretense_qa", "pretense_coverage"]
+    else:
+        return ["lib", "test", "qa", "coverage"]
 
 
 def _drain_unit_workspace(repo_root: Path, unit: benchmark.BenchmarkUnit) -> None:
@@ -986,12 +1072,13 @@ def _drain_unit_workspace(repo_root: Path, unit: benchmark.BenchmarkUnit) -> Non
         pass
 
 
-# Contract: __orphan__ - MUST provision a concise sequential ephemeral flight scope directory (e.g. benchmark_1), rewrite copied benchmark imports, disallow bare parts imports, mark specifications clean up to specification QA, and copy scope methodology configuration.
+# Contract: __orphan__ - MUST provision a concise sequential ephemeral flight scope directory (e.g. benchmark_1), explicitly configure methodology pipeline as pretense, combined, or standard, rewrite copied benchmark imports, disallow bare parts imports, mark specifications clean up to specification QA, and copy scope methodology configuration.
 def _provision_flight_scope(
     repo_root: Path,
     unit: benchmark.BenchmarkUnit,
     flight_id: str,
     pretense: bool = False,
+    method: Optional[str] = None,
 ) -> Tuple[str, Path]:
     """Provisions a concise sequential ephemeral flight scope directory (e.g. benchmark_1)
     preserving the package structure of the benchmark unit's enclosing scope.
@@ -999,6 +1086,7 @@ def _provision_flight_scope(
     Returns:
         (flight_scope, flight_unit_dir)
     """
+    effective_method = method if method is not None else ("pretense" if pretense else "standard")
     ws_bases = _get_role_workspace_bases(repo_root)
     idx = 1
     while True:
@@ -1071,21 +1159,19 @@ def _provision_flight_scope(
     if flight_parts_dir is not None:
         dirs_to_update.append(flight_parts_dir)
     for toml_dir in dirs_to_update:
-        pipe_name = "pretense" if pretense else None
-        if pipe_name:
-            for fname in app_info.get_config_filenames():
-                c_toml = toml_dir / fname
-                if c_toml.is_file():
-                    try:
-                        content = c_toml.read_text(encoding="utf-8")
-                        if "pipeline =" not in content:
-                            c_toml.write_text(content.strip() + f'\npipeline = "{pipe_name}"\n', encoding="utf-8")
-                    except OSError:
-                        pass
+        pipe_name = effective_method
+        for fname in app_info.get_config_filenames():
+            c_toml = toml_dir / fname
+            if c_toml.is_file():
+                try:
+                    content = c_toml.read_text(encoding="utf-8")
+                    if "pipeline =" not in content:
+                        c_toml.write_text(content.strip() + f'\npipeline = "{pipe_name}"\n', encoding="utf-8")
+                except OSError:
+                    pass
         if not any((toml_dir / cfg).is_file() for cfg in app_info.get_config_filenames()):
             try:
-                pipe_line = f'\npipeline = "{pipe_name}"\n' if pipe_name else '\n'
-                (toml_dir / app_info.DEFAULT_CONFIG_FILE).write_text(f'methodology = "//autofab_py"{pipe_line}', encoding="utf-8")
+                (toml_dir / app_info.DEFAULT_CONFIG_FILE).write_text(f'methodology = "//autofab_py"\npipeline = "{pipe_name}"\n', encoding="utf-8")
             except OSError:
                 pass
 
@@ -1161,8 +1247,12 @@ def _provision_flight_scope(
 
     # Mark specifications clean up to spec_qa within the flight scope so only downstream roles run
     mark_cmd = ["uv", "run", "autofab", "mark-clean", flight_scope, "--up-to-role", "spec_qa"]
-    if pretense:
+    if effective_method == "combined":
+        mark_cmd.append("--combined")
+    elif effective_method == "pretense":
         mark_cmd.append("--pretense")
+    else:
+        mark_cmd.append("--standard")
     try:
         subprocess.run(
             mark_cmd,
@@ -1285,6 +1375,7 @@ def _archive_flight_artifacts(
     source_dir: Optional[Path] = None,
     flight_scope_dir: Optional[Path] = None,
     use_pretense: bool = False,
+    method: Optional[str] = None,
 ) -> Optional[Tuple[str, str]]:
     """Archives synthesized library and test files into the results directory with embedded metrics.
 
@@ -1301,9 +1392,13 @@ def _archive_flight_artifacts(
 
     model_id = str(record.model.get("identifier", "unknown")).replace("/", "_")
     resolved_harness = harness or str(record.model.get("default_harness", "loop"))
-    is_pretense = use_pretense or ("pretense" in record.methodology)
+    effective_method = method if method is not None else ("pretense" if use_pretense else None)
+    is_combined = (effective_method == "combined") or ("combined" in record.methodology)
+    is_pretense = not is_combined and (effective_method == "pretense" or use_pretense or ("pretense" in record.methodology))
     folder_name = f"{model_id}+{resolved_harness}"
-    if is_pretense:
+    if is_combined:
+        folder_name += "-combined"
+    elif is_pretense:
         folder_name += "-pretense"
     if "baseline" in record.methodology:
         folder_name += "-baseline"
@@ -1316,6 +1411,7 @@ def _archive_flight_artifacts(
     unit_full_dir = source_dir if source_dir is not None else (repo_root / unit.unit_dir)
     lib_dir = unit_full_dir / "lib"
     tests_dir = unit_full_dir / "tests"
+    pretense_dir = unit_full_dir / "pretense"
 
     # Find source lib files
     src_lib_files: List[Path] = []
@@ -1330,6 +1426,7 @@ def _archive_flight_artifacts(
         for ws_base in cand_ws_bases:
             for cand_prefix in (
                 f"lib_{flight_scope_dir.name}",
+                f"combined_baseline_{flight_scope_dir.name}",
                 f"pretense_baseline_{flight_scope_dir.name}",
                 f"baseline_{flight_scope_dir.name}",
                 f"{app_info.APP_NAME}_lib_{flight_scope_dir.name}",
@@ -1346,30 +1443,9 @@ def _archive_flight_artifacts(
 
     # Find source test files
     src_test_files: List[Path] = []
-    if is_pretense:
-        pretense_dir = unit_full_dir / "pretense"
-        if pretense_dir.is_dir():
-            for p in sorted(pretense_dir.glob("*_pretense.py")):
-                if p.stat().st_size > 0:
-                    src_test_files.append(p)
+    src_pretense_files: List[Path] = []
 
-        if not src_test_files and flight_scope_dir is not None:
-            for ws_base in cand_ws_bases:
-                for cand_prefix in (
-                    f"pretense_{flight_scope_dir.name}",
-                    f"pretense_baseline_{flight_scope_dir.name}",
-                    f"{app_info.APP_NAME}_pretense_{flight_scope_dir.name}",
-                ):
-                    cand_test = ws_base / cand_prefix / flight_scope_dir.name / "parts" / unit.task_id / "pretense"
-                    if cand_test.is_dir():
-                        for p in sorted(cand_test.glob("*_pretense.py")):
-                            if p.stat().st_size > 0:
-                                src_test_files.append(p)
-                    if src_test_files:
-                        break
-                if src_test_files:
-                    break
-    else:
+    if is_combined or not is_pretense:
         if tests_dir.is_dir():
             for p in sorted(tests_dir.glob("*_test.py")):
                 if p.stat().st_size > 0:
@@ -1379,6 +1455,7 @@ def _archive_flight_artifacts(
             for ws_base in cand_ws_bases:
                 for cand_prefix in (
                     f"test_{flight_scope_dir.name}",
+                    f"combined_baseline_{flight_scope_dir.name}",
                     f"baseline_{flight_scope_dir.name}",
                     f"{app_info.APP_NAME}_test_{flight_scope_dir.name}",
                 ):
@@ -1390,6 +1467,30 @@ def _archive_flight_artifacts(
                     if src_test_files:
                         break
                 if src_test_files:
+                    break
+
+    if is_combined or is_pretense:
+        if pretense_dir.is_dir():
+            for p in sorted(pretense_dir.glob("*_pretense.py")):
+                if p.stat().st_size > 0:
+                    src_pretense_files.append(p)
+
+        if not src_pretense_files and flight_scope_dir is not None:
+            for ws_base in cand_ws_bases:
+                for cand_prefix in (
+                    f"pretense_{flight_scope_dir.name}",
+                    f"combined_baseline_{flight_scope_dir.name}",
+                    f"pretense_baseline_{flight_scope_dir.name}",
+                    f"{app_info.APP_NAME}_pretense_{flight_scope_dir.name}",
+                ):
+                    cand_test = ws_base / cand_prefix / flight_scope_dir.name / "parts" / unit.task_id / "pretense"
+                    if cand_test.is_dir():
+                        for p in sorted(cand_test.glob("*_pretense.py")):
+                            if p.stat().st_size > 0:
+                                src_pretense_files.append(p)
+                    if src_pretense_files:
+                        break
+                if src_pretense_files:
                     break
 
     target_dir = base_res / benchmark_id / folder_name
@@ -1410,8 +1511,15 @@ def _archive_flight_artifacts(
             except OSError:
                 pass
 
-    if (not src_lib_files or not src_test_files) and not target_existing_lib:
-        return None
+    if is_combined:
+        if (not src_lib_files or not src_test_files or not src_pretense_files) and not target_existing_lib:
+            return None
+    elif is_pretense:
+        if (not src_lib_files or not src_pretense_files) and not target_existing_lib:
+            return None
+    else:
+        if (not src_lib_files or not src_test_files) and not target_existing_lib:
+            return None
 
     target_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1429,8 +1537,15 @@ def _archive_flight_artifacts(
         run_idx = max_idx + 1
 
     dest_lib_path = target_existing_lib if (target_existing_lib and not src_lib_files) else (target_dir / f"lib_{run_idx}.py")
-    dest_test_name = f"pretense_{run_idx}.py" if is_pretense else f"test_{run_idx}.py"
-    dest_test_path = target_dir / dest_test_name
+    if is_combined:
+        dest_test_name = f"test_{run_idx}.py"
+        dest_test_path = target_dir / dest_test_name
+    elif is_pretense:
+        dest_test_name = f"pretense_{run_idx}.py"
+        dest_test_path = target_dir / dest_test_name
+    else:
+        dest_test_name = f"test_{run_idx}.py"
+        dest_test_path = target_dir / dest_test_name
 
     m = record.measurements
     v = record.verification_outcomes
@@ -1488,14 +1603,35 @@ def _archive_flight_artifacts(
             lib_parts.append(content)
     dest_lib_path.write_text(metrics_comment + "\n\n".join(lib_parts), encoding="utf-8")
 
-    test_parts: List[str] = []
-    for st in src_test_files:
-        content = st.read_text(encoding="utf-8", errors="replace")
-        if len(src_test_files) > 1:
-            test_parts.append(f"# === File: {st.name} ===\n" + content)
-        else:
-            test_parts.append(content)
-    dest_test_path.write_text("\n\n".join(test_parts), encoding="utf-8")
+    if is_combined:
+        test_parts: List[str] = []
+        for st in src_test_files:
+            content = st.read_text(encoding="utf-8", errors="replace")
+            if len(src_test_files) > 1:
+                test_parts.append(f"# === File: {st.name} ===\n" + content)
+            else:
+                test_parts.append(content)
+        dest_test_path.write_text("\n\n".join(test_parts), encoding="utf-8")
+
+        dest_pretense_path = target_dir / f"pretense_{run_idx}.py"
+        pretense_parts: List[str] = []
+        for sp in src_pretense_files:
+            content = sp.read_text(encoding="utf-8", errors="replace")
+            if len(src_pretense_files) > 1:
+                pretense_parts.append(f"# === File: {sp.name} ===\n" + content)
+            else:
+                pretense_parts.append(content)
+        dest_pretense_path.write_text("\n\n".join(pretense_parts), encoding="utf-8")
+    else:
+        test_parts: List[str] = []
+        source_files = src_pretense_files if is_pretense else src_test_files
+        for st in source_files:
+            content = st.read_text(encoding="utf-8", errors="replace")
+            if len(source_files) > 1:
+                test_parts.append(f"# === File: {st.name} ===\n" + content)
+            else:
+                test_parts.append(content)
+        dest_test_path.write_text("\n\n".join(test_parts), encoding="utf-8")
 
     # Contract: MUST archive Autofab event log when present as autofab_<N>.log
     candidates: List[Path] = []
@@ -1548,6 +1684,7 @@ def _execute_flight(
     antigravity_dispatch: str = "message",
     baseline: bool = False,
     pretense: bool = False,
+    method: Optional[str] = None,
     max_waves: Optional[int] = 100,
 ) -> benchmark.FlightRecord:
     timestamp_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d_%H%M%S")
@@ -1557,6 +1694,9 @@ def _execute_flight(
     start_wall = time.perf_counter()
     start_epoch = time.time()
     measurements = benchmark.FlightMeasurements()
+
+    effective_method = method if method is not None else ("pretense" if pretense else "standard")
+    is_pretense = (effective_method == "pretense")
 
     resolved_harness = harness if harness != "auto" else model.default_harness
 
@@ -1574,20 +1714,26 @@ def _execute_flight(
         measurements.outbound_tokens = (unit.target_lib_loc * 18) if unit.target_lib_loc > 0 else 6_000
         measurements.step_latencies_seconds = [2.4, 3.1, 2.9, 4.2]
         measurements.wall_clock_seconds = round(time.perf_counter() - start_wall, 2)
-        if baseline and pretense:
+        if baseline and effective_method == "combined":
+            methodology = "combined_baseline"
+            flight_id_str = f"{flight_id}_combined_baseline"
+        elif baseline and effective_method == "pretense":
             methodology = "pretense_baseline"
             flight_id_str = f"{flight_id}_pretense_baseline"
         elif baseline:
             methodology = "baseline"
             flight_id_str = f"{flight_id}_baseline"
-        elif pretense:
+        elif effective_method == "combined":
+            methodology = "combined"
+            flight_id_str = f"{flight_id}_combined"
+        elif effective_method == "pretense":
             methodology = "pretense"
             flight_id_str = f"{flight_id}_pretense"
         else:
             methodology = app_info.APP_NAME
             flight_id_str = flight_id
 
-        stages = _get_execution_stages(repo_root, methodology, pretense=pretense, baseline=baseline)
+        stages = _get_execution_stages(repo_root, methodology, pretense=is_pretense, baseline=baseline, method=effective_method)
         measurements.role_rounds = {s: 1 for s in stages}
         measurements.compute_totals(model)
 
@@ -1635,7 +1781,9 @@ def _execute_flight(
             )
 
         # Pre-flight: provision ephemeral flight scope directory preserving scope structure
-        flight_scope, flight_unit_dir = _provision_flight_scope(repo_root, unit, flight_id, pretense=pretense)
+        flight_scope, flight_unit_dir = _provision_flight_scope(
+            repo_root, unit, flight_id, pretense=is_pretense, method=effective_method
+        )
         flight_scope_dir = repo_root / flight_scope
         flight_unit_rel = str(flight_unit_dir.relative_to(repo_root)).replace("\\", "/")
 
@@ -1647,16 +1795,18 @@ def _execute_flight(
                 model.identifier,
             )
             fused_role_name: Optional[str] = None
-            if baseline and pretense:
+            if baseline and effective_method == "combined":
+                fused_role_name = "combined_baseline"
+            elif baseline and effective_method == "pretense":
                 fused_role_name = "pretense_baseline"
             elif baseline:
                 fused_role_name = "baseline"
 
-            if baseline and pretense:
-                flight_id_str = f"{flight_id}_pretense_baseline"
-            elif baseline:
-                flight_id_str = f"{flight_id}_baseline"
-            elif pretense:
+            if baseline:
+                flight_id_str = f"{flight_id}_{fused_role_name}"
+            elif effective_method == "combined":
+                flight_id_str = f"{flight_id}_combined"
+            elif effective_method == "pretense":
                 flight_id_str = f"{flight_id}_pretense"
             else:
                 flight_id_str = flight_id
@@ -1675,7 +1825,9 @@ def _execute_flight(
                             "model": model.identifier,
                             "harness": resolved_harness,
                             "baseline": baseline,
-                            "pretense": pretense,
+                            "pretense": is_pretense,
+                            "method": effective_method,
+                            "pipeline": effective_method,
                             "start_time": start_wall,
                         }, indent=2),
                         encoding="utf-8"
@@ -1696,8 +1848,12 @@ def _execute_flight(
                 cmd.append("--simulation")
             if baseline:
                 cmd.extend(["--role", str(fused_role_name), "--baseline"])
-            if pretense:
+            if effective_method == "combined":
+                cmd.append("--combined")
+            elif effective_method == "pretense":
                 cmd.append("--pretense")
+            else:
+                cmd.append("--standard")
             if max_waves is not None:
                 cmd.extend(["--max-waves", str(max_waves)])
             if resolved_harness == "antigravity" and antigravity_dispatch:
@@ -1766,8 +1922,12 @@ def _execute_flight(
                         wq_cmd = ["uv", "run", "autofab", "work-queue", flight_scope, "--json"]
                         if fused_role_name:
                             wq_cmd.extend(["--role", fused_role_name])
-                        if pretense:
+                        if effective_method == "combined":
+                            wq_cmd.append("--combined")
+                        elif effective_method == "pretense":
                             wq_cmd.append("--pretense")
+                        else:
+                            wq_cmd.append("--standard")
                         wq_proc = subprocess.run(
                             wq_cmd,
                             cwd=repo_root,
@@ -1777,7 +1937,7 @@ def _execute_flight(
                         if wq_proc.returncode == 0 and wq_proc.stdout.strip():
                             try:
                                 wq_data = json.loads(wq_proc.stdout)
-                                if wq_data.get("is_clean") is True and _has_materialized_artifacts(flight_unit_dir, use_pretense=pretense):
+                                if wq_data.get("is_clean") is True and _has_materialized_artifacts(flight_unit_dir, use_pretense=is_pretense, method=effective_method):
                                     converged = True
                                     break
                             except json.JSONDecodeError:
@@ -1821,7 +1981,7 @@ def _execute_flight(
             measurements.outbound_tokens = out_tok
             measurements.step_latencies_seconds = lats
             if baseline:
-                measurements.role_rounds = {"baseline": 1}
+                measurements.role_rounds = {fused_role_name or "baseline": 1}
             else:
                 measurements.role_rounds = r_rounds
             measurements.compute_totals(model)
@@ -1844,19 +2004,19 @@ def _execute_flight(
                 description=unit.description,
             )
             outcomes = _VerificationGate.evaluate(
-                repo_root, flight_unit_spec, run_mutation=mutation_testing, use_pretense=pretense
+                repo_root, flight_unit_spec, run_mutation=mutation_testing, use_pretense=is_pretense, method=effective_method
             )
             outcomes.converged = flight_converged
 
-            if baseline and pretense:
-                methodology = "pretense_baseline"
-            elif baseline:
-                methodology = "baseline"
-            elif pretense:
+            if baseline:
+                methodology = fused_role_name or "baseline"
+            elif effective_method == "combined":
+                methodology = "combined"
+            elif effective_method == "pretense":
                 methodology = "pretense"
             else:
                 methodology = app_info.APP_NAME
-            stages = _get_execution_stages(repo_root, methodology, pretense=pretense, baseline=baseline)
+            stages = _get_execution_stages(repo_root, methodology, pretense=is_pretense, baseline=baseline, method=effective_method)
 
             record = benchmark.FlightRecord(
                 flight_id=flight_id_str,
@@ -1902,7 +2062,8 @@ def _execute_flight(
                     harness=resolved_harness,
                     source_dir=flight_unit_dir,
                     flight_scope_dir=flight_scope_dir,
-                    use_pretense=pretense,
+                    use_pretense=is_pretense,
+                    method=effective_method,
                 )
                 if archived is not None:
                     flight_success = True
@@ -2053,6 +2214,7 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
         antigravity_dispatch: str = "message",
         baseline: bool = False,
         pretense: bool = False,
+        method: Optional[str] = None,
         max_waves: Optional[int] = 100,
     ) -> benchmark.FlightRecord:
         return _execute_flight(
@@ -2070,6 +2232,7 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
             antigravity_dispatch=antigravity_dispatch,
             baseline=baseline,
             pretense=pretense,
+            method=method,
             max_waves=max_waves,
         )
 
@@ -2153,7 +2316,9 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
         )
         measurements.compute_totals(model)
 
-        is_pretense_flight = ("pretense" in data.get("methodology", "")) or clean_id.endswith("_pretense") or "_pretense" in clean_id
+        is_combined_flight = ("combined" in data.get("methodology", "")) or clean_id.endswith("_combined") or "_combined" in clean_id
+        is_pretense_flight = not is_combined_flight and (("pretense" in data.get("methodology", "")) or clean_id.endswith("_pretense") or "_pretense" in clean_id)
+        harvest_method = "combined" if is_combined_flight else ("pretense" if is_pretense_flight else "standard")
         outcomes_data = data.get("verification_outcomes")
         if outcomes_data:
             outcomes = benchmark.VerificationOutcomes(
@@ -2167,7 +2332,7 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
             )
         else:
             outcomes = _VerificationGate.evaluate(
-                self._repo_root, unit, run_mutation=mutation_testing, use_pretense=is_pretense_flight
+                self._repo_root, unit, run_mutation=mutation_testing, use_pretense=is_pretense_flight, method=harvest_method
             )
 
         record = benchmark.FlightRecord(
@@ -2191,6 +2356,7 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
             results_dir=results_dir,
             harness=resolved_harness,
             use_pretense=is_pretense_flight,
+            method=harvest_method,
         )
 
         return record
@@ -2200,12 +2366,14 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
         record: benchmark.FlightRecord,
         unit: benchmark.BenchmarkUnit,
         results_dir: Optional[str] = None,
+        method: Optional[str] = None,
     ) -> Optional[Tuple[str, str]]:
         return _archive_flight_artifacts(
             repo_root=self._repo_root,
             record=record,
             unit=unit,
             results_dir=results_dir,
+            method=method,
         )
 
     def drain_unit_workspace(self, unit: benchmark.BenchmarkUnit) -> None:
@@ -2298,9 +2466,31 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
             help="Execute traditional single-agent baseline evaluation (one round to write lib, tests, and verify using standard developer tools).",
         )
         parser.add_argument(
+            "--method",
+            choices=["standard", "pretense", "combined"],
+            default="standard",
+            help="Verification methodology: 'standard' (unit tests + pytest + coverage), 'pretense' (state machines + Hypothesis fuzzing), or 'combined' (dual-branch: both coverage and pretense_coverage).",
+        )
+        parser.add_argument(
+            "--standard",
+            dest="method",
+            action="store_const",
+            const="standard",
+            help="Alias for --method standard.",
+        )
+        parser.add_argument(
             "--pretense",
-            action="store_true",
-            help="Generate and test via Pretense pipeline rather than standard test/qa/coverage roles.",
+            dest="method",
+            action="store_const",
+            const="pretense",
+            help="Alias for --method pretense.",
+        )
+        parser.add_argument(
+            "--combined",
+            dest="method",
+            action="store_const",
+            const="combined",
+            help="Alias for --method combined.",
         )
         parser.add_argument(
             "--results-dir",
@@ -2452,7 +2642,8 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
                     timeout=args.timeout,
                     antigravity_dispatch=args.antigravity_dispatch,
                     baseline=args.baseline,
-                    pretense=args.pretense,
+                    pretense=(args.method == "pretense"),
+                    method=args.method,
                     max_waves=args.max_waves,
                 )
                 self.save_flight_json(record, str(logs_dir))
@@ -2497,8 +2688,8 @@ if __name__ == "__main__":
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-19T18:45:00Z
-# LAST_CHANGED: 2026-11-03T09:10:00Z
-# CHANGE: Remove pretense2 benchmark evaluation pipeline
+# LAST_CHANGED: 2026-11-04T11:30:00Z
+# CHANGE: Support --method combined, pretense, standard and combined_baseline fused role
 # SPEC_QA_AUDIT: 2026-10-19T19:35:00Z
 # --- END CLEANROOM METADATA ---
 

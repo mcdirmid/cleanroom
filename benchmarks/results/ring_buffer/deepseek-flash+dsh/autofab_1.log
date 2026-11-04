@@ -1,0 +1,5 @@
+[CHANGE] benchmark_1/parts/ring_buffer/lib/ring_buffer.py: Implement ring_buffer interface: package-qualified pretense imports, mutable dataclass BufferError/BufferEmptyError with message and __str__, full RingBuffer protocol stubs for capacity/size/is_empty/is_full/push/pop/clear/snapshot_items
+[CHANGE] benchmark_1/parts/ring_buffer/lib/ring_buffer_impl.py: Implement concrete RingBuffer singleton: deque(maxlen=10) backing state, capacity/size/is_empty/is_full properties, overflow-evicting push, BufferEmptyError-raising pop, clear, test-only snapshot_items, lifecycle registration preserved
+[CHANGE] benchmark_1/parts/ring_buffer/tests/ring_buffer_impl_test.py: Author RingBuffer unit tests covering default capacity/initial emptiness, push growth without eviction, FIFO eviction on saturation, pop ordering and size decrement, clear reset, and non-destructive FIFO snapshot_items.
+[AUDIT] benchmark_1/parts/ring_buffer/lib/ring_buffer_impl.py: QA_AUDIT
+[AUDIT] benchmark_1/parts/ring_buffer/lib/ring_buffer_impl.py: COVERAGE_AUDIT

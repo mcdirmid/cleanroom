@@ -388,17 +388,27 @@ import importlib
 
 # Force identical module identity between unqualified and qualified imports
 try:
+    _pkg = importlib.import_module("benchmark_1.parts.{suite_name}")
+    sys.modules["{suite_name}"] = _pkg
     _pkg_mod = importlib.import_module("benchmark_1.parts.{suite_name}.lib.{suite_name}")
-    sys.modules["{suite_name}"] = _pkg_mod
-    for b in ("benchmark_1", "benchmark_2", "benchmark_3", "benchmark_4"):
+    for attr in dir(_pkg_mod):
+        if not attr.startswith("__"):
+            setattr(_pkg, attr, getattr(_pkg_mod, attr))
+    for b in ("benchmark_1", "benchmark_2", "benchmark_3", "benchmark_4", "benchmark_5"):
         sys.modules[f"{{b}}.parts.{suite_name}.lib.{suite_name}"] = _pkg_mod
 except ImportError:
-    pass
+    try:
+        _pkg_mod = importlib.import_module("benchmark_1.parts.{suite_name}.lib.{suite_name}")
+        sys.modules["{suite_name}"] = _pkg_mod
+        for b in ("benchmark_1", "benchmark_2", "benchmark_3", "benchmark_4", "benchmark_5"):
+            sys.modules[f"{{b}}.parts.{suite_name}.lib.{suite_name}"] = _pkg_mod
+    except ImportError:
+        pass
 
 try:
     _pkg_impl = importlib.import_module("benchmark_1.parts.{suite_name}.lib.{suite_name}_impl")
     sys.modules["{suite_name}_impl"] = _pkg_impl
-    for b in ("benchmark_1", "benchmark_2", "benchmark_3", "benchmark_4"):
+    for b in ("benchmark_1", "benchmark_2", "benchmark_3", "benchmark_4", "benchmark_5"):
         sys.modules[f"{{b}}.parts.{suite_name}.lib.{suite_name}_impl"] = _pkg_impl
 except ImportError:
     pass

@@ -1081,8 +1081,11 @@ def resolve_scope_pipeline(
     scope: str,
     repo_root: str | None = None,
     explicit_pretense: bool = False,
+    explicit_pipeline: str | None = None,
     target_role: str | None = None,
 ) -> str | None:
+    if explicit_pipeline:
+        return explicit_pipeline.strip().lower()
     if explicit_pretense:
         return "pretense"
     if target_role:
@@ -1093,16 +1096,25 @@ def resolve_scope_pipeline(
     root = repo_root or find_workspace_root()
 
     # 1. Check active flight metadata
-    flight_file = os.path.join(root, ".cleanroom", "active_flight.json")
-    if os.path.isfile(flight_file):
-        try:
-            with open(flight_file, "r", encoding="utf-8") as f:
-                fdata = json.load(f)
-            if fdata.get("flight_scope") == scope:
-                if fdata.get("pretense") or "pretense" in str(fdata.get("flight_id", "")):
-                    return "pretense"
-        except Exception:
-            pass
+    app_inf = _get_app_info()
+    state_dirs = [os.path.join(root, ".cleanroom"), os.path.join(root, ".autofab")]
+    if app_inf and hasattr(app_inf, "resolve_state_dir"):
+        state_dirs.insert(0, app_inf.resolve_state_dir(root))
+    for state_dir in state_dirs:
+        flight_file = os.path.join(state_dir, "active_flight.json")
+        if os.path.isfile(flight_file):
+            try:
+                with open(flight_file, "r", encoding="utf-8") as f:
+                    fdata = json.load(f)
+                if fdata.get("flight_scope") == scope:
+                    if fdata.get("pipeline"):
+                        return str(fdata.get("pipeline")).strip().lower()
+                    if fdata.get("method"):
+                        return str(fdata.get("method")).strip().lower()
+                    if fdata.get("pretense") or "pretense" in str(fdata.get("flight_id", "")):
+                        return "pretense"
+            except Exception:
+                pass
 
     # 2. Check configuration files in scope or parts
     import tomllib
@@ -1161,9 +1173,33 @@ def run_work_queue(argv: list[str]) -> int:
         help="Output queue state as structured JSON.",
     )
     parser.add_argument(
+        "--pipeline",
+        "--method",
+        dest="pipeline",
+        choices=["standard", "pretense", "combined"],
+        default=None,
+        help="Target methodology / pipeline for work queue inspection.",
+    )
+    parser.add_argument(
+        "--standard",
+        dest="pipeline",
+        action="store_const",
+        const="standard",
+        help="Inspect work queue for standard pipeline.",
+    )
+    parser.add_argument(
         "--pretense",
-        action="store_true",
+        dest="pipeline",
+        action="store_const",
+        const="pretense",
         help="Inspect work queue for Pretense pipeline.",
+    )
+    parser.add_argument(
+        "--combined",
+        dest="pipeline",
+        action="store_const",
+        const="combined",
+        help="Inspect work queue for combined pipeline.",
     )
     parser.add_argument(
         "--baseline",
@@ -1185,13 +1221,19 @@ def run_work_queue(argv: list[str]) -> int:
     scope, parsed_role, is_unit = parse_cleanroom_target(target_input)
     target_role = (parsed.role_opt or parsed.target_role or parsed_role or "").strip().lower()
     if parsed.baseline and not target_role:
-        target_role = "pretense_baseline" if parsed.pretense else "baseline"
+        if parsed.pipeline == "combined":
+            target_role = "combined_baseline"
+        elif parsed.pipeline == "pretense":
+            target_role = "pretense_baseline"
+        else:
+            target_role = "baseline"
 
     root = parsed.repo_root or find_workspace_root()
     active_pipeline = resolve_scope_pipeline(
         scope=scope,
         repo_root=root,
-        explicit_pretense=parsed.pretense,
+        explicit_pretense=(parsed.pipeline == "pretense"),
+        explicit_pipeline=parsed.pipeline,
         target_role=target_role or None,
     )
     from support.lib.lifecycle import enter_phase, get_singleton
@@ -1209,7 +1251,12 @@ def run_work_queue(argv: list[str]) -> int:
             print(f"Error: No declared roles found for directory scope '{scope}'.", file=sys.stderr)
             return 1
 
-        if active_pipeline:
+        if active_pipeline == "combined":
+            declared_roles = [
+                r for r in declared_roles
+                if r.pipeline in (None, "", "standard", "pretense")
+            ]
+        elif active_pipeline:
             declared_roles = [
                 r for r in declared_roles
                 if r.pipeline in (None, "", active_pipeline)
@@ -1553,10 +1600,16 @@ def resolve_scope_nodes(
 
     if pipeline:
         pipe_clean = pipeline.strip().lower()
-        roles_to_scan = [
-            r for r in roles_to_scan
-            if roles_dict.get(r, {}).get("pipeline") in (None, "", pipe_clean)
-        ]
+        if pipe_clean == "combined":
+            roles_to_scan = [
+                r for r in roles_to_scan
+                if roles_dict.get(r, {}).get("pipeline") in (None, "", "standard", "pretense")
+            ]
+        else:
+            roles_to_scan = [
+                r for r in roles_to_scan
+                if roles_dict.get(r, {}).get("pipeline") in (None, "", pipe_clean)
+            ]
 
     if exclude_roles:
         exclude_set = {r.strip().lower() for r in exclude_roles}
@@ -1830,10 +1883,33 @@ def run_mark_clean_cli(argv: list[str]) -> int:
         help="Roles to exclude from marking clean.",
     )
     parser.add_argument(
+        "--pipeline",
+        "--method",
+        dest="pipeline",
+        choices=["standard", "pretense", "combined"],
+        default=None,
+        help="Pipeline to mark clean.",
+    )
+    parser.add_argument(
+        "--standard",
+        dest="pipeline",
+        action="store_const",
+        const="standard",
+        help="Use standard pipeline.",
+    )
+    parser.add_argument(
         "--pretense",
-        action="store_true",
-        default=False,
+        dest="pipeline",
+        action="store_const",
+        const="pretense",
         help="Use pretense pipeline.",
+    )
+    parser.add_argument(
+        "--combined",
+        dest="pipeline",
+        action="store_const",
+        const="combined",
+        help="Use combined pipeline.",
     )
     parsed = parser.parse_args(argv)
     target = parsed.target or _get_dir_scope()
@@ -1846,7 +1922,7 @@ def run_mark_clean_cli(argv: list[str]) -> int:
         workspace_dir=parsed.workspace_dir,
         up_to_role=parsed.up_to_role,
         exclude_roles=parsed.exclude_roles,
-        pipeline="pretense" if parsed.pretense else None,
+        pipeline=parsed.pipeline,
     )
 
 
@@ -2144,9 +2220,33 @@ def run_clean(
         help="Force headless execution even on antigravity harness.",
     )
     parser.add_argument(
+        "--pipeline",
+        "--method",
+        dest="pipeline",
+        choices=["standard", "pretense", "combined"],
+        default=None,
+        help="Use specified testing pipeline ('standard', 'pretense', or 'combined').",
+    )
+    parser.add_argument(
+        "--standard",
+        dest="pipeline",
+        action="store_const",
+        const="standard",
+        help="Use standard testing pipeline.",
+    )
+    parser.add_argument(
         "--pretense",
-        action="store_true",
+        dest="pipeline",
+        action="store_const",
+        const="pretense",
         help="Use Pretense testing pipeline (pretense, pretense_qa, pretense_coverage) instead of standard test/qa/coverage.",
+    )
+    parser.add_argument(
+        "--combined",
+        dest="pipeline",
+        action="store_const",
+        const="combined",
+        help="Use combined testing pipeline (standard + pretense).",
     )
     parser.add_argument(
         "--baseline",
@@ -2174,12 +2274,18 @@ def run_clean(
     scope, parsed_role, is_unit = parse_cleanroom_target(target_input)
     target_role = (parsed.role_opt or parsed.target_role or parsed_role or "").strip().lower()
     if parsed.baseline and not target_role:
-        target_role = "pretense_baseline" if parsed.pretense else "baseline"
+        if parsed.pipeline == "combined":
+            target_role = "combined_baseline"
+        elif parsed.pipeline == "pretense":
+            target_role = "pretense_baseline"
+        else:
+            target_role = "baseline"
 
     active_pipeline = resolve_scope_pipeline(
         scope=scope,
         repo_root=parsed.repo_root,
-        explicit_pretense=parsed.pretense,
+        explicit_pretense=(parsed.pipeline == "pretense"),
+        explicit_pipeline=parsed.pipeline,
         target_role=target_role or None,
     )
 
@@ -2225,7 +2331,7 @@ def run_clean(
                 forward_args.extend(["--max-context-tokens", str(parsed.max_context_tokens)])
             if parsed.repo_root:
                 forward_args.extend(["--repo-root", parsed.repo_root])
-            if parsed.pretense:
+            if parsed.pipeline == "pretense":
                 forward_args.append("--pretense")
             if parsed.simulation:
                 forward_args.append("--simulation")
@@ -2253,7 +2359,12 @@ def run_clean(
             print(f"Error: No declared roles found for directory scope '{scope}'.", file=sys.stderr)
             return 1
 
-        if active_pipeline:
+        if active_pipeline == "combined":
+            declared_roles = [
+                r for r in declared_roles
+                if r.pipeline in (None, "", "standard", "pretense")
+            ]
+        elif active_pipeline:
             declared_roles = [
                 r for r in declared_roles
                 if r.pipeline in (None, "", active_pipeline)

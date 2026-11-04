@@ -827,22 +827,25 @@ class RoleResolver(roles.RoleResolver):
                 all_roles = self._get_roles(repo_root)
                 resolved_roles = list(all_roles.values())
 
-            active_pipeline = _find_pipeline_for_scope(root, dir_scope)
-            if active_pipeline:
+            active_pipeline = _find_pipeline_for_scope(root, dir_scope) or "standard"
+            if active_pipeline == "combined":
                 return [
                     r for r in resolved_roles
-                    if not r.fused_roles and (r.pipeline is None or r.pipeline == "" or r.pipeline == active_pipeline)
+                    if not r.fused_roles and (r.pipeline is None or r.pipeline == "" or r.pipeline in ("standard", "pretense"))
                 ]
-            else:
-                return [
-                    r for r in resolved_roles
-                    if not r.fused_roles
-                ]
+            return [
+                r for r in resolved_roles
+                if not r.fused_roles and (r.pipeline is None or r.pipeline == "" or r.pipeline == active_pipeline)
+            ]
 
         all_roles = self._get_roles(repo_root)
         return [r for r in all_roles.values() if not r.fused_roles]
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-26T20:38:00Z
+# LAST_CHANGED: 2026-11-04T10:33:00Z
+# CHANGE: Default active pipeline to standard when no pipeline is explicitly configured
+# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+# --- END CLEANROOM METADATA ---
 # LAST_CHANGED: 2026-11-03T09:10:00Z
 # CHANGE: Remove pretense2 active pipeline handling
 # COVERAGE_AUDIT: 2026-10-15T17:42:47Z

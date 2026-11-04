@@ -81,6 +81,11 @@
     - [Cost-Efficiency Dynamics](#cost-efficiency-dynamics)
     - [Empirical Multi-Component & Cross-Interface Telemetry (`task_queue`, `inter_interface`, `multi_interface`)](#empirical-multi-component--cross-interface-telemetry-task_queue-inter_interface-multi_interface)
 13. [Comparative Evolution Matrix](#13-comparative-evolution-matrix)
+14. [Combined Verification Methodology (`--method combined`) [TODO]](#14-combined-verification-methodology---method-combined-todo)
+    - [The Complementary Verification Thesis](#the-complementary-verification-thesis)
+    - [Benchmark Runner CLI Interface (`--method`)](#benchmark-runner-cli-interface---method)
+    - [DAG Role Topology & Dual-Branch Convergence](#dag-role-topology--dual-branch-convergence)
+    - [Verification Gate & Artifact Archival](#verification-gate--artifact-archival)
 
 ---
 
@@ -1237,3 +1242,77 @@ These benchmarks demonstrate that Pretense reliably scales from single-component
 | **Observability Hooks** | Private attribute inspection (`target._items`) | **Typed `@test_only` query accessors in `low/*.pyi`** |
 | **QA Blame Allocation** | 100% blamed on `lib` (infinite loop risk) | **Symmetrical blame + Circuit Breaker** |
 | **AST Processing** | None (speculative runtime execution `_run_pass1`) | **Static AST Chopping in framework & linter** |
+
+---
+
+## 14. Combined Verification Methodology (`--method combined`) [TODO]
+
+> **Status: TODO (Design complete, implementation pending)**
+
+### The Complementary Verification Thesis
+
+Empirical benchmark analysis across model tiers demonstrated that neither standard unit testing nor stateful fuzzing is sufficient in isolation:
+1. **Targeted Unit Tests (`test`, `qa`, `coverage`)**: Excel at validating essential specification postconditions and generating direct statement coverage backpressure. When an implementation author introduces a branch to satisfy a requirement, `coverage` forces the test author to verify it. However, static unit tests cannot reliably detect accidental temporal ordering bugs, subtle concurrency reentrancy, or multi-step state mutations.
+2. **Stateful Fuzz Testing (`pretense`, `pretense_qa`, `pretense_coverage`)**: Excels at broad invariant validation and exploring thousands of random call sequences, exposing temporal race conditions and state leakage. However, when both the library and state machine authors share an omission blind spot, the abstract model tautology ($SUT \equiv Model_{SM}$) conceals missing postconditions behind 100% fuzz pass rates.
+
+The **Combined Verification Methodology** (`--method combined`) bridges this epistemic divide by subjecting the concrete library implementation (`lib/*.py`) to **both** verification engines simultaneously within a single Cleanroom DAG pass.
+
+### Benchmark Runner CLI Interface (`--method`)
+
+The legacy `--pretense` binary switch is replaced by a first-class `--method` option with three distinct modes:
+
+```bash
+# 1. Standard methodology: Unit tests with pytest + line/branch coverage (default)
+uv run autofab benchmark --method standard --suite task_queue --model deepseek-flash
+
+# 2. Pretense methodology: 1:1 state machines, fake synthesis, and Hypothesis fuzzing
+uv run autofab benchmark --method pretense --suite task_queue --model deepseek-flash
+
+# 3. Combined methodology: Dual-branch execution up to both coverage and pretense_coverage
+uv run autofab benchmark --method combined --suite task_queue --model deepseek-flash
+```
+
+For backward compatibility, invocations specifying `--pretense` are automatically mapped to `--method pretense`.
+
+### DAG Role Topology & Dual-Branch Convergence
+
+Under `--method combined`, the DAG provisioner executes common specification and implementation roles, then forks downstream verification into concurrent branches that converge on the shared library implementation:
+
+```mermaid
+flowchart TD
+    high["high/*.md"] --> planning["planning/*.md"]
+    planning --> scenario["scenarios/*.md"]
+    scenario --> low["low/*.pyi"]
+    low --> spec_qa["spec_qa"]
+    spec_qa --> lib["lib/*.py"]
+    
+    subgraph Standard Branch ["Standard Unit Testing Pipeline"]
+        lib -.-> test["tests/*_test.py"]
+        test --> qa["qa (pytest)"]
+        qa --> coverage["coverage (100% line & branch)"]
+    end
+    
+    subgraph Pretense Branch ["Pretense Stateful Fuzzing Pipeline"]
+        lib -.-> pretense["pretense/*_pretense.py"]
+        pretense --> pretense_qa["pretense_qa (fuzzing)"]
+        pretense_qa --> pretense_coverage["pretense_coverage (statement)"]
+    end
+
+    coverage --> lib
+    pretense_coverage --> lib
+```
+
+1. **Role Filtering**: Roles declared with `pipeline = "standard"` and `pipeline = "pretense"` are both treated as active when `active_pipeline == "combined"`.
+2. **Mutual Verification Invariant**: The scope only achieves clean convergence when **both** `coverage` and `pretense_coverage` pass without outstanding defect feedback.
+3. **Defect Backpressure**:
+   - If `lib` violates contract postconditions caught by unit tests, `qa` or `coverage` blames `lib`.
+   - If `lib` violates state-transition invariants caught by Hypothesis fuzzing, `pretense_qa` or `pretense_coverage` blames `lib`.
+   - Modifying `lib` to fix either defect automatically triggers downstream re-verification across **both** test suites.
+
+### Verification Gate & Artifact Archival
+
+Upon DAG convergence, the benchmark verification gate (`_VerificationGate`) validates the composite test artifacts:
+1. **Static Analysis (Pyright)**: Validates type integrity across `lib/`, `tests/`, and `pretense/`.
+2. **Unit Test Gate (Pytest)**: Executes `uv run pytest <unit_dir>/tests/` and records test counts and assertion outcomes.
+3. **Pretense Gate (Pretense)**: Executes `uv run pretense <unit_dir>/pretense/ --no-fuzz --cov` to verify state-machine transitions and coverage.
+4. **Artifact Archival**: Archives `lib_<N>.py`, `test_<N>.py`, and `pretense_<N>.py` under the destination directory tagged with the `-combined` folder suffix.

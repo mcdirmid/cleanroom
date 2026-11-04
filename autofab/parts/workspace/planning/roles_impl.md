@@ -12,7 +12,7 @@ The roles_impl implementation component provides concrete algorithms to parse co
 - The role resolver parses fused role declarations combining constituent roles, unioning writable and readonly patterns, and associating constituent role names. [parse_fused_role_declarations]
 - The role resolver evaluates role declarations from repository build file AST structures when TOML files are absent. [evaluate_build_file_ast]
 - The role resolver enforces declaration rules rejecting redundant, conflicting, or non-silent auditor dependencies. [validate_dependency_declarations]
-- The role resolver discovers package methodology and pipeline configurations across directory scope hierarchies, filtering listed roles according to active pipeline bindings. [discover_package_methodologies]
+- The role resolver discovers package methodology and pipeline configurations across directory scope hierarchies, filtering listed roles according to active pipeline bindings and defaulting to the standard pipeline when unconfigured. [discover_package_methodologies]
 - The role resolver qualifies resolved role definitions with requested target role addresses. [qualify_resolved_role_address]
 - The role resolver caches parsed role definitions against file modification timestamps. [cache_parsed_role_definitions]
 
@@ -38,7 +38,7 @@ The roles_impl implementation component provides concrete algorithms to parse co
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-26T20:38:00Z
-LAST_CHANGED: 2026-11-03T09:10:00Z
-CHANGE: Remove pretense2 active pipeline handling
+LAST_CHANGED: 2026-11-04T10:33:00Z
+CHANGE: Default active pipeline to standard when no pipeline is explicitly configured
 SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 -->

@@ -177,6 +177,67 @@ class ToolCoverageImplTest(unittest.TestCase):
             self.assertGreater(cov.missed, 0)
             self.assertLess(cov.coverage_pct, 100.0)
 
+    def test_measure_single_target_coverage_failing_suite(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            td_path = Path(td)
+            impl_file = td_path / "calc_impl.py"
+            test_file = td_path / "calc_impl_test.py"
+
+            impl_code = textwrap.dedent(
+                """
+                def add(a: int, b: int) -> int:
+                    return a + b
+                """
+            )
+            test_code = textwrap.dedent(
+                """
+                import unittest
+                from calc_impl import add
+
+                class CalcTest(unittest.TestCase):
+                    def test_add(self):
+                        self.assertEqual(add(2, 3), 999)
+                """
+            )
+
+            impl_file.write_text(impl_code, encoding="utf-8")
+            test_file.write_text(test_code, encoding="utf-8")
+
+            cov = self.evaluator.measure_single_target_coverage(impl_file, test_file)
+            self.assertFalse(cov.test_passed)
+            self.assertIsNotNone(cov.test_error)
+            self.assertIn("AssertionError", str(cov.test_error))
+            # Executed line 2 (def add) was executed before the assertion in test
+            self.assertGreater(cov.covered, 0)
+
+    def test_measure_single_target_coverage_package_resolution(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "pyproject.toml").write_text("[project]\nname='test'\n", encoding="utf-8")
+            pkg_dir = root / "parts" / "widget_box"
+            (pkg_dir / "lib").mkdir(parents=True)
+            (pkg_dir / "tests").mkdir(parents=True)
+            (pkg_dir / "__init__.py").write_text("", encoding="utf-8")
+            (pkg_dir / "lib" / "__init__.py").write_text("", encoding="utf-8")
+            # Same stem in lib as the package name (the shadowing pitfall)
+            (pkg_dir / "lib" / "widget_box.py").write_text("class WidgetBox:\n    pass\n", encoding="utf-8")
+            impl_file = pkg_dir / "lib" / "widget_box_impl.py"
+            impl_file.write_text(
+                "from . import widget_box\nclass WidgetBoxImpl(widget_box.WidgetBox):\n    def size(self):\n        return 1\n",
+                encoding="utf-8",
+            )
+            (pkg_dir / "tests" / "__init__.py").write_text("", encoding="utf-8")
+            test_file = pkg_dir / "tests" / "widget_box_impl_test.py"
+            test_file.write_text(
+                "import unittest\nfrom widget_box.lib.widget_box_impl import WidgetBoxImpl\nclass WTest(unittest.TestCase):\n    def test_size(self):\n        self.assertEqual(WidgetBoxImpl().size(), 1)\n",
+                encoding="utf-8",
+            )
+
+            cov = self.evaluator.measure_single_target_coverage(impl_file, test_file)
+            self.assertTrue(cov.test_passed)
+            self.assertIsNone(cov.test_error)
+            self.assertEqual(cov.coverage_pct, 100.0)
+
     def test_classify_span_and_status_buffer(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             td_path = Path(td)
@@ -244,8 +305,8 @@ if __name__ == "__main__":
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-11-03T19:30:00Z
-# CHANGE: add tests for classify_span and coverage status buffer
+# LAST_CHANGED: 2026-11-04T12:15:00Z
+# CHANGE: add tests for unified pytest execution under coverage, failing suite, and package resolution
 # COVERAGE_AUDIT: 2026-10-15T17:42:47Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

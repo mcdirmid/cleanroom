@@ -7,7 +7,9 @@ import json
 import os
 from pathlib import Path
 import re
+import subprocess
 import sys
+import tempfile
 import trace
 import types
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
@@ -348,151 +350,267 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
                     non_exec.add(ln)
         return non_exec
 
-    # Contract: Extract candidate executable lines; determine covered statements by tracing unit test suite; report missed statements, missing ranges, and missing spans; set test_passed=False on errors.
+    # Contract: Extract candidate executable lines; determine covered statements by running unit test suite using unified pytest runner under coverage tracking; report missed statements, missing ranges, and missing spans; set test_passed=False on errors.
     def measure_single_target_coverage(
         self, impl_path: Path | str, test_path: Path | str
     ) -> coverage.ModuleCoverage:
-        """Executes single target test suite under trace instrumentation and calculates metrics."""
+        """Executes single target test suite under coverage tracking and calculates metrics."""
         ipath = Path(impl_path).resolve()
         tpath = Path(test_path).resolve()
+        abs_impl = str(ipath)
 
         raw_exec: Set[int] = set()
         trace_mod: Any = trace
         if hasattr(trace_mod, "_find_executable_linenos"):
-            exec_dict = trace_mod._find_executable_linenos(str(ipath))
+            exec_dict = trace_mod._find_executable_linenos(abs_impl)
             if isinstance(exec_dict, dict):
                 raw_exec = {ln for ln in exec_dict.keys() if isinstance(ln, int) and ln > 0}
         non_exec = self.get_non_executable_lines(ipath)
         exec_lines = raw_exec - non_exec
 
-        module_base = ipath.stem
-        test_mod_name = tpath.stem
+        # Resolve workspace / root directory from test/impl path ancestors
+        ws_root: Optional[Path] = None
+        curr: Optional[Path] = tpath.parent
+        while curr and curr != curr.parent:
+            if any(
+                (curr / marker).exists()
+                for marker in (
+                    "pyproject.toml",
+                    "autofab.toml",
+                    "cleanroom.toml",
+                    ".role_descriptor.json",
+                )
+            ) or (curr / "parts").is_dir():
+                ws_root = curr
+                break
+            curr = curr.parent
+        if ws_root is None:
+            ws_root = tpath.parent
 
-        for m in list(sys.modules.keys()):
-            if (
-                m == module_base
-                or m.endswith(f".{module_base}")
-                or m == tpath.stem
-                or m.endswith(f".{tpath.stem}")
-                or m == "lib"
-                or m.startswith("lib.")
-                or m == "tests"
-                or m.startswith("tests.")
-                or m == "parts"
-                or m.startswith("parts.")
-            ):
-                del sys.modules[m]
+        # Discover package/parts containers to construct canonical PYTHONPATH
+        extra_dirs: List[Path] = [tpath.parent]
+        is_cleanroom_part = False
+        curr_p: Optional[Path] = ipath.parent
+        while curr_p and curr_p != curr_p.parent:
+            if curr_p.name == "parts":
+                extra_dirs.append(curr_p)
+                extra_dirs.append(curr_p.parent)
+                is_cleanroom_part = True
+                break
+            curr_p = curr_p.parent
 
-        tracer = trace.Trace(count=1, trace=0)
+        if not is_cleanroom_part:
+            extra_dirs.append(ipath.parent)
 
-        test_load_error: Optional[str] = None
-        test_failures_str: Optional[str] = None
-        test_passed = True
-
-        def run_suite() -> None:
-            nonlocal test_load_error, test_failures_str, test_passed
-            loader = unittest.TestLoader()
-            try:
-                suite = loader.loadTestsFromName(test_mod_name)
-            except (ImportError, AttributeError, SyntaxError, TypeError, ValueError, NameError) as e:
-                test_load_error = str(e)
-                test_passed = False
-                return
-
-            if suite.countTestCases() == 0:
-                mod = sys.modules.get(test_mod_name)
-                if mod:
-                    for attr_name in sorted(dir(mod)):
-                        if attr_name.startswith("test_") and callable(getattr(mod, attr_name)):
-                            fn = getattr(mod, attr_name)
-                            suite.addTest(unittest.FunctionTestCase(fn))
-
-            runner = unittest.TextTestRunner(stream=io.StringIO(), verbosity=0)
-            with (
-                contextlib.redirect_stdout(io.StringIO()),
-                contextlib.redirect_stderr(io.StringIO()),
-            ):
-                res = runner.run(suite)
-            if res.errors:
-                for _test_case, err_trace in res.errors:
-                    if "Failed to import test module" in err_trace:
-                        test_load_error = err_trace
-                        test_passed = False
-                        return
-            if not res.wasSuccessful():
-                test_passed = False
-                fail_lines = []
-                for test_case, err in res.failures + res.errors:
-                    fail_lines.append(f"{test_case}:\n{err}")
-                test_failures_str = "\n".join(fail_lines)
-        orig_sys_path = list(sys.path)
+        env = dict(os.environ)
+        env["BUILD_WORKSPACE_DIRECTORY"] = str(ws_root)
         try:
-            extra_paths: List[str] = []
-            part_dir = str(ipath.parent.parent)
-            lib_dir = str(ipath.parent)
-            test_dir = str(tpath.parent)
-            extra_paths.extend([test_dir, lib_dir, part_dir])
+            from support.lib import app_info
+        except Exception:
+            import app_info  # type: ignore
 
-            # Include enclosing package scopes (e.g. directories containing 'parts', config files, or pyproject.toml)
-            try:
-                from support.lib import app_info
-            except Exception:
-                import app_info  # type: ignore
-            cfg_markers = app_info.get_config_filenames() + ("pyproject.toml",)
-            curr = ipath.parent
-            while curr and curr != curr.parent:
-                if (curr / "parts").is_dir():
-                    extra_paths.append(str(curr))
-                if any((curr / f).is_file() for f in cfg_markers):
-                    extra_paths.append(str(curr))
-                curr = curr.parent
-
-            env_pypath = os.environ.get("PYTHONPATH", "")
-            if env_pypath:
-                for pp in env_pypath.split(os.pathsep):
-                    if pp and os.path.isdir(pp):
-                        extra_paths.append(str(Path(pp).resolve()))
-
-            cwd_str = str(Path.cwd().resolve())
-            extra_paths.append(cwd_str)
-
-            for p in reversed(extra_paths):
-                while p in sys.path:
-                    sys.path.remove(p)
-                sys.path.insert(0, p)
-
-            tracer.runfunc(run_suite)
-        finally:
-            sys.path[:] = orig_sys_path
-
-        if not test_passed:
-            err_msg = (
-                test_load_error or test_failures_str or "Test suite execution failed."
+        if hasattr(app_info, "assemble_pythonpath_str"):
+            env["PYTHONPATH"] = app_info.assemble_pythonpath_str(
+                repo_root=str(ws_root),
+                ws_root=str(ws_root),
+                extra_paths=[str(d) for d in extra_dirs],
+                existing_pythonpath=env.get("PYTHONPATH"),
             )
-            return coverage.ModuleCoverage(
-                module_name=ipath.name,
-                test_name=tpath.name,
-                file_path=str(ipath),
-                test_path=str(tpath),
-                total_executable=len(exec_lines),
-                covered=0,
-                missed=len(exec_lines),
-                coverage_pct=0.0,
-                missing_lines=sorted(list(exec_lines)),
-                missing_ranges=self.format_ranges(sorted(list(exec_lines))),
-                missing_spans=self.group_into_spans(sorted(list(exec_lines))),
-                test_passed=False,
-                test_error=err_msg,
-            )
+        else:
+            pypaths: List[str] = [str(ws_root)]
+            pypaths.extend(str(d) for d in extra_dirs)
+            if "PYTHONPATH" in env:
+                pypaths.extend(
+                    p for p in env["PYTHONPATH"].split(os.pathsep) if p and p not in pypaths
+                )
+            env["PYTHONPATH"] = os.pathsep.join(pypaths)
 
-        results = tracer.results()
-        abs_impl = str(ipath.resolve())
+        env["PATH"] = os.path.dirname(sys.executable) + os.pathsep + env.get("PATH", "")
+
+        with tempfile.NamedTemporaryFile(suffix=".coverage", delete=False) as tmp_cov:
+            cov_data_file = tmp_cov.name
+
+        include_arg = f"{abs_impl},{Path(impl_path)}" if str(impl_path) != abs_impl else abs_impl
+        cmd = [
+            sys.executable,
+            "-m",
+            "coverage",
+            "run",
+            f"--data-file={cov_data_file}",
+            f"--include={include_arg}",
+            "-m",
+            "pytest",
+            str(tpath),
+            "-q",
+            "--timeout=10",
+            "--timeout-method=thread",
+        ]
+
+        test_passed = True
+        test_error: Optional[str] = None
+        ran_subprocess = False
+
+        cmd_timeout = getattr(app_info, "get_verify_timeout", lambda: 60.0)()
+        try:
+            res = subprocess.run(
+                cmd,
+                cwd=str(ws_root),
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=cmd_timeout,
+            )
+            # If pytest failed because pytest-timeout option wasn't recognized, retry without it
+            if res.returncode != 0 and (
+                "unrecognized arguments: --timeout" in res.stderr
+                or "unrecognized arguments: --timeout" in res.stdout
+            ):
+                cmd_fallback = [
+                    sys.executable,
+                    "-m",
+                    "coverage",
+                    "run",
+                    f"--data-file={cov_data_file}",
+                    f"--include={include_arg}",
+                    "-m",
+                    "pytest",
+                    str(tpath),
+                    "-q",
+                ]
+                res = subprocess.run(
+                    cmd_fallback,
+                    cwd=str(ws_root),
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=cmd_timeout,
+                )
+
+            ran_subprocess = True
+            if res.returncode != 0:
+                test_passed = False
+                out_str = res.stdout.strip()
+                err_str = res.stderr.strip()
+                test_error = f"{out_str}\n{err_str}".strip() or "Test suite execution failed."
+        except subprocess.TimeoutExpired:
+            ran_subprocess = True
+            test_passed = False
+            test_error = f"Test suite execution timed out after {cmd_timeout:.1f} seconds."
+        except (OSError, PermissionError):
+            ran_subprocess = False
+
         covered_lines: Set[int] = set()
-        for (fn, ln), _ in results.counts.items():
-            if (
-                os.path.abspath(fn) == abs_impl or Path(fn).name == ipath.name
-            ) and ln in exec_lines:
-                covered_lines.add(ln)
+
+        if ran_subprocess:
+            if os.path.exists(cov_data_file):
+                try:
+                    import coverage as cov_lib
+
+                    c_data = cov_lib.Coverage(data_file=cov_data_file)
+                    c_data.load()
+                    cov_data = c_data.get_data()
+                    lines = cov_data.lines(abs_impl) or cov_data.lines(str(Path(impl_path)))
+                    if not lines:
+                        for mf in cov_data.measured_files():
+                            if os.path.realpath(mf) == abs_impl or Path(mf).name == ipath.name:
+                                lines = cov_data.lines(mf)
+                                if lines:
+                                    break
+                    if lines:
+                        covered_lines = {ln for ln in lines if ln in exec_lines}
+                except Exception:
+                    pass
+                finally:
+                    try:
+                        os.remove(cov_data_file)
+                    except OSError:
+                        pass
+        else:
+            try:
+                os.remove(cov_data_file)
+            except OSError:
+                pass
+
+            module_base = ipath.stem
+            test_mod_name = tpath.stem
+
+            for m in list(sys.modules.keys()):
+                if (
+                    m == module_base
+                    or m.endswith(f".{module_base}")
+                    or m == tpath.stem
+                    or m.endswith(f".{tpath.stem}")
+                    or m == "lib"
+                    or m.startswith("lib.")
+                    or m == "tests"
+                    or m.startswith("tests.")
+                    or m == "parts"
+                    or m.startswith("parts.")
+                ):
+                    del sys.modules[m]
+
+            tracer = trace.Trace(count=1, trace=0)
+            test_load_error: Optional[str] = None
+            test_failures_str: Optional[str] = None
+
+            def run_suite() -> None:
+                nonlocal test_load_error, test_failures_str, test_passed
+                loader = unittest.TestLoader()
+                try:
+                    suite = loader.loadTestsFromName(test_mod_name)
+                except (ImportError, AttributeError, SyntaxError, TypeError, ValueError, NameError) as e:
+                    test_load_error = str(e)
+                    test_passed = False
+                    return
+
+                if suite.countTestCases() == 0:
+                    mod = sys.modules.get(test_mod_name)
+                    if mod:
+                        for attr_name in sorted(dir(mod)):
+                            if attr_name.startswith("test_") and callable(getattr(mod, attr_name)):
+                                fn = getattr(mod, attr_name)
+                                suite.addTest(unittest.FunctionTestCase(fn))
+
+                runner = unittest.TextTestRunner(stream=io.StringIO(), verbosity=0)
+                with (
+                    contextlib.redirect_stdout(io.StringIO()),
+                    contextlib.redirect_stderr(io.StringIO()),
+                ):
+                    res = runner.run(suite)
+                if res.errors:
+                    for _test_case, err_trace in res.errors:
+                        if "Failed to import test module" in err_trace:
+                            test_load_error = err_trace
+                            test_passed = False
+                            return
+                if not res.wasSuccessful():
+                    test_passed = False
+                    fail_lines = []
+                    for test_case, err in res.failures + res.errors:
+                        fail_lines.append(f"{test_case}:\n{err}")
+                    test_failures_str = "\n".join(fail_lines)
+
+            orig_sys_path = list(sys.path)
+            try:
+                for p in reversed([str(d) for d in extra_dirs]):
+                    while p in sys.path:
+                        sys.path.remove(p)
+                    sys.path.insert(0, p)
+                tracer.runfunc(run_suite)
+            finally:
+                sys.path[:] = orig_sys_path
+
+            if not test_passed:
+                test_error = (
+                    test_load_error or test_failures_str or "Test suite execution failed."
+                )
+
+            results = tracer.results()
+            for (fn, ln), _ in results.counts.items():
+                if (
+                    os.path.abspath(fn) == abs_impl or Path(fn).name == ipath.name
+                ) and ln in exec_lines:
+                    covered_lines.add(ln)
 
         missed_lines = sorted(list(exec_lines - covered_lines))
         total_exec = len(exec_lines)
@@ -511,7 +629,8 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
             missing_lines=missed_lines,
             missing_ranges=self.format_ranges(missed_lines),
             missing_spans=spans,
-            test_passed=True,
+            test_passed=test_passed,
+            test_error=test_error,
         )
 
     # Contract: Resolve target if test_path omitted; evaluate coverage pct against threshold; write formatted report to update_log when specified.

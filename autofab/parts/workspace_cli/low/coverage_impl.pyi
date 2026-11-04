@@ -142,15 +142,12 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
         """Measures single-target statement coverage by executing the companion test suite under execution tracing.
 
         GROUNDING:
-        - Clears the sys.modules entries of the measured module, test module, and library
-          package namespaces, and injects the local part package and constituent directories
-          of the implementation and test files into sys.path before execution, then runs the
-          companion unittest suite under trace instrumentation
-          through trace.Trace, mutating a per-invocation mapping of implementation file
-          paths to executed line numbers from the trace callback and capturing suite import
-          and execution failures into coverage.ModuleCoverage.test_error with
-          coverage.ModuleCoverage.test_passed cleared.
-        - Intersects the accumulated traced line numbers with the candidate executable
+        - Executes the companion unit test suite using the unified pytest test runner
+          under coverage tracking in an isolated process, recording executed line
+          numbers on the implementation file and capturing suite import and execution
+          failures into coverage.ModuleCoverage.test_error with
+          coverage.ModuleCoverage.test_passed cleared when failures occur.
+        - Intersects the accumulated line numbers with the candidate executable
           lines extracted by this evaluator's get_non_executable_lines and populates
           coverage.ModuleCoverage.total_executable,
           coverage.ModuleCoverage.covered, coverage.ModuleCoverage.missed,
@@ -189,7 +186,7 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-11-03T23:45:00Z
-# CHANGE: Instruct coverage auditor when uncovered spans persist to examine library implementation for unreachable code
+# LAST_CHANGED: 2026-11-04T12:12:00Z
+# CHANGE: Unify test execution in coverage evaluator with the standard pytest runner under coverage tracking
 # SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---

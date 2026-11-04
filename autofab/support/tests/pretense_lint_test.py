@@ -1028,6 +1028,44 @@ class PretenseLintTest(unittest.TestCase):
         self.assertTrue(any("PRE_LINT_NO_TOP_LEVEL_PROBE" in e for e in errors))
         self.assertTrue(any("You are not allowed to execute the test suite or run ad-hoc probes" in e for e in errors))
 
+    def test_multi_module_singleton_auto_registration(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            low_dir = os.path.join(tmp_dir, "low")
+            os.makedirs(low_dir, exist_ok=True)
+            tq_pyi = os.path.join(low_dir, "task_queue_impl.pyi")
+            with open(tq_pyi, "w", encoding="utf-8") as f:
+                f.write(
+                    "from support.lib.framework import singleton_type\n\n"
+                    "@singleton_type('system')\n"
+                    "class TaskQueue:\n"
+                    "    def submit(self, task_id: str) -> None: ...\n"
+                )
+            tw_pyi = os.path.join(low_dir, "task_worker_impl.pyi")
+            with open(tw_pyi, "w", encoding="utf-8") as f:
+                f.write(
+                    "from support.lib.framework import singleton_type\n\n"
+                    "@singleton_type('system')\n"
+                    "class TaskWorker:\n"
+                    "    def process(self, task_id: str) -> None: ...\n"
+                )
+
+            scaffold = generate_pretense_scaffold(
+                pyi_path=tw_pyi,
+                stem="task_worker_impl_pretense",
+                impl_stem="task_worker_impl",
+                lib_pkg="my_pkg",
+                is_interface=False,
+            )
+            self.assertIn("from my_pkg.task_queue_impl import __initialize__ as _tq_initialize", scaffold)
+            self.assertIn("from my_pkg.task_worker_impl import __initialize__ as _tw_initialize", scaffold)
+            self.assertIn("_tq_initialize(self.registry)", scaffold)
+            self.assertIn("_tw_initialize(self.registry)", scaffold)
+            self.assertIn("_tq_initialize(registry)", scaffold)
+            self.assertIn("_tw_initialize(registry)", scaffold)
+            tree = ast.parse(scaffold)
+            self.assertEqual(len(check_pretense_structure(tree)), 0)
+            self.assertEqual(len(check_pretense_imports(scaffold, pyi_path=tw_pyi, is_impl=True)), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

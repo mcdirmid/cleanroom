@@ -4,9 +4,9 @@ implements: coverage
 
 ## Purpose
 
-The coverage_impl implementation component realizes module test coverage evaluation, syntax tree statement filtering, trace-based execution counting, AST-based span ownership classification, and structured report formatting.
+The coverage_impl implementation component realizes module test coverage evaluation, syntax tree statement filtering, unified pytest test execution under coverage tracking, AST-based span ownership classification, and structured report formatting.
 
-Trace-based coverage evaluation and syntax tree analysis require concrete execution semantics to filter non-executable lines and run test suites hermetically. Accurately attributing missing statements to grounding requirements requires parsing abstract syntax trees to ignore signature continuations and docstrings, resetting module loader state to ensure clean test imports, classifying uncovered spans by ownership, and formatting contiguous span reports with source code context. The coverage_impl implementation component provides concrete algorithms for syntax tree line filtering, trace execution capture, span grouping, span classification, and coverage threshold validation.
+Test execution under coverage tracking and syntax tree analysis require concrete execution semantics to filter non-executable lines and run test suites hermetically matching the QA test runner. Accurately attributing missing statements to grounding requirements requires parsing abstract syntax trees to ignore signature continuations and docstrings, executing test suites via the unified pytest runner under coverage tracking, classifying uncovered spans by ownership, and formatting contiguous span reports with source code context. The coverage_impl implementation component provides concrete algorithms for syntax tree line filtering, test execution capture, span grouping, span classification, and coverage threshold validation.
 
 **Out of scope:** The coverage_impl implementation component does not modify source files, schedule graph traversals, or install conversational tools; these are handled by other components.
 
@@ -18,7 +18,7 @@ The coverage evaluator discovers target mappings by scanning the part directorie
 
 The coverage evaluator extracts candidate non-executable lines by parsing source text into abstract syntax trees, identifying docstring constants, class and function signature continuations, and line indices marked with pragma no cover comments together with their statement bodies.
 
-The coverage evaluator executes a single-target test suite under trace instrumentation, clearing cached target, test, and library package modules from memory across package namespaces, injecting local part package and constituent directory paths into module search paths to prevent loading cross-workspace shadows, capturing test suite runner failures, and collecting executed line hits on the implementation file.
+The coverage evaluator executes a single-target test suite using the unified pytest test runner under coverage tracking, isolating test execution errors, capturing test suite runner failures, and collecting executed line hits on the implementation file.
 
 The coverage evaluator formats uncovered line sequences into compact comma-separated range strings and paired contiguous span tuples, and formats source context snippets for uncovered spans by extracting the corresponding source file lines and clamping output to a maximum span limit when requested.
 
@@ -30,7 +30,7 @@ The coverage evaluator enforces minimum coverage thresholds, returning exit stat
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-11-03T23:45:00Z
-CHANGE: Instruct coverage auditor when uncovered spans persist to examine library implementation for unreachable code
+LAST_CHANGED: 2026-11-04T12:08:00Z
+CHANGE: Unify test execution in coverage evaluator with the standard pytest runner under coverage tracking
 SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->

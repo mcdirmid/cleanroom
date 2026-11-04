@@ -1422,13 +1422,155 @@ class BenchmarkImplTest(unittest.TestCase):
         ret_models = evaluator.run_cli(["--dry-run", "--suite=cpython", "--models=deepseek-flash", "--units=1"])
         self.assertEqual(ret_models, 0)
 
+    def test_baseline_combined_simulation(self) -> None:
+        """CUJ: Executing a simulated baseline flight with combined methodology."""
+        evaluator = BenchmarkEvaluator()
+        catalog = evaluator.get_model_catalog()
+        model = catalog["gemini-flash"]
+        unit = evaluator.get_suite_catalog()["dag_engine"][0]
+
+        record = evaluator.execute_flight(
+            model=model,
+            unit=unit,
+            rq="rq1",
+            harness="antigravity",
+            simulate=True,
+            baseline=True,
+            method="combined",
+        )
+
+        self.assertTrue(record.flight_id.endswith("_combined_baseline"))
+        self.assertEqual(record.methodology, "combined_baseline")
+        self.assertEqual(record.stages_executed, ["baseline"])
+        self.assertEqual(record.measurements.role_rounds, {"baseline": 1})
+        self.assertTrue(record.verification_outcomes.spec_linter_pass)
+        self.assertGreater(record.verification_outcomes.unit_tests_passed, 0)
+
+    def test_combined_non_baseline_simulation(self) -> None:
+        """CUJ: Executing a simulated flight with combined methodology."""
+        evaluator = BenchmarkEvaluator()
+        catalog = evaluator.get_model_catalog()
+        model = catalog["gemini-flash"]
+        unit = evaluator.get_suite_catalog()["dag_engine"][0]
+
+        record = evaluator.execute_flight(
+            model=model,
+            unit=unit,
+            rq="rq1",
+            harness="antigravity",
+            simulate=True,
+            baseline=False,
+            method="combined",
+        )
+
+        self.assertTrue(record.flight_id.endswith("_combined"))
+        self.assertEqual(record.methodology, "combined")
+        self.assertIn("lib", record.stages_executed)
+        self.assertIn("test", record.stages_executed)
+        self.assertIn("pretense", record.stages_executed)
+        self.assertTrue(record.verification_outcomes.spec_linter_pass)
+        self.assertGreater(record.verification_outcomes.unit_tests_passed, 0)
+
+    def test_baseline_combined_artifact_archival_directory(self) -> None:
+        """CUJ: Archiving successful baseline combined flight saves into -combined-baseline folder with test_<N>.py and pretense_<N>.py."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            evaluator = BenchmarkEvaluator()
+            evaluator._repo_root = repo_root
+
+            model = evaluator.get_model_catalog()["gemini-flash"]
+            unit = benchmark.BenchmarkUnit(
+                suite="dag_engine",
+                task_id="dag_engine",
+                unit_dir="parts/dag_engine",
+                target_address="//parts/dag_engine#lib",
+            )
+
+            unit_full = repo_root / "parts" / "dag_engine"
+            lib_dir = unit_full / "lib"
+            tests_dir = unit_full / "tests"
+            pretense_dir = unit_full / "pretense"
+            lib_dir.mkdir(parents=True, exist_ok=True)
+            tests_dir.mkdir(parents=True, exist_ok=True)
+            pretense_dir.mkdir(parents=True, exist_ok=True)
+            (lib_dir / "dag_engine.py").write_text("class DAG: pass\n", encoding="utf-8")
+            (tests_dir / "dag_engine_test.py").write_text("def test_dag(): pass\n", encoding="utf-8")
+            (pretense_dir / "dag_engine_impl_pretense.py").write_text("class TestDAGUnit: pass\n", encoding="utf-8")
+
+            measurements = benchmark.FlightMeasurements(
+                inbound_tokens_uncached=1000,
+                inbound_tokens_cached=2000,
+                outbound_tokens=500,
+                step_latencies_seconds=[1.2],
+                wall_clock_seconds=5.0,
+                role_rounds={"combined_baseline": 1},
+            )
+            measurements.compute_totals(model)
+            outcomes = benchmark.VerificationOutcomes(
+                spec_linter_pass=True,
+                pyright_errors=0,
+                unit_tests_passed=15,
+                unit_tests_failed=0,
+                line_coverage_pct=95.0,
+                branch_coverage_pct=90.0,
+            )
+            record = benchmark.FlightRecord(
+                flight_id="flight_test_combined_baseline_001",
+                timestamp="2026-10-25T11:00:00Z",
+                rq="RQ1",
+                model={"identifier": model.identifier, "tier": model.tier, "default_harness": "antigravity"},
+                benchmark_unit={"task_id": unit.task_id, "suite": unit.suite},
+                methodology="combined_baseline",
+                stages_executed=["combined_baseline"],
+                measurements=measurements,
+                verification_outcomes=outcomes,
+            )
+
+            res = evaluator.archive_flight_artifacts(record, unit, method="combined")
+            self.assertIsNotNone(res)
+            assert res is not None
+            lib_dest, test_dest = res
+            self.assertIn("gemini-flash+antigravity-combined-baseline", lib_dest)
+            self.assertTrue(test_dest.endswith("test_1.py"))
+            dest_dir = Path(lib_dest).parent
+            self.assertTrue((dest_dir / "pretense_1.py").is_file())
+            lib_content = Path(lib_dest).read_text(encoding="utf-8")
+            self.assertIn("Methodology: combined_baseline", lib_content)
+
+    def test_run_cli_method_and_aliases_parsing(self) -> None:
+        """Scenario 18: run_cli accepts --method {standard, pretense, combined} and --standard, --pretense, --combined aliases."""
+        evaluator = BenchmarkEvaluator()
+        # --method options
+        for flag in ["--method=standard", "--method=pretense", "--method=combined", "--standard", "--pretense", "--combined"]:
+            ret = evaluator.run_cli(["--dry-run", "--suite=cpython", "--model=deepseek-flash", "--units=1", flag])
+            self.assertEqual(ret, 0, f"Failed for flag: {flag}")
+
+    def test_has_materialized_artifacts_combined(self) -> None:
+        """Verifies _has_materialized_artifacts requires lib, test, and pretense when method is combined."""
+        from autofab.parts.benchmark.lib.benchmark_impl import _has_materialized_artifacts
+        with tempfile.TemporaryDirectory() as td:
+            u_dir = Path(td)
+            (u_dir / "lib").mkdir()
+            (u_dir / "lib" / "foo.py").write_text("class Foo: pass\n")
+            self.assertFalse(_has_materialized_artifacts(u_dir, method="combined"))
+
+            (u_dir / "tests").mkdir()
+            (u_dir / "tests" / "foo_test.py").write_text("def test_foo(): pass\n")
+            self.assertFalse(_has_materialized_artifacts(u_dir, method="combined"))
+            self.assertTrue(_has_materialized_artifacts(u_dir, method="standard"))
+
+            (u_dir / "pretense").mkdir()
+            (u_dir / "pretense" / "foo_pretense.py").write_text("class FooPretense: pass\n")
+            self.assertTrue(_has_materialized_artifacts(u_dir, method="combined"))
+            self.assertTrue(_has_materialized_artifacts(u_dir, method="pretense"))
+
 
 if __name__ == "__main__":
     unittest.main()
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-19T18:45:00Z
-# LAST_CHANGED: 2026-11-03T09:10:00Z
-# CHANGE: Remove pretense2 test cases
+# LAST_CHANGED: 2026-11-04T11:30:00Z
+# CHANGE: Support --method combined, pretense, standard and combined_baseline fused role
 # SPEC_QA_AUDIT: 2026-10-19T19:35:00Z
 # --- END CLEANROOM METADATA ---

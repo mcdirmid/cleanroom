@@ -17,7 +17,7 @@ Validating implementation cleanliness requires verifying that every executable s
 
 - A coverage evaluator discovers available implementation and test file pairs across repository part packages. [discover_target_pairs]
 - A coverage evaluator extracts candidate executable lines from implementation source files by filtering out docstrings, function and class signature continuation lines, and pragma exclusion annotations. [extract_non_executable_lines]
-- A coverage evaluator measures single-target statement coverage by executing its test suite under execution tracing. [measure_target_coverage]
+- A coverage evaluator measures single-target statement coverage by executing its test suite using the unified test runner under coverage tracking. [measure_target_coverage]
 - A coverage evaluator formats missing statement line numbers into compact comma-separated range strings. [format_missing_ranges]
 - A coverage evaluator groups sorted missing statement line numbers into contiguous span tuples. [group_missing_spans]
 - A coverage evaluator normalizes target query strings by stripping package target or path prefixes. [normalize_query_string]
@@ -44,12 +44,12 @@ Validating implementation cleanliness requires verifying that every executable s
   - Deferred: Provided by coverage evaluator implementation.
 - AST parsing and pragma comment detection for non-executable statement lines.
   - Deferred: Provided by coverage evaluator implementation.
-- Python trace execution and test suite error capture.
+- Test execution under coverage tracking and test suite error capture.
   - Deferred: Provided by coverage evaluator implementation.
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:16:07Z
-CHANGE: Declare the coverage evaluator system tier and align record and executable line statements
+LAST_CHANGED: 2026-11-04T12:12:00Z
+CHANGE: Unify test execution in coverage evaluator with the standard test runner under coverage tracking
 SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->

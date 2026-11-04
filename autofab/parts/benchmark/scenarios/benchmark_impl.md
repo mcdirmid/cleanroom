@@ -60,7 +60,7 @@ Given: a list of completed flight records and an optional output file path.
 Given: a completed flight for model `qwen-35b` on benchmark unit `dag_engine` with synthesized `lib/`, `tests/`, and `.autofab.log` files in the ephemeral flight scope.
 
 1. The benchmark evaluator provisions the flight scope.
-   Observed: allocates a concise unique flight scope directory (e.g. `benchmark_1`), copies the target unit directory and configuration into `<flight_scope>/parts/<unit>`, rewrites benchmark package imports to reference the flight scope package while disallowing bare parts imports, drains pre-existing `lib/` and `tests/` directories, and marks specifications clean up to `spec_qa` within the flight scope to isolate code and test generation.
+   Observed: allocates a concise unique flight scope directory (e.g. `benchmark_1`), copies the target unit directory and configuration into `<flight_scope>/parts/<unit>`, explicitly configures the methodology pipeline as `pipeline = "pretense"` or `pipeline = "standard"`, rewrites benchmark package imports to reference the flight scope package while disallowing bare parts imports, drains pre-existing `lib/` and `tests/` directories, and marks specifications clean up to `spec_qa` within the flight scope to isolate code and test generation.
 
 2. The benchmark evaluator archives the artifacts.
    Observed: creates `lib_1.py`, `test_1.py`, and `autofab_1.log` under `benchmarks/results/dag_engine/qwen-35b+omlx/`, embedding flight telemetry comments in `lib_1.py`.
@@ -109,14 +109,14 @@ Given: the benchmark evaluator and CLI argument parser.
 
 Given: the benchmark evaluator and CLI argument parser.
 
-1. The caller runs `autofab benchmark` with `--pretense`.
+1. The caller runs `autofab benchmark` with `--method pretense` (or alias `--pretense`).
    Observed: the flight executes synthesis and testing using Pretense state machines, fakes, and property fuzzing across pretense roles or baseline prompts, verification gates evaluate Pretense test execution (`uv run pretense --no-fuzz --cov`) and statement coverage, methodology is `pretense`, and passing artifacts are archived with `-pretense` destination suffix.
 
 ## Scenario 14 — Pretense baseline benchmark flight execution and verification
 
 Given: the benchmark evaluator and CLI argument parser.
 
-1. The caller runs `autofab benchmark` with `--baseline` and `--pretense`.
+1. The caller runs `autofab benchmark` with `--baseline` and `--method pretense` (or alias `--pretense`).
    Observed: routes execution through the unified Autofab clean orchestrator targeting the fused role `pretense_baseline`, verification gates evaluate Pretense test execution (`uv run pretense --no-fuzz --cov`) and statement coverage, methodology is `pretense_baseline`, and passing artifacts are archived with `-pretense-baseline` destination suffix.
 
 ## Scenario 15 — Headless coordination announcement and real-time output streaming
@@ -143,9 +143,19 @@ Given: the benchmark evaluator and CLI argument parser.
 2. The caller runs with `--model <name>` targeting a single model.
    Observed: resolves the single target model specification and executes the benchmark flight.
 
+## Scenario 18 — Combined benchmark flight execution and baseline verification
+
+Given: the benchmark evaluator and CLI argument parser.
+
+1. The caller runs `autofab benchmark` with `--method combined` (or alias `--combined`).
+   Observed: provisions the flight scope with `pipeline = "combined"`, executes dual-branch convergence covering both standard unit testing and Pretense fuzzing, verification gates validate static types across library, tests, and pretense, standard pytest execution, and Pretense test execution (`uv run pretense --no-fuzz --cov`), methodology is `combined`, and passing artifacts are archived with `-combined` destination suffix containing `lib_<N>.py`, `test_<N>.py`, and `pretense_<N>.py`.
+
+2. The caller runs `autofab benchmark` with `--baseline` and `--method combined` (or alias `--combined`).
+   Observed: routes execution through the unified Autofab clean orchestrator targeting the fused role `combined_baseline`, evaluates composite verification gates, methodology is `combined_baseline`, and passing artifacts are archived with `-combined-baseline` destination suffix.
+
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-19T18:45:00Z
-LAST_CHANGED: 2026-11-03T09:10:00Z
-CHANGE: Remove pretense2 scenarios
+LAST_CHANGED: 2026-11-04T11:30:00Z
+CHANGE: Support --method combined, pretense, standard and combined_baseline fused role
 SPEC_QA_AUDIT: 2026-10-19T19:35:00Z
 -->

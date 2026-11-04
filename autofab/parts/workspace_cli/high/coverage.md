@@ -16,7 +16,7 @@ A system's *coverage evaluator* coordinates statement coverage measurement and r
 
 The coverage evaluator discovers the implementation and test file pairs across the part packages of a repository, and extracts candidate executable lines from implementation source files by filtering out docstrings, function and class signature continuation lines, and pragma exclusion annotations.
 
-The coverage evaluator measures single-target statement coverage by executing the corresponding unit test suite under trace instrumentation, isolating test execution errors and recording covered line hits.
+The coverage evaluator measures single-target statement coverage by executing the corresponding unit test suite using the unified test runner (pytest) under coverage tracking, isolating test execution errors and recording covered line hits.
 
 The coverage evaluator formats missing statement lines into compact comma-separated range strings and contiguous span ranges, and formats structured coverage reports presenting missing statement spans, source code context lines, presentation span clamping when output exceeds limits, and actionable guidance for defect attribution.
 

@@ -61,9 +61,9 @@ the companion test suite `parts/alpha/tests/widget_test.py` executes only line 5
 1. The caller asks for the statement coverage of that one target.
    Observed: the measurement reports two total executable statements, one covered, one missed, and
    a coverage percentage of 50, with the missed line 6.
-   Realized by: the component's own execution of the test suite under trace instrumentation, which
-   records the executed hits on the implementation file, and its own extraction of the candidate
-   lines to form the denominator.
+   Realized by: the component's own execution of the test suite using the unified pytest runner under
+   coverage tracking, which records the executed hits on the implementation file, and its own extraction
+   of the candidate lines to form the denominator.
 
 ### Scenario 5 — A test suite that fails during execution
 
@@ -131,9 +131,8 @@ evaluator, and it passes on a second execution that covers line 6 as well as lin
 1. The caller asks for the statement coverage of the target a second time.
    Observed: the second measurement reports both lines 5 and 6 covered and a coverage percentage of
    100, rather than reusing the line hits of the first execution.
-   Realized by: the component's own clearing of the cached target and test modules from memory
-   across the package namespaces before each measurement, and its injection of the local package
-   paths into the module search paths.
+   Realized by: the component's execution of each measurement in an isolated pytest test run
+   under coverage tracking with clean module loading and canonical package paths.
 
 ### Scenario 10 — A target whose companion test suite is missing
 
@@ -158,6 +157,6 @@ statement.
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-11-03T23:45:00Z
-CHANGE: Instruct coverage auditor when uncovered spans persist to examine library implementation for unreachable code
+LAST_CHANGED: 2026-11-04T12:12:00Z
+CHANGE: Unify test execution in coverage evaluator with the standard pytest runner under coverage tracking
 -->
