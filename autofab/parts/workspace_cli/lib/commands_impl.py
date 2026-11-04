@@ -47,14 +47,17 @@ def _record_blame_buffer(
     culprit_file: str,
     critique: str = "",
     caller: str = "",
+    missing_spans: Optional[List[Any]] = None,
 ) -> None:
     """Records blamed target entry into workspace blame buffer."""
     culprit_rel = culprit_file.lstrip("/")
-    entry = {
+    entry: Dict[str, Any] = {
         "target": culprit_rel,
         "explanation": critique,
         "blamed_by": caller or "role workspace",
     }
+    if missing_spans is not None:
+        entry["missing_spans"] = missing_spans
     candidate_buffers = app_info.get_blame_buffer_filenames()
     for bname in sorted(candidate_buffers):
         buf_path = os.path.join(ws_root, bname)
@@ -67,7 +70,7 @@ def _record_blame_buffer(
                         entries = [e for e in data if isinstance(e, dict)]
             except (OSError, json.JSONDecodeError):
                 entries = []
-        if not any(e.get("target") == culprit_rel for e in entries):
+        if not any(e.get("target") == culprit_rel and e.get("missing_spans") == missing_spans for e in entries):
             entries.append(entry)
         try:
             with open(buf_path, "w", encoding="utf-8") as f:
@@ -396,6 +399,63 @@ class WorkspaceCommandHandler(commands.WorkspaceCommandHandler):
                             )
                             return 1
 
+        is_cov_role = bool("coverage" in clean_caller)
+        cov_status_path = os.path.join(ws_root, ".coverage_spans.json")
+        cov_status: Optional[Dict[str, Any]] = None
+        if is_cov_role and os.path.isfile(cov_status_path):
+            try:
+                with open(cov_status_path, "r", encoding="utf-8") as csf:
+                    cov_status = json.load(csf)
+            except Exception:
+                cov_status = None
+
+        if is_cov_role and cov_status and cov_status.get("missing_spans"):
+            current_spans = cov_status.get("missing_spans")
+            norm_culprit = culprit_file.replace("\\", "/").lower()
+            cov_lib = str(cov_status.get("file_path", "")).replace("\\", "/").lower()
+            cov_test = str(cov_status.get("test_path", "")).replace("\\", "/").lower()
+            is_relevant_target = (
+                not cov_lib
+                or norm_culprit in cov_lib
+                or cov_lib in norm_culprit
+                or norm_culprit in cov_test
+                or cov_test in norm_culprit
+                or norm_culprit.endswith(("_test.py", "_pretense.py"))
+            )
+            if is_relevant_target:
+                is_test_culprit = (
+                    "/tests/" in norm_culprit
+                    or "/pretense/" in norm_culprit
+                    or norm_culprit.endswith(("_test.py", "_pretense.py"))
+                )
+                if cov_status.get("all_lib_pragma_required") and is_test_culprit:
+                    print(
+                        "Error: misattribution: no test-owned spans in this deficit. "
+                        "All uncovered spans are [LIB-PRAGMA-REQUIRED] (raises *Error or precondition guard). "
+                        "Blame the library module to add '# pragma: no cover (assumption: precondition enforced by caller)' or restructure.",
+                        file=sys.stderr,
+                    )
+                    return 1
+
+                buf_path = os.path.join(ws_root, BLAME_BUFFER_FILE)
+                if os.path.isfile(buf_path):
+                    try:
+                        with open(buf_path, "r", encoding="utf-8") as bf:
+                            prev_entries = json.load(bf)
+                        if isinstance(prev_entries, list):
+                            culprit_rel = culprit_file.lstrip("/")
+                            for pe in prev_entries:
+                                if isinstance(pe, dict) and pe.get("target") == culprit_rel:
+                                    if pe.get("missing_spans") == current_spans:
+                                        print(
+                                            "Error: repeating identical blame against the same uncovered span set is prohibited. "
+                                            "Previous feedback failed to achieve coverage; reclassify open spans or evaluate whether library code is unreachable.",
+                                            file=sys.stderr,
+                                        )
+                                        return 1
+                    except Exception:
+                        pass
+
         attr_coord = get_singleton(attribution.AttributionCoordinator)
         outcome = attr_coord.blame_culprit_file(
             culprit_file=culprit_file,
@@ -417,7 +477,14 @@ class WorkspaceCommandHandler(commands.WorkspaceCommandHandler):
                     append_log(culprit_file, blame_msg, repo_root=ws_root)
                 except OSError:
                     pass
-            _record_blame_buffer(ws_root, culprit_file, critique=critique, caller=caller)
+            current_spans = cov_status.get("missing_spans") if cov_status else None
+            _record_blame_buffer(
+                ws_root,
+                culprit_file,
+                critique=critique,
+                caller=caller,
+                missing_spans=current_spans,
+            )
             if meta:
                 pending_mgr = get_singleton(pending.WorkspacePendingManager)
                 pending_targets = list(pending_mgr.get_pending_work(ws_root))
@@ -646,8 +713,8 @@ class WorkspaceCommandHandler(commands.WorkspaceCommandHandler):
         return 0
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-30T11:00:00Z
-# LAST_CHANGED: 2026-10-30T11:00:00Z
-# CHANGE: Mandate post-completion bin/get_work and sanitize critiques in run_blame
+# LAST_CHANGED: 2026-11-03T20:40:00Z
+# CHANGE: Prohibit bypassing verification via no_verify in active role workspaces and validate blame attribution
 # COVERAGE_AUDIT: 2026-10-15T17:42:47Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

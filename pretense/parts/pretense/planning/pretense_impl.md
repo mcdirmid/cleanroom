@@ -32,7 +32,7 @@ By standardizing on a dynamic Hypothesis compiler, dual-layer timeouts combining
 - The watchdog monitor disarms watchdog timers upon test execution completion. [disarm_execution_watchdog]
 - The test runner coordinator discovers pretense test files matching naming patterns across target paths, rejecting loading errors or missing test targets. [discover_pretense_test_files]
 - The test runner coordinator executes discovered test cases using configured fuzzing and coverage parameters, suppressing property fuzzing during coverage evaluation to bound execution to deterministic test suites while reserving fuzzing for QA verification, formatting and reporting all failure and error details across all executed test methods when test failures occur to prevent defect masking, and formatting auditor guidance reminders upon test failures directing the agent to formulate blame feedback strictly in terms of how the blamed file is not compliant with the common source of truth specification, permitting line numbers only within the blamed file while strictly forbidding exposing details of other files. [run_test_cases]
-- The test runner coordinator evaluates statement coverage of target implementation modules corresponding to executed test suites against configured thresholds (excluding abstract interface stubs), formatting auditor guidance reminders upon coverage deficits directing the agent to formulate blame feedback strictly in terms of how the blamed file is not compliant with the common source of truth specification, permitting line numbers only within the blamed file while strictly forbidding exposing details of other files, and aggregates execution metrics into a run result. [evaluate_statement_coverage]
+- The test runner coordinator evaluates statement coverage of target implementation modules corresponding to executed test suites against configured thresholds (excluding abstract interface stubs), formatting auditor guidance reminders upon coverage deficits directing the agent to formulate blame feedback strictly in terms of how the blamed file is not compliant with the common source of truth specification, permitting line numbers only within the blamed file while strictly forbidding exposing details of other files, and instructing the agent when an uncovered line persists across rounds or after test updates to examine the library implementation closely to determine whether the line is structurally or logically unreachable, and aggregates execution metrics into a run result. [evaluate_statement_coverage]
 - The test runner coordinator parses command-line arguments to configure targets, fuzzing, coverage, watchdogs, and synthesis, exiting with a non-zero exit code if target loading fails, tests fail, coverage is unmet, or zero targets are discovered. [parse_runner_cli_arguments]
 - The pretense engine provides access to the state machine compiler, test runner coordinator, and fake synthesis. [provide_pretense_engine]
 
@@ -58,7 +58,7 @@ By standardizing on a dynamic Hypothesis compiler, dual-layer timeouts combining
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-31T00:50:00Z
-LAST_CHANGED: 2026-10-31T00:50:00Z
-CHANGE: Pretense Next AST compiler, strategy validator, and fake synthesizer
+LAST_CHANGED: 2026-11-03T23:45:00Z
+CHANGE: Instruct coverage auditor when uncovered lines persist to examine library implementation for unreachable code
 SPEC_QA_AUDIT: 2026-10-31T00:50:00Z
 -->

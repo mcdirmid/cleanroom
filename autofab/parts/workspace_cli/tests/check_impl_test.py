@@ -113,6 +113,10 @@ class FakeWorkspacePendingManager:
     def clear_pending_work(self, ws_root: str) -> None:
         self.pending.clear()
 
+    def remove_pending_target(self, ws_root: str, submitted_target: str) -> None:
+        if submitted_target in self.pending:
+            self.pending.remove(submitted_target)
+
     def is_pending_target_dirty(
         self,
         target: str,
@@ -146,6 +150,7 @@ class FakeWorkspaceSynchronizer:
         role_name: str,
         dir_scope: str = "",
         silent: bool = False,
+        delete_missing: bool = True,
     ) -> None:
         self.pulled.append((ws_root, main_root, role_name))
 
@@ -162,6 +167,20 @@ class FakeWorkspaceSynchronizer:
 
 class FakeSubmissionCoordinator:
     tier = agent_session.agent_session
+
+    def __init__(self) -> None:
+        self.submitted: List[Tuple[str, Optional[str]]] = []
+
+    def submit_target_file(
+        self,
+        target: str,
+        summary: Optional[str] = None,
+        repo_root: Optional[str] = None,
+        workspace_root: Optional[str] = None,
+        role_name: Optional[str] = None,
+    ) -> submit.SubmissionOutcome:
+        self.submitted.append((target, role_name))
+        return submit.SubmissionOutcome(accepted=True, message=f"✔ Stamped {target}")
 
     def resolve_submit_target(
         self,
@@ -281,9 +300,12 @@ class WorkspaceCheckImplTest(unittest.TestCase):
             ret = self.checker.run_get_work(dir_scope="pkg")
             out = mock_out.getvalue()
         self.assertEqual(ret, 1)
-        self.assertIn("Pending dirty target(s) from previous get_work call:", out)
+        self.assertIn("READY FOR EXECUTION (Prerequisites satisfied):", out)
+        self.assertIn("pkg/parts/foo/lib/foo.py", out)
         self.assertIn("Dirty Reasons:", out)
         self.assertIn("Unacted feedback in pkg/parts/foo/lib/foo.py: Test feedback", out)
+        self.assertIn("ACTIONABLE NEXT STEP:", out)
+        self.assertNotIn("Error: Cannot call get_work", out)
 
     def test_extract_unacted_feedback_autofab_metadata(self) -> None:
         from autofab.parts.workspace_cli.lib.check_impl import _extract_unacted_feedback
@@ -324,21 +346,56 @@ class WorkspaceCheckImplTest(unittest.TestCase):
         ret = self.checker.run_check_files()
         self.assertEqual(ret, 0)
 
+    def test_run_check_files_rejected_when_no_pending_work_and_empty_queue(self) -> None:
+        target_file = os.path.join(self.test_dir, "pkg", "parts", "foo", "lib", "foo.py")
+        os.makedirs(os.path.dirname(target_file), exist_ok=True)
+        with open(target_file, "w", encoding="utf-8") as f:
+            f.write("# sample implementation\n")
+        self.fake_pending.pending = []
+        self.fake_work.ready_items = []
+        self.checker.run_get_work(dir_scope="pkg")
+        ret = self.checker.run_check_files(target=target_file)
+        self.assertEqual(ret, 1)
+
     def test_run_check_files_with_target(self) -> None:
         target_file = os.path.join(self.test_dir, "pkg", "parts", "foo", "lib", "foo.py")
         os.makedirs(os.path.dirname(target_file), exist_ok=True)
         with open(target_file, "w", encoding="utf-8") as f:
             f.write("# sample implementation\n")
 
+        self.fake_pending.pending = [target_file]
         ret = self.checker.run_check_files(target=target_file)
         self.assertEqual(ret, 0)
         self.assertTrue(self.checker.is_checked_since_modification(self.test_dir, target_file))
+
+    def test_run_check_files_rejected_when_target_not_pending(self) -> None:
+        target_file = os.path.join(self.test_dir, "pkg", "parts", "foo", "lib", "foo.py")
+        os.makedirs(os.path.dirname(target_file), exist_ok=True)
+        with open(target_file, "w", encoding="utf-8") as f:
+            f.write("# sample implementation\n")
+        self.fake_pending.pending = ["pkg/parts/other/lib/other.py"]
+        ret = self.checker.run_check_files(target=target_file)
+        self.assertEqual(ret, 1)
+
+    def test_run_check_files_pulls_before_check(self) -> None:
+        main_repo = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, main_repo)
+        target_file = os.path.join(self.test_dir, "pkg", "parts", "foo", "lib", "foo.py")
+        os.makedirs(os.path.dirname(target_file), exist_ok=True)
+        with open(target_file, "w", encoding="utf-8") as f:
+            f.write("# sample implementation\n")
+        self.fake_pending.pending = [target_file]
+        ret = self.checker.run_check_files(target=target_file, repo_root=main_repo)
+        self.assertEqual(ret, 0)
+        self.assertTrue(len(self.fake_sync.pulled) > 0)
 
     def test_run_check_files_prioritizes_workspace_pythonpath(self) -> None:
         target_file = os.path.join(self.test_dir, "pkg", "parts", "foo", "lib", "foo.py")
         os.makedirs(os.path.dirname(target_file), exist_ok=True)
         with open(target_file, "w", encoding="utf-8") as f:
             f.write("# sample implementation\n")
+
+        self.fake_pending.pending = [target_file]
 
         self.role_lib = role_registry.RoleDefinition(
             role_name="lib",
@@ -382,6 +439,7 @@ class WorkspaceCheckImplTest(unittest.TestCase):
         os.makedirs(os.path.dirname(target_file), exist_ok=True)
         with open(target_file, "w", encoding="utf-8") as f:
             f.write("# sample implementation\n")
+        self.fake_pending.pending = [target_file]
 
         cfg_path = os.path.join(self.test_dir, "model_configs.toml")
         with open(cfg_path, "w", encoding="utf-8") as f:
@@ -428,6 +486,7 @@ class WorkspaceCheckImplTest(unittest.TestCase):
         os.makedirs(os.path.dirname(target_file), exist_ok=True)
         with open(target_file, "w", encoding="utf-8") as f:
             f.write("# sample implementation\n")
+        self.fake_pending.pending = [target_file]
 
         cfg_path = os.path.join(self.test_dir, "model_configs.toml")
         with open(cfg_path, "w", encoding="utf-8") as f:
@@ -474,6 +533,7 @@ class WorkspaceCheckImplTest(unittest.TestCase):
         os.makedirs(os.path.dirname(target_file), exist_ok=True)
         with open(target_file, "w", encoding="utf-8") as f:
             f.write("# sample implementation\n")
+        self.fake_pending.pending = [target_file]
 
         role_lib = role_registry.RoleDefinition(
             role_name="lib",
@@ -663,6 +723,7 @@ class WorkspaceCheckImplTest(unittest.TestCase):
         os.makedirs(os.path.dirname(target_file), exist_ok=True)
         with open(target_file, "w", encoding="utf-8") as f:
             f.write("# target file\n# CHANGE: Add base calculation logic\n")
+        self.fake_pending.pending = [target_file]
 
         import io
         from unittest.mock import patch
@@ -723,6 +784,7 @@ class WorkspaceCheckImplTest(unittest.TestCase):
 
         with open(target_file, "a") as f:
             f.write("# verified modification\n")
+        self.fake_pending.pending = [target_file]
 
         ret = self.checker.run_check_files(target=target_file)
         self.assertEqual(ret, 0)
@@ -762,6 +824,7 @@ class WorkspaceCheckImplTest(unittest.TestCase):
 
         with open(target_file, "a") as f:
             f.write("# some uncommitted edit\n")
+        self.fake_pending.pending = [target_file]
 
         ret = self.checker.run_check_files(target=target_file)
         self.assertEqual(ret, 0)
@@ -787,6 +850,7 @@ class WorkspaceCheckImplTest(unittest.TestCase):
         os.makedirs(os.path.dirname(target_file), exist_ok=True)
         with open(target_file, "w", encoding="utf-8") as f:
             f.write("# impl\n")
+        self.fake_pending.pending = [target_file]
 
         ret = self.checker.run_check_files(target=target_file, repo_root=main_repo)
         self.assertEqual(ret, 1)
@@ -795,6 +859,152 @@ class WorkspaceCheckImplTest(unittest.TestCase):
         with open(ws_init, "r", encoding="utf-8") as f:
             reverted_content = f.read()
         self.assertEqual(reverted_content, "# canonical empty init\n")
+
+    def test_check_files_deduplicates_arbiter_reminders(self) -> None:
+        self.fake_reg.roles.append(role_registry.RoleDefinition(
+            role_name="qa",
+            guide_path="guides/qa.md",
+            writable_file_patterns=[],
+            readonly_file_patterns=[],
+            feedback_role_deps=[],
+            verify_template="echo '[QA ARBITER REMINDER - EXPLAIN DEFECTS IN TERMS OF SPECIFICATION]\n• Blame feedback MUST be provided\nAssertionError: failed' && exit 1",
+            audit_tag="QA_AUDIT",
+            src_pattern="",
+        ))
+        meta_file = os.path.join(self.test_dir, ".autofab_role.json")
+        with open(meta_file, "w", encoding="utf-8") as f:
+            json.dump({"role": "qa", "parts_dir": "parts/test_pkg"}, f)
+
+        target_file = os.path.join(self.test_dir, "parts", "test_pkg", "lib", "foo.py")
+        os.makedirs(os.path.dirname(target_file), exist_ok=True)
+        with open(target_file, "w", encoding="utf-8") as f:
+            f.write("# impl\n")
+        self.fake_pending.pending = [target_file]
+
+        import io
+        from unittest.mock import patch
+        with patch("sys.stdout", new_callable=io.StringIO) as mock_out:
+            ret = self.checker.run_check_files(target=target_file)
+            out = mock_out.getvalue()
+        self.assertEqual(ret, 1)
+        # The reminder should appear exactly once, not twice
+        reminder_count = out.count("[QA ARBITER REMINDER - EXPLAIN DEFECTS IN TERMS OF SPECIFICATION]")
+        self.assertEqual(reminder_count, 1)
+
+    def test_check_files_pretense_qa_reminder_and_deduplication(self) -> None:
+        self.fake_reg.roles.append(role_registry.RoleDefinition(
+            role_name="pretense_qa",
+            guide_path="guides/pretense_qa.md",
+            writable_file_patterns=[],
+            readonly_file_patterns=[],
+            feedback_role_deps=[],
+            verify_template="echo '[PRETENSE QA ARBITER REMINDER - RULES ON ERRORS AND PRECONDITIONS]\n• Blame feedback MUST be provided\nAssertionError: failed' && exit 1",
+            audit_tag="PRETENSE_QA_AUDIT",
+            src_pattern="",
+        ))
+        meta_file = os.path.join(self.test_dir, ".autofab_role.json")
+        with open(meta_file, "w", encoding="utf-8") as f:
+            json.dump({"role": "pretense_qa", "parts_dir": "parts/test_pkg"}, f)
+
+        target_file = os.path.join(self.test_dir, "parts", "test_pkg", "lib", "foo_impl.py")
+        os.makedirs(os.path.dirname(target_file), exist_ok=True)
+        with open(target_file, "w", encoding="utf-8") as f:
+            f.write("# impl\n")
+        self.fake_pending.pending = [target_file]
+
+        import io
+        from unittest.mock import patch
+        with patch("sys.stdout", new_callable=io.StringIO) as mock_out:
+            ret = self.checker.run_check_files(target=target_file)
+            out = mock_out.getvalue()
+        self.assertEqual(ret, 1)
+        reminder_count = out.count("[PRETENSE QA ARBITER REMINDER - RULES ON ERRORS AND PRECONDITIONS]")
+        self.assertEqual(reminder_count, 1)
+        self.assertIn("Checked preconditions (*Error, e.g. NodeNotFoundError, CycleError) CANNOT be tested", out)
+        self.assertIn("Candidate Culprit:", out)
+        self.assertIn("(or companion test/pretense module)", out)
+
+    def test_run_get_work_auditor_auto_submits_passing_targets(self) -> None:
+        self.fake_reg.roles.append(role_registry.RoleDefinition(
+            role_name="qa",
+            guide_path="guides/qa.md",
+            writable_file_patterns=[],
+            readonly_file_patterns=[],
+            feedback_role_deps=[],
+            verify_template="echo 'OK'",
+            audit_tag="QA_AUDIT",
+            src_pattern="",
+        ))
+        meta_file = os.path.join(self.test_dir, ".autofab_role.json")
+        with open(meta_file, "w", encoding="utf-8") as f:
+            json.dump({"role": "qa", "parts_dir": "parts/test_pkg"}, f)
+
+        target_file = os.path.join(self.test_dir, "parts", "test_pkg", "lib", "foo.py")
+        os.makedirs(os.path.dirname(target_file), exist_ok=True)
+        with open(target_file, "w", encoding="utf-8") as f:
+            f.write("# impl\n")
+
+        self.fake_work.ready_items = [
+            {
+                "role": "qa",
+                "target_file": target_file,
+                "contract_files": [],
+                "reasons": ["lib updated"],
+            }
+        ]
+
+        import io
+        from unittest.mock import patch
+        with patch("sys.stdout", new_callable=io.StringIO) as mock_out:
+            ret = self.checker.run_get_work(dir_scope="test_pkg")
+            out = mock_out.getvalue()
+        self.assertEqual(ret, 0)
+        self.assertEqual(len(self.fake_submit.submitted), 1)
+        self.assertEqual(self.fake_submit.submitted[0][0], target_file)
+        self.assertIn("[AUTO-SUBMIT]", out)
+        self.assertIn("[ROUND CONCLUSION DIRECTIVE]", out)
+        self.assertEqual(len(self.fake_pending.pending), 0)
+
+    def test_run_get_work_auditor_presents_failing_targets(self) -> None:
+        self.fake_reg.roles.append(role_registry.RoleDefinition(
+            role_name="qa",
+            guide_path="guides/qa.md",
+            writable_file_patterns=[],
+            readonly_file_patterns=[],
+            feedback_role_deps=[],
+            verify_template="echo 'AssertionError: test failure' && exit 1",
+            audit_tag="QA_AUDIT",
+            src_pattern="",
+        ))
+        meta_file = os.path.join(self.test_dir, ".autofab_role.json")
+        with open(meta_file, "w", encoding="utf-8") as f:
+            json.dump({"role": "qa", "parts_dir": "parts/test_pkg"}, f)
+
+        target_file = os.path.join(self.test_dir, "parts", "test_pkg", "lib", "foo.py")
+        os.makedirs(os.path.dirname(target_file), exist_ok=True)
+        with open(target_file, "w", encoding="utf-8") as f:
+            f.write("# impl\n")
+
+        self.fake_work.ready_items = [
+            {
+                "role": "qa",
+                "target_file": target_file,
+                "contract_files": [],
+                "reasons": ["lib updated"],
+            }
+        ]
+
+        import io
+        from unittest.mock import patch
+        with patch("sys.stdout", new_callable=io.StringIO) as mock_out:
+            ret = self.checker.run_get_work(dir_scope="test_pkg")
+            out = mock_out.getvalue()
+        self.assertEqual(ret, 1)
+        self.assertEqual(len(self.fake_submit.submitted), 0)
+        self.assertIn("READY FOR EXECUTION", out)
+        self.assertIn(target_file, self.fake_pending.pending)
+        self.assertNotIn("Triage Summary", out)
+        self.assertNotIn("AssertionError: test failure", out)
 
 
 if __name__ == "__main__":

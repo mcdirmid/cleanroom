@@ -17,6 +17,7 @@ from support.lib.lifecycle import (
     get_singleton,
 )
 from autofab.parts.agent.lib import session as agent_session
+from autofab.parts.workspace.lib import role_registry
 from autofab.parts.workspace_cli.lib import work
 try:
     from support.lib import app_info
@@ -110,6 +111,20 @@ class _ActiveTask:
     start_time: float
 
 
+def _is_auditor_role(role_name: str) -> bool:
+    if not role_name:
+        return False
+    clean_r = role_name.split(":")[-1].strip().lower()
+    try:
+        reg = get_singleton(role_registry.WorkspaceRegistry)
+        r_def = reg.resolve_role_definition(clean_r)
+        if r_def.fused_roles:
+            return False
+        return bool(r_def.audit_tag or not r_def.src_pattern)
+    except Exception:
+        return False
+
+
 class CommandHarnessAdapter(
     subagent_harness.CommandHarnessAdapter,
 ):
@@ -141,11 +156,39 @@ class CommandHarnessAdapter(
             if dispatch.ready_targets
             else "(none)"
         )
+        directive_str = (
+            f"\n## Coordinator Directive / Action Required\n{dispatch.task_prompt}\n"
+            if dispatch.task_prompt
+            else ""
+        )
+        if _is_auditor_role(dispatch.role_name):
+            return (
+                f"# {app_info.APP_TITLE} Autonomous Role Execution\n\n"
+                f"- Role: {dispatch.role_name}\n"
+                f"- Scope: {dispatch.dir_scope}\n"
+                f"- Workspace: {dispatch.workspace_dir}\n"
+                f"{directive_str}\n"
+                f"## Assigned Targets\n{targets_str}\n\n"
+                "CRITICAL CONSTRAINTS:\n"
+                "- You are an AUDITOR, not an author. You have ZERO writable files in this workspace.\n"
+                "- DO NOT modify, create, or delete any files in this workspace.\n"
+                "- DO NOT create scratch tests, temporary test scripts, or auxiliary test runners, and DO NOT execute inline test scripts (python3 -c or stdin heredocs).\n"
+                "- DO NOT EDIT METADATA headers. Use only tools.\n\n"
+                f"## Instructions\n"
+                f"1. Run `bin/get_work` immediately to evaluate assigned targets.\n"
+                f"2. For auditor roles, `bin/get_work` automatically executes verification checks on each dirty target. If all targets pass verification, `bin/get_work` automatically submits them with audit attestation and marks your round complete — in that case, you MUST conclude your round immediately with summary text and ZERO further tool calls.\n"
+                f"3. If any target fails verification, inspect the triage summary provided by `bin/get_work` and deliver blame attribution using:\n"
+                f"   `bin/blame <culprit_file> \"<critique>\"`\n"
+                f"4. After blaming, run `bin/get_work` to inspect remaining units and conclude.\n"
+                f"5. If an unresolvable blocker:\n"
+                f"   `bin/fail <target_file> --reason \"...\"`\n"
+            )
         return (
             f"# {app_info.APP_TITLE} Autonomous Role Execution\n\n"
             f"- Role: {dispatch.role_name}\n"
             f"- Scope: {dispatch.dir_scope}\n"
-            f"- Workspace: {dispatch.workspace_dir}\n\n"
+            f"- Workspace: {dispatch.workspace_dir}\n"
+            f"{directive_str}\n"
             f"## Assigned Targets\n{targets_str}\n\n"
             "CRITICAL CONSTRAINTS:\n"
             "- DO NOT create or edit any files other than your assigned targets.\n"
@@ -276,6 +319,13 @@ class CommandHarnessAdapter(
             # Note: await_role primarily relies on blame buffer and pending work difference per contract.
 
         blamed = _read_blame_buffer(task.dispatch.workspace_dir)
+        for cand in (app_info.DEFAULT_BLAME_BUFFER_FILE,):
+            p = os.path.join(task.dispatch.workspace_dir, cand)
+            if os.path.isfile(p):
+                try:
+                    os.remove(p)
+                except OSError:
+                    pass
         if blamed and status != "failed":
             status = "blamed"
 

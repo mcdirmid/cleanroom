@@ -38,6 +38,7 @@ class WorkspaceSynchronizer(Singleton[AgentSessionTier], Protocol):
         role_name: str,
         dir_scope: str,
         silent: bool = False,
+        delete_missing: bool = True,
     ) -> int: ...
 
     # Contract: Refreshes non-parts system files into role workspace.

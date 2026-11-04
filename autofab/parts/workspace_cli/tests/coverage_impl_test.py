@@ -177,14 +177,75 @@ class ToolCoverageImplTest(unittest.TestCase):
             self.assertGreater(cov.missed, 0)
             self.assertLess(cov.coverage_pct, 100.0)
 
+    def test_classify_span_and_status_buffer(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            td_path = Path(td)
+            impl_file = td_path / "sample_service_impl.py"
+            test_file = td_path / "sample_service_impl_test.py"
+
+            impl_code = textwrap.dedent(
+                """
+                class ServiceConfigError(Exception):
+                    pass
+
+                def execute_task(port: int, flag: bool) -> str:
+                    if port < 0:
+                        raise ServiceConfigError("Port must be positive")
+                    if flag:
+                        return "active"
+                    return "inactive"
+                """
+            ).strip()
+
+            test_code = textwrap.dedent(
+                """
+                import unittest
+                from sample_service_impl import execute_task
+
+                class ServiceTest(unittest.TestCase):
+                    def test_execute(self):
+                        self.assertEqual(execute_task(80, True), "active")
+                """
+            ).strip()
+
+            impl_file.write_text(impl_code, encoding="utf-8")
+            test_file.write_text(test_code, encoding="utf-8")
+
+            # Lines 5-6 raise ServiceConfigError
+            owner_err, disp_err = self.evaluator.classify_span(impl_file, 5, 6)
+            self.assertEqual(owner_err, "lib")
+            self.assertIn("LIB-PRAGMA-REQUIRED: raises ServiceConfigError", disp_err)
+
+            # Line 9 returns "inactive" (untested success branch)
+            owner_test, disp_test = self.evaluator.classify_span(impl_file, 9, 9)
+            self.assertEqual(owner_test, "test")
+            self.assertIn("TEST-COVERAGE-DEFICIT", disp_test)
+
+            cov = self.evaluator.evaluate_coverage(
+                target_or_impl=str(impl_file),
+                test_path=str(test_file),
+                repo_root=td_path,
+                threshold=100.0,
+            )
+            self.assertFalse(cov.coverage_pct >= 100.0)
+
+            status_path = td_path / ".coverage_spans.json"
+            self.assertTrue(status_path.is_file())
+            import json
+            with open(status_path, "r", encoding="utf-8") as sf:
+                data = json.load(sf)
+            self.assertIn("span_classifications", data)
+            self.assertFalse(data.get("all_lib_pragma_required"))
+            self.assertTrue(data.get("has_test_owned_spans"))
+
 
 if __name__ == "__main__":
     unittest.main()
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-06T15:15:00Z
-# CHANGE: add coverage_impl tests
+# LAST_CHANGED: 2026-11-03T19:30:00Z
+# CHANGE: add tests for classify_span and coverage status buffer
 # COVERAGE_AUDIT: 2026-10-15T17:42:47Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

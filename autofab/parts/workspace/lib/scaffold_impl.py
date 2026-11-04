@@ -81,7 +81,7 @@ def _declared_units(repo_root: str, scope_dir: str) -> List[Tuple[str, str]]:
         try:
             for sub in sorted(os.listdir(part_dir)):
                 sub_dir = os.path.join(part_dir, sub)
-                if not os.path.isdir(sub_dir) or sub.startswith((".", "venv", "bazel-", "__pycache__")):
+                if not os.path.isdir(sub_dir) or sub.startswith((".", "venv", "bazel-", "__pycache__")) or sub in ("tests", "pretense", "ext"):
                     continue
                 try:
                     for fname in os.listdir(sub_dir):
@@ -90,7 +90,7 @@ def _declared_units(repo_root: str, scope_dir: str) -> List[Tuple[str, str]]:
                         if not fname.endswith((".pyi", ".py", ".md")):
                             continue
                         stem = os.path.splitext(fname)[0]
-                        if stem and stem != "__init__" and not stem.endswith("_ext"):
+                        if stem and stem != "__init__" and not stem.endswith(("_ext", "_test", "_pretense")):
                             stems.add(stem)
                 except OSError:
                     pass
@@ -167,10 +167,13 @@ def _create_missing_target_skeletons(
                     unit_dir=unit_dir,
                     unit_name=unit_name,
                 )
+                env = dict(os.environ)
+                env["UV_PROJECT"] = os.path.abspath(repo_root)
                 res = subprocess.run(
                     cmd,
                     shell=True,
-                    cwd=workspace_dir or repo_root,
+                    cwd=repo_root,
+                    env=env,
                     capture_output=True,
                     timeout=30,
                 )
@@ -185,8 +188,11 @@ def _create_missing_target_skeletons(
                                 write_file_with_perms(p_init, "", readonly=False)
                             curr_p = os.path.dirname(curr_p)
                     continue
-            except Exception:
-                pass
+                elif res.returncode != 0:
+                    err_msg = res.stderr.decode("utf-8", errors="replace").strip()
+                    sys.stderr.write(f"Warning: template_command failed for {rel_path}: {err_msg}\n")
+            except Exception as e:
+                sys.stderr.write(f"Warning: template_command execution error for {rel_path}: {e}\n")
         skeleton = _missing_target_skeleton(
             repo_root, rel_path, unit_dir, unit_name, role_def, workspace_dir=workspace_dir
         )
@@ -495,6 +501,36 @@ def package_runner_zipapps(
     pycs = _collect_and_compile_runner_pycs(bin_dir)
     roles_toml_bytes = _find_roles_toml_content(bin_dir)
 
+    pkg_repo_root = os.environ.get("AUTOFAB_MAIN_ROOT")
+    if not pkg_repo_root or not os.path.isdir(pkg_repo_root):
+        ws_d = os.path.dirname(bin_dir)
+        p_dir = os.path.dirname(ws_d)
+        if os.path.basename(p_dir) in app_info.get_role_workspaces_containers():
+            p_r = os.path.dirname(p_dir)
+            try:
+                for entry in sorted(os.listdir(p_r), key=len, reverse=True):
+                    if entry not in app_info.get_role_workspaces_containers():
+                        cand = os.path.join(p_r, entry)
+                        if os.path.isdir(cand) and (
+                            os.path.exists(os.path.join(cand, ".git"))
+                            or any(
+                                os.path.exists(os.path.join(cand, m))
+                                for m in (*app_info.get_config_filenames(), *app_info.get_roles_filenames(), "pyproject.toml")
+                            )
+                        ):
+                            pkg_repo_root = cand
+                            break
+            except OSError:
+                pass
+    if not pkg_repo_root or not os.path.isdir(pkg_repo_root):
+        try:
+            cand = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".."))
+            cfg_markers = app_info.get_config_filenames() + ("pyproject.toml",)
+            if os.path.isdir(cand) and any(os.path.isfile(os.path.join(cand, m)) for m in cfg_markers):
+                pkg_repo_root = cand
+        except Exception:
+            pass
+
     for tool_name, cmd in tools.items():
         tool_path = os.path.join(bin_dir, tool_name)
         runner_code = f'''import json
@@ -525,8 +561,13 @@ while ws_dir and ws_dir != os.path.dirname(ws_dir):
         break
     ws_dir = os.path.dirname(ws_dir)
 
+embedded_main = {repr(os.path.abspath(pkg_repo_root) if pkg_repo_root else "")}
+if not main_root and embedded_main and os.path.isdir(embedded_main):
+    main_root = embedded_main
+
 if main_root:
     os.environ["AUTOFAB_MAIN_ROOT"] = main_root
+    os.environ["UV_PROJECT"] = main_root
 
 if curr and os.path.isdir(curr):
     if curr not in sys.path:
@@ -705,11 +746,11 @@ All {app_info.APP_TITLE} verification and resolution in this fused role workspac
         ground_truth_bullet = f"- **Ground Truth First (Oracle Diagnostics Over Prose)**: Always run {fused_bins_cmds} to establish deterministic ground truth errors. Do NOT speculate, guess, or infer defects from prose descriptions before checking oracle output."
     elif can_blame:
         if is_auditor:
-            workflow = f"""1. Run `bin/get_work` to synchronize with main and inspect pending dirty units.
+            workflow = f"""1. Run `bin/get_work` to evaluate assigned dirty units and synchronize with main.
 2. Follow companion guide `{guide}` for role auditing rules.
-3. Run verification checks immediately: `bin/check_files [target_file]`
-4. If checks pass: Submit verification stamp via `bin/submit <target_file>`.
-5. If checks fail: Inspect the structured {app_info.APP_TITLE} Triage Summary surfaced by `bin/check_files` (which already extracts the author's `# CHANGE:` header and primary failure). Deliver blame attribution via `bin/blame <culprit_file> "<explanation>"`. Your critique MUST explain specifically why the author's change did not resolve the defect against the common specification.
+3. For auditor roles, `bin/get_work` automatically executes verification checks on each dirty target.
+4. If all checks pass: `bin/get_work` automatically submits the target with audit attestation and reports 0 ready targets; conclude your round immediately with summary text and ZERO tool calls.
+5. If checks fail: Inspect the structured {app_info.APP_TITLE} Triage Summary surfaced by `bin/get_work` (which extracts the author's `# CHANGE:` header and primary failure). Deliver blame attribution via `bin/blame <culprit_file> "<explanation>"`. Your critique MUST explain specifically why the author's change did not resolve the defect against the common specification.
 6. If target cannot be certified or an unresolvable impasse is reached: `bin/fail <target_file> "<reason>"`
 7. Mandatory Post-Completion: Call `bin/get_work` once to inspect remaining units. If all ready targets are resolved or only blocked targets remain, STOP and conclude your round immediately with summary text and ZERO further tool calls.
 """
@@ -841,7 +882,9 @@ This workspace is an isolated git tracking repository with automatic pre-tool ch
             "or native harness tools strictly WITHIN this workspace directory (`.`) to inspect files and complete your tasks.\n"
             "Unbounded searches outside the workspace (e.g., `find /`, `grep -r /`) and Git operations against external repositories are strictly prohibited.\n"
             "Executing ad-hoc tests, runtime assertions, or inline Python scripts (including via `python3 -c`, `python -c`, or stdin heredocs `python3 - <<'EOF'`) "
-            "is strictly prohibited; target verification is exclusively performed via `bin/check_files` (or `bin/verify_*` for fused roles)."
+            "is strictly prohibited; target verification is exclusively performed via `bin/check_files` (or `bin/verify_*` for fused roles). "
+            "You are not allowed to execute the test suite or run ad-hoc probes; submit work via `bin/submit` so a downstream QA auditor can execute the test suite on your behalf.\n"
+            "Package management operations (such as running `uv`, `pip`, `pip3`, `python -m pip`, `conda`, `apt`, `brew`) are strictly prohibited; the environment and dependencies are pre-configured. Never attempt to install or modify packages."
         )
 
     content = f"""# {app_info.APP_TITLE} Role Instructions: {role_def.role_name.capitalize()}
@@ -858,7 +901,7 @@ This workspace is an isolated git tracking repository with automatic pre-tool ch
 - **Targeted Reads Over Micro-Read Loops**: Strictly avoid sequential loops of tiny (e.g. 30-line) windowed reads. Never dump or read entire large files repeatedly. Instead, read targeted chunks of 100-200 lines around target symbols or definitions, or use grep to pinpoint locations before reading.
 - **Strict Workspace Confinement**: All file inspections, searches, and commands MUST remain strictly confined within your assigned role workspace directory (`.`). Never execute unbounded filesystem searches (such as `find /` or searches across root/parent directories).
 - **Ground Truth Oracle Exclusivity**: Use only `bin/check_files` (or `bin/verify_*` for fused roles) as the deterministic oracle for errors and validation. Do NOT invent custom linters or scripts.
-- **Restricted Targets & Test Execution Ban**: Edit ONLY your assigned target files. Do NOT create scratch tests, temporary test scripts, or auxiliary test runners. Executing ad-hoc tests, runtime sanity checks, or test assertions (including via `python3 -c`, `python -c`, or stdin heredocs) is strictly prohibited. Rely EXCLUSIVELY on `bin/check_files` (or `bin/verify_*` for fused roles) for target verification.
+- **Restricted Targets & Test Execution Ban**: Edit ONLY your assigned target files. Do NOT create scratch tests, temporary test scripts, or auxiliary test runners. Executing ad-hoc tests, runtime sanity checks, or test assertions (including via `python3 -c`, `python -c`, or stdin heredocs) is strictly prohibited. You are not allowed to execute the test suite or run ad-hoc probes. Rely EXCLUSIVELY on `bin/check_files` (or `bin/verify_*` for fused roles) for target verification, and submit work with `bin/submit` so a downstream QA auditor can execute the test suite on your behalf.
 - **No Runner Binary Inspection or Linter Hunting**: Runner executables in `bin/` ({runner_tools_list}) are encapsulated self-contained tools. Do NOT search for internal linters (`*_lint.py`, `test_lint`, `build_lint`), and do NOT attempt to read, disassemble, decompile, or run inspection utilities (`file`, `strings`, `unzip`, `head`, `od`, `xxd`) on `bin/` executables. All required structural rules and conventions are documented in your Companion Guide.
 - **Standard Terminology**:
   - **Step**: A single prompt ↔ tool-call interaction cycle between an agent/model and the runtime.
@@ -917,6 +960,7 @@ If any {app_info.APP_NAME} binary ({fail_stop_tools}) fails due to:
 
 **STOP IMMEDIATELY.**
 - **DO NOT** attempt to fix, patch, restore, or work around the infrastructure.
+- **DO NOT** install, update, or modify packages (running `uv`, `pip`, or package managers is strictly prohibited).
 - **DO NOT** create, undelete, or check out missing files.
 - **DO NOT** attempt alternate execution paths outside `bin/`.
 - **REPORT IMMEDIATELY**: Output the exact command that failed and its verbatim error/traceback to the user, state what dependency or file appears to be missing, and wait for human instruction.
@@ -1015,8 +1059,8 @@ class WorkspaceScaffolder(scaffold.WorkspaceScaffolder):
         write_file_with_perms(dst, content, readonly=readonly, executable=executable)
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-30T11:00:00Z
-# LAST_CHANGED: 2026-11-02T20:38:00Z
-# CHANGE: Prohibit ad-hoc runtime testing and inline python scripts in AGENTS.md
+# LAST_CHANGED: 2026-11-03T20:40:00Z
+# CHANGE: Ground template command execution in repository environment with UV_PROJECT and bind UV_PROJECT in runner zipapps
 # COVERAGE_AUDIT: 2026-10-15T17:42:47Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

@@ -30,6 +30,9 @@ Given: an active role workspace with modified target `parts/agent/lib/bar.py`.
 3. The handler executes `run_submit` on a modified target without having run `run_check_files` since modification.
    Observed: submission is refused, target remains modified and dirty, and exit code is 1.
 
+4. The handler executes `run_submit` with `no_verify` in an active role workspace.
+   Observed: submission is refused with an error prohibiting `--no-verify` in role workspaces, and exit code is 1.
+
 ## Scenario 4 — Blame attribution with single-paragraph constraint
 
 Given: a culprit upstream target and a multi-line critique containing newline characters.
@@ -46,8 +49,14 @@ Given: a culprit upstream target and a multi-line critique containing newline ch
 4. An auditor workspace with pending target `parts/dag_engine_lite/lib/dag_engine_lite_impl.py` executes `run_blame` against `parts/dag_engine_lite/pretense/dag_engine_lite_impl_pretense.py` with a valid critique.
    Observed: blame is accepted, a post-blame round conclusion directive instructing the worker to run `bin/get_work` is emitted, pending work is cleared of the audited target, and exit code is 0.
 
+5. A coverage auditor workspace where all open deficit spans in `.coverage_spans.json` are classified as `LIB-PRAGMA-REQUIRED` executes `run_blame` against a test module.
+   Observed: blame is refused with an error reporting misattribution and zero test-owned spans in the deficit, directing blaming the library module instead, and exit code is 1.
+
+6. A coverage auditor workspace executes `run_blame` with the same culprit and identical uncovered span set as the previous blame recorded in the buffer.
+   Observed: blame is refused with an error prohibiting repeating identical blame against an unyielding span set, and exit code is 1.
+
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-30T11:00:00Z
-LAST_CHANGED: 2026-10-30T11:00:00Z
-CHANGE: Mandate post-completion bin/get_work verification and sanitize multi-line critiques in blame scenario
+LAST_CHANGED: 2026-11-03T20:40:00Z
+CHANGE: Add scenario for prohibiting no_verify in active role workspaces
 -->

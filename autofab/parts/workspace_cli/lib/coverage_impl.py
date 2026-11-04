@@ -3,8 +3,10 @@ from __future__ import annotations
 import ast
 import contextlib
 import io
+import json
 import os
 from pathlib import Path
+import re
 import sys
 import trace
 import types
@@ -78,6 +80,75 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
             q = q[:-3]
         return q
 
+    # Contract: Classify an uncovered statement span by ownership ('lib' vs 'test') and required disposition.
+    def classify_span(
+        self, file_path: Path | str, start: int, end: int
+    ) -> Tuple[str, str]:
+        """Classifies an uncovered statement span by ownership ('lib' vs 'test') and required disposition."""
+        src_path = Path(file_path)
+        try:
+            with open(src_path, "r", encoding="utf-8") as f:
+                src = f.read()
+            tree = ast.parse(src, str(src_path))
+        except Exception:
+            return ("test", "TEST-COVERAGE-DEFICIT: missing unit test assertion")
+
+        def _extract_error_name(exc: Any) -> Optional[str]:
+            if isinstance(exc, ast.Call):
+                fn = exc.func
+                name = fn.id if isinstance(fn, ast.Name) else getattr(fn, "attr", "")
+                if name.endswith("Error") or name == "unreachable":
+                    return name
+            elif isinstance(exc, (ast.Name, ast.Attribute)):
+                name = exc.id if isinstance(exc, ast.Name) else getattr(exc, "attr", "")
+                if name.endswith("Error"):
+                    return name
+            return None
+
+        error_names: List[str] = []
+        has_precondition_guard = False
+
+        for node in ast.walk(tree):
+            n_start = getattr(node, "lineno", None)
+            n_end = getattr(node, "end_lineno", n_start)
+            if n_start is None:
+                continue
+            n_end = n_end or n_start
+            if max(start, n_start) <= min(end, n_end):
+                if isinstance(node, ast.Raise):
+                    err = _extract_error_name(node.exc) if node.exc else None
+                    if err:
+                        error_names.append(err)
+                    else:
+                        error_names.append("Exception")
+                elif isinstance(node, ast.Assert):
+                    has_precondition_guard = True
+                elif isinstance(node, ast.If):
+                    for b_stmt in node.body:
+                        if isinstance(b_stmt, ast.Raise):
+                            err = _extract_error_name(b_stmt.exc) if b_stmt.exc else None
+                            if err:
+                                error_names.append(err)
+                                has_precondition_guard = True
+
+        src_lines = src.splitlines()
+        for ln in range(start, min(end + 1, len(src_lines) + 1)):
+            line_text = src_lines[ln - 1] if 0 < ln <= len(src_lines) else ""
+            m = re.search(r"\braise\s+([A-Za-z0-9_]*Error)\b", line_text)
+            if m:
+                error_names.append(m.group(1))
+            if "unreachable(" in line_text:
+                error_names.append("unreachable")
+
+        if error_names:
+            unique_errs = sorted(set(error_names))
+            err_str = ", ".join(unique_errs)
+            return ("lib", f"LIB-PRAGMA-REQUIRED: raises {err_str}")
+        if has_precondition_guard:
+            return ("lib", "LIB-PRAGMA-REQUIRED: precondition guard")
+
+        return ("test", "TEST-COVERAGE-DEFICIT: missing unit test assertion")
+
     # Contract: WHEN no missing spans remain, MUST return "All statements covered."; present each uncovered statement span with source lines, clamped by max_spans.
     def format_spans_report(
         self, cov: coverage.ModuleCoverage, max_spans: Optional[int] = None
@@ -98,7 +169,8 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
         lines.append(f"Uncovered statement spans in {cov.module_name}:")
         for idx, (start, end) in enumerate(shown_spans, 1):
             span_label = f"line {start}" if start == end else f"lines {start}-{end}"
-            lines.append(f"\n  Span {idx} ({span_label}):")
+            _, disposition = self.classify_span(cov.file_path, start, end)
+            lines.append(f"\n  Span {idx} ({span_label}) [{disposition}]:")
             for ln in range(start, end + 1):
                 if ln in cov.missing_lines:
                     text = (
@@ -150,11 +222,14 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
             f"{spans_detail}\n"
             f"--------------------------------------------------------------------------------\n"
             f"AGENT GUIDANCE / COVERAGE ARBITER REMINDER [EXPLAIN FEEDBACK IN TERMS OF SPECIFICATION]:\n"
+            f"• First classify: is this span an *Error raise or precondition guard? If so, it belongs to the library as a pragma annotation (# pragma: no cover (assumption: precondition enforced by caller)) — do not translate it into a test requirement.\n"
             f"• Blame feedback MUST be provided in terms of how the file being blamed is not compliant with the common source of truth specification.\n"
             f"• Line numbers MAY be mentioned ONLY IF they reference the file being blamed.\n"
             f"• DO NOT expose details (line numbers, code snippets, or internal symbols) of other files.\n"
-            f"• Translate uncovered statements and branches into missing specification requirements or scenario cases.\n"
-            f"• If an uncovered branch is an unreachable defensive check or caller assumption guaranteed by the specification, instruct the implementation author to prune it or mark it as unreachable according to the methodology.\n"
+            f"• Translate contracted positive-path postconditions, invariants, or success branches into missing unit test cases.\n"
+            f"• If an uncovered branch is an unreachable defensive check or caller assumption guaranteed by the specification, instruct the implementation author to prune it or mark it as unreachable (# pragma: no cover) according to the methodology.\n"
+            f"• If an uncovered span persists after tests were updated or across multiple rounds, deeply examine the library implementation: trace control flow and invariants to determine whether the span is structurally or logically unreachable; if so, blame the library rather than repeating blame to tests.\n"
+            f"• If 100% coverage appears unreachable without either testing a precondition violation or deleting contracted behavior, use bin/fail — do not reinterpret a *Error span as a test requirement.\n"
             f"================================================================================\n"
         )
 
@@ -469,6 +544,43 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
 
         cov = self.measure_single_target_coverage(ipath, tpath)
 
+        # Persist workspace coverage status buffer
+        try:
+            span_classifications = []
+            has_test_spans = False
+            has_lib_pragma = False
+            for start, end in cov.missing_spans:
+                owner, disp = self.classify_span(cov.file_path, start, end)
+                span_classifications.append({
+                    "span": [start, end],
+                    "owner": owner,
+                    "disposition": disp,
+                })
+                if owner == "test":
+                    has_test_spans = True
+                elif owner == "lib":
+                    has_lib_pragma = True
+
+            all_lib_pragma = bool(cov.missing_spans and not has_test_spans and has_lib_pragma)
+            status_data = {
+                "module_name": cov.module_name,
+                "test_name": cov.test_name,
+                "file_path": cov.file_path,
+                "test_path": cov.test_path,
+                "missing_spans": cov.missing_spans,
+                "missing_lines": cov.missing_lines,
+                "coverage_pct": cov.coverage_pct,
+                "test_passed": cov.test_passed,
+                "span_classifications": span_classifications,
+                "all_lib_pragma_required": all_lib_pragma,
+                "has_test_owned_spans": has_test_spans,
+            }
+            status_file = root / ".coverage_spans.json"
+            with open(status_file, "w", encoding="utf-8") as sf:
+                json.dump(status_data, sf, indent=2)
+        except Exception:
+            pass
+
         if update_log:
             log_p = Path(update_log)
             if not log_p.is_absolute():
@@ -483,8 +595,8 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
         return cov
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-29T00:30:00Z
-# CHANGE: Appends agent guidance directing blame feedback in terms of common specification compliance, permitting line numbers only in blamed file while forbidding exposing details of other files
+# LAST_CHANGED: 2026-11-03T23:45:00Z
+# CHANGE: Instruct coverage auditor when uncovered spans persist to examine library implementation for unreachable code
 # COVERAGE_AUDIT: 2026-10-15T17:42:47Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

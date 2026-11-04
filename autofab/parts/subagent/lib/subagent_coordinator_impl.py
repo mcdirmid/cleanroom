@@ -7,7 +7,7 @@ import json
 import os
 import shutil
 import time
-from typing import Dict, List, Optional, Sequence, Set, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
 try:
     import tomllib  # type: ignore
@@ -29,6 +29,7 @@ from autofab.parts.workspace_cli.lib import pending, work
 from autofab.parts.workspace.lib import (
     provision,
     role_registry,
+    sync,
 )
 from . import subagent_coordinator
 
@@ -178,6 +179,34 @@ def _extract_blame_fingerprint(
     critique_str = " ".join(sorted(critique_parts))
     critique_hash = hashlib.sha256(critique_str.encode("utf-8")).hexdigest()[:16] if critique_str else ""
     return (sorted_targets, critique_hash)
+
+
+def _get_upstream_roles_for_role(
+    r_name: str, reg: Any, repo_root: str
+) -> Set[str]:
+    """Dynamically resolves transitive upstream roles that the given role depends on."""
+    visited: Set[str] = set()
+    clean_r = r_name.split(":")[-1].strip().lower()
+
+    def dfs(r: str) -> None:
+        try:
+            r_def = reg.resolve_role_definition(r, repo_root=repo_root)
+        except Exception:
+            return
+        dep_labels = (
+            list(getattr(r_def, "role_deps", ()) or ())
+            + list(getattr(r_def, "feedback_role_deps", ()) or ())
+            + list(getattr(r_def, "star_role_deps", ()) or ())
+            + list(getattr(r_def, "silent_role_deps", ()) or ())
+        )
+        for d in dep_labels:
+            d_name = d.split(":")[-1].strip().lower()
+            if d_name != r and d_name not in visited:
+                visited.add(d_name)
+                dfs(d_name)
+
+    dfs(clean_r)
+    return visited
 
 
 class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
@@ -532,10 +561,36 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
                         if len(res.submitted_targets) > 0 and len(res.blamed_targets) == 0:
                             consecutive_identical_blames[role_name] = 0
                             last_blame_fingerprints.pop(role_name, None)
+                            subagent_restarts[role_name] = 0
+
+                        if len(res.submitted_targets) > 0:
+                            # When an author submits modified targets, clear consecutive blames
+                            # for any other roles that had blamed those targets, as the code under test has been modified.
+                            sub_set = {os.path.normpath(t).replace("\\", "/") for t in res.submitted_targets}
+                            for other_role, fp in list(last_blame_fingerprints.items()):
+                                if other_role != role_name:
+                                    blamed_set = {os.path.normpath(t).replace("\\", "/") for t in fp[0]}
+                                    if blamed_set & sub_set or any(
+                                        any(bt.endswith(st) or st.endswith(bt) for st in sub_set)
+                                        for bt in blamed_set
+                                    ):
+                                        consecutive_identical_blames[other_role] = 0
+                                        last_blame_fingerprints.pop(other_role, None)
 
                         if len(res.blamed_targets) > 0:
                             ws_dir = reg.compute_workspace_dir(role_name, dir_scope=dir_scope, repo_root=root)
                             blame_fp = _extract_blame_fingerprint(ws_dir, res.blamed_targets)
+                            candidate_buffers = app_info.get_blame_buffer_filenames() if hasattr(app_info, "get_blame_buffer_filenames") else ()
+                            if not candidate_buffers:
+                                candidate_buffers = (getattr(app_info, "DEFAULT_BLAME_BUFFER_FILE", ".autofab_blame_buffer.json"),)
+                            for bname in candidate_buffers:
+                                bp = os.path.join(ws_dir, bname)
+                                if os.path.isfile(bp):
+                                    try:
+                                        os.remove(bp)
+                                    except OSError:
+                                        pass
+
                             prev_fp = last_blame_fingerprints.get(role_name)
                             if prev_fp is not None and prev_fp == blame_fp:
                                 consecutive_identical_blames[role_name] = consecutive_identical_blames.get(role_name, 0) + 1
@@ -546,9 +601,9 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
                             if consecutive_identical_blames[role_name] >= 2:
                                 restarts = subagent_restarts.get(role_name, 0) + 1
                                 subagent_restarts[role_name] = restarts
-                                if restarts >= 3:
+                                if restarts >= 10:
                                     failure_msg = (
-                                        f"Role '{role_name}' delivered identical blame repeatedly and exceeded max 3 restarts "
+                                        f"Role '{role_name}' delivered identical blame repeatedly and exceeded max 10 restarts "
                                         f"(blamed targets: {list(res.blamed_targets)})."
                                     )
                                     print(f"[ORCHESTRATE] Circuit breaker tripped: {failure_msg}", flush=True)
@@ -556,7 +611,7 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
                                 else:
                                     print(
                                         f"[ORCHESTRATE] Circuit breaker: Subagent '{role_name}' delivered identical blame twice in a row. "
-                                        f"Restarting subagent with clean workspace and session (restart {restarts}/3)...",
+                                        f"Restarting subagent with clean workspace and session (restart {restarts}/10)...",
                                         flush=True,
                                     )
                                     try:
@@ -570,7 +625,13 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
                                     if effective_batch_size is not None:
                                         _persist_batch_size(ws_dir, effective_batch_size)
                                     consecutive_identical_blames[role_name] = 0
-                                    last_blame_fingerprints.pop(role_name, None)
+                                    advisory = (
+                                        f"[CIRCUIT BREAKER ADVISORY] Your previous session in workspace '{ws_dir}' was terminated "
+                                        f"and restarted with a clean workspace (restart {restarts}/10) because it delivered consecutive "
+                                        f"identical blame signatures without making progress. Please review your strategy carefully, "
+                                        f"verify all preconditions, and adopt a fresh approach."
+                                    )
+                                    unresolved_reminders[role_name] = advisory
 
                 if failure_msg is not None:
                     for h in active_workers.values():
@@ -624,7 +685,7 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
                 # 2. Check work queues dynamically on each polling cycle for asynchronous unblocked role dispatch
                 all_clean = True
                 blocked_count = 0
-                ready_roles_map: Dict[str, Sequence[str]] = {}
+                candidate_ready_map: Dict[str, Sequence[str]] = {}
 
                 for r_entry in roles_to_evaluate:
                     r_name = r_entry.role_name if hasattr(r_entry, "role_name") else str(r_entry)
@@ -637,10 +698,17 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
                     if ready:
                         all_clean = False
                         if r_name not in active_workers:
-                            ready_roles_map[r_name] = [item.target_file for item in ready]
+                            candidate_ready_map[r_name] = [item.target_file for item in ready]
                     if blocked:
                         all_clean = False
                         blocked_count += len(blocked)
+
+                ready_roles_map: Dict[str, Sequence[str]] = {}
+                for r_name, target_paths in candidate_ready_map.items():
+                    up_roles = _get_upstream_roles_for_role(r_name, reg, root)
+                    if any(up_r in active_workers or up_r in candidate_ready_map for up_r in up_roles):
+                        continue
+                    ready_roles_map[r_name] = target_paths
 
                 # 3. Clean convergence check
                 if not active_workers and all_clean:
@@ -706,6 +774,19 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
                             if not os.path.isdir(ws_dir) or not os.path.isdir(os.path.join(ws_dir, "bin")):
                                 prov = get_singleton(provision.WorkspaceProvisioner)
                                 prov.commission(r_name, dir_scope=dir_scope, repo_root=root, model=model_name)
+                            else:
+                                try:
+                                    sync_svc = get_singleton(sync.WorkspaceSynchronizer)
+                                    sync_svc.pull(ws_dir, root, r_name, dir_scope=dir_scope, silent=True)
+                                    sync_svc.refresh_system_files(ws_dir, root, r_name, dir_scope=dir_scope, silent=True)
+                                except Exception:
+                                    pass
+
+                            try:
+                                work_mgr = get_singleton(work.WorkspaceWorkManager)
+                                work_mgr.set_pending_work(ws_dir, target_paths)
+                            except Exception:
+                                pass
 
                             if effective_batch_size is not None:
                                 _persist_batch_size(ws_dir, effective_batch_size)

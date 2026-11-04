@@ -94,13 +94,13 @@ Given: the implementation file `parts/alpha/lib/widget.py` has 400 uncovered sta
 spans `(1, 200)` and `(300, 500)`, and the caller requests a report clamped to 10 context lines.
 
 1. The caller asks for the coverage report clamped to 10 context lines.
-   Observed: the report carries the two uncovered spans, at most 10 source code context lines
-   around them, and actionable guidance directing the agent to formulate blame feedback strictly
+   Observed: the report carries the two uncovered spans labeled with ownership dispositions, at most 10 source code context lines
+   around them, and actionable guidance leading with the precondition exemption directing the agent to first classify whether a span is an *Error raise or precondition guard belonging to the library as a pragma annotation rather than a test requirement, formulating blame feedback strictly
    in terms of how the blamed file is not compliant with the common source of truth specification,
    permitting line numbers only within the blamed file while strictly forbidding exposing details of
-   other files.
+   other files, and instructing the agent when an uncovered span persists across rounds or after test updates to deeply examine the library implementation to determine whether the span is structurally or logically unreachable.
    Realized by: the component's own context snippet extraction, which reads the corresponding
-   source lines and clamps the output to the requested span limit, and its own report formatting.
+   source lines, classifies span ownership, and clamps the output to the requested span limit, and its own report formatting.
 
 ### Scenario 8 — Enforcing the configured threshold
 
@@ -110,10 +110,10 @@ configured threshold is 80 percent, and the designated coverage log file
 
 1. The caller asks the coverage evaluator to enforce the threshold for that module.
    Observed: the report states that the 80 percent threshold was not met, the coverage log file
-   exists and carries the formatted report, and the exit status indicates the threshold was
-   missed.
-   Realized by: the component's own threshold comparison and its own report write to the
-   designated coverage log file, whose exit status indication it returns.
+   exists and carries the formatted report, the workspace coverage status buffer `.coverage_spans.json`
+   is recorded, and the exit status indicates the threshold was missed.
+   Realized by: the component's own threshold comparison, status buffer persistence, and report write
+   to the designated coverage log file, whose exit status indication it returns.
 
 2. The caller asks again after the module reports 90 percent.
    Observed: the report states that the 80 percent threshold was met, the log file is rewritten
@@ -158,6 +158,6 @@ statement.
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-29T00:30:00Z
-CHANGE: Format grounding attribution instructions permitting line numbers in blamed file while forbidding exposing details of other files
+LAST_CHANGED: 2026-11-03T23:45:00Z
+CHANGE: Instruct coverage auditor when uncovered spans persist to examine library implementation for unreachable code
 -->

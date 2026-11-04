@@ -21,8 +21,8 @@ Given: scope_a has dirty roles across multiple levels where some roles have unsa
 Given: scope_a has unblocked roles role_a and role_b each with available work targets and no active workers.
 
 1. The coordinator dispatches workers.
-   Observed: role workspaces are provisioned and concurrent subagent processes are launched for role_a and role_b simultaneously.
-   Realized by: the component's concurrent worker dispatch commissioning workspaces via `provision` and invoking `spawn_role` on `subagent_harness`.
+   Observed: role workspaces are provisioned, updated files from canonical root are pulled, pending targets are recorded, and concurrent subagent processes are launched for role_a and role_b simultaneously.
+   Realized by: the component's concurrent worker dispatch commissioning workspaces via `provision`, pulling updated files via `sync`, seeding pending work via `work`, and invoking `spawn_role` on `subagent_harness`.
 
 ### Scenario 4 — Continuous non-blocking polling and dynamic supervisor loop
 
@@ -130,15 +130,27 @@ Given: an active worker is executing in role_a and submits or blames work that u
 
 ### Scenario 17 — Tripping circuit breaker upon repeated identical blame deliveries
 
-Given: a role worker repeatedly delivers an identical blame signature across consecutive rounds.
+Given: a role worker repeatedly delivers an identical blame signature across consecutive rounds on unchanged targets.
 
-1. The coordinator detects that the role worker delivered the identical blame twice in a row.
-   Observed: the coordinator interrupts the worker, wipes its workspace and session state, and recommissions a clean workspace for the role.
-   Realized by: the component tracking consecutive blame signatures per role, interrupting the worker, wiping the workspace directory, and calling `prov.commission(...)`.
+1. The coordinator detects that the role worker delivered the identical blame twice in a row without intervening author modifications.
+   Observed: the coordinator interrupts the worker, wipes its workspace and session state, recommissions a clean workspace for the role, and injects a circuit breaker restart advisory into subsequent task prompts.
+   Realized by: the component tracking consecutive blame signatures per role on unchanged targets, interrupting the worker, wiping the workspace directory, calling `prov.commission(...)`, and recording a restart advisory.
 
-2. The role worker again delivers identical blame repeatedly, triggering a third restart.
+2. The role worker again delivers identical blame repeatedly across successive restarts, exceeding 10 restarts.
    Observed: the coordinator halts orchestration immediately and reports an unconverged summary indicating the repeated blame circuit breaker tripped.
-   Realized by: the component tracking subagent restarts per role and breaking the supervisor loop when restarts reach 3.
+   Realized by: the component tracking cumulative subagent restarts per role and breaking the supervisor loop when restarts reach 10.
+
+3. An author role submits modifications to a previously blamed target.
+   Observed: the coordinator clears consecutive blame tracking for any roles that had blamed that target so that testing the new revision starts as a fresh evaluation.
+   Realized by: the component inspecting author submitted targets, matching against active blame fingerprints, and clearing consecutive identical blame counts.
+
+4. An upstream author role is active or scheduled for concurrent dispatch in the same polling cycle.
+   Observed: the coordinator withholds the downstream auditor role from concurrent dispatch until the upstream author finishes and submits.
+   Realized by: the component checking active workers and current cycle dispatch candidates against transitive upstream role dependencies.
+
+5. A role round finishes or is dispatched.
+   Observed: the coordinator and harness consume and clear workspace blame buffers upon reading round outcomes and purge preexisting blame buffers prior to dispatching new rounds.
+   Realized by: the component removing workspace blame buffer files at dispatch and consuming them upon round completion.
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-30T19:55:00Z

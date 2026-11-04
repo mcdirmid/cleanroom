@@ -30,6 +30,13 @@
    - [Principle 11: Test-Only Query Methods (`@test_only`) & Epistemic Traceability](#principle-11-test-only-query-methods-test_only--epistemic-traceability)
    - [Principle 12: Symmetrical QA Blame Attribution](#principle-12-symmetrical-qa-blame-attribution)
    - [Principle 13: AST Chopping & Compile-Time Validation](#principle-13-ast-chopping--compile-time-validation)
+   - [Principle 14: Prohibition of Pre-Seeding & Blank Initial State Invariant](#principle-14-prohibition-of-pre-seeding--blank-initial-state-invariant)
+   - [Principle 15: Collaborator Seeding Transitions in Implementation Fuzz Testing](#principle-15-collaborator-seeding-transitions-in-implementation-fuzz-testing)
+   - [Principle 16: Cross-Collaborator Outcome Assertions](#principle-16-cross-collaborator-outcome-assertions)
+   - [Principle 17: Inter-Interface Requirements & Model Assertions](#principle-17-inter-interface-requirements--model-assertions)
+   - [Principle 18: Multi-Interface Implementations (`implements: B, C`)](#principle-18-multi-interface-implementations-implements-b-c)
+   - [Principle 19: Interface Fixed Conformance Testing (`Test<Target>Fake`)](#principle-19-interface-fixed-conformance-testing-testtargetfake)
+   - [Principle 20: Base Interface Transition Delegation & Onion Dispatch](#principle-20-base-interface-transition-delegation--onion-dispatch)
 5. [Contract Exception Taxonomy: `*Error` vs. `*Exception` & Untestability of Preconditions](#5-contract-exception-taxonomy-error-vs-exception--untestability-of-preconditions)
    - [The Semantic Taxonomy](#the-semantic-taxonomy)
    - [Untestability of `*Error` (Checked Caller Preconditions)](#untestability-of-error-checked-caller-preconditions)
@@ -56,6 +63,8 @@
    - [Implementation Pseudo State Machine (`<name>_impl_pretense.py`)](#implementation-pseudo-state-machine-name_impl_pretensepy)
    - [Seeding Transitions & Fakes Outside Default Initialization](#seeding-transitions--fakes-outside-default-initialization)
    - [Cross-Component Precondition Composition](#cross-component-precondition-composition)
+   - [Multi-Interface Composition & Transition Inheritance](#multi-interface-composition--transition-inheritance)
+   - [Streamlined Component Boundaries: Interface Conciseness vs Implementation Grounding](#streamlined-component-boundaries-interface-conciseness-vs-implementation-grounding)
 9. [End-to-End Concrete Reference: `LRUCache`](#9-end-to-end-concrete-reference-lrucache)
    - [Low-Level Specification with `@test_only` (`low/lru_cache.pyi`)](#low-level-specification-with-test_only-lowlru_cachepyi)
    - [Interface State Machine (`pretense/lru_cache_pretense.py`)](#interface-state-machine-pretenselru_cache_pretensepy)
@@ -70,6 +79,7 @@
 12. [Empirical Benchmarking: Pretense as a Baseline Equalizer](#12-empirical-benchmarking-pretense-as-a-baseline-equalizer)
     - [Empirical Cross-Model Telemetry (`dag_engine_lite`)](#empirical-cross-model-telemetry-dag_engine_lite)
     - [Cost-Efficiency Dynamics](#cost-efficiency-dynamics)
+    - [Empirical Multi-Component & Cross-Interface Telemetry (`task_queue`, `inter_interface`, `multi_interface`)](#empirical-multi-component--cross-interface-telemetry-task_queue-inter_interface-multi_interface)
 13. [Comparative Evolution Matrix](#13-comparative-evolution-matrix)
 
 ---
@@ -460,15 +470,17 @@ The AST compiler automatically slices pre-pivot statements into `_pre_<method>`,
 The implementation layer is termed an **Implementation Pseudo State Machine** (`<Impl>PseudoStateMachine`):
 - Owns **zero state variables of its own** and defines no independent state transitions.
 - Shares `<Iface>State` directly.
-- Contains **zero `require_arg` statements**; all parameter domains and strategies are inherited from the interface state machine.
-- Uses `call_target()` as the AST pivot to capture private SUT pre-state snapshots and verify private differentials:
+- Contains **zero `require_arg` statements**; all parameter domains and strategies are inherited from the interface state machine (`PN_IMPL_NO_REQUIRE_ARG`).
+- Does **never mutate `self.state` directly** (`PN_IMPL_NO_STATE_MUTATION`). The runtime linear transition execution automatically runs the base interface transition first to evaluate preconditions, generate domain values, and mutate model state, delegating via `make_return_value` to the implementation override.
+- Uses `ret = call_target(target.method(*args))` as the AST pivot to capture private SUT pre-state snapshots and verify private differentials:
 ```python
 class LRUCacheImplPseudoStateMachine(LRUCacheStateMachine):
-    @transition(LRUCacheImpl.put)
+    @transition(LRUCache.put)
     def put(self, key: str, value: Any) -> Any:
-        old_nodes = len(sut(LRUCacheImpl)._items)
-        ret = call_target()
-        assert len(sut(LRUCacheImpl)._items) == len(self.state.items)
+        target: LRUCache = sut(LRUCache)
+        old_nodes = len(target._items)
+        ret = call_target(target.put(key, value))
+        assert len(target._items) == len(self.state.items)
         return ret
 ```
 
@@ -495,6 +507,102 @@ Original Pretense's speculative `_run_pass1` is replaced with **static AST analy
 - Parses transition functions at edit time.
 - Chops the AST at pivot nodes (`make_return_value` in interface; `call_target()` in impl pseudo state machine).
 - Validates that `requires` and `require_arg` appear before the pivot, snapshots `old_*` are assigned before the pivot, and assertions conform to single-argument rules.
+
+### Principle 14: Prohibition of Pre-Seeding & Blank Initial State Invariant
+In multi-component architectures, components under test interact with external collaborator singletons. A recurring failure mode in early benchmarks was **static pre-seeding**: test authors populated collaborator states inside `make_sut()` or `setUp()` fixtures (e.g., pre-enqueuing 10 tasks into a collaborator queue so that `TaskWorker.fetch_and_execute()` would not encounter an empty queue).
+- **Why Pre-Seeding is Defective**:
+  1. *State Exhaustion*: In a 50-step Hypothesis stateful fuzzing run, 10 pre-seeded tasks are drained within the first 10 steps, leaving the queue empty for the remaining 40 steps.
+  2. *Loss of Dynamic Interleaving*: Static fixtures fail to explore dynamic operation interleavings (e.g. `submit` $\to$ `fetch` $\to$ `submit` $\to$ `submit` $\to$ `fetch`).
+  3. *Masked Failure Branches*: Operational failures (e.g., backing service unavailability) cannot be randomly injected mid-run.
+- **The Blank Initial State Rule**: All SUT instances and collaborator fakes initialized in `make_sut()`, `setUp()`, or test fixtures **must start in blank (default initial) states**.
+- **Dynamic Seeding Transitions**: Transitions from blank states to non-blank states occur exclusively through **seeding transitions** (`@transition.seeding`), executed dynamically and randomly by Hypothesis during fuzzing, or step-by-step in scenario tests.
+- **Static AST Linter Enforcement (`[PRE_LINT_NO_PRE_SEEDING]`)**: `pretense_lint.py` inspects `make_sut()` to prohibit loops (`for`, `while`), state injection arguments, or mutating method calls on instances. Only lifecycle registry construction, module initialization, collaborator fake registration, scope entry, and singleton resolution are permitted.
+- **Anti-State-Poking Invariant (`[PRE_LINT_NO_STATE_POKING]`)**: Direct mutation or mutating method calls on `.state` or `self.state` in test methods is strictly prohibited. State transitions must be driven through public methods on `self.checked` or synthesized fake methods.
+
+### Principle 15: Collaborator Seeding Transitions in Implementation Fuzz Testing
+When verifying an implementation component that depends on collaborator interfaces (e.g. `TaskWorker` depending on `TaskQueue`):
+- `compile_hypothesis_test_case` supports a `collaborators` parameter accepting a sequence of collaborator interface state machines:
+  ```python
+  TaskWorkerFuzzTest = compile_hypothesis_test_case(
+      proto=TaskWorkerImplPseudoStateMachine,
+      collaborators=[TaskQueueStateMachine],
+      sut_factory=make_sut,
+      initial_state_factory=TaskWorkerState,
+      name="TaskWorkerFuzzTest",
+  )
+  ```
+- **Rule Collection & Dispatch**:
+  1. *SUT Rules*: Transitions on the implementation pseudo-state machine are registered as Hypothesis rules dispatching against the SUT via `call_target`.
+  2. *Collaborator Seeding Rules*: Every `@transition.seeding` method declared on each collaborator state machine is registered as a Hypothesis rule.
+  3. *Collaborator Resolution*: When a collaborator seeding rule is chosen, the engine resolves the registered collaborator fake or singleton from active dynamic context (`sut(CollaboratorClass)`) and executes the seeding transition against it.
+- This allows Hypothesis to interleave collaborator state changes (e.g. enqueuing tasks, injecting service unavailability) throughout the entire fuzzing run without violating the blank initial state invariant.
+
+### Principle 16: Cross-Collaborator Outcome Assertions
+An implementation under test frequently mutates or delegates operations to collaborator singletons. In `TaskWorkerImplPseudoStateMachine`, transition overrides must be capable of asserting postconditions on collaborator fakes:
+```python
+class TaskWorkerImplPseudoStateMachine(TaskWorkerStateMachine):
+
+    @transition(TaskWorker.execute)
+    def execute(self, task_id: str, payload: str) -> Any:
+        target: TaskWorker = sut(TaskWorker)
+        queue: TaskQueue = sut(TaskQueue)  # Resolves collaborator fake
+        
+        old_completed = queue.get_outcome(task_id)
+        ret = call_target(target.execute(task_id, payload))
+        
+        # Cross-collaborator outcome assertions
+        assert ret == f"PROCESSED:{payload.upper()}"
+        assert queue.get_outcome(task_id) == ret
+        return ret
+```
+Collaborator fakes synthesized via `synthesize_fake` expose all public methods and `@test_only` query accessors declared on the collaborator interface, allowing transition overrides to verify end-to-end integration contracts cleanly without violating encapsulation.
+
+### Principle 17: Inter-Interface Requirements & Model Assertions
+When Interface $A$ imports Interface $B$:
+1. **Model Preconditions & Domains via `sut_state`**: Interface transitions in $A$ can express caller preconditions (`require`) or argument domains (`require_arg`) conditioned on $B$'s abstract model state via `sut_state(BState)`:
+   ```python
+   @transition(TaskWorker.fetch_and_execute)
+   def fetch_and_execute(self) -> str:
+       require(self.state.initialized)
+       queue_state = sut_state(TaskQueueState)
+       require(len(queue_state.pending) > 0)
+       require(queue_state.is_available)
+       ...
+   ```
+2. **Inter-Interface Postcondition Assertions**: Interface transitions in $A$ can assert postconditions against collaborator $B$ (`sut(B)`).
+3. **Execution Context Binding**: During fake fuzzing (`Fake<A>FuzzTest`), Pretense automatically binds collaborator fakes in the test context so that `sut(B)` and `sut_state(BState)` resolve deterministically.
+
+### Principle 18: Multi-Interface Implementations (`implements: B, C`)
+When a concrete component implements multiple interfaces (e.g. `multi_interface_impl` implementing both `stream_reader` and `stream_writer`):
+1. **Multiple Inheritance for Pseudo-State Machines**:
+   ```python
+   class MultiImplPseudoStateMachine(StreamReaderStateMachine, StreamWriterStateMachine):
+       """Implements transitions for singletons across both interfaces."""
+       ...
+   ```
+2. **Transition Coverage**: The pseudo-state machine provides `call_target` transition overrides for methods across all implemented interfaces, asserting postconditions and invariants for both interfaces.
+3. **Static AST Linter Enforcement (`[PRE_LINT_MULTI_INTERFACE_INHERITANCE]`)**: Linters verify that the implementation pseudo-state machine inherits all implemented interface state machines declared in `implements:`.
+4. **Interleaved Stateful Fuzzing**: `compile_hypothesis_test_case` discovers transitions from all inherited base classes in MRO order. Hypothesis randomly interleaves operations across both interfaces against the single concrete implementation instance.
+
+### Principle 19: Interface Fixed Conformance Testing (`Test<Target>Fake`)
+Interface pretense modules (`pretense/<name>_pretense.py`) must provide a verified in-memory fake for downstream consumers. To guarantee that synthesized fakes execute all operational and seeding transitions correctly:
+1. **Mandatory Fixed Fake Test Suite**: Interface modules define `Test<Target>Fake(unittest.TestCase)` exercising 100% of declared `@transition` and `@transition.seeding` methods against `make_<target>_fake()`.
+2. **Linter Enforcement (`[PRE_LINT_INTERFACE_TRANSITION_COVERAGE]`)**: `pretense_lint.py` inspects `Test<Target>Fake` and verifies that every transition and seeding transition is invoked. If a transition is missing, the linter emits a failure:
+   `error: [PRE_LINT_INTERFACE_TRANSITION_COVERAGE] interface transition 'TargetStateMachine.<method>' is not covered in 'Test<Target>Fake'. Advice: Ensure its required conditions can be properly reached by existing transitions, or add seeding transitions if coverage is difficult.`
+3. **Prohibition of `call_target` in Interface Modules (`[PRE_LINT_NO_CALL_TARGET_IN_INTERFACE]`)**: Interface state machines use `ret = make_return_value(...)`. `call_target` is reserved exclusively for implementation pseudo-state machines.
+
+### Principle 20: Base Interface Transition Delegation & Onion Dispatch
+To eliminate duplication and prevent cognitive desynchronization between interface state machines and implementation pseudo-state machines:
+1. **Automatic Runtime Transition Wrapping**: In `pretense.py`, the engine (`_build_linear_transition`) detects when an implementation pseudo-state machine overrides a base interface transition. It wraps the override in an onion wrapper:
+   - When the transition is invoked, the base interface transition executes first.
+   - The base transition evaluates `requires(...)` caller preconditions, draws parameter domains (`require_arg`), and applies reference model mutations (`self.state`).
+   - Upon encountering `ret = make_return_value(...)` in the base transition, control pivots to the implementation override.
+   - The implementation override evaluates pre-state differentials, invokes the real SUT via `call_target(target.method(*args))`, and checks private SUT assertions.
+2. **Zero Duplication in Implementation Pseudo-State Machines**:
+   - Implementation pseudo-state machines **must NOT duplicate `require(...)` preconditions**; these are evaluated by the base class.
+   - Implementation pseudo-state machines **must NOT declare `require_arg(...)` parameter domains** (`PN_IMPL_NO_REQUIRE_ARG`); domains are inherited from the base class.
+   - Implementation pseudo-state machines **must NEVER mutate `self.state` directly** (`PN_IMPL_NO_STATE_MUTATION`); model state is updated by the base class.
+3. **Auditor Protection in `pretense_qa.md`**: QA auditors are strictly prohibited from blaming implementation pseudo-state machines for missing `require(...)` gates, missing `require_arg(...)` domains, or missing `self.state` mutations, since these responsibilities are handled by base interface transition delegation.
 
 ---
 
@@ -672,18 +780,21 @@ Pretense structurally resolves this through a **dual verification architecture**
 Authored alongside the interface specification:
 1. `<Iface>State` dataclass modeling abstract canonical state.
 2. `StateMachine[<Iface>State]` defining 1:1 transitions with `require_arg`, `requires`, pre-execution `assert`, and post-call `assert`.
-3. Seeding transitions (`@transition.seeding`).
+3. Seeding transitions (`@transition.seeding`) for populating model state or injecting failure states dynamically.
 4. Fake synthesis factory: `make_<iface>_fake = synthesize_fake(<Iface>StateMachine)`.
-5. **Zero fixed unit test classes** (fixed scenarios belong to implementation components).
+5. **Mandatory Interface Fixed Test Suite** (`Test<Iface>Fake(unittest.TestCase)`), exercising 100% of declared `@transition` and `@transition.seeding` methods against the synthesized fake double (`PRE_LINT_INTERFACE_TRANSITION_COVERAGE`). Real SUT tests belong exclusively in the implementation pretense module.
 6. **Compiled Hypothesis Fake Fuzz Test** (`Fake<Iface>FuzzTest = compile_hypothesis_test_case(...)`), verifying the fake under all contract assertions.
 
 ### Implementation Pseudo State Machine (`<name>_impl_pretense.py`)
 Authored alongside the library implementation:
-1. `<Impl>PseudoStateMachine` inheriting from `<Iface>StateMachine`:
+1. `<Impl>PseudoStateMachine` inheriting from `<Iface>StateMachine` (or multiple interface state machines if implementing multiple interfaces):
    - **Defines ZERO state dataclasses of its own.**
-   - Uses `call_target()` as the AST pivot to capture pre-state snapshots and verify private internal invariants.
-2. `Test<Impl>Real(unittest.TestCase)` driving targeted lifecycle scenarios.
-3. Compiled Hypothesis property fuzzing on the real SUT (`compile_hypothesis_test_case`).
+   - Uses `call_target(target.method(*args))` as the AST pivot to capture pre-state snapshots and verify private internal invariants.
+   - **Never mutates `self.state` directly (`PN_IMPL_NO_STATE_MUTATION`)**; runtime onion dispatch executes the inherited base interface transition to evaluate preconditions, generate domain values, and mutate model state, delegating through `make_return_value` to the override.
+   - Contains **zero `require_arg` declarations** (`PN_IMPL_NO_REQUIRE_ARG`); domain constraints and generation strategies are inherited from the interface state machine.
+   - Asserts postconditions across both SUT and collaborator fakes via `sut(CollabClass)` and `sut_state(CollabState)`.
+2. `Test<Impl>Real(unittest.TestCase)` driving targeted lifecycle scenarios through `self.checked = self.sm.as_checked(TargetClass, self.real)` to achieve 100% statement coverage.
+3. Compiled Hypothesis property fuzzing on the real SUT with collaborator seeding (`compile_hypothesis_test_case(proto=..., collaborators=[...], sut_factory=make_sut, ...)`).
 
 ### Seeding Transitions & Fakes Outside Default Initialization
 Fakes can be initialized into non-default states for unit test priming or fuzz exploration:
@@ -704,6 +815,47 @@ def dispatch_next(self) -> Optional[Task]:
     requires(sut_state(TaskStoreState).has_unassigned_tasks)
     ...
 ```
+
+### Multi-Interface Composition & Transition Inheritance
+When a concrete component realizes multiple protocols (e.g. `multi_interface_impl` implementing both `stream_reader` and `stream_writer`):
+- High-level specification declares: `implements: stream_reader, stream_writer`.
+- Low-level specification declares concrete class realizing both protocols: `class MultiInterface(stream_reader.StreamReader, stream_writer.StreamWriter): ...`.
+- Implementation pseudo-state machine subclasses both interface state machines:
+  ```python
+  class MultiInterfaceImplPseudoStateMachine(
+      StreamReaderStateMachine,
+      StreamWriterStateMachine,
+  ):
+      """Pseudo-state machine covering transitions across both stream_reader and stream_writer."""
+      
+      @transition(StreamReader.read)
+      def read(self) -> Optional[str]:
+          target = sut(StreamReader)
+          old_unread = target.unread_count
+          ret = call_target(target.read())
+          assert target.unread_count == len(self.state.buffered)
+          return ret
+          
+      @transition(StreamWriter.write)
+      def write(self, payload: str) -> None:
+          target = sut(StreamWriter)
+          old_written = target.written_count
+          call_target(target.write(payload))
+          assert target.written_count == old_written + 1
+  ```
+- `compile_hypothesis_test_case` discovers all transitions across the inheritance graph in MRO order. Hypothesis stateful fuzzing drives interleaved read and write action sequences against the single multi-interface instance.
+
+### Streamlined Component Boundaries: Interface Conciseness vs Implementation Grounding
+A critical lesson from the `task_queue` benchmark was **interface bloat**. Early iterations placed derived convenience properties (`is_empty`, `is_full`), bounded capacity limits (10-item buffer bounds, `QueueFullError`), and telemetry counters (`processed_count`, `last_task_id`, `reset()`) directly on interface protocols. This inflated interface specifications to ~150 lines and led to brittle, tautological model states.
+
+**Streamlined Responsibility Division**:
+1. **Interface Protocol Conciseness**:
+   - Focus exclusively on essential operational contracts: FIFO enqueue (`submit`), dequeue/dispatch (`dispatch`), outcome completion (`complete`), query (`get_outcome`), and core depth (`pending_count`).
+   - Define operational exception models (`QueueUnavailableException`, `WorkerExecutionException`) and seeding switches (`@test_only set_available()`, `@transition.seeding seed_unavailable()`).
+2. **Implementation Grounding**:
+   - Move capacity limits, internal buffer layouts (e.g. deque with bounded capacity 10), and derived convenience checks (`is_empty`, `is_full`) into `task_queue_impl`.
+   - Move execution telemetry (`processed_count`, `last_task_id`, `reset()`) and internal execution state flags (`is_busy`) into `task_worker_impl`.
+3. This division reduces interface specifications by 40%–50%, matching the clean, concise size of `ring_buffer`, while giving implementations full freedom to realize bounded memory structures and telemetry tracking.
 
 ---
 
@@ -990,11 +1142,18 @@ The Pretense runtime parses state machine transition bodies using Python's `ast`
 
 ### Static AST Validation in `pretense_lint.py`
 The linter enforces:
-- `[PRE_LINT_ASSERT_SINGLE_ARG]`: Forbids multi-argument assertions (`assert test, msg`).
-- `[NO_ERROR_TESTING]`: Forbids asserting or expecting any `*Error` exception in `raises(...)` or `assertRaises`.
+- `[PRE_LINT_ASSERT_SINGLE_ARG]`: Forbids multi-argument assertions (`assert test, msg`), preventing truthy tuple bugs and enforcing clean Pytest failure introspection.
+- `[NO_ERROR_TESTING]`: Forbids asserting or expecting any `*Error` exception in `raises(...)` or `assertRaises` (checked preconditions are untestable contract boundaries).
 - `[PRE_LINT_REQUIRE_ARG_DOMAINS]`: Enforces valid `Domain.*` specifications in `require_arg`.
 - `[PRE_LINT_PSEUDO_ZERO_STATE]`: Prohibits defining state dataclasses in `<Impl>PseudoStateMachine`.
 - `[PRE_LINT_NO_LAMBDA]`: Prohibits lambdas in transition definitions.
+- `[PRE_LINT_NO_PRE_SEEDING]`: Prohibits loops (`for`, `while`), mutating method calls, and non-blank state initialization inside `make_sut()`. SUT and collaborator fakes must start in default initial states; state transitions occur via seeding transitions or nominal method calls.
+- `[PRE_LINT_NO_STATE_POKING]`: Prohibits direct mutation or mutating calls on `.state` or `self.state` in test methods.
+- `[PRE_LINT_NO_CALL_TARGET_IN_INTERFACE]`: Prohibits `call_target` in interface state machines (`call_target` belongs exclusively to implementation pseudo-state machines).
+- `[PRE_LINT_MULTI_INTERFACE_INHERITANCE]`: Enforces that multi-interface implementation pseudo-state machines inherit all implemented interface state machines declared in HLS `implements:`.
+- `[PRE_LINT_INTERFACE_TRANSITION_COVERAGE]`: Requires interface pretense modules to define `Test<Target>Fake(unittest.TestCase)` exercising 100% of declared `@transition` and `@transition.seeding` methods against the synthesized fake.
+- `[PRE_LINT_NO_TOP_LEVEL_PROBE]`: Prohibits executing top-level test calls, exploratory scripts, or assertions at module import time.
+- `[PRE_LINT_NO_SKIP]`: Strictly prohibits skipping tests via `@unittest.skip*`, `pytest.skip()`, or `SkipTest`.
 
 ---
 
@@ -1038,6 +1197,18 @@ To prevent 100-wave deadlock loops caused by auditor hallucinations:
    - **Unit Tests**: Optimal for fast models prioritizing latency, standard pre-training alignment, and low token cost.
    - **Pretense**: Optimal for mission-critical concurrency, state-machine verification, verified in-memory fake synthesis, and temporal invariant fuzzing.
 
+### Empirical Multi-Component & Cross-Interface Telemetry (`task_queue`, `inter_interface`, `multi_interface`)
+
+Following the resolution of pre-seeding antipatterns and the addition of multi-interface inheritance, empirical benchmark flights were executed with `deepseek-flash` (DSH) across the expanded multi-component suite:
+
+| Benchmark Target | Focus Architecture | Outcome | Rounds / Status | Key Verification Insights |
+| :--- | :--- | :---: | :---: | :--- |
+| `task_queue` | Collaborator seeding (`TaskQueue` fake feeding `TaskWorker`) | **PASS** | Complete | Zero pre-seeding. Dynamic task feeding and unavailability seeding via Hypothesis rules avoided state exhaustion. |
+| `inter_interface` | Cross-interface state modeling (`sut_state(VaultState)` in `require`) | **PASS** | Complete | Interface transitions successfully gated on collaborator model state and asserted balance outcomes across allocator and vault. |
+| `multi_interface` | Multi-interface pseudo-SM (`ReaderStateMachine` + `WriterStateMachine`) | **PASS** | Complete | Single concrete stream buffer verified under interleaved read/write fuzzing with 100% transition coverage. |
+
+These benchmarks demonstrate that Pretense reliably scales from single-component data structures (`ring_buffer`, `lru_cache`, `dag_engine_lite`) to inter-dependent microservices and composite multi-protocol components without test-worker deadlock or state space starvation.
+
 ---
 
 ## 13. Comparative Evolution Matrix
@@ -1055,8 +1226,14 @@ To prevent 100-wave deadlock loops caused by auditor hallucinations:
 | **Impl State Machine** | Duplicate `<Impl>State` with parallel syncing | **Implementation Pseudo State Machine (Zero state)** |
 | **Contract Invariants** | Ad-hoc `ensure(...)` crashing on dummy contexts | **Universal native `assert` on SUT and Fake** |
 | **Fake Verification** | Untested synthesized fake | **Interface-level Hypothesis fake fuzzing** |
+| **Interface Fixed Tests** | None (tests only in impl) | **Mandatory `Test<Target>Fake` with 100% transition coverage** |
 | **Dead-Ends & Coverage** | Unreachable fallbacks cause test failures | **`unreachable("reason")` + `*Error` auto-exempt** |
 | **Collaborator Testing** | Mock-style proxy interceptors (`as_checked`) | **Dynamic scope (`sut(Collaborator)`) checking Fake state** |
+| **Collaborator Seeding** | Static pre-seeding antipattern in `make_sut()` | **Dynamic `@transition.seeding` via `collaborators` in Hypothesis** |
+| **Pre-Seeding Invariant** | Permitted (led to state exhaustion) | **Blank initial state strictly enforced (`PRE_LINT_NO_PRE_SEEDING`)** |
+| **State Poking Invariant** | Unchecked test state mutation | **Direct `.state` mutation forbidden (`PRE_LINT_NO_STATE_POKING`)** |
+| **Multi-Interface Support** | Single interface only | **Multiple inheritance pseudo-SM (`PRE_LINT_MULTI_INTERFACE_INHERITANCE`)** |
+| **Transition Wrapping** | Manual duplicate checks in pseudo-SM | **Onion dispatch auto-executing base interface transition first** |
 | **Observability Hooks** | Private attribute inspection (`target._items`) | **Typed `@test_only` query accessors in `low/*.pyi`** |
 | **QA Blame Allocation** | 100% blamed on `lib` (infinite loop risk) | **Symmetrical blame + Circuit Breaker** |
 | **AST Processing** | None (speculative runtime execution `_run_pass1`) | **Static AST Chopping in framework & linter** |

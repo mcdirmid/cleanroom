@@ -963,6 +963,336 @@ ctx.returns(lambda v, r: v.is_prerelease)
         self.assertTrue(none_dom.validate(None))
         self.assertFalse(none_dom.validate("hello"))
 
+    def test_collaborator_seeding_in_hypothesis_fuzzing(self) -> None:
+        """Verify that collaborator seeding transitions are compiled and executable by Hypothesis."""
+        from dataclasses import dataclass, field
+        from pretense import (
+            Domain,
+            StateMachine,
+            compile_hypothesis_test_case,
+            require,
+            require_arg,
+            sut,
+            synthesize_fake,
+            transition,
+        )
+
+        @dataclass
+        class QueueCollabState:
+            pending_items: list[str] = field(default_factory=list)
+
+        class QueueCollabStateMachine(StateMachine[QueueCollabState]):
+            def __init__(self, state: Optional[QueueCollabState] = None, singletons: Optional[dict[type[Any], Any]] = None) -> None:
+                super().__init__(state=state or QueueCollabState(), singletons=singletons)
+
+            @transition.seeding
+            def seed_pending(self, item: str) -> None:
+                require_arg(item, Domain.sampled_from(["x", "y", "z"]))
+                self.state.pending_items.append(item)
+
+        FakeQueue = synthesize_fake(QueueCollabStateMachine)
+
+        @dataclass
+        class WorkerTargetState:
+            processed: list[str] = field(default_factory=list)
+
+        class WorkerTargetStateMachine(StateMachine[WorkerTargetState]):
+            def __init__(self, state: Optional[WorkerTargetState] = None, singletons: Optional[dict[type[Any], Any]] = None) -> None:
+                super().__init__(state=state or WorkerTargetState(), singletons=singletons)
+
+            @transition(name="fetch")
+            def fetch(self) -> str:
+                # Expects a collaborator fake with pending items
+                collab = sut(FakeQueue)
+                require(len(collab.state.pending_items) > 0)
+                item = collab.state.pending_items.pop(0)
+                self.state.processed.append(item)
+                return item
+
+        fake_q = FakeQueue()
+
+        def make_worker_sut() -> Any:
+            class RealWorker:
+                def fetch(self) -> str:
+                    return fake_q.state.pending_items.pop(0)
+            return RealWorker()
+
+        proto = WorkerTargetStateMachine(singletons={FakeQueue: fake_q})
+        CompiledFuzz = compile_hypothesis_test_case(
+            proto=proto,
+            collaborators=[QueueCollabStateMachine],
+            sut_factory=make_worker_sut,
+            initial_state_factory=WorkerTargetState,
+            name="CollaboratorSeedingFuzzTest",
+        )
+
+        # Verify collaborator seeding rule exists on the compiled state machine
+        self.assertTrue(hasattr(CompiledFuzz, "step_collab_QueueCollabStateMachine_seed_pending"))
+
+        # Run state machine instance directly
+        sm_runner = CompiledFuzz()
+        self.assertEqual(len(fake_q.state.pending_items), 0)
+        # Execute collaborator seeding step
+        getattr(sm_runner, "step_collab_QueueCollabStateMachine_seed_pending")()
+        self.assertEqual(len(fake_q.state.pending_items), 1)
+
+        # Run Hypothesis TestCase fuzzing
+        CompiledFuzz.TestCase().runTest()
+
+    def test_inter_interface_state_requirements_and_assertions(self) -> None:
+        """Verify that an interface state machine can express requirements and assertions on collaborator state models."""
+        from dataclasses import dataclass, field
+        from pretense import (
+            Domain,
+            StateMachine,
+            compile_hypothesis_test_case,
+            require,
+            require_arg,
+            sut,
+            sut_state,
+            synthesize_fake,
+            transition,
+        )
+
+        @dataclass
+        class VaultState:
+            balance: int = 0
+            is_active: bool = True
+
+        class VaultStateMachine(StateMachine[VaultState]):
+            def __init__(self, state: Optional[VaultState] = None, singletons: Optional[dict[type[Any], Any]] = None) -> None:
+                super().__init__(state=state or VaultState(), singletons=singletons)
+
+            @transition.seeding
+            def seed_deposit(self, amount: int) -> None:
+                require_arg(amount, Domain.range(10, 100))
+                self.state.balance += amount
+
+        FakeVault = synthesize_fake(VaultStateMachine)
+        fake_vault = FakeVault()
+
+        @dataclass
+        class AllocatorState:
+            allocated_total: int = 0
+
+        class AllocatorStateMachine(StateMachine[AllocatorState]):
+            def __init__(self, state: Optional[AllocatorState] = None, singletons: Optional[dict[type[Any], Any]] = None) -> None:
+                super().__init__(state=state or AllocatorState(), singletons=singletons)
+
+            @transition(name="allocate")
+            def allocate(self, amount: int) -> int:
+                # 1. Express requirement on collaborator state machine state via sut_state:
+                require(sut_state(VaultState).is_active)
+                require(sut_state(VaultState).balance >= 1)
+                require_arg(amount, Domain.range(1, max(1, min(10, sut_state(VaultState).balance))))
+
+                # 2. Mutate collaborator fake directly
+                vault = sut(FakeVault)
+                old_bal = vault.state.balance
+                vault.state.balance -= amount
+
+                # 3. Assert on collaborator fake
+                assert vault.state.balance == old_bal - amount
+                self.state.allocated_total += amount
+                return amount
+
+        proto = AllocatorStateMachine(singletons={FakeVault: fake_vault})
+
+        def make_allocator_sut() -> Any:
+            class RealAllocator:
+                def allocate(self, amount: int) -> int:
+                    fake_vault.state.balance -= amount
+                    return amount
+            return RealAllocator()
+
+        CompiledFuzz = compile_hypothesis_test_case(
+            proto=proto,
+            collaborators=[VaultStateMachine],
+            sut_factory=make_allocator_sut,
+            initial_state_factory=AllocatorState,
+            name="InterInterfaceFuzzTest",
+        )
+
+        # Execute direct runner steps
+        sm_runner = CompiledFuzz()
+        self.assertEqual(fake_vault.state.balance, 0)
+        # Seed deposit
+        getattr(sm_runner, "step_collab_VaultStateMachine_seed_deposit")(amount=50)
+        self.assertEqual(fake_vault.state.balance, 50)
+        # Allocate
+        ret = getattr(sm_runner, "step_allocate")(amount=5)
+        self.assertEqual(fake_vault.state.balance, 45)
+
+        # Run Hypothesis fuzzing
+        CompiledFuzz.TestCase().runTest()
+
+    def test_multi_interface_state_machine_composition(self) -> None:
+        """Verify that an implementation pseudo-state machine can inherit multiple interface state machines."""
+        from typing import Generic, TypeVar
+        from dataclasses import dataclass, field
+        from pretense import (
+            Domain,
+            StateMachine,
+            call_target,
+            compile_hypothesis_test_case,
+            require,
+            require_arg,
+            sut,
+            transition,
+        )
+
+        @dataclass
+        class ReaderState:
+            read_count: int = 0
+
+        R_T = TypeVar("R_T", bound=ReaderState)
+
+        class ReaderStateMachine(Generic[R_T], StateMachine[R_T]):
+            def __init__(self, state: Optional[R_T] = None, singletons: Optional[dict[type[Any], Any]] = None) -> None:
+                super().__init__(state=state or ReaderState(), singletons=singletons)
+
+            @transition(name="read")
+            def read(self) -> str:
+                self.state.read_count += 1
+                return "data"
+
+        @dataclass
+        class WriterState:
+            written_count: int = 0
+
+        W_T = TypeVar("W_T", bound=WriterState)
+
+        class WriterStateMachine(Generic[W_T], StateMachine[W_T]):
+            def __init__(self, state: Optional[W_T] = None, singletons: Optional[dict[type[Any], Any]] = None) -> None:
+                super().__init__(state=state or WriterState(), singletons=singletons)
+
+            @transition(name="write")
+            def write(self, payload: str) -> None:
+                require_arg(payload, Domain.sampled_from(["a", "b", "c"]))
+                self.state.written_count += 1
+
+        @dataclass
+        class CombinedBufferState(ReaderState, WriterState):
+            pass
+
+        class CombinedBufferImplPseudoStateMachine(ReaderStateMachine[CombinedBufferState], WriterStateMachine[CombinedBufferState]):
+            def __init__(self, state: Optional[CombinedBufferState] = None, singletons: Optional[dict[type[Any], Any]] = None) -> None:
+                c_state = state or CombinedBufferState()
+                super().__init__(state=c_state, singletons=singletons)
+
+            @transition(name="read")
+            def read(self) -> str:
+                target = sut(RealBuffer)
+                ret = call_target(target.read())
+                self.state.read_count += 1
+                return ret
+
+            @transition(name="write")
+            def write(self, payload: str) -> None:
+                require_arg(payload, Domain.sampled_from(["a", "b", "c"]))
+                target = sut(RealBuffer)
+                call_target(target.write(payload))
+                self.state.written_count += 1
+
+        class RealBuffer:
+            def __init__(self) -> None:
+                self.reads = 0
+                self.writes = 0
+
+            def read(self) -> str:
+                self.reads += 1
+                return "data"
+
+            def write(self, payload: str) -> None:
+                self.writes += 1
+
+        buf_sut = RealBuffer()
+        proto = CombinedBufferImplPseudoStateMachine(singletons={RealBuffer: buf_sut})
+
+        CompiledFuzz = compile_hypothesis_test_case(
+            proto=proto,
+            sut_factory=lambda: buf_sut,
+            initial_state_factory=CombinedBufferState,
+            name="MultiInterfaceFuzzTest",
+        )
+
+        # Verify that transitions from both Reader and Writer are present
+        self.assertTrue(hasattr(CompiledFuzz, "step_read"))
+        self.assertTrue(hasattr(CompiledFuzz, "step_write"))
+
+        # Execute direct runner steps
+        sm_runner = CompiledFuzz()
+        getattr(sm_runner, "step_write")(payload="a")
+        self.assertEqual(buf_sut.writes, 1)
+        getattr(sm_runner, "step_read")()
+        self.assertEqual(buf_sut.reads, 1)
+
+        # Run Hypothesis fuzzing
+        CompiledFuzz.TestCase().runTest()
+
+    def test_implementation_pseudo_state_machine_executes_base_interface_transition_mutations(self) -> None:
+        """Requirement: Overridden transitions in an implementation pseudo-state machine MUST execute
+        the base interface transition's model state mutations and parameter domains while delegating to the
+        real SUT via make_return_value and call_target during Hypothesis fuzzing."""
+        @dataclass
+        class CounterState:
+            initialized: bool = True
+            count: int = 0
+            items: list[str] = field(default_factory=list)
+
+        class CounterStateMachine(pretense.StateMachine[CounterState]):
+            @pretense.transition(name="add_item")
+            def add_item(self, item: str) -> None:
+                pretense.require(self.state.initialized)
+                pretense.require_arg(item, pretense.Domain.sampled_from(["alpha", "beta", "gamma"]))
+                ret = pretense.make_return_value(None)
+                self.state.count += 1
+                self.state.items.append(item)
+                assert ret is None
+
+        class RealCounter:
+            def __init__(self) -> None:
+                self.sut_count = 0
+                self.sut_items: list[str] = []
+
+            def add_item(self, item: str) -> None:
+                self.sut_count += 1
+                self.sut_items.append(item)
+
+        class CounterImplPseudoStateMachine(CounterStateMachine):
+            @pretense.transition(name="add_item")
+            def add_item(self, item: str) -> Any:
+                target = pretense.sut(RealCounter)
+                ret = pretense.call_target(target.add_item(item))
+                return ret
+
+        counter_sut = RealCounter()
+        proto = CounterImplPseudoStateMachine(singletons={RealCounter: counter_sut})
+
+        CompiledFuzz = compile_hypothesis_test_case(
+            proto=proto,
+            sut_factory=lambda: counter_sut,
+            initial_state_factory=CounterState,
+            name="CounterFuzzTest",
+        )
+
+        runner = CompiledFuzz()
+        self.assertEqual(runner.sm.state.count, 0)
+        self.assertEqual(counter_sut.sut_count, 0)
+
+        # Execute direct step
+        getattr(runner, "step_add_item")(item="alpha")
+        # Verify BOTH model state and SUT state were updated in lockstep:
+        self.assertEqual(runner.sm.state.count, 1)
+        self.assertEqual(runner.sm.state.items, ["alpha"])
+        self.assertEqual(counter_sut.sut_count, 1)
+        self.assertEqual(counter_sut.sut_items, ["alpha"])
+
+        # Run Hypothesis fuzzing on real SUT
+        CompiledFuzz.TestCase().runTest()
+        self.assertGreaterEqual(runner.sm.state.count, 1)
+        self.assertGreaterEqual(counter_sut.sut_count, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

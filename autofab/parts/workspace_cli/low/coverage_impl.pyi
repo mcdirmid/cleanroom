@@ -69,6 +69,8 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
         GROUNDING:
         - Reads the source text named by coverage.ModuleCoverage.file_path through the
           pathlib filesystem operations declared by the filesystem_ext external boundary,
+          parses the source abstract syntax tree to classify each span's ownership disposition
+          between library pragma requirements and test coverage deficits,
           indexes the lines of coverage.ModuleCoverage.missing_spans against that
           source text, and clamps the presented spans when max_spans is configured.
         """
@@ -89,10 +91,13 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
           coverage.ModuleCoverage.missed, coverage.ModuleCoverage.test_passed,
           and coverage.ModuleCoverage.test_error, delegates uncovered source span
           context to this evaluator's format_spans_report under the supplied threshold and
-          max_spans, and appends agent guidance directing the agent to formulate blame feedback
-          strictly in terms of how the blamed file is not compliant with the common source of truth
-          specification, permitting line numbers only within the blamed file while strictly forbidding
-          exposing details of other files.
+          max_spans, and appends agent guidance leading with the precondition exemption
+          directing the agent to first classify whether a span is an *Error raise or precondition
+          guard belonging to the library as a pragma annotation rather than a test requirement,
+          permitting line numbers only within the blamed file while strictly forbidding
+          exposing details of other files, and instructing the agent when an uncovered span persists
+          across rounds or after test updates to deeply examine the library implementation to
+          determine whether the span is structurally or logically unreachable.
         """
         ...
 
@@ -174,15 +179,17 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
           keys exposed by coverage.CoverageEvaluator.get_available_targets when
           test_path is omitted, delegates measurement to measure_single_target_coverage,
           compares coverage.ModuleCoverage.coverage_pct against the supplied
-          threshold to derive the threshold exit status indication, and synchronizes the
+          threshold to derive the threshold exit status indication, synchronizes the
           report produced by format_coverage_report to the update_log path through the
-          pathlib filesystem operations declared by the filesystem_ext external boundary.
+          pathlib filesystem operations declared by the filesystem_ext external boundary,
+          and records span classifications and ownership status into the workspace coverage
+          status buffer.
         """
         ...
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-29T00:30:00Z
-# CHANGE: Appends agent guidance directing blame feedback in terms of common specification compliance, permitting line numbers only in blamed file while forbidding exposing details of other files
+# LAST_CHANGED: 2026-11-03T23:45:00Z
+# CHANGE: Instruct coverage auditor when uncovered spans persist to examine library implementation for unreachable code
 # SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---

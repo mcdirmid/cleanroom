@@ -7,6 +7,7 @@ import session as agent_session
 import subagent_coordinator
 import provision
 import role_registry
+import sync
 import work
 
 
@@ -85,8 +86,10 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
           work.WorkspaceWorkManager.compute_role_work_queue when target_node is specified.
         - Iterates dynamic process supervision until work queues are clean, a round fails,
           consecutive unproductive rounds on unresolved targets exceed the threshold (suppressing unproductive counts and reminders when assigned ready targets are resolved or cleaned in the repository), or max_waves is exceeded (draining in-flight active workers to completion or cleanly interrupting active workers upon loop termination),
-          terminating active workers, clearing persistent session state, and recommissioning workspaces with a clean baseline when identical blame signatures are delivered twice in a row (halting orchestration when a role exceeds 3 restarts),
-          evaluating work queues on each polling interval to dispatch newly unblocked roles without awaiting completion of active workers,
+          terminating active workers, clearing persistent session state, recommissioning workspaces with a clean baseline, and injecting restart advisories when identical blame signatures are delivered twice in a row on unchanged targets (halting orchestration when a role exceeds 10 restarts, and clearing consecutive blame tracking when an author submits modifications to a previously blamed target),
+          evaluating work queues on each polling interval to dispatch newly unblocked roles without awaiting completion of active workers while withholding downstream roles whose upstream dependencies are actively executing or scheduled for concurrent dispatch,
+          prior to dispatching each role, purging preexisting blame buffers, pulling updated files and refreshing system files from the canonical repository root via sync.WorkspaceSynchronizer.pull and sync.WorkspaceSynchronizer.refresh_system_files, and recording assigned ready targets in the pending work buffer via work.WorkspaceWorkManager.set_pending_work,
+          consuming workspace blame buffers upon round completion,
           interrupting idling workers that have resolved assigned targets and hold zero pending items across consecutive intervals past an initialization grace period,
           injecting reminder directives into subsequent role dispatches upon unresolved rounds when assigned targets remain unresolved,
           supervising fused role workers with coordinator verification, delivering diagnostics up to 3 retries on failure, and atomically harvesting targets on success,

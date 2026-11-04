@@ -39,7 +39,7 @@ class PretenseEngine(pretense.PretenseEngine):
         - Discovers test targets, arms watchdogs, runs pytest/pretense, and verifies coverage,
           suppressing property fuzzing during coverage evaluation to bound execution to deterministic test suites while reserving fuzzing for QA verification,
           formatting and reporting all test failure details across failed test methods to prevent defect masking,
-          formatting auditor guidance reminders upon test failures and coverage deficits directing the agent to formulate blame feedback strictly in terms of how the blamed file is not compliant with the common source of truth specification, permitting line numbers only within the blamed file while strictly forbidding exposing details of other files,
+          formatting auditor guidance reminders upon test failures and coverage deficits directing the agent to formulate blame feedback strictly in terms of how the blamed file is not compliant with the common source of truth specification, permitting line numbers only within the blamed file while strictly forbidding exposing details of other files, and instructing the agent when an uncovered line persists across rounds or after test updates to examine the library implementation closely to determine whether the line is structurally or logically unreachable,
           failing when test files cannot be loaded, tests fail, coverage is unmet, or zero targets are discovered.
 
         POSTCONDITIONS:

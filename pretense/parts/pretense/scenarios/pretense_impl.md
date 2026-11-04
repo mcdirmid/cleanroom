@@ -52,7 +52,13 @@ Given: a test suite containing an infinite loop or hanging operation.
 Given: a directory containing `*_pretense.py` test files.
 
 1. The test runner discovers target test files and runs them with coverage tracking enabled.
-   Observed: discovered tests execute with property fuzzing suppressed during coverage evaluation to bound execution to deterministic test suites while reserving fuzzing for QA verification, statement coverage is measured for corresponding implementation modules (excluding abstract interface stubs), and any lines missing coverage below the threshold are reported along with auditor guidance reminders directing the agent to formulate blame feedback strictly in terms of how the blamed file is not compliant with the common source of truth specification, permitting line numbers only within the blamed file while strictly forbidding exposing details of other files.
+   Observed: discovered tests execute with property fuzzing suppressed during coverage evaluation to bound execution to deterministic test suites while reserving fuzzing for QA verification, statement coverage is measured for corresponding implementation modules (excluding abstract interface stubs), and any lines missing coverage below the threshold are reported along with auditor guidance reminders directing the agent to formulate blame feedback strictly in terms of how the blamed file is not compliant with the common source of truth specification, permitting line numbers only within the blamed file while strictly forbidding exposing details of other files, and instructing the agent when an uncovered line persists across rounds or after test updates to examine the library implementation closely to determine whether the line is structurally or logically unreachable.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-31T00:50:00Z
+LAST_CHANGED: 2026-11-03T23:45:00Z
+CHANGE: Instruct coverage auditor when uncovered lines persist to examine library implementation for unreachable code
+-->
 
 2. A target test file has import or syntax errors or contains no executable test targets.
    Observed: the test runner raises or reports target loading errors and exits with a non-zero status code rather than reporting success.

@@ -93,8 +93,11 @@ class WorkspaceCommandHandler(commands.WorkspaceCommandHandler):
 
         GROUNDING:
         - Enforces that modified workspace targets have been checked via check_files since modification,
-          sanitizes multi-line critique explanations into a single continuous paragraph, delegates attribution to
-          attribution.AttributionCoordinator, appends blame message to
+          sanitizes multi-line critique explanations into a single continuous paragraph,
+          validates blame attribution against open coverage spans in the workspace coverage status buffer
+          (rejecting test-directed blame when all uncovered spans are library-owned pragma requirements
+          and rejecting repeating identical blame against the same uncovered span set),
+          delegates attribution to attribution.AttributionCoordinator, appends blame message to
           autofab_files_ext.AUTOFAB_LOG_FILE in the directory containing parts,
           records the blamed target in autofab_files_ext.BLAME_BUFFER_FILE in the workspace root,
           clears target or single pending workspace target from pending work via pending.WorkspacePendingManager,
@@ -192,7 +195,7 @@ def __orphan__() -> None:
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-30T11:00:00Z
-# LAST_CHANGED: 2026-10-30T11:00:00Z
-# CHANGE: Mandate post-completion bin/get_work and sanitize critiques in run_blame
+# LAST_CHANGED: 2026-11-03T20:40:00Z
+# CHANGE: Prohibit bypassing verification via no_verify in active role workspaces
 # SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---

@@ -29,8 +29,9 @@ class WorkspaceScaffolder(scaffold.WorkspaceScaffolder):
           permissions, embedding the active methodology autofab_files_ext.AUTOFAB_ROLES_FILE manifest inside the archive,
           configuring runner import paths bounded strictly to the active role workspace
           root on sys.path without injecting arbitrary workspace subdirectories onto sys.path,
-          isolating runner execution from the canonical repository root in sys.path, packaging
-          revert and checkpoint tools for authoring roles with writable targets (omitting revert and checkpoint for auditor roles with zero writable targets), packaging blame
+          isolating runner execution from the canonical repository root in sys.path,
+          configuring runner execution environments with UV_PROJECT bound to the discovered main repository root for subprocess execution,
+          packaging revert and checkpoint tools for authoring roles with writable targets (omitting revert and checkpoint for auditor roles with zero writable targets), packaging blame
           only when role_def declares feedback capability or auditor tags, and omitting blame for
           author roles without feedback capability (workspace_scaffold_mechanics).
         """
@@ -97,7 +98,8 @@ class WorkspaceScaffolder(scaffold.WorkspaceScaffolder):
         """Creates starter skeletons for declared writable targets absent from disk.
 
         GROUNDING:
-        - Inspects declared units and generates starter skeleton code from companion specifications
+        - Inspects declared units and generates starter skeleton code executing declared template commands
+          within the repository project environment with UV_PROJECT or falling back to companion specifications
           or templates resolved both from workspace root and repository root (workspace_scaffold_mechanics).
         """
         ...
@@ -130,7 +132,7 @@ def __orphan__() -> None:
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-30T11:00:00Z
-# LAST_CHANGED: 2026-11-02T20:38:00Z
-# CHANGE: Prohibit ad-hoc runtime testing and inline python scripts in AGENTS.md
+# LAST_CHANGED: 2026-11-03T20:40:00Z
+# CHANGE: Ground template command execution in repository environment with UV_PROJECT and bind UV_PROJECT in runner zipapps
 # SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

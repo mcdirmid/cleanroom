@@ -79,6 +79,17 @@ fi
 
 export PYTHONPATH="$(IFS=:; echo "${PYPATHS[*]}"):${PYTHONPATH:-}"
 
+if [ -z "$TARGET" ]; then
+    echo "=== Packaging Runner Zipapps (bin/) ==="
+    python3 -c '
+from autofab.parts.systems.lib import autofab_asm
+from autofab.parts.workspace.lib import scaffold_impl
+autofab_asm.__initialize__()
+scaffold_impl.WorkspaceScaffolder().deploy_runner_zipapps("bin")
+'
+    echo ""
+fi
+
 # Execute specification linters dynamically based on parts/autofab.toml and autofab_roles.toml
 python3 -c '
 import os, sys, tomllib, subprocess

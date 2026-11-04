@@ -31,6 +31,7 @@ from build_lint_common import (
     check_no_private_imports,
     check_no_relative_parent_imports,
     check_no_sys_modules_tampering,
+    check_no_top_level_probes,
     check_no_error_testing,
     check_tautological_assertions,
     check_syntax,
@@ -716,6 +717,7 @@ def main() -> int:
             + check_no_private_imports(args.module_path)
             + check_tautological_assertions(args.module_path)
             + check_no_sys_modules_tampering(args.module_path)
+            + check_no_top_level_probes(args.module_path, error_code="TEST_LINT_NO_TOP_LEVEL_PROBE")
             + check_no_error_testing(args.module_path)
             + check_test_mocks(args.module_path)
             + check_test_structure(args.module_path)

@@ -247,26 +247,55 @@ def sut(singleton_type: Type[T]) -> T:
     """Resolves a registered singleton under test or collaborator from dynamic context."""
     active = _current_sut.get()
     if active is not None:
-        if isinstance(active, singleton_type) or getattr(active, "__class__", None) == singleton_type or getattr(type(active), "__name__", "") == getattr(singleton_type, "__name__", ""):
+        try:
+            if isinstance(active, singleton_type):
+                return cast(T, active)
+        except TypeError:
+            pass
+        if (
+            getattr(active, "__class__", None) == singleton_type
+            or getattr(type(active), "__name__", "") == getattr(singleton_type, "__name__", "")
+            or getattr(active, "target_protocol", None) == singleton_type
+        ):
             return cast(T, active)
     suts = _ACTIVE_SUTS.get()
     if singleton_type in suts:
         return cast(T, suts[singleton_type])
     for s_type, s_inst in suts.items():
-        if isinstance(s_type, type) and (
-            issubclass(s_type, singleton_type)
-            or getattr(s_type, "__name__", "") == getattr(singleton_type, "__name__", "")
-        ):
-            return cast(T, s_inst)
-        if isinstance(s_inst, singleton_type):
-            return cast(T, s_inst)
+        if isinstance(s_type, type):
+            try:
+                if issubclass(s_type, singleton_type):
+                    return cast(T, s_inst)
+            except TypeError:
+                pass
+            if getattr(s_type, "__name__", "") == getattr(singleton_type, "__name__", ""):
+                return cast(T, s_inst)
+        try:
+            if isinstance(s_inst, singleton_type):
+                return cast(T, s_inst)
+        except TypeError:
+            pass
+        if getattr(s_inst, "__is_pretense_fake__", False):
+            sm = getattr(s_inst, "_sm", None)
+            if sm is not None:
+                try:
+                    if isinstance(sm, singleton_type):
+                        return cast(T, s_inst)
+                except TypeError:
+                    pass
+                if getattr(type(sm), "__name__", "") == getattr(singleton_type, "__name__", ""):
+                    return cast(T, s_inst)
     try:
         from support.lib.lifecycle import get_singleton
         return cast(T, get_singleton(singleton_type))
     except Exception:
         pass
     if active is not None:
-        return cast(T, active)
+        if not suts or len(suts) <= 1:
+            return cast(T, active)
+        type_methods = [m for m in dir(singleton_type) if not m.startswith("_")]
+        if type_methods and all(hasattr(active, m) for m in type_methods):
+            return cast(T, active)
     raise KeyError(f"No singleton registered for type '{singleton_type.__name__}' in active context")
 
 
@@ -278,6 +307,16 @@ def sut_state(state_cls: Type[StateT]) -> StateT:
     for c in _ACTIVE_SUTS.get().values():
         if hasattr(c, "state") and (isinstance(c.state, state_cls) or getattr(type(c.state), "__name__", "") == state_cls.__name__):
             return cast(StateT, c.state)
+    try:
+        from support.lib.lifecycle import get_active_scope
+        scope = get_active_scope()
+        instances_by_desc = getattr(scope, "_instances_by_desc", None)
+        if instances_by_desc is not None and isinstance(instances_by_desc, dict):
+            for inst in instances_by_desc.values():
+                if hasattr(inst, "state") and (isinstance(inst.state, state_cls) or getattr(type(inst.state), "__name__", "") == state_cls.__name__):
+                    return cast(StateT, inst.state)
+    except Exception:
+        pass
     raise PretenseError(f"No active state model of type {state_cls.__name__} found in context")
 
 
@@ -2302,15 +2341,36 @@ def _parse_linear_transition(orig_fn: Callable[..., Any], spec: transition, attr
         src = textwrap.dedent(inspect.getsource(orig_fn))
         tree = ast.parse(src)
         fn_node = tree.body[0]
+        local_aliases: Dict[str, ast.AST] = {}
         if isinstance(fn_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             for stmt in fn_node.body:
-                if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
+                if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name):
+                    local_aliases[stmt.targets[0].id] = stmt.value
+                elif isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
                     call = stmt.value
                     func_name = call.func.id if isinstance(call.func, ast.Name) else getattr(call.func, "attr", "")
                     if func_name in ("require", "requires") and call.args:
-                        cond_expr = ast.Expression(body=call.args[0])
-                        code = compile(cond_expr, f"<{attr_name}_require_{len(req_codes)}>", "eval")
-                        req_codes.append(code)
+                        arg_expr = call.args[0]
+                        class _AliasReplacer(ast.NodeTransformer):
+                            def visit_Name(self, node: ast.Name) -> ast.AST:
+                                if node.id in local_aliases:
+                                    import copy
+                                    return ast.copy_location(copy.deepcopy(local_aliases[node.id]), node)
+                                return node
+                        subbed_expr = _AliasReplacer().visit(copy.deepcopy(arg_expr))
+                        ast.fix_missing_locations(subbed_expr)
+
+                        class _NameChecker(ast.NodeVisitor):
+                            def __init__(self) -> None:
+                                self.names: set[str] = set()
+                            def visit_Name(self, node: ast.Name) -> None:
+                                self.names.add(node.id)
+                        checker = _NameChecker()
+                        checker.visit(subbed_expr)
+                        if not any(name in param_names for name in checker.names):
+                            cond_expr = ast.Expression(body=subbed_expr)
+                            code = compile(cond_expr, f"<{attr_name}_require_{len(req_codes)}>", "eval")
+                            req_codes.append(code)
                     elif func_name == "require_arg" and len(call.args) >= 2:
                         arg_name_node = call.args[0]
                         arg_name = arg_name_node.id if isinstance(arg_name_node, ast.Name) else ""
@@ -2367,8 +2427,13 @@ def _build_linear_transition(
     eval_globs = dict(fn_globals)
     eval_globs.setdefault("Domain", Domain)
     eval_globs.setdefault("PretenseSpecificationError", PretenseSpecificationError)
+    eval_globs.setdefault("sut_state", sut_state)
+    eval_globs.setdefault("sut", sut)
+    eval_globs.setdefault("require", require)
+    eval_globs.setdefault("requires", requires)
 
     # Inherit parameter domains and requirement codes from base state machine if missing
+    base_target_fn: Optional[Callable[..., Any]] = None
     if sm_instance is not None and hasattr(sm_instance, "__class__"):
         for base_cls in sm_instance.__class__.__mro__[1:]:
             if not issubclass(base_cls, StateMachine):
@@ -2386,6 +2451,7 @@ def _build_linear_transition(
                                 eval_globs.setdefault(k, v)
                     if not req_codes and base_desc.get("req_codes"):
                         req_codes = list(base_desc["req_codes"])
+                    base_target_fn = getattr(base_attr, "__target_fn__", base_raw_fn)
                     break
 
     target_defaults: Dict[str, Any] = {}
@@ -2409,9 +2475,19 @@ def _build_linear_transition(
 
     def linear_req(state: Any, this: Any) -> bool:
         eval_ns = {"self": this, "state": state}
+        for s_inst in list(_ACTIVE_SUTS.get().values()):
+            if hasattr(s_inst, "state") and s_inst.state is not None:
+                st_cls = type(s_inst.state)
+                eval_ns.setdefault(st_cls.__name__, st_cls)
+        if hasattr(this, "singletons") and isinstance(this.singletons, dict):
+            for s_inst in this.singletons.values():
+                if hasattr(s_inst, "state") and s_inst.state is not None:
+                    st_cls = type(s_inst.state)
+                    eval_ns.setdefault(st_cls.__name__, st_cls)
         for code in req_codes:
             try:
-                if not eval(code, eval_globs, eval_ns):
+                val = eval(code, eval_globs, eval_ns)
+                if not val:
                     return False
             except Exception:
                 return False
@@ -2422,6 +2498,15 @@ def _build_linear_transition(
     def linear_args(state: Any, this: Any, *args: Any, **kwargs: Any) -> Any:
         is_generation = (not args and not kwargs) or (args and all(isinstance(a, NotBoundType) for a in args))
         eval_ns = {"self": this, "state": state}
+        for s_inst in list(_ACTIVE_SUTS.get().values()):
+            if hasattr(s_inst, "state") and s_inst.state is not None:
+                st_cls = type(s_inst.state)
+                eval_ns.setdefault(st_cls.__name__, st_cls)
+        if hasattr(this, "singletons") and isinstance(this.singletons, dict):
+            for s_inst in this.singletons.values():
+                if hasattr(s_inst, "state") and s_inst.state is not None:
+                    st_cls = type(s_inst.state)
+                    eval_ns.setdefault(st_cls.__name__, st_cls)
         drawn: Dict[str, Any] = {}
 
         if is_generation:
@@ -2501,6 +2586,23 @@ def _build_linear_transition(
                 drawn[p_name] = val
             return tuple(drawn[p] for p in param_names)
 
+
+    if base_target_fn is not None and base_target_fn is not target_fn:
+        orig_fn = target_fn
+        def make_wrapped(b_fn: Callable[..., Any], o_fn: Callable[..., Any]) -> Callable[..., Any]:
+            def wrapped(self_sm: Any, *args: Any, **kwargs: Any) -> Any:
+                if _in_make_return_value.get():
+                    return o_fn(self_sm, *args, **kwargs)
+                tok = _last_ensured_ret.set(NotBound)
+                try:
+                    res = b_fn(self_sm, *args, **kwargs)
+                    if _last_ensured_ret.get() is NotBound:
+                        res = o_fn(self_sm, *args, **kwargs)
+                    return res
+                finally:
+                    _last_ensured_ret.reset(tok)
+            return wrapped
+        t._target_fn = make_wrapped(base_target_fn, orig_fn)
 
     t.args_fn = linear_args
     return t
@@ -2678,9 +2780,9 @@ class StateMachine(Generic[StateT]):
         self.invariants: List[Callable[..., None]] = list(invariants) if invariants is not None else []
         self.singletons: Dict[Type[Any], Any] = dict(singletons or {})
 
-        # Auto-discover @transition methods on self in class definition order
+        # Auto-discover @transition methods on self in class definition order (child overrides parent)
         seen_transitions: set[str] = set()
-        for cls_in_mro in reversed(self.__class__.__mro__):
+        for cls_in_mro in self.__class__.__mro__:
             for attr_name, attr in cls_in_mro.__dict__.items():
                 if attr_name.startswith("__") or attr_name in seen_transitions:
                     continue

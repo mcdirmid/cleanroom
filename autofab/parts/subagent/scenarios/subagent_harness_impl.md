@@ -64,9 +64,17 @@ Given: a subagent round log contains token reporting strings.
    Observed: uncached, cached, and output tokens are parsed into a normalized token usage record.
    Realized by: the component's regular expression log parsing and pricing calculation.
 
+### Scenario 9 — Formatting instructional task prompts for auditor roles
+
+Given: an auditor role (such as QA or Coverage) is dispatched in scope_a with ready targets.
+
+1. The harness formats a task prompt.
+   Observed: the prompt instructs the worker to run `bin/get_work` as the primary evaluation entry point, to conclude immediately with summary text and zero tool calls if all targets pass verification and are auto-submitted, and to deliver blame attribution via `bin/blame` on failing targets before concluding via `bin/get_work`.
+   Realized by: the component's prompt construction interpolation detecting auditor roles.
+
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-11-02T20:38:00Z
-CHANGE: Instruct role subagents against inline python test scripts and scratch tests
+LAST_CHANGED: 2026-11-03T12:15:00Z
+CHANGE: Add scenario for formatting auditor task prompts
 -->
 -->

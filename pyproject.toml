@@ -13,8 +13,6 @@ authors = [
     { name = "Sean McDirmid", email = "mcdirmid@outlook.com" }
 ]
 dependencies = [
-    "autofab-py>=0.2.4",
-    "pretense-py>=0.2.4",
     "pydantic>=2.5.0",
     "pyright>=1.1.350",
     "pytest>=8.0.0",
@@ -34,20 +32,12 @@ dependencies = [
 autofab = "autofab.support.lib.autofab_role_tool:main"
 pretense = "pretense.cli:main"
 
-[tool.uv.workspace]
-members = [
-    "autofab_py",
-    "pretense",
-]
-
-[tool.uv.sources]
-autofab-py = { workspace = true, editable = false }
-pretense-py = { workspace = true, editable = false }
-
 [tool.hatch.build.targets.wheel]
 packages = [
     "autofab",
+    "autofab_py",
     "benchmarks",
+    "pretense",
 ]
 
 [tool.pytest.ini_options]
@@ -73,6 +63,7 @@ pythonpath = [
     "autofab_py/support/lib",
     "autofab/support/lib",
     "benchmarks",
+    "pretense",
 ]
 python_files = ["*_test.py"]
 timeout = 45

@@ -1,11 +1,11 @@
 # Concrete scenarios for `check_impl` (implementation)
 
-## Scenario 1 — Work discovery with pending dirty target blocking
+## Scenario 1 — Work discovery with pending dirty target relisting
 
 Given: an active role workspace with a pending dirty target recorded in the buffer.
 
 1. The caller runs `run_get_work`.
-   Observed: returns exit code 1 and outputs error requiring completion of the pending target, formatting the companion guide, contracts to read, and dirty reasons including unacted feedback for the pending target.
+   Observed: returns exit code 1 and relists the assigned pending target under ready for execution, formatting the companion guide, contracts to read, dirty reasons including unacted feedback, and actionable next steps as if it were the initial get_work call.
 
 ## Scenario 2 — File verification with starter template regeneration
 
@@ -61,7 +61,7 @@ Given: an active role workspace configured with model `gemini-argon` on the `ant
 Given: an active auditor role workspace (such as QA or Coverage) where verification checks fail on a target file.
 
 1. The caller runs `run_check_files`.
-   Observed: upon verification failure, outputs a structured triage summary extracting the author's latest # CHANGE: commit header, primary failure exception or assertion, candidate culprit file, and prominent auditor reminders directing the agent to formulate blame feedback explaining why the author's change did not resolve the defect strictly in terms of how the blamed file is not compliant with the common source of truth specification, and to call bin/get_work to verify remaining units and conclude after delivering blame without authoring debug scripts.
+   Observed: upon verification failure, sanitizes subprocess output by stripping redundant embedded arbiter reminders, and outputs a structured triage summary extracting the author's latest # CHANGE: commit header, primary failure exception or assertion, candidate culprit file, and a single prominent auditor reminder directing the agent to formulate blame feedback explaining why the author's change did not resolve the defect strictly in terms of how the blamed file is not compliant with the common source of truth specification (instructing the coverage auditor to examine the library implementation for unreachable code when an uncovered line persists), and to call bin/get_work to verify remaining units and conclude after delivering blame without authoring debug scripts.
 
 ## Scenario 10 — Milestone git checkpoint commit on successful check_files
 
@@ -84,8 +84,36 @@ Given: an active role workspace where `__init__.py` or another file outside the 
 1. The caller runs `run_check_files`.
    Observed: detects the unauthorized modification, prints verification failure diagnostic, reverts the modified file from repository canonical state, and returns exit code 1.
 
+## Scenario 13 — Verification rejected when role workspace has zero pending work
+
+Given: an active role workspace with no pending targets recorded in the buffer and zero ready items in the work queue.
+
+1. The caller runs `run_check_files` for a target.
+   Observed: returns exit code 1 with error diagnostic directing the worker to call get_work first or conclude the round.
+
+## Scenario 14 — Verification rejected when target is not in assigned pending work
+
+Given: an active role workspace with pending targets recorded in the buffer.
+
+1. The caller runs `run_check_files` for an unassigned target.
+   Observed: returns exit code 1 with error diagnostic reporting that the target is not in assigned pending work.
+
+## Scenario 15 — Pull inbound changes and refresh system files before running check_files
+
+Given: an active role workspace with assigned pending work where canonical main workspace has updated files.
+
+1. The caller runs `run_check_files`.
+   Observed: pulls updated files and refreshes system files from canonical repository before executing verification rules.
+
+## Scenario 16 — Auditor aggressive check_files and auto-submit in get_work
+
+Given: an active auditor role workspace (such as QA or Coverage) with ready dirty targets discovering work via `get_work`.
+
+1. The caller runs `run_get_work`.
+   Observed: aggressively executes verification checks on each dirty target; targets passing verification are automatically submitted with audit attestation and omitted from presented work; targets failing verification are retained in the work queue without outputting failure diagnostics or triage summaries during work acquisition (leaving failure diagnostics to be surfaced when the worker executes `check_files` directly); and when all targets pass, clears pending work, sets the no-pending-work marker, and outputs the round conclusion directive directing the worker to conclude immediately with zero tool calls.
+
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-30T11:00:00Z
-LAST_CHANGED: 2026-11-01T17:15:00Z
-CHANGE: Add scenario for unauthorized read-only file modification detection and reversion
+LAST_CHANGED: 2026-11-03T23:45:00Z
+CHANGE: Instruct coverage auditor when uncovered lines persist to examine library implementation for unreachable code
 -->

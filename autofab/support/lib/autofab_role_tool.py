@@ -456,7 +456,7 @@ You are an autonomous Cleanroom role worker executing strictly inside your assig
 
 ## PERMITTED TOOLS & SHELL COMMANDS:
 You are fully permitted to run read-only shell utilities (`cat`, `grep`, `find`, `head`, `tail`, `sed`, etc.) or native tools strictly WITHIN your assigned role workspace directory (`.`) to inspect files and complete your tasks.
-Executing ad-hoc tests, runtime assertions, or inline Python scripts (including via `python3 -c`, `python -c`, or stdin heredocs) is strictly prohibited; target verification is exclusively performed via `bin/check_files` (or `bin/verify_*` for fused roles).
+Executing ad-hoc tests, runtime assertions, or inline Python scripts (including via `python3 -c`, `python -c`, or stdin heredocs) is strictly prohibited; target verification is exclusively performed via `bin/check_files` (or `bin/verify_*` for fused roles). You are not allowed to execute the test suite or run ad-hoc probes; submit work via `bin/submit` so a downstream QA auditor can execute the test suite on your behalf.
 Note: Shell working directory does not persist across tool calls. Always prefix shell commands with `cd <workspace_dir> && ` (e.g., `cd <workspace_dir> && bin/get_work`) and use absolute paths under `<workspace_dir>` for file operations.
 Git operations (`git checkout`, `git restore`, `git reset`, etc.) and accessing files outside your workspace remain strictly prohibited.
 
@@ -1210,20 +1210,10 @@ def run_work_queue(argv: list[str]) -> int:
             return 1
 
         if active_pipeline:
-            try:
-                from autofab.parts.systems.lib import autofab_asm
-                from autofab.parts.uv.lib import manifest_loader
-                autofab_asm.__initialize__()
-                loader = get_singleton(manifest_loader.UvManifestLoader)
-                scope_prefix = f"{scope}/parts" if scope else "parts"
-                _, roles_dict = loader._get_methodology_roles(root, scope_prefix)  # type: ignore[reportAttributeAccessIssue]
-                if roles_dict:
-                    declared_roles = [
-                        r for r in declared_roles
-                        if roles_dict.get(r.role_name, {}).get("pipeline") in (None, "", active_pipeline)
-                    ]
-            except Exception:
-                pass
+            declared_roles = [
+                r for r in declared_roles
+                if r.pipeline in (None, "", active_pipeline)
+            ]
 
         if target_role:
             matching_idx = None
@@ -2264,20 +2254,10 @@ def run_clean(
             return 1
 
         if active_pipeline:
-            try:
-                from autofab.parts.systems.lib import autofab_asm
-                from autofab.parts.uv.lib import manifest_loader
-                autofab_asm.__initialize__()
-                loader = get_singleton(manifest_loader.UvManifestLoader)
-                scope_prefix = f"{scope}/parts" if scope else "parts"
-                _, roles_dict = loader._get_methodology_roles(root, scope_prefix)  # type: ignore[reportAttributeAccessIssue]
-                if roles_dict:
-                    declared_roles = [
-                        r for r in declared_roles
-                        if roles_dict.get(r.role_name, {}).get("pipeline") in (None, "", active_pipeline)
-                    ]
-            except Exception:
-                pass
+            declared_roles = [
+                r for r in declared_roles
+                if r.pipeline in (None, "", active_pipeline)
+            ]
 
         if target_role:
             matching_idx = None

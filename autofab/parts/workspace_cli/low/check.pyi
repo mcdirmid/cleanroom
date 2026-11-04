@@ -23,6 +23,7 @@ class WorkspaceChecker(Singleton[AgentSessionTier], Protocol):
         POSTCONDITIONS:
         - WHEN batch_size is provided or resolved from configuration, MUST bound presented ready tasks to at most batch_size without extraneous remaining or blocked queue details.
         - WHEN unacted feedback reasons exceed max_feedback_chars resolved from configuration, MUST throttle presented feedback reasons to at most max_feedback_chars.
+        - WHEN executed for an auditor role, MUST aggressively execute verification checks on each discovered ready dirty target: automatically submitting targets that pass with audit attestation and omitting them from presented work, retaining targets that fail in the ready queue with triage failure diagnostics, and directing immediate round conclusion with zero tool calls when all ready targets pass and are auto-submitted.
         - WHEN zero ready targets remain, MUST format a prominent round conclusion directive instructing the worker that all work assigned to their role is resolved and directing immediate round conclusion without further tool calls.
         - MUST evaluate dirty work in local workspace and print ready tasks.
         """
@@ -42,7 +43,7 @@ class WorkspaceChecker(Singleton[AgentSessionTier], Protocol):
         - MUST configure PYTHONPATH in the execution environment to include the target package root and constituent support libraries.
         - MUST record verification execution records and target file hashes in the workspace to gate subsequent submit, blame, and fail commands.
         - WHEN verification checks pass on a target carrying unacted feedback, MUST surface the unacted feedback items with an explicit reminder that static checks do not verify runtime behavior or feedback resolution.
-        - WHEN verification checks fail for an auditor role, MUST surface a triage summary and specification grounding reminders.
+        - WHEN verification checks fail for an auditor role, MUST sanitize child process output by stripping redundant embedded arbiter reminders before display and surface a single triage summary and specification grounding reminder.
         - MUST execute verification checks and return exit code.
         """
         ...

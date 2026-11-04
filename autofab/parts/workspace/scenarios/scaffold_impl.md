@@ -37,7 +37,7 @@ Given: role `alpha` is a writable authoring role with companion guide `guides/al
 Given: role `spec_qa` is a read-only auditor role with companion guide `guides/spec_qa.md` and scope `parts/alpha` declaring zero writable targets.
 
 1. The scaffolder writes the role agents guide into `/ws/spec_qa_scope_a`.
-   Observed: `AGENTS.md` exists with auditor requirements instructing inspection of `# CHANGE:` commit headers and autofab triage summaries before delivering blame, immediate post-blame post-completion protocol instructing that once blame is delivered, the worker must run bin/get_work to verify remaining units and conclude with zero further tool calls without re-running verification or debugging author code, omitting workspace undo and rollback instructions, strictly prohibiting file edits, modifications, and git commands, requiring round conclusion when targets are blocked, and prohibiting blind recycling of feedback without checking what the author attempted to fix.
+   Observed: `AGENTS.md` exists with auditor requirements establishing `bin/get_work` as the primary verification and auto-submission mechanism, instructing inspection of `# CHANGE:` commit headers and autofab triage summaries before delivering blame, immediate post-blame post-completion protocol instructing that once blame is delivered, the worker must run bin/get_work to verify remaining units and conclude with zero further tool calls without re-running verification or debugging author code, omitting workspace undo and rollback instructions, strictly prohibiting file edits, modifications, and git commands, requiring round conclusion when targets are blocked, and prohibiting blind recycling of feedback without checking what the author attempted to fix.
    Realized by: the component's markdown formatter generating verification and blame attribution instructions tailored for auditor roles.
 
 ### Scenario 5 — Generating starter skeletons for missing targets
@@ -45,7 +45,7 @@ Given: role `spec_qa` is a read-only auditor role with companion guide `guides/s
 Given: role `alpha` declares source pattern `parts/alpha/lib/{unit_name}.py` and writable file patterns `["parts/alpha/lib/*.py"]`; unit `widget` has companion specification `parts/alpha/low/widget.pyi` in the repository root, but `parts/alpha/lib/widget.py` does not yet exist.
 
 1. The scaffolder creates missing target skeletons for the workspace.
-   Observed: `parts/alpha/lib/widget.py` is generated in `/ws/alpha_scope_a` with starter skeleton content derived from role template_command, `widget.pyi`, or templates resolved from workspace root `./templates/` or repository root, and has permissions 0o644.
+   Observed: `parts/alpha/lib/widget.py` is generated in `/ws/alpha_scope_a` with starter skeleton content derived from role template_command executed within the repository project environment with `UV_PROJECT`, `widget.pyi`, or templates resolved from workspace root `./templates/` or repository root, and has permissions 0o644.
    Realized by: the component's target skeleton generator inspecting unit declarations and generating starter skeleton content from role template commands, companion specifications, or resolved templates.
 
 ### Scenario 6 — Synthesizing role AGENTS.md guide instructions for fused role
@@ -58,6 +58,9 @@ Given: role `baseline` is a fused role combining `lib`, `test`, `qa`, and `cover
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-30T11:00:00Z
+LAST_CHANGED: 2026-11-03T20:40:00Z
+CHANGE: Ground template command execution in repository environment with UV_PROJECT
+-->
 LAST_CHANGED: 2026-11-02T20:38:00Z
 CHANGE: Prohibit ad-hoc runtime testing and inline python scripts in AGENTS.md
 SPEC_QA_AUDIT: 2026-10-15T17:42:47Z

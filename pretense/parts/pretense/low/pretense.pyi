@@ -706,6 +706,7 @@ class compile_hypothesis_test_case:
         *,
         name: Optional[str] = None,
         max_examples: int = 50,
+        collaborators: Optional[Sequence[Any]] = None,
     ) -> Type[Any]: ...
     def __call__(
         self,
@@ -714,6 +715,7 @@ class compile_hypothesis_test_case:
         *,
         name: Optional[str] = None,
         max_examples: int = 50,
+        collaborators: Optional[Sequence[Any]] = None,
     ) -> Type[Any]: ...
 
 

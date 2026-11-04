@@ -25,6 +25,7 @@ try:
         check_no_private_imports,
         check_no_relative_parent_imports,
         check_no_sys_modules_tampering,
+        check_no_top_level_probes,
         check_no_error_testing,
         check_syntax,
         check_tautological_assertions,
@@ -48,6 +49,7 @@ except ImportError:
         check_no_private_imports,
         check_no_relative_parent_imports,
         check_no_sys_modules_tampering,
+        check_no_top_level_probes,
         check_no_error_testing,
         check_syntax,
         check_tautological_assertions,
@@ -183,12 +185,13 @@ def check_pretense_structure(
             errors.append("Missing Pretense StateMachine class in interface pretense module.")
         if not state_classes and not imported_state:
             errors.append("Missing Pretense model state class (interface must define a dataclass ending with 'State').")
-        if test_classes:
-            t_names = [c.name for c in test_classes]
-            errors.append(
-                f"Interface pretense module must not contain unit test classes ({', '.join(t_names)}). "
-                "Fixed tests belong exclusively in the implementation pretense module (*_impl_pretense.py)."
-            )
+        for tc in test_classes:
+            if tc.name.endswith("Real") or "Real" in tc.name:
+                errors.append(
+                    f"{file_path}:{tc.lineno}: error: Interface pretense module must not contain real SUT test classes ('{tc.name}'). "
+                    "Real SUT tests belong exclusively in the implementation pretense module (*_impl_pretense.py); "
+                    "interface pretense modules define fixed tests against the synthesized fake ('Test<Name>Fake')."
+                )
         return errors
 
     # Implementation pretense module
@@ -1110,6 +1113,311 @@ def check_no_scaffold_placeholders(tree: ast.AST, file_path: str = "") -> list[s
                     f"{file_path}:{node.lineno}: error: transition postconditions still contain scaffold placeholder '{fn_id}(False, ...)'. "
                     f"You must specify concrete postcondition invariants in ensure."
                 )
+        elif isinstance(node, ast.ClassDef):
+            if node.name in ("TargetState", "TargetStateMachine"):
+                errors.append(
+                    f"{file_path}:{node.lineno}: error: class '{node.name}' is an unconfigured template placeholder. "
+                    f"You must define concrete state machine classes matching the specification."
+                )
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if node.name.startswith("test"):
+                non_doc_stmts = [
+                    s for s in node.body
+                    if not (isinstance(s, ast.Expr) and isinstance(s.value, ast.Constant) and isinstance(s.value.value, str))
+                ]
+                if len(non_doc_stmts) == 1 and isinstance(non_doc_stmts[0], ast.Pass):
+                    errors.append(
+                        f"{file_path}:{node.lineno}: error: test method '{node.name}' contains only 'pass'. "
+                        f"Empty tests are strictly prohibited; tests must exercise transitions or assert concrete contracts."
+                    )
+    return errors
+
+
+def check_no_pre_seeding(tree: ast.AST, file_path: str = "") -> list[str]:
+    """Ensures make_sut() starts components and collaborator fakes in blank initial states without pre-seeding,
+    and forbids direct manipulation of internal model state in test methods."""
+    errors: list[str] = []
+    allowed_call_names = {
+        "LifecycleRegistry",
+        "enter_phase",
+        "get_singleton",
+        "register_instance",
+        "register_singleton",
+        "cast",
+        "dict",
+        "list",
+        "set",
+        "tuple",
+    }
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "make_sut":
+            for child in ast.walk(node):
+                if isinstance(child, (ast.For, ast.While)):
+                    errors.append(
+                        f"{file_path}:{child.lineno}: error: [PRE_LINT_NO_PRE_SEEDING] loops are prohibited in 'make_sut()'; "
+                        f"components and collaborator fakes must start in blank initial states. Use seeding transitions during fuzzing instead."
+                    )
+                elif isinstance(child, ast.Call):
+                    func_name = ""
+                    if isinstance(child.func, ast.Name):
+                        func_name = child.func.id
+                    elif isinstance(child.func, ast.Attribute):
+                        func_name = child.func.attr
+
+                    if (func_name.startswith("__") and func_name.endswith("__")) or func_name == "__enter__":
+                        continue
+                    if func_name.startswith("make_") and "fake" in func_name:
+                        if child.args or child.keywords:
+                            errors.append(
+                                f"{file_path}:{child.lineno}: error: [PRE_LINT_NO_PRE_SEEDING] passing state arguments to '{func_name}' is prohibited in 'make_sut()'; "
+                                f"components and collaborator fakes must start in blank default initial states. Found: '{ast.unparse(child)}'."
+                            )
+                        continue
+                    if func_name.isupper():
+                        continue
+                    if func_name in allowed_call_names:
+                        continue
+                    if func_name in ("submit", "push", "deposit", "withdraw", "put", "add", "dispatch", "fetch_and_execute", "clear", "reset") or func_name.startswith("set_"):
+                        errors.append(
+                            f"{file_path}:{child.lineno}: error: [PRE_LINT_NO_PRE_SEEDING] pre-seeding call '{func_name}' is prohibited in 'make_sut()'; "
+                            f"components and collaborator fakes must start in blank initial states. Use seeding transitions during fuzzing instead."
+                        )
+
+        # Check for direct state poking in TestCase classes
+        elif isinstance(node, ast.ClassDef):
+            if "StateMachine" in node.name or node.name.endswith("State"):
+                continue
+            is_test_case = any(
+                (isinstance(b, ast.Name) and b.id in ("TestCase", "unittest.TestCase")) or
+                (isinstance(b, ast.Attribute) and b.attr == "TestCase")
+                for b in node.bases
+            ) or (
+                (node.name.startswith("Test") or node.name.endswith("Real") or node.name.endswith("Fake"))
+                and any(
+                    isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef)) and m.name.startswith("test")
+                    for m in node.body
+                )
+            )
+            if is_test_case:
+                for item in node.body:
+                    if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                        for stmt in ast.walk(item):
+                            if isinstance(stmt, ast.Assign):
+                                for target in stmt.targets:
+                                    target_str = ast.unparse(target)
+                                    if ".state." in target_str or target_str.endswith(".state"):
+                                        errors.append(
+                                            f"{file_path}:{stmt.lineno}: error: [PRE_LINT_NO_STATE_POKING] direct mutation of internal model state '{target_str}' is prohibited in test methods. Manipulate state exclusively via public operations or declared '@transition.seeding' methods."
+                                        )
+                            elif isinstance(stmt, ast.AugAssign):
+                                target_str = ast.unparse(stmt.target)
+                                if ".state." in target_str or target_str.endswith(".state"):
+                                    errors.append(
+                                        f"{file_path}:{stmt.lineno}: error: [PRE_LINT_NO_STATE_POKING] direct mutation of internal model state '{target_str}' is prohibited in test methods. Manipulate state exclusively via public operations or declared '@transition.seeding' methods."
+                                    )
+                            elif isinstance(stmt, ast.Call) and isinstance(stmt.func, ast.Attribute):
+                                if stmt.func.attr in ("append", "add", "extend", "insert", "remove", "pop", "clear", "update", "discard"):
+                                    val_str = ast.unparse(stmt.func.value)
+                                    if ".state." in val_str or val_str.endswith(".state"):
+                                        errors.append(
+                                            f"{file_path}:{stmt.lineno}: error: [PRE_LINT_NO_STATE_POKING] mutating internal model state via '{ast.unparse(stmt.func)}' is prohibited in test methods. Manipulate state exclusively via public operations or declared '@transition.seeding' methods."
+                                        )
+    return errors
+
+
+def check_no_call_target_in_interface(tree: ast.AST, file_path: str = "", is_interface: bool = False) -> list[str]:
+    """Ensures interface state machines do not invoke call_target (call_target belongs in implementation pseudo-state machines)."""
+    errors: list[str] = []
+    if not is_interface:
+        return errors
+
+    tree_body: list[ast.stmt] = getattr(tree, "body", [])
+    for node in tree_body:
+        if isinstance(node, ast.ClassDef) and "StateMachine" in node.name and not node.name.endswith("PseudoStateMachine"):
+            for item in node.body:
+                if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    for child in ast.walk(item):
+                        if isinstance(child, ast.Call):
+                            call_name = ""
+                            if isinstance(child.func, ast.Name):
+                                call_name = child.func.id
+                            elif isinstance(child.func, ast.Attribute):
+                                call_name = child.func.attr
+                            if call_name == "call_target":
+                                errors.append(
+                                    f"{file_path}:{child.lineno}: error: [PRE_LINT_NO_CALL_TARGET_IN_INTERFACE] 'call_target' is prohibited in interface state machines. "
+                                    f"Interface state machines are abstract models over state dataclasses; 'call_target' belongs strictly in implementation pseudo-state machines."
+                                )
+    return errors
+
+
+def check_multi_interface_inheritance(tree: ast.AST, file_path: str = "") -> list[str]:
+    """Ensures multi-interface implementation pseudo-state machines inherit all implemented interface state machines."""
+    errors: list[str] = []
+    if not file_path or not file_path.endswith("_impl_pretense.py"):
+        return errors
+
+    high_spec_path: Path | None = None
+    curr_path = Path(file_path).resolve()
+    if "parts" in curr_path.parts:
+        try:
+            parts_idx = curr_path.parts.index("parts")
+            unit_name = curr_path.name.replace("_pretense.py", "")
+            unit_dir = Path(*curr_path.parts[:parts_idx + 2])
+            cand = unit_dir / "high" / f"{unit_name}.md"
+            if cand.is_file():
+                high_spec_path = cand
+        except Exception:
+            pass
+
+    if high_spec_path is None or not high_spec_path.is_file():
+        return errors
+
+    try:
+        high_text = high_spec_path.read_text(encoding="utf-8")
+    except OSError:
+        return errors
+
+    implements_targets: list[str] = []
+    for line in high_text.splitlines()[:20]:
+        line_s = line.strip()
+        if line_s.startswith("implements:"):
+            raw = line_s[len("implements:"):].strip()
+            implements_targets = [t.strip() for t in raw.split(",") if t.strip()]
+            break
+
+    if len(implements_targets) <= 1:
+        return errors
+
+    pseudo_sm_cls: ast.ClassDef | None = None
+    tree_body: list[ast.stmt] = getattr(tree, "body", [])
+    for node in tree_body:
+        if isinstance(node, ast.ClassDef) and ("PseudoStateMachine" in node.name or ("StateMachine" in node.name and node.name != "StateMachine")):
+            pseudo_sm_cls = node
+            break
+
+    if pseudo_sm_cls is None:
+        return errors
+
+    inherited_bases: set[str] = set()
+    for base in pseudo_sm_cls.bases:
+        if isinstance(base, ast.Name):
+            inherited_bases.add(base.id)
+        elif isinstance(base, ast.Subscript):
+            if isinstance(base.value, ast.Name):
+                inherited_bases.add(base.value.id)
+
+    for target in implements_targets:
+        expected_pascal = "".join(p.capitalize() for p in target.split("_"))
+        expected_sm_name = f"{expected_pascal}StateMachine"
+        if expected_sm_name not in inherited_bases:
+            errors.append(
+                f"{file_path}:{pseudo_sm_cls.lineno}: error: [PRE_LINT_MULTI_INTERFACE_INHERITANCE] component implements {implements_targets}, "
+                f"but '{pseudo_sm_cls.name}' does not inherit from '{expected_sm_name}'. "
+                f"Multi-interface implementation pseudo-state machines must inherit all implemented interface state machines."
+            )
+
+    return errors
+
+
+def check_interface_transition_coverage(
+    tree: ast.AST,
+    file_path: str = "",
+    is_interface: bool = False,
+    pyi_elements: dict[str, Any] | None = None,
+) -> list[str]:
+    """Ensures interface pretense files define fixed fake tests that cover 100% of declared transitions and seeding transitions."""
+    errors: list[str] = []
+    if not is_interface:
+        return errors
+
+    sm_cls: ast.ClassDef | None = None
+    tree_body: list[ast.stmt] = getattr(tree, "body", [])
+    for node in tree_body:
+        if isinstance(node, ast.ClassDef) and "StateMachine" in node.name and not node.name.endswith("PseudoStateMachine"):
+            sm_cls = node
+            break
+
+    if sm_cls is None:
+        return errors
+
+    declared_transitions: dict[str, ast.FunctionDef | ast.AsyncFunctionDef] = {}
+    for item in sm_cls.body:
+        if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) and not item.name.startswith("_"):
+            for dec in item.decorator_list:
+                is_t = False
+                if isinstance(dec, ast.Name) and dec.id == "transition":
+                    is_t = True
+                elif isinstance(dec, ast.Call):
+                    if isinstance(dec.func, ast.Name) and dec.func.id == "transition":
+                        is_t = True
+                    elif isinstance(dec.func, ast.Attribute) and dec.func.attr == "transition":
+                        is_t = True
+                elif isinstance(dec, ast.Attribute) and dec.attr in ("transition", "seeding"):
+                    is_t = True
+                if is_t:
+                    declared_transitions[item.name] = item
+                    break
+
+    if not declared_transitions:
+        if pyi_elements and pyi_elements.get("classes"):
+            total_methods = sum(len(c.get("methods", [])) for c in pyi_elements["classes"])
+            if total_methods > 0:
+                errors.append(
+                    f"{file_path}:{sm_cls.lineno}: error: [PRE_LINT_INTERFACE_TRANSITION_COVERAGE] state machine '{sm_cls.name}' "
+                    f"defines 0 transitions, but interface specification declares {total_methods} method(s). "
+                    f"State machine must define 1:1 transitions for all public methods."
+                )
+        return errors
+
+    test_cases: list[ast.ClassDef] = []
+    for node in tree_body:
+        if isinstance(node, ast.ClassDef):
+            is_test_case_subclass = any(
+                (isinstance(b, ast.Name) and b.id in ("TestCase", "unittest.TestCase")) or
+                (isinstance(b, ast.Attribute) and b.attr == "TestCase")
+                for b in node.bases
+            )
+            has_test_methods = any(
+                isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef)) and m.name.startswith("test")
+                for m in node.body
+            )
+            if (is_test_case_subclass or node.name.startswith("Test")) and has_test_methods:
+                test_cases.append(node)
+
+    if not test_cases:
+        clean_name = sm_cls.name.replace("StateMachine", "")
+        errors.append(
+            f"{file_path}:1: error: [PRE_LINT_INTERFACE_TRANSITION_COVERAGE] interface pretense module is missing a fixed test suite (e.g. 'Test{clean_name}Fake(unittest.TestCase)'). "
+            f"Interface pretense modules must include fixed fake tests covering 100% of transitions and seeding transitions."
+        )
+        return errors
+
+    called_names: set[str] = set()
+    accessed_names: set[str] = set()
+    for tc in test_cases:
+        for item in tc.body:
+            if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) and item.name.startswith("test"):
+                for child in ast.walk(item):
+                    if isinstance(child, ast.Call):
+                        if isinstance(child.func, ast.Attribute):
+                            called_names.add(child.func.attr)
+                        elif isinstance(child.func, ast.Name):
+                            called_names.add(child.func.id)
+                    elif isinstance(child, ast.Attribute):
+                        accessed_names.add(child.attr)
+
+    exercised = called_names | accessed_names
+    tc_name = test_cases[0].name
+
+    for t_name, t_node in declared_transitions.items():
+        if t_name not in exercised:
+            errors.append(
+                f"{file_path}:{t_node.lineno}: error: [PRE_LINT_INTERFACE_TRANSITION_COVERAGE] transition '{t_name}' on '{sm_cls.name}' "
+                f"was not covered by fixed tests in '{tc_name}'. "
+                f"Advice: Ensure its required conditions can be properly reached by existing transitions, or add seeding transitions if coverage is difficult."
+            )
+
     return errors
 
 
@@ -1336,6 +1644,7 @@ def generate_pretense_scaffold(
             "",
             "from dataclasses import dataclass, field",
             "from typing import Any, List, Optional, Sequence, Set, Tuple",
+            "import unittest",
             "",
             "from hypothesis import given, settings, strategies as st",
             "",
@@ -1375,6 +1684,38 @@ def generate_pretense_scaffold(
             "# live naturally inside the single transition body (multi-transition splitting is prohibited).",
             "# require_arg defines the caller precondition contract (checked at runtime on real calls).",
             "# Use Domain.type(T) or open domain; use preferred=[...] to cluster/bias fuzz inputs without restricting the contract.",
+            "#",
+            "# REFERENCE PATTERNS:",
+            "#   # 1:1 Transition Pattern with Domain strategies and make_return_value pivot:",
+            "#   @transition(TargetClass.method)",
+            "#   def method(self, arg1: str, count: int) -> ReturnType:",
+            "#       require(self.state.initialized)",
+            "#       require_arg(arg1, Domain.type(str), preferred=[\"sample\"])",
+            "#       require_arg(count, Domain.range(1, 100), preferred=[10])",
+            "#       fake_ret = ReturnType(...)  # or None / value",
+            "#       ret = make_return_value(fake_ret)",
+            "#       self.state.items.append(ret)",
+            "#       assert ret == fake_ret",
+            "#       return ret",
+            "#",
+            "#   # Seeding Transition (sets up state dynamically outside default __init__):",
+            "#   @transition.seeding",
+            "#   def seed_initial(self) -> None:",
+            "#       self.state.initialized = True",
+            "#",
+            "#   # Single service fake factory:",
+            "#   FakeTarget = synthesize_fake(TargetStateMachine)",
+            "#   def make_target_fake(state: Optional[TargetState] = None) -> TargetClass:",
+            "#       return FakeTarget(state=state or TargetState())",
+            "#",
+            "#   # Fixed fake test suite covering 100% of transitions and seeding transitions:",
+            "#   class TestTargetFake(unittest.TestCase):",
+            "#       def setUp(self) -> None:",
+            "#           self.fake = make_target_fake()",
+            "#           self.sm = TargetStateMachine()",
+            "#       def test_transitions_coverage(self) -> None:",
+            "#           self.sm.seed_initial()",
+            "#           self.fake.method(\"sample\", 10)",
             "",
             "def _unimplemented_transition(name: str) -> Any:",
             '    """Placeholder for unmodeled transition return contracts that crashes at runtime."""',
@@ -1500,11 +1841,53 @@ def generate_pretense_scaffold(
                 f"    return {fake_cls_name}(state=state or {state_cls_name}())",
             ])
 
+        test_fake_cls = f"Test{pascal_name}Fake"
         lines.extend([
             "",
             "",
             "# ==============================================================================",
-            "# 3. Hypothesis Stateful Fuzzing on Fake",
+            "# 3. Fixed Scenarios on Fake",
+            "# ==============================================================================",
+            "",
+            f"class {test_fake_cls}(unittest.TestCase):",
+            f'    """Verifies that the synthesized fake satisfies all transitions and seeding transitions."""',
+            "",
+            "    def setUp(self) -> None:",
+        ])
+        if len(service_classes) > 1:
+            lines.append(f"        self.fakes = make_{clean_stem}_fakes()")
+            lines.append(f"        self.sm = {iface_sm_cls_name}()")
+        else:
+            lines.append(f"        self.fake = make_{clean_stem}_fake()")
+            lines.append(f"        self.sm = {iface_sm_cls_name}(sut=self.fake)")
+        lines.extend([
+            "",
+            "    def test_transitions_coverage(self) -> None:",
+            '        """Exercises all transitions and seeding transitions on the fake."""',
+            "        self.sm.seed_initial()",
+        ])
+        for sc in service_classes:
+            cls_name = sc["name"]
+            for prop in sc.get("properties", []):
+                fn_name = prop if method_counts[prop] == 0 else f"{cls_name.lower()}_{prop}"
+                if len(service_classes) > 1:
+                    lines.append(f"        _ = self.sm.{fn_name}()")
+                else:
+                    lines.append(f"        _ = self.fake.{prop}")
+            for m in sc["methods"]:
+                fn_name = m["name"]
+                arg_info = m.get("arg_info", [{"name": a, "type": "Any"} for a in m["args"]])
+                args_call = ", ".join(_sample_val_for_arg(a["name"], a.get("type", "")) for a in arg_info)
+                if len(service_classes) > 1:
+                    lines.append(f"        self.sm.{fn_name}({args_call})")
+                else:
+                    lines.append(f"        self.fake.{fn_name}({args_call})")
+
+        lines.extend([
+            "",
+            "",
+            "# ==============================================================================",
+            "# 4. Hypothesis Stateful Fuzzing on Fake",
             "# ==============================================================================",
             "",
             f"Fake{pascal_name}FuzzTest = compile_hypothesis_test_case(",
@@ -1570,6 +1953,30 @@ def generate_pretense_scaffold(
             "# ==============================================================================",
             "# 1. Implementation Pseudo-State Machine",
             "# ==============================================================================",
+            "# REFERENCE PATTERNS:",
+            "#   # Implementation pseudo-state machine transition override with call_target:",
+            "#   @transition(TargetClass.method)",
+            "#   def method(self, *args) -> Any:",
+            "#       target: TargetClass = sut(TargetClass)",
+            "#       old_val = target.property",
+            "#       ret = call_target(target.method(*args))",
+            "#       assert target.property == old_val",
+            "#       return ret",
+            "#",
+            "#   # Real implementation scenario test driving self.checked (100% statement coverage):",
+            "#   class TestTargetImplReal(unittest.TestCase):",
+            "#       def setUp(self) -> None:",
+            "#           self.registry = LifecycleRegistry()",
+            "#           __initialize__(self.registry)",
+            "#           self.phase_scope = enter_phase(system, registry=self.registry)",
+            "#           self.phase_scope.__enter__()",
+            "#           self.real = get_singleton(TargetClass)",
+            "#           self.sm = TargetImplPseudoStateMachine(singletons={TargetClass: self.real})",
+            "#           self.checked = self.sm.as_checked(TargetClass, self.real)",
+            "#       def tearDown(self) -> None:",
+            "#           self.phase_scope.__exit__(None, None, None)",
+            "#       def test_real_conformance(self) -> None:",
+            "#           self.checked.method(*args)",
             "",
             f"class {impl_sm_cls_name}({iface_sm_cls_name}):",
             f'    """Implementation pseudo-state machine for {pascal_name}."""',
@@ -2259,16 +2666,11 @@ def main() -> int:
     elif args.implementation:
         is_interface = False
     elif pyi_path:
-        is_interface = not os.path.basename(pyi_path).endswith("_impl.pyi") and os.path.exists(
-            pyi_path.replace(".pyi", "_impl.pyi")
-        )
+        basename = os.path.basename(pyi_path)
+        is_interface = not basename.endswith("_impl.pyi")
     elif args.module_path:
         stem = os.path.basename(args.module_path)
-        if not stem.endswith("_impl_pretense.py"):
-            parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(args.module_path)))
-            low_impl = os.path.join(parent_dir, "low", stem.replace("_pretense.py", "_impl.pyi"))
-            if os.path.exists(low_impl):
-                is_interface = True
+        is_interface = not stem.endswith("_impl_pretense.py")
 
     struct_errs = check_pretense_structure(tree, args.module_path, is_interface=is_interface)
     all_errors.extend(struct_errs)
@@ -2300,6 +2702,9 @@ def main() -> int:
     sys_module_errs = check_no_sys_modules_tampering(args.module_path, tree=tree)
     all_errors.extend(sys_module_errs)
 
+    probe_errs = check_no_top_level_probes(args.module_path, tree=tree, error_code="PRE_LINT_NO_TOP_LEVEL_PROBE")
+    all_errors.extend(probe_errs)
+
     outcome_errs = check_transition_outcomes(tree, args.module_path)
     all_errors.extend(outcome_errs)
 
@@ -2321,7 +2726,21 @@ def main() -> int:
     skip_errs = check_banned_skips(args.module_path, tree=tree, error_code="PRE_LINT_NO_SKIP")
     all_errors.extend(skip_errs)
 
+    pre_seeding_errs = check_no_pre_seeding(tree, args.module_path)
+    all_errors.extend(pre_seeding_errs)
+
+    call_target_iface_errs = check_no_call_target_in_interface(tree, args.module_path, is_interface=is_interface)
+    all_errors.extend(call_target_iface_errs)
+
+    multi_iface_errs = check_multi_interface_inheritance(tree, args.module_path)
+    all_errors.extend(multi_iface_errs)
+
     pyi_elements = extract_pyi_elements(pyi_path) if pyi_path and os.path.isfile(pyi_path) else None
+
+    coverage_errs = check_interface_transition_coverage(
+        tree, args.module_path, is_interface=is_interface, pyi_elements=pyi_elements
+    )
+    all_errors.extend(coverage_errs)
     target_internal_errs = check_pretense_target_internals(tree, args.module_path, pyi_elements=pyi_elements)
     all_errors.extend(target_internal_errs)
 

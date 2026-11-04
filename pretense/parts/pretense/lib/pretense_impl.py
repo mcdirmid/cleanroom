@@ -191,14 +191,27 @@ def compile_hypothesis_test_case(
     initial_state_factory: Optional[Any] = None,
     settings: Optional[Any] = None,
     name: Optional[str] = None,
+    collaborators: Optional[Sequence[Any]] = None,
 ) -> Type[Any]:
     """Compile a StateMachine or StateMachineProto into an executable Hypothesis test case."""
     proto_inst = proto() if isinstance(proto, type) else proto
     class_name = name or f"TestPretense{proto_inst.__class__.__name__}"
 
-    def make_rule_method(t: Any) -> Callable[[Any, Any], None]:
+    collab_list: List[Any] = list(collaborators or [])
+    if hasattr(proto_inst, "collaborators") and proto_inst.collaborators:
+        for c in proto_inst.collaborators:
+            if c not in collab_list:
+                collab_list.append(c)
+
+    class _DummyData:
+        def draw(self, strategy: Any) -> Any:
+            return strategy.example() if hasattr(strategy, "example") else None
+
+    def make_rule_method(t: Any) -> Callable[..., Any]:
         @rule(data=st.data())
-        def rule_method(self: Any, data: Any) -> None:
+        def rule_method(self: Any, data: Any = None, *call_args: Any, **call_kwargs: Any) -> Any:
+            if data is None:
+                data = _DummyData()
             curr_t = t
             if hasattr(self.sm, "transitions"):
                 for candidate in self.sm.transitions:
@@ -206,11 +219,23 @@ def compile_hypothesis_test_case(
                         curr_t = candidate
                         break
 
-            if not all(req(self.sm.state, self.sm) for req in curr_t.requirements):
-                return
-
-            if getattr(curr_t, "is_seeding", False) and not getattr(self.sut, "__is_pretense_fake__", False) and not hasattr(self.sut, curr_t.name):
-                return
+            s_dict: Dict[Any, Any] = {}
+            if isinstance(self.sut, dict):
+                s_dict.update(self.sut)
+            elif self.sut is not None:
+                s_dict[type(self.sut)] = self.sut
+            if hasattr(self.sm, "singletons") and isinstance(self.sm.singletons, dict):
+                s_dict.update(self.sm.singletons)
+            try:
+                from support.lib.lifecycle import get_active_scope
+                scope = get_active_scope()
+                instances_by_desc = getattr(scope, "_instances_by_desc", None)
+                if instances_by_desc is not None and isinstance(instances_by_desc, dict):
+                    for inst in instances_by_desc.values():
+                        if inst not in s_dict.values():
+                            s_dict[type(inst)] = inst
+            except Exception:
+                pass
 
             from .pretense import (
                 with_draw,
@@ -226,24 +251,57 @@ def compile_hypothesis_test_case(
                 _last_contracted_exception_type,
             )
 
-            with with_draw(data.draw):
+            token_suts = _ACTIVE_SUTS.set(dict(s_dict))
+            token_sut = _current_sut.set(self.sut)
+            token_sm = _current_sm.set(self.sm)
+
+            if getattr(curr_t, "is_seeding", False):
+                is_fake = getattr(self.sut, "__is_pretense_fake__", False)
+                has_sut_attr = hasattr(self.sut, curr_t.name)
+                has_singleton_attr = any(hasattr(v, curr_t.name) for v in s_dict.values())
+                if not is_fake and not has_sut_attr and not has_singleton_attr:
+                    _current_sm.reset(token_sm)
+                    _current_sut.reset(token_sut)
+                    _ACTIVE_SUTS.reset(token_suts)
+                    return None
+
+            if not all(req(self.sm.state, self.sm) for req in curr_t.requirements):
+                _current_sm.reset(token_sm)
+                _current_sut.reset(token_sut)
+                _ACTIVE_SUTS.reset(token_suts)
+                return None
+
+            if call_args or call_kwargs:
                 if curr_t.args_fn is not None:
-                    import inspect
-                    sig = inspect.signature(curr_t.args_fn)
-                    extra_params = [
-                        p for p in list(sig.parameters.values())[2:]
-                        if p.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
-                    ]
-                    nb_args = [NotBound] * len(extra_params)
-                    try:
-                        args = curr_t.args_fn(self.sm.state, self.sm, *nb_args)
-                    except UnsatisfiedAntecedentError:
-                        return
+                    args = curr_t.args_fn(self.sm.state, self.sm, *call_args, **call_kwargs)
                 else:
-                    args = ()
+                    args = call_args or tuple(call_kwargs.values())
+            else:
+                with with_draw(data.draw):
+                    if curr_t.args_fn is not None:
+                        import inspect
+                        sig = inspect.signature(curr_t.args_fn)
+                        extra_params = [
+                            p for p in list(sig.parameters.values())[2:]
+                            if p.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+                        ]
+                        nb_args = [NotBound] * len(extra_params)
+                        try:
+                            args = curr_t.args_fn(self.sm.state, self.sm, *nb_args)
+                        except UnsatisfiedAntecedentError:
+                            _current_sm.reset(token_sm)
+                            _current_sut.reset(token_sut)
+                            _ACTIVE_SUTS.reset(token_suts)
+                            return None
+                    else:
+                        args = ()
 
             if args is None:
-                return
+                print("DEBUG: args is None!")
+                _current_sm.reset(token_sm)
+                _current_sut.reset(token_sut)
+                _ACTIVE_SUTS.reset(token_suts)
+                return None
 
             global _ACTIVE_STEP, _ACTIVE_TRACE
             current_step = TraceStep(curr_t.name, getattr(curr_t.target, "__name__", None), getattr(curr_t, "is_seeding", False), args, {}, None)
@@ -254,24 +312,35 @@ def compile_hypothesis_test_case(
 
             target_name = getattr(curr_t.target, "__name__", curr_t.name)
             is_fake = getattr(self.sut, "__is_pretense_fake__", False)
-            token_sut = _current_sut.set(self.sut)
             token_ver = _is_verification.set(not is_fake)
             token_tgt = _current_target.set(self.sut)
             token_mth = _current_method.set(target_name)
             token_arg = _current_args.set(args)
             token_kw = _current_kwargs.set({})
-            token_sm = _current_sm.set(self.sm)
             token_exc_type = _last_contracted_exception_type.set(None)
 
             try:
                 res = None
-                if getattr(curr_t, "_target_fn", None) is not None:
+                if getattr(curr_t, "is_seeding", False):
+                    seeding_target = None
+                    if hasattr(self.sut, curr_t.name):
+                        seeding_target = self.sut
+                    else:
+                        for inst in s_dict.values():
+                            if hasattr(inst, curr_t.name):
+                                seeding_target = inst
+                                break
+                    if seeding_target is not None and (getattr(curr_t, "_target_fn", None) is None or getattr(seeding_target, "__is_pretense_fake__", False)):
+                        res = getattr(seeding_target, curr_t.name)(*args)
+                    elif getattr(curr_t, "_target_fn", None) is not None:
+                        res = curr_t._target_fn(self.sm, *args)
+                    else:
+                        if curr_t.return_fn is not None:
+                            res = curr_t.return_fn(self.sm.state, self.sm, *args)
+                        if curr_t.provider is not None:
+                            curr_t.provider(self.sm.state, self.sm, *args, result=res)
+                elif getattr(curr_t, "_target_fn", None) is not None:
                     res = curr_t._target_fn(self.sm, *args)
-                elif getattr(curr_t, "is_seeding", False):
-                    if curr_t.return_fn is not None:
-                        res = curr_t.return_fn(self.sm.state, self.sm, *args)
-                    if curr_t.provider is not None:
-                        curr_t.provider(self.sm.state, self.sm, *args, result=res)
                 else:
                     sut_exc: Optional[Exception] = None
                     sut_res: Any = None
@@ -308,13 +377,6 @@ def compile_hypothesis_test_case(
                         valid_outcome = Value(sut_res)
 
                     actual_val = valid_outcome.val if isinstance(valid_outcome, Value) else valid_outcome
-                    s_dict: Dict[Any, Any] = {}
-                    if isinstance(self.sut, dict):
-                        s_dict.update(self.sut)
-                    elif self.sut is not None:
-                        s_dict[type(self.sut)] = self.sut
-                    if hasattr(self.sm, "singletons") and isinstance(self.sm.singletons, dict):
-                        s_dict.update(self.sm.singletons)
                     from .pretense import EnsuresCheck, _resolve_target_singleton
                     target_obj = _resolve_target_singleton(s_dict, curr_t.target)
                     if target_obj is None and self.sut is not None:
@@ -349,11 +411,144 @@ def compile_hypothesis_test_case(
                 _current_target.reset(token_tgt)
                 _is_verification.reset(token_ver)
                 _current_sut.reset(token_sut)
+                _ACTIVE_SUTS.reset(token_suts)
 
             self.sm.check_invariants()
 
         rule_method.__name__ = f"step_{t.name}"
         return rule_method
+
+    def make_collab_rule_method(c_spec: Any, ct: Any) -> Callable[..., Any]:
+        c_proto = c_spec() if isinstance(c_spec, type) else c_spec
+
+        @rule(data=st.data())
+        def collab_rule_method(self: Any, data: Any = None, *call_args: Any, **call_kwargs: Any) -> Any:
+            if data is None:
+                data = _DummyData()
+            from .pretense import (
+                with_draw,
+                UnsatisfiedAntecedentError,
+                _ACTIVE_SUTS,
+                _current_sut,
+                _is_verification,
+                _current_target,
+                _current_method,
+                _current_args,
+                _current_kwargs,
+                _current_sm,
+                _last_contracted_exception_type,
+            )
+
+            s_dict: Dict[Any, Any] = {}
+            if isinstance(self.sut, dict):
+                s_dict.update(self.sut)
+            elif self.sut is not None:
+                s_dict[type(self.sut)] = self.sut
+            if hasattr(self.sm, "singletons") and isinstance(self.sm.singletons, dict):
+                s_dict.update(self.sm.singletons)
+            try:
+                from support.lib.lifecycle import get_active_scope
+                scope = get_active_scope()
+                instances_by_desc = getattr(scope, "_instances_by_desc", None)
+                if instances_by_desc is not None and isinstance(instances_by_desc, dict):
+                    for inst in instances_by_desc.values():
+                        if inst not in s_dict.values():
+                            s_dict[type(inst)] = inst
+            except Exception:
+                pass
+
+            collab_obj = None
+            if hasattr(ct, "target") and ct.target is not None:
+                from .pretense import _resolve_target_singleton
+                collab_obj = _resolve_target_singleton(s_dict, ct.target)
+            if collab_obj is None:
+                for inst in s_dict.values():
+                    if hasattr(inst, ct.name):
+                        collab_obj = inst
+                        break
+            if collab_obj is None:
+                try:
+                    from support.lib.lifecycle import get_singleton
+                    if isinstance(c_spec, type):
+                        collab_obj = get_singleton(c_spec)
+                except Exception:
+                    pass
+
+            collab_state = getattr(collab_obj, "state", None) or getattr(collab_obj, "_state", None) or getattr(c_proto, "state", None)
+            collab_sm = getattr(collab_obj, "_sm", None) or c_proto
+
+            if collab_state is not None and not all(req(collab_state, collab_sm) for req in ct.requirements):
+                return None
+
+            if call_args or call_kwargs:
+                if ct.args_fn is not None:
+                    args = ct.args_fn(collab_state, collab_sm, *call_args, **call_kwargs)
+                else:
+                    args = call_args or tuple(call_kwargs.values())
+            else:
+                with with_draw(data.draw):
+                    if ct.args_fn is not None:
+                        import inspect
+                        sig = inspect.signature(ct.args_fn)
+                        extra_params = [
+                            p for p in list(sig.parameters.values())[2:]
+                            if p.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+                        ]
+                        nb_args = [NotBound] * len(extra_params)
+                        try:
+                            args = ct.args_fn(collab_state, collab_sm, *nb_args)
+                        except UnsatisfiedAntecedentError:
+                            return None
+                    else:
+                        args = ()
+
+            if args is None:
+                return None
+
+            global _ACTIVE_STEP, _ACTIVE_TRACE
+            current_step = TraceStep(ct.name, getattr(ct.target, "__name__", None), True, args, {}, None)
+            self.trace.append(current_step)
+            type(self)._last_trace = list(self.trace)
+            _ACTIVE_STEP = current_step
+            _ACTIVE_TRACE = list(self.trace)
+
+            token_suts = _ACTIVE_SUTS.set(dict(s_dict))
+            token_sut = _current_sut.set(collab_obj)
+            token_ver = _is_verification.set(not getattr(collab_obj, "__is_pretense_fake__", False))
+            token_tgt = _current_target.set(collab_obj)
+            token_mth = _current_method.set(ct.name)
+            token_arg = _current_args.set(args)
+            token_kw = _current_kwargs.set({})
+            token_sm = _current_sm.set(collab_sm)
+            token_exc_type = _last_contracted_exception_type.set(None)
+
+            try:
+                res = None
+                if collab_obj is not None and hasattr(collab_obj, ct.name):
+                    res = getattr(collab_obj, ct.name)(*args)
+                elif getattr(ct, "_target_fn", None) is not None:
+                    res = ct._target_fn(collab_sm, *args)
+                else:
+                    if ct.return_fn is not None:
+                        res = ct.return_fn(collab_state, collab_sm, *args)
+                    if ct.provider is not None:
+                        ct.provider(collab_state, collab_sm, *args, result=res)
+                current_step = TraceStep(ct.name, getattr(ct.target, "__name__", None), True, args, {}, res)
+                self.trace[-1] = current_step
+            finally:
+                _ACTIVE_STEP = None
+                _last_contracted_exception_type.reset(token_exc_type)
+                _current_sm.reset(token_sm)
+                _current_kwargs.reset(token_kw)
+                _current_args.reset(token_arg)
+                _current_method.reset(token_mth)
+                _current_target.reset(token_tgt)
+                _is_verification.reset(token_ver)
+                _current_sut.reset(token_sut)
+                _ACTIVE_SUTS.reset(token_suts)
+
+        collab_rule_method.__name__ = f"step_collab_{c_proto.__class__.__name__}_{ct.name}"
+        return collab_rule_method
 
     attrs: Dict[str, Any] = {}
 
@@ -416,6 +611,28 @@ def compile_hypothesis_test_case(
                         self.sm.singletons[k] = v
             elif self.sut is not None:
                 self.sm.singletons[type(self.sut)] = self.sut
+            if collab_list:
+                for c_spec in collab_list:
+                    c_cls = c_spec if isinstance(c_spec, type) else type(c_spec)
+                    has_collab = False
+                    for k, inst in self.sm.singletons.items():
+                        if isinstance(k, type) and (issubclass(k, c_cls) or issubclass(c_cls, k)):
+                            has_collab = True
+                            break
+                        if getattr(inst, "__is_pretense_fake__", False):
+                            sm_obj = getattr(inst, "_sm", None)
+                            if sm_obj is not None and (isinstance(sm_obj, c_cls) or type(sm_obj).__name__ == c_cls.__name__):
+                                has_collab = True
+                                break
+                    if not has_collab:
+                        try:
+                            fake_collab_cls = pretense.synthesize_fake(c_cls)
+                            fake_inst = fake_collab_cls()
+                            self.sm.singletons[c_cls] = fake_inst
+                            if hasattr(c_cls, "target_protocol"):
+                                self.sm.singletons[getattr(c_cls, "target_protocol")] = fake_inst
+                        except Exception:
+                            pass
         self.trace = []
 
     def teardown(self: Any) -> None:
@@ -436,6 +653,12 @@ def compile_hypothesis_test_case(
     transitions = getattr(proto_inst, "transitions", [])
     for t in transitions:
         attrs[f"step_{t.name}"] = make_rule_method(t)
+
+    for c_spec in collab_list:
+        c_proto = c_spec() if isinstance(c_spec, type) else c_spec
+        for ct in getattr(c_proto, "transitions", []):
+            if getattr(ct, "is_seeding", False):
+                attrs[f"step_collab_{c_proto.__class__.__name__}_{ct.name}"] = make_collab_rule_method(c_spec, ct)
 
     cls: Type[RuleBasedStateMachine] = type(class_name, (RuleBasedStateMachine,), attrs)
     if settings is not None:
@@ -836,6 +1059,7 @@ def run_pretense_cli(argv: Optional[List[str]] = None) -> int:
                 "• DO NOT expose details (line numbers, code snippets, or internal symbols) of other files.\n"
                 "• Translate uncovered statements and branches into missing specification requirements or scenario cases.\n"
                 "• If an uncovered branch is an unreachable defensive check or caller assumption guaranteed by the specification, instruct the implementation author to prune it or mark it as unreachable according to the methodology.\n"
+                "• If an uncovered line persists after tests were updated or across multiple rounds, examine the library implementation closely: trace control flow and invariants to verify whether the line is structurally unreachable or defensive dead code; if unreachable, blame the library (prune, unreachable(), or # pragma: no cover).\n"
                 + "=" * 80
             )
             return 1

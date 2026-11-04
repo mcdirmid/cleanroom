@@ -429,6 +429,13 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
                 cand_logs.append(cl)
 
         blamed = list(_read_blame_buffer(task.dispatch.workspace_dir))
+        for cand in (app_info.DEFAULT_BLAME_BUFFER_FILE,):
+            p = os.path.join(task.dispatch.workspace_dir, cand)
+            if os.path.isfile(p):
+                try:
+                    os.remove(p)
+                except OSError:
+                    pass
         for cand_log in cand_logs:
             if os.path.isfile(cand_log):
                 try:

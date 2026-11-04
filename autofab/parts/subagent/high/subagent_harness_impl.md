@@ -19,7 +19,7 @@ The command harness adapter realization executes subagent processes, formats tas
 
 When realizing subagent dispatch and outcome monitoring:
 
-- The realization constructs instructional task prompts detailing role responsibilities, workspace context, ready targets, check-files verification commands, constraints against creating scratch tests, unassigned file modifications, or executing ad-hoc inline test scripts (`python3 -c` or stdin heredocs), and role tool submission and blame workflows.
+- The realization constructs instructional task prompts tailoring workflow instructions by role type: for auditor roles, instructing the worker to run `bin/get_work` as the primary evaluation entry point, concluding immediately with summary text and zero tool calls if all targets pass verification and are auto-submitted, and delivering `bin/blame` on failing targets before concluding via `bin/get_work`; for authoring roles, detailing target editing, `bin/check_files` verification commands, and `bin/submit`; and enforcing constraints across all roles against creating scratch tests, unassigned file modifications, or executing ad-hoc inline test scripts (`python3 -c` or stdin heredocs).
 
 - The realization captures initial pending targets from the workspace pending work buffer prior to process execution.
 
@@ -33,7 +33,7 @@ When realizing subagent dispatch and outcome monitoring:
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-11-02T20:38:00Z
-CHANGE: Instruct role subagents against inline python test scripts and scratch tests
+LAST_CHANGED: 2026-11-03T12:15:00Z
+CHANGE: Tailor task prompts for auditor roles directing bin/get_work and auto-submit round conclusion
 SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->

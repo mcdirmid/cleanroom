@@ -4,9 +4,9 @@ implements: coverage
 
 ## Purpose
 
-The coverage_impl implementation component realizes module test coverage evaluation, syntax tree statement filtering, trace-based execution counting, and structured report formatting.
+The coverage_impl implementation component realizes module test coverage evaluation, syntax tree statement filtering, trace-based execution counting, AST-based span ownership classification, and structured report formatting.
 
-Trace-based coverage evaluation and syntax tree analysis require concrete execution semantics to filter non-executable lines and run test suites hermetically. Accurately attributing missing statements to grounding requirements requires parsing abstract syntax trees to ignore signature continuations and docstrings, resetting module loader state to ensure clean test imports, and formatting contiguous span reports with source code context. The coverage_impl implementation component provides concrete algorithms for syntax tree line filtering, trace execution capture, span grouping, and coverage threshold validation.
+Trace-based coverage evaluation and syntax tree analysis require concrete execution semantics to filter non-executable lines and run test suites hermetically. Accurately attributing missing statements to grounding requirements requires parsing abstract syntax trees to ignore signature continuations and docstrings, resetting module loader state to ensure clean test imports, classifying uncovered spans by ownership, and formatting contiguous span reports with source code context. The coverage_impl implementation component provides concrete algorithms for syntax tree line filtering, trace execution capture, span grouping, span classification, and coverage threshold validation.
 
 **Out of scope:** The coverage_impl implementation component does not modify source files, schedule graph traversals, or install conversational tools; these are handled by other components.
 
@@ -22,13 +22,15 @@ The coverage evaluator executes a single-target test suite under trace instrumen
 
 The coverage evaluator formats uncovered line sequences into compact comma-separated range strings and paired contiguous span tuples, and formats source context snippets for uncovered spans by extracting the corresponding source file lines and clamping output to a maximum span limit when requested.
 
-The coverage evaluator formats comprehensive coverage reports incorporating test outcomes, coverage metrics, uncovered code spans, and grounding attribution instructions directing the agent to formulate blame feedback strictly in terms of how the blamed file is not compliant with the common source of truth specification, permitting line numbers only within the blamed file while strictly forbidding exposing details of other files.
+The coverage evaluator parses abstract syntax trees to classify each uncovered statement span by ownership and disposition, identifying contract violation error raises or unreachable branches as library-owned pragma candidates (`LIB-PRAGMA-REQUIRED: raises <ErrorName>`), defensive precondition guards as library-owned guards (`LIB-PRAGMA-REQUIRED: precondition guard`), and positive-path postconditions, invariants, or success branches as test-owned deficits (`TEST-COVERAGE-DEFICIT: missing unit test assertion`).
 
-The coverage evaluator enforces minimum coverage thresholds, returning exit status indications and synchronizing formatted output to the specified coverage log files.
+The coverage evaluator formats comprehensive coverage reports incorporating test outcomes, coverage metrics, uncovered code spans labeled with ownership dispositions, and grounding attribution instructions leading with the precondition exemption directing the agent to first classify whether a span is an `*Error` raise or precondition guard belonging to the library as a pragma annotation rather than a test requirement, permitting line numbers only within the blamed file while strictly forbidding exposing details of other files, instructing the agent when an uncovered span persists across rounds or after test updates to deeply examine the library implementation to determine whether the span is structurally or logically unreachable, and providing an escape valve directing using fail when 100% coverage appears unreachable without violating contracts.
+
+The coverage evaluator enforces minimum coverage thresholds, returning exit status indications, synchronizing formatted output to the specified coverage log files, and recording evaluated span classifications and ownership status into the workspace coverage status buffer (`.coverage_spans.json`) for attribution validation.
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-29T00:30:00Z
-CHANGE: Format grounding attribution instructions permitting line numbers in blamed file while forbidding exposing details of other files
+LAST_CHANGED: 2026-11-03T23:45:00Z
+CHANGE: Instruct coverage auditor when uncovered spans persist to examine library implementation for unreachable code
 SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->

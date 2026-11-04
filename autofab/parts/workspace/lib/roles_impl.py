@@ -525,6 +525,12 @@ def _find_pipeline_for_scope(root: str, dir_scope: str) -> Optional[str]:
     if not dir_scope:
         return None
 
+    if "#" in dir_scope:
+        role_part = dir_scope.split("#", 1)[1].strip().lower()
+        if "pretense" in role_part:
+            return "pretense"
+        dir_scope = dir_scope.split("#", 1)[0].strip()
+
     scope_dir, scope_rel = _normalize_dir_scope(root, dir_scope)
     root_abs = os.path.abspath(root)
 
@@ -830,7 +836,7 @@ class RoleResolver(roles.RoleResolver):
             else:
                 return [
                     r for r in resolved_roles
-                    if not r.fused_roles and (r.pipeline is None or r.pipeline == "" or r.pipeline == "standard")
+                    if not r.fused_roles
                 ]
 
         all_roles = self._get_roles(repo_root)

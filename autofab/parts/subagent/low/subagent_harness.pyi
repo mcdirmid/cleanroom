@@ -17,7 +17,7 @@ class CommandHarnessAdapter(subagent_coordinator.HarnessAdapter, Protocol):
         """Constructs instructional task prompt for the role subagent.
 
         POSTCONDITIONS:
-        - MUST format instructional task prompt detailing role, directory scope, targets, verification commands, and submit or blame actions.
+        - MUST format instructional task prompt detailing role, directory scope, targets, tailoring instructions between auditor roles (directing bin/get_work and round conclusion upon auto-submit) and authoring roles (directing target editing, bin/check_files verification, and bin/submit), and submit or blame actions.
         """
         ...
 

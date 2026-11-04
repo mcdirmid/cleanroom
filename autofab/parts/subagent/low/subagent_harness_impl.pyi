@@ -28,8 +28,8 @@ class CommandHarnessAdapter(
         """Constructs instructional task prompt for the role subagent.
 
         GROUNDING:
-        - Formulates task prompt with role, directory scope, assigned targets, constraints against
-          scratch tests, unassigned file modifications, or inline test scripts (python3 -c and stdin heredocs), check-files verification, and autofab_role_tool submit and blame commands.
+        - Formulates task prompt with role, directory scope, assigned targets, tailoring instructions between auditor roles (directing bin/get_work and round conclusion upon auto-submit) and authoring roles (directing target editing, bin/check_files verification, and bin/submit), constraints against
+          scratch tests, unassigned file modifications, or inline test scripts (python3 -c and stdin heredocs), and autofab_role_tool submit and blame commands.
         """
         ...
 

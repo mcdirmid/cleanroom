@@ -93,6 +93,29 @@ class UvManifestLoader(manifest_loader.UvManifestLoader):
                         toml_path = c_path
                         break
             if not toml_path:
+                main_r = app_info.get_main_root()
+                if main_r and os.path.isdir(main_r):
+                    for fname in roles_filenames:
+                        cand = os.path.join(main_r, rel_pkg, fname)
+                        if os.path.isfile(cand):
+                            toml_path = cand
+                            break
+                        c_path = os.path.join(main_r, fname)
+                        if os.path.isfile(c_path):
+                            toml_path = c_path
+                            break
+            if not toml_path:
+                try:
+                    import importlib.resources
+                    files = importlib.resources.files(rel_pkg.replace("-", "_"))
+                    for fname in roles_filenames:
+                        cand = str(files.joinpath(fname))
+                        if os.path.isfile(cand):
+                            toml_path = cand
+                            break
+                except (ImportError, AttributeError, TypeError, ValueError, OSError):
+                    pass
+            if not toml_path:
                 toml_path = os.path.join(root, rel_pkg, default_roles_file)
             canon_meth = f"//{rel_pkg}"
         else:

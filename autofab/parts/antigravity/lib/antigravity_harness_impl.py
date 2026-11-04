@@ -277,6 +277,13 @@ class AntigravityHarnessAdapter(antigravity_harness.AntigravityHarnessAdapter):
 
         # Contract: Reads blamed culprit targets from workspace blame buffer.
         blamed = _read_blame_buffer(dispatch.workspace_dir)
+        for cand in (app_info.DEFAULT_BLAME_BUFFER_FILE,):
+            p = os.path.join(dispatch.workspace_dir, cand)
+            if os.path.isfile(p):
+                try:
+                    os.remove(p)
+                except OSError:
+                    pass
 
         submitted: List[str] = []
         for m in re.finditer(r"\[SUBMITTED\]\s*([a-zA-Z0-9_\-/\.]+)", stdout_txt):

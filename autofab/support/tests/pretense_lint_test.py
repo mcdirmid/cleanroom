@@ -30,9 +30,14 @@ for p in [
     if p not in sys.path and os.path.isdir(p):
         sys.path.insert(0, p)
 
+from autofab_py.support.lib.build_lint_common import check_no_top_level_probes
 from autofab_py.support.lib.pretense_lint import (
+    check_interface_transition_coverage,
     check_lifted_expr_usage,
+    check_multi_interface_inheritance,
     check_multi_transition_disambiguation,
+    check_no_call_target_in_interface,
+    check_no_pre_seeding,
     check_no_relative_parent_imports,
     check_no_scaffold_placeholders,
     check_pretense_imports,
@@ -851,6 +856,177 @@ class PretenseLintTest(unittest.TestCase):
         tree_clean = ast.parse(code_non_mutating)
         errs_clean = check_lifted_expr_usage(tree_clean, "dummy_impl_pretense.py", is_impl=True)
         self.assertFalse(any("PN_IMPL_NO_STATE_MUTATION" in e for e in errs_clean))
+
+    def test_pre_seeding_with_state_args_rejected(self) -> None:
+        code_bad = (
+            "def make_sut() -> Allocator:\n"
+            "    vault = make_vault_fake(VaultState(balance=1000))\n"
+            "    return get_singleton(Allocator)\n"
+        )
+        errs = check_no_pre_seeding(ast.parse(code_bad), "test.py")
+        self.assertTrue(any("PRE_LINT_NO_PRE_SEEDING" in e and "passing state arguments" in e for e in errs))
+
+        code_good = (
+            "def make_sut() -> Allocator:\n"
+            "    vault = make_vault_fake()\n"
+            "    return get_singleton(Allocator)\n"
+        )
+        errs_good = check_no_pre_seeding(ast.parse(code_good), "test.py")
+        self.assertEqual(len(errs_good), 0)
+
+    def test_state_poking_in_test_cases_rejected(self) -> None:
+        code_poking_assign = (
+            "import unittest\n"
+            "class TestTaskWorkerReal(unittest.TestCase):\n"
+            "    def test_poke(self) -> None:\n"
+            "        self.sm.state.queue_available = False\n"
+        )
+        errs = check_no_pre_seeding(ast.parse(code_poking_assign), "test.py")
+        self.assertTrue(any("PRE_LINT_NO_STATE_POKING" in e for e in errs))
+
+        code_poking_call = (
+            "import unittest\n"
+            "class TestTaskWorkerReal(unittest.TestCase):\n"
+            "    def test_poke(self) -> None:\n"
+            "        self.sm.state.queue_pending.append('task-1')\n"
+        )
+        errs_call = check_no_pre_seeding(ast.parse(code_poking_call), "test.py")
+        self.assertTrue(any("PRE_LINT_NO_STATE_POKING" in e for e in errs_call))
+
+        code_clean = (
+            "import unittest\n"
+            "class TestTaskWorkerReal(unittest.TestCase):\n"
+            "    def test_clean(self) -> None:\n"
+            "        self.checked.submit('task-1', 'alpha')\n"
+            "        self.checked.execute('task-1', 'alpha')\n"
+        )
+        errs_clean = check_no_pre_seeding(ast.parse(code_clean), "test.py")
+        self.assertEqual(len(errs_clean), 0)
+
+    def test_call_target_in_interface_rejected(self) -> None:
+        code_bad = (
+            "from pretense import StateMachine, transition, call_target, sut\n"
+            "class StreamReaderStateMachine(StateMachine[StreamReaderState]):\n"
+            "    @transition\n"
+            "    def read(self) -> str:\n"
+            "        target = sut(StreamReader)\n"
+            "        return call_target(target.read())\n"
+        )
+        errs = check_no_call_target_in_interface(ast.parse(code_bad), "stream_reader_pretense.py", is_interface=True)
+        self.assertTrue(any("PRE_LINT_NO_CALL_TARGET_IN_INTERFACE" in e for e in errs))
+
+        errs_impl = check_no_call_target_in_interface(ast.parse(code_bad), "stream_reader_impl_pretense.py", is_interface=False)
+        self.assertEqual(len(errs_impl), 0)
+
+    def test_interface_transition_coverage_missing_or_incomplete(self) -> None:
+        code_missing_suite = (
+            "from pretense import StateMachine, transition\n"
+            "class VaultStateMachine(StateMachine[VaultState]):\n"
+            "    @transition\n"
+            "    def deposit(self, amount: int) -> None:\n"
+            "        pass\n"
+        )
+        errs = check_interface_transition_coverage(ast.parse(code_missing_suite), "vault_pretense.py", is_interface=True)
+        self.assertTrue(any("PRE_LINT_INTERFACE_TRANSITION_COVERAGE" in e and "missing a fixed test suite" in e for e in errs))
+
+        code_incomplete = (
+            "import unittest\n"
+            "from pretense import StateMachine, transition\n"
+            "class VaultStateMachine(StateMachine[VaultState]):\n"
+            "    @transition\n"
+            "    def deposit(self, amount: int) -> None:\n"
+            "        pass\n"
+            "    @transition\n"
+            "    def withdraw(self, amount: int) -> None:\n"
+            "        pass\n"
+            "    @transition.seeding\n"
+            "    def seed_active(self, active: bool) -> None:\n"
+            "        pass\n"
+            "class TestVaultFake(unittest.TestCase):\n"
+            "    def test_only_deposit(self) -> None:\n"
+            "        self.fake.deposit(10)\n"
+        )
+        errs_inc = check_interface_transition_coverage(ast.parse(code_incomplete), "vault_pretense.py", is_interface=True)
+        self.assertTrue(any("transition 'withdraw'" in e for e in errs_inc))
+        self.assertTrue(any("transition 'seed_active'" in e for e in errs_inc))
+        self.assertTrue(all("Advice: Ensure its required conditions can be properly reached" in e for e in errs_inc))
+
+    def test_interface_transition_coverage_passing(self) -> None:
+        code_complete = (
+            "import unittest\n"
+            "from pretense import StateMachine, transition\n"
+            "class VaultStateMachine(StateMachine[VaultState]):\n"
+            "    @transition\n"
+            "    def deposit(self, amount: int) -> None:\n"
+            "        pass\n"
+            "    @transition\n"
+            "    def withdraw(self, amount: int) -> None:\n"
+            "        pass\n"
+            "    @transition.seeding\n"
+            "    def seed_active(self, active: bool) -> None:\n"
+            "        pass\n"
+            "class TestVaultFake(unittest.TestCase):\n"
+            "    def test_all(self) -> None:\n"
+            "        self.sm.seed_active(True)\n"
+            "        self.fake.deposit(10)\n"
+            "        self.fake.withdraw(5)\n"
+            "        _ = self.fake.total\n"
+        )
+        errs = check_interface_transition_coverage(ast.parse(code_complete), "vault_pretense.py", is_interface=True)
+        self.assertEqual(len(errs), 0)
+
+    def test_interface_scaffold_generation(self) -> None:
+        with tempfile.NamedTemporaryFile("w", suffix=".pyi", delete=False) as f:
+            f.write(
+                "class KeyVault:\n"
+                "    def store_key(self, key_id: str, secret: str) -> None: ...\n"
+                "    def retrieve_key(self, key_id: str) -> str: ...\n"
+                "    @property\n"
+                "    def key_count(self) -> int: ...\n"
+            )
+            pyi_path = f.name
+        try:
+            scaffold = generate_pretense_scaffold(
+                pyi_path=pyi_path,
+                stem="key_vault_pretense",
+                impl_stem="key_vault",
+                lib_pkg="vault_pkg",
+                is_interface=True,
+            )
+            tree = ast.parse(scaffold)
+            self.assertIn("import unittest", scaffold)
+            self.assertIn("class TestKeyVaultFake(unittest.TestCase):", scaffold)
+            self.assertIn("def test_transitions_coverage(self) -> None:", scaffold)
+            self.assertIn("self.sm.seed_initial()", scaffold)
+            self.assertIn("self.fake.store_key(", scaffold)
+            self.assertIn("self.fake.retrieve_key(", scaffold)
+            self.assertIn("self.fake.key_count", scaffold)
+
+            # Interface transition coverage check must pass cleanly on scaffold
+            cov_errs = check_interface_transition_coverage(tree, "key_vault_pretense.py", is_interface=True)
+            self.assertEqual(cov_errs, [])
+
+            # State poking check must not flag seed_initial in StateMachine
+            poke_errs = check_no_pre_seeding(tree, "key_vault_pretense.py")
+            self.assertEqual(poke_errs, [])
+        finally:
+            os.unlink(pyi_path)
+
+    def test_pretense_top_level_probe_rejected(self) -> None:
+        source = (
+            "from __future__ import annotations\n"
+            "import unittest\n"
+            "_PROBE_RESULT10 = 'propagated'\n"
+            "try:\n"
+            "    raise RuntimeError('PROBE')\n"
+            "except Exception:\n"
+            "    pass\n"
+        )
+        tree = ast.parse(source)
+        errors = check_no_top_level_probes("test_pretense.py", tree=tree, error_code="PRE_LINT_NO_TOP_LEVEL_PROBE")
+        self.assertTrue(len(errors) >= 2)
+        self.assertTrue(any("PRE_LINT_NO_TOP_LEVEL_PROBE" in e for e in errors))
+        self.assertTrue(any("You are not allowed to execute the test suite or run ad-hoc probes" in e for e in errors))
 
 
 if __name__ == "__main__":

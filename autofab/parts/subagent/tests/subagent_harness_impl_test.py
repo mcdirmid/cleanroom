@@ -17,7 +17,25 @@ from autofab.parts.subagent.lib import (
     subagent_harness,
     subagent_harness_impl,
 )
+from autofab.parts.workspace.lib import role_registry
 from autofab.parts.workspace_cli.lib import work
+
+
+class FakeWorkspaceRegistry:
+    tier = agent_session.agent_session
+
+    def resolve_role_definition(self, role_name: str, repo_root: Optional[str] = None) -> role_registry.RoleDefinition:
+        clean = role_name.split(":")[-1].strip().lower()
+        is_aud = "qa" in clean or "coverage" in clean
+        return role_registry.RoleDefinition(
+            role_name=clean,
+            guide_path=f"guides/{clean}.md",
+            writable_file_patterns=[] if is_aud else ["parts/*"],
+            readonly_file_patterns=[],
+            feedback_role_deps=["lib"] if is_aud else [],
+            audit_tag=f"{clean.upper()}_AUDIT" if is_aud else "",
+            src_pattern="" if is_aud else "{unit_dir}/lib/{unit_name}.py",
+        )
 
 
 class FakeWorkspaceWorkManager:
@@ -58,30 +76,54 @@ class SubagentHarnessImplTest(unittest.TestCase):
             keys=[work.WorkspaceWorkManager],
             tier=agent_session.agent_session,
         )
+        self.fake_reg = FakeWorkspaceRegistry()
+        self.registry.register_instance(
+            self.fake_reg,
+            keys=[role_registry.WorkspaceRegistry],
+            tier=agent_session.agent_session,
+        )
 
     def tearDown(self) -> None:
         shutil.rmtree(self.test_dir, ignore_errors=True)
 
     def test_formatting_instructional_task_prompts(self) -> None:
         """Scenario 1: Formats instructional task prompt detailing role, scope, targets, and commands."""
-        adapter = subagent_harness_impl.CommandHarnessAdapter(simulation_mode=True)
-        dispatch = subagent_coordinator.RoleDispatch(
-            role_name="lib",
-            workspace_dir=self.test_dir,
-            dir_scope="pkg_a",
-            ready_targets=("lib/module.py",),
-        )
-        prompt = adapter.format_task_prompt(dispatch)
-        self.assertIn("Role: lib", prompt)
-        self.assertIn("Scope: pkg_a", prompt)
-        self.assertIn("Workspace: " + self.test_dir, prompt)
-        self.assertIn("- lib/module.py", prompt)
-        self.assertIn("check_files", prompt)
-        self.assertIn("submit", prompt)
-        self.assertIn("blame", prompt)
-        self.assertIn("fail", prompt)
-        self.assertIn("DO NOT create scratch tests", prompt)
-        self.assertIn("DO NOT execute inline test scripts", prompt)
+        with enter_phase(agent_session.agent_session, registry=self.registry):
+            adapter = subagent_harness_impl.CommandHarnessAdapter(simulation_mode=True)
+            dispatch = subagent_coordinator.RoleDispatch(
+                role_name="lib",
+                workspace_dir=self.test_dir,
+                dir_scope="pkg_a",
+                ready_targets=("lib/module.py",),
+            )
+            prompt = adapter.format_task_prompt(dispatch)
+            self.assertIn("Role: lib", prompt)
+            self.assertIn("Scope: pkg_a", prompt)
+            self.assertIn("Workspace: " + self.test_dir, prompt)
+            self.assertIn("- lib/module.py", prompt)
+            self.assertIn("check_files", prompt)
+            self.assertIn("submit", prompt)
+            self.assertIn("blame", prompt)
+            self.assertIn("fail", prompt)
+            self.assertIn("DO NOT create scratch tests", prompt)
+            self.assertIn("DO NOT execute inline test scripts", prompt)
+
+    def test_formatting_task_prompt_auditor_role(self) -> None:
+        """Scenario 9: Formats instructional task prompt for auditor roles directing bin/get_work and auto-submit."""
+        with enter_phase(agent_session.agent_session, registry=self.registry):
+            adapter = subagent_harness_impl.CommandHarnessAdapter(simulation_mode=True)
+            dispatch = subagent_coordinator.RoleDispatch(
+                role_name="qa",
+                workspace_dir=self.test_dir,
+                dir_scope="pkg_a",
+                ready_targets=("lib/module.py",),
+            )
+            prompt = adapter.format_task_prompt(dispatch)
+            self.assertIn("Role: qa", prompt)
+            self.assertIn("You are an AUDITOR, not an author", prompt)
+            self.assertIn("Run `bin/get_work` immediately", prompt)
+            self.assertIn("ZERO further tool calls", prompt)
+            self.assertIn("bin/blame", prompt)
 
     def test_detecting_submitted_files_from_pending_work_diffs(self) -> None:
         """Scenario 2: Detects submitted targets by diffing pre-execution and post-execution pending targets."""

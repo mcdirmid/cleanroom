@@ -13,7 +13,7 @@ The subagent_harness_impl implementation component realizes the command harness 
 
 ### Contracts
 
-- The realization constructs instructional task prompts detailing role, scope, targets, check-files verification, constraints against scratch tests and inline test scripts, and submit or blame actions. [construct_role_workflow_prompt]
+- The realization constructs instructional task prompts detailing role, scope, targets, tailoring instructions between auditor roles (directing bin/get_work and round conclusion upon auto-submit) and authoring roles (directing target editing, bin/check_files verification, and bin/submit), and enforcing constraints against scratch tests and inline test scripts. [construct_role_workflow_prompt]
 - The realization captures initial pending targets prior to process execution. [capture_pre_execution_pending_work]
 - The realization executes the configured subagent command template with workspace directory and prompt substitutions, configuring context token compaction limits in the environment. [execute_subagent_command_template]
 - The realization monitors subagent process lifecycle, enforcing configured timeout limits when specified. [monitor_subagent_process_lifecycle]

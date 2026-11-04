@@ -32,6 +32,7 @@ def _load_role_definitions() -> Dict[str, Any]:
     import tomllib
     roles_fnames = app_info.get_roles_filenames()
     config_fnames = app_info.get_config_filenames()
+    merged_roles: Dict[str, Any] = {}
     for root in search_roots:
         for fname in roles_fnames:
             cand = os.path.join(root, fname)
@@ -40,7 +41,9 @@ def _load_role_definitions() -> Dict[str, Any]:
                     with open(cand, "rb") as f:
                         roles = tomllib.load(f).get("roles", {})
                         if roles:
-                            return roles
+                            for k, v in roles.items():
+                                if k not in merged_roles:
+                                    merged_roles[k] = v
                 except Exception:
                     pass
         for cname in config_fnames:
@@ -58,7 +61,9 @@ def _load_role_definitions() -> Dict[str, Any]:
                                 with open(r_cand, "rb") as f:
                                     roles = tomllib.load(f).get("roles", {})
                                     if roles:
-                                        return roles
+                                        for k, v in roles.items():
+                                            if k not in merged_roles:
+                                                merged_roles[k] = v
                 except Exception:
                     pass
         try:
@@ -72,12 +77,14 @@ def _load_role_definitions() -> Dict[str, Any]:
                                 with open(sub_cand, "rb") as f:
                                     roles = tomllib.load(f).get("roles", {})
                                     if roles:
-                                        return roles
+                                        for k, v in roles.items():
+                                            if k not in merged_roles:
+                                                merged_roles[k] = v
                             except Exception:
                                 pass
         except Exception:
             pass
-    return {}
+    return merged_roles
 
 
 # Contract: __orphan__ - MUST evaluate whether a role name denotes an auditor role.

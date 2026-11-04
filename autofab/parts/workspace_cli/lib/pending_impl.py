@@ -192,9 +192,22 @@ class WorkspacePendingManager(pending.WorkspacePendingManager):
     # Contract: Records pending target paths into local buffer file.
     def set_pending_work(self, workspace_dir: str, targets: Sequence[str]) -> None:
         p = os.path.join(workspace_dir, PENDING_WORK_FILE)
+        marker = os.path.join(app_info.resolve_state_dir(workspace_dir), ".no_pending_work")
         if not targets:
             self.clear_pending_work(workspace_dir)
+            try:
+                with open(marker, "w", encoding="utf-8") as f:
+                    f.write("0\n")
+            except OSError:
+                pass
             return
+
+        if os.path.isfile(marker):
+            try:
+                os.remove(marker)
+            except OSError:
+                pass
+
         os.makedirs(workspace_dir, exist_ok=True)
         if os.path.exists(p):
             try:

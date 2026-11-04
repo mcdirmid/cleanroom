@@ -81,7 +81,7 @@ def _format_agents_md(
         "DO NOT EDIT METADATA headers. Use only tools to update metadata.\n\n"
         "PERMITTED TOOLS & SHELL COMMANDS:\n"
         "You are fully permitted to run read-only shell utilities (cat, grep, find, head, tail, sed, etc.) or native harness tools strictly WITHIN this workspace directory (.) to inspect files and complete your tasks.\n"
-        "Executing ad-hoc tests, runtime assertions, or inline Python scripts (including via python3 -c, python -c, or stdin heredocs python3 - <<'EOF') is strictly prohibited; target verification is exclusively performed via bin/check_files.\n"
+        "Executing ad-hoc tests, runtime assertions, or inline Python scripts (including via python3 -c, python -c, or stdin heredocs python3 - <<'EOF') is strictly prohibited; target verification is exclusively performed via bin/check_files. You are not allowed to execute the test suite or run ad-hoc probes; submit work with bin/submit so a downstream QA auditor can execute the test suite on your behalf.\n"
         f"{git_rule}"
         f"{workflow_binaries}"
         "MANDATORY EXECUTION RULES:\n"

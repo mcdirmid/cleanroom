@@ -40,6 +40,7 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
         role_name: str,
         dir_scope: str,
         silent: bool = False,
+        delete_missing: bool = True,
     ) -> int:
         """Pulls updated upstream contracts and source files into role workspace.
 

@@ -185,6 +185,11 @@ class LRUImplPseudoStateMachine(LRUStateMachine):
             assert len(target._dict) == old_count
         else:
             assert len(target._dict) == old_count + 1
+        if key not in self.state.items and len(self.state.items) >= self.state.capacity:
+            if self.state.items:
+                self.state.items.popitem(last=False)
+        self.state.items[key] = value
+        self.state.items.move_to_end(key)
         return ret
 
 

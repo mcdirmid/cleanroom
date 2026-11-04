@@ -1939,6 +1939,114 @@ def check_no_sys_modules_tampering(
     return errors
 
 
+def check_no_top_level_probes(
+    file_path: str,
+    tree: Optional[ast.AST] = None,
+    error_code: str = "LINT_NO_TOP_LEVEL_PROBE",
+) -> list[str]:
+    """Check that test and pretense modules do not contain ad-hoc test executions or top-level probe statements."""
+    errors: list[str] = []
+    if not os.path.exists(file_path) and tree is None:
+        return errors
+
+    if tree is None:
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                tree = ast.parse(f.read(), filename=file_path)
+        except (SyntaxError, OSError):
+            return errors
+
+    if not isinstance(tree, ast.Module):
+        return errors
+
+    allowed_types: tuple[type, ...] = (
+        ast.Import,
+        ast.ImportFrom,
+        ast.ClassDef,
+        ast.FunctionDef,
+        ast.AsyncFunctionDef,
+        ast.Assign,
+        ast.AnnAssign,
+    )
+    if hasattr(ast, "TypeAlias"):
+        allowed_types = allowed_types + (ast.TypeAlias,)  # type: ignore
+
+    for node in tree.body:
+        lineno = getattr(node, "lineno", 1)
+        # Allow module docstring or top-level string constant
+        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+            continue
+        # Allow sys.path modifications or basic logging setup
+        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
+            func = node.value.func
+            if isinstance(func, ast.Attribute) and func.attr in ("insert", "append", "basicConfig"):
+                continue
+        # Allow `if __name__ == "__main__":` or `if TYPE_CHECKING:`
+        if isinstance(node, ast.If):
+            test = node.test
+            if isinstance(test, ast.Compare):
+                if isinstance(test.left, ast.Name) and test.left.id == "__name__":
+                    continue
+            elif isinstance(test, (ast.Name, ast.Attribute)):
+                name = getattr(test, "id", None) or getattr(test, "attr", None)
+                if name == "TYPE_CHECKING":
+                    continue
+
+        # Check for probe variable names in assignments
+        if isinstance(node, (ast.Assign, ast.AnnAssign)):
+            target_names: list[str] = []
+            if isinstance(node, ast.Assign):
+                for t in node.targets:
+                    if isinstance(t, ast.Name):
+                        target_names.append(t.id)
+            elif isinstance(node, ast.AnnAssign):
+                if isinstance(node.target, ast.Name):
+                    target_names.append(node.target.id)
+            has_probe = False
+            for tname in target_names:
+                if tname.upper().startswith(("_PROBE", "PROBE")) or "probe" in tname.lower():
+                    errors.append(
+                        f"{file_path}:{lineno}: error: Top-level probe variable '{tname}' is prohibited. "
+                        "You are not allowed to execute the test suite or run ad-hoc probes. "
+                        "Submit work with 'bin/submit' so a downstream QA auditor can execute the test suite on your behalf. "
+                        f"({error_code})"
+                    )
+                    has_probe = True
+            if has_probe:
+                continue
+            continue
+
+        if isinstance(node, ast.ClassDef):
+            if node.name.upper().startswith(("_PROBE", "PROBE")) or "probe" in node.name.lower():
+                errors.append(
+                    f"{file_path}:{lineno}: error: Top-level probe class '{node.name}' is prohibited. "
+                    "You are not allowed to execute the test suite or run ad-hoc probes. "
+                    "Submit work with 'bin/submit' so a downstream QA auditor can execute the test suite on your behalf. "
+                    f"({error_code})"
+                )
+            continue
+
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if node.name.upper().startswith(("_PROBE", "PROBE")) or "probe" in node.name.lower():
+                errors.append(
+                    f"{file_path}:{lineno}: error: Top-level probe function '{node.name}' is prohibited. "
+                    "You are not allowed to execute the test suite or run ad-hoc probes. "
+                    "Submit work with 'bin/submit' so a downstream QA auditor can execute the test suite on your behalf. "
+                    f"({error_code})"
+                )
+            continue
+
+        if not isinstance(node, allowed_types):
+            errors.append(
+                f"{file_path}:{lineno}: error: Top-level statement '{type(node).__name__}' is prohibited. "
+                "You are not allowed to execute the test suite or run ad-hoc probes. "
+                "Submit work with 'bin/submit' so a downstream QA auditor can execute the test suite on your behalf. "
+                f"({error_code})"
+            )
+
+    return errors
+
+
 def check_test_imports(lib_pkg: str, file_path: str) -> list[str]:
     """Check that imports in a test module from the lib package use standard package syntax."""
     errors: list[str] = []
@@ -2428,37 +2536,23 @@ def check_test_dry_run(lib_pkg: str, module_path: str) -> list[str]:
         except OSError:
             pass
 
+    if repo_root and os.path.isdir(repo_root):
+        repo_abs = os.path.abspath(repo_root)
+        if repo_abs not in prioritized_dirs:
+            prioritized_dirs.append(repo_abs)
+
     dirs_repr = repr([os.path.abspath(d) for d in prioritized_dirs])
-    if is_role_ws:
-        repo_abs = os.path.abspath(repo_root) if repo_root else ""
-        repo_filter = (
-            f"and ('site-packages' in p or '.venv' in p or (os.path.abspath(p) != {repr(repo_abs)} and not os.path.abspath(p).startswith({repr(repo_abs)} + os.sep)))"
-            if repo_abs
-            else ""
-        )
-        cmd = [
-            sys.executable,
-            "-c",
-            (
-                f"import sys, os, unittest; "
-                f"sys.path = {dirs_repr} + [p for p in sys.path if p not in {dirs_repr} {repo_filter}]; "
-                f"import importlib; "
-                f"mod = importlib.import_module('{mod_stem}'); "
-                f"suite = unittest.defaultTestLoader.loadTestsFromModule(mod)"
-            ),
-        ]
-    else:
-        cmd = [
-            sys.executable,
-            "-c",
-            (
-                f"import sys, os, unittest; "
-                f"sys.path = {dirs_repr} + [p for p in sys.path if p not in {dirs_repr}]; "
-                f"import importlib; "
-                f"mod = importlib.import_module('{mod_stem}'); "
-                f"suite = unittest.defaultTestLoader.loadTestsFromModule(mod)"
-            ),
-        ]
+    cmd = [
+        sys.executable,
+        "-c",
+        (
+            f"import sys, os, unittest; "
+            f"sys.path = {dirs_repr} + [p for p in sys.path if p not in {dirs_repr}]; "
+            f"import importlib; "
+            f"mod = importlib.import_module('{mod_stem}'); "
+            f"suite = unittest.defaultTestLoader.loadTestsFromModule(mod)"
+        ),
+    ]
     try:
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
         if res.returncode != 0:

@@ -23,6 +23,7 @@ from autofab.parts.workspace_cli.lib import work
 from autofab.parts.workspace.lib import (
     provision,
     role_registry,
+    sync,
 )
 
 
@@ -59,6 +60,39 @@ class FakeWorkspaceProvisioner:
             role_definition=r_def,
             directory_scope=dir_scope,
         )
+
+
+class FakeWorkspaceSynchronizer:
+    """Test double implementing WorkspaceSynchronizer protocol."""
+
+    tier = agent_session.agent_session
+
+    def __init__(self) -> None:
+        self.pulled: List[Tuple[str, str, str]] = []
+        self.refreshed: List[Tuple[str, str, str]] = []
+
+    def pull(
+        self,
+        workspace_dir: str,
+        main_root: str,
+        role_name: str,
+        dir_scope: str = "",
+        silent: bool = False,
+        delete_missing: bool = True,
+    ) -> int:
+        self.pulled.append((workspace_dir, main_root, role_name))
+        return 1
+
+    def refresh_system_files(
+        self,
+        workspace_dir: str,
+        main_root: str,
+        role_name: str,
+        dir_scope: str = "",
+        silent: bool = False,
+    ) -> int:
+        self.refreshed.append((workspace_dir, main_root, role_name))
+        return 1
 
 
 class FakeWorkspaceRegistry:
@@ -1305,8 +1339,8 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
             self.assertEqual(summary.blamed_count, 2)
             self.assertEqual(summary.submitted_count, 1)
 
-    def test_orchestrate_trips_circuit_breaker_on_third_restart_failure(self) -> None:
-        """Scenario 17: Halting orchestration upon exceeding 3 restarts from repeated blame."""
+    def test_orchestrate_trips_circuit_breaker_on_tenth_restart_failure(self) -> None:
+        """Scenario 17: Halting orchestration upon exceeding 10 restarts from repeated blame."""
         fake_reg = FakeWorkspaceRegistry([self.role_qa])
         fake_work = FakeWorkspaceWorkManager({
             "qa": (([_make_item("qa/core.md", "qa")], ())),
@@ -1328,7 +1362,299 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
             coord = scope.get_singleton(subagent_coordinator.SubagentCoordinator)
             summary = coord.orchestrate("pkg_a", harness, poll_interval=0.001)
             self.assertFalse(summary.is_converged)
-            self.assertIn("delivered identical blame repeatedly and exceeded max 3 restarts", summary.status_message)
+            self.assertIn("delivered identical blame repeatedly and exceeded max 10 restarts", summary.status_message)
+
+    def test_orchestrate_resets_restart_counter_on_successful_submission(self) -> None:
+        """Verifies that successful target submission resets the subagent restart counter."""
+        fake_reg = FakeWorkspaceRegistry([self.role_qa])
+        fake_work = FakeWorkspaceWorkManager({
+            "qa": (([_make_item("qa/core.md", "qa")], ())),
+        })
+        self.registry.register_instance(fake_reg, keys=[role_registry.WorkspaceRegistry], tier=agent_session.agent_session)
+        self.registry.register_instance(fake_work, keys=[work.WorkspaceWorkManager], tier=agent_session.agent_session)
+
+        # Sequence: blame, blame (triggers restart 1), submit (resets counter to 0), blame, blame (triggers restart 1 again)
+        responses = [
+            subagent_coordinator.RoleRoundResult(role="qa", status="blamed", blamed_targets=("lib/core.py",)),
+            subagent_coordinator.RoleRoundResult(role="qa", status="blamed", blamed_targets=("lib/core.py",)),
+            subagent_coordinator.RoleRoundResult(role="qa", status="clean", submitted_targets=("qa/core.md",)),
+            subagent_coordinator.RoleRoundResult(role="qa", status="blamed", blamed_targets=("lib/core.py",)),
+            subagent_coordinator.RoleRoundResult(role="qa", status="blamed", blamed_targets=("lib/core.py",)),
+        ]
+
+        class SequenceHarness(FakeHarnessAdapter):
+            def __init__(self) -> None:
+                super().__init__()
+                self.restarted_count = 0
+
+            def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleRoundResult]:
+                if responses:
+                    return responses.pop(0)
+                return subagent_coordinator.RoleRoundResult(role="qa", status="clean")
+
+        harness = SequenceHarness()
+
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            coord = scope.get_singleton(subagent_coordinator.SubagentCoordinator)
+            import io
+            from unittest.mock import patch
+            with patch("sys.stdout", new_callable=io.StringIO) as mock_out:
+                summary = coord.orchestrate("pkg_a", harness, poll_interval=0.001, max_waves=10)
+                out = mock_out.getvalue()
+            # After submit, the next restart should be restart 1/10, not 2/10
+            self.assertIn("restart 1/10", out)
+            self.assertNotIn("restart 2/10", out)
+
+    def test_orchestrate_accumulates_restarts_and_injects_advisory_on_restart(self) -> None:
+        """Verifies that distinct blame signatures do NOT reset restart counters (preventing infinite loops) and that circuit breaker advisories are injected."""
+        fake_reg = FakeWorkspaceRegistry([self.role_qa])
+        fake_work = FakeWorkspaceWorkManager({
+            "qa": (([_make_item("qa/core.md", "qa")], ())),
+        })
+        self.registry.register_instance(fake_reg, keys=[role_registry.WorkspaceRegistry], tier=agent_session.agent_session)
+        self.registry.register_instance(fake_work, keys=[work.WorkspaceWorkManager], tier=agent_session.agent_session)
+
+        # Sequence:
+        # blame lib/core_a.py twice (triggers restart 1/10)
+        # next dispatch receives advisory in task_prompt
+        # blame lib/core_b.py twice (triggers restart 2/10, NOT reset to 1/10!)
+        responses = [
+            subagent_coordinator.RoleRoundResult(role="qa", status="blamed", blamed_targets=("lib/core_a.py",)),
+            subagent_coordinator.RoleRoundResult(role="qa", status="blamed", blamed_targets=("lib/core_a.py",)),
+            subagent_coordinator.RoleRoundResult(role="qa", status="blamed", blamed_targets=("lib/core_b.py",)),
+            subagent_coordinator.RoleRoundResult(role="qa", status="blamed", blamed_targets=("lib/core_b.py",)),
+        ]
+        dispatched_prompts: List[str] = []
+
+        class DistinctBlameHarness(FakeHarnessAdapter):
+            def dispatch_role(self, dispatch: subagent_coordinator.RoleDispatch) -> str:
+                dispatched_prompts.append(dispatch.task_prompt or "")
+                return super().dispatch_role(dispatch)
+
+            def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleRoundResult]:
+                if responses:
+                    return responses.pop(0)
+                return subagent_coordinator.RoleRoundResult(role="qa", status="clean")
+
+        harness = DistinctBlameHarness()
+
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            coord = scope.get_singleton(subagent_coordinator.SubagentCoordinator)
+            import io
+            from unittest.mock import patch
+            with patch("sys.stdout", new_callable=io.StringIO) as mock_out:
+                summary = coord.orchestrate("pkg_a", harness, poll_interval=0.001, max_waves=10)
+                out = mock_out.getvalue()
+            # Restarts must accumulate strictly to prevent degenerate agents from infinite loops
+            self.assertIn("restart 1/10", out)
+            self.assertIn("restart 2/10", out)
+            # Circuit breaker advisory must be injected into task prompt
+            self.assertTrue(any("CIRCUIT BREAKER ADVISORY" in p for p in dispatched_prompts))
+
+    def test_orchestrate_resets_restart_counter_when_author_submits_blamed_target(self) -> None:
+        """Verifies that when an author submits a blamed target, other roles' consecutive blame tracking is reset."""
+        fake_reg = FakeWorkspaceRegistry([self.impl_role_lib, self.role_qa])
+        fake_work = FakeWorkspaceWorkManager({
+            "lib": (((), ())),
+            "qa": (([_make_item("qa/core.md", "qa")], ())),
+        })
+        self.registry.register_instance(fake_reg, keys=[role_registry.WorkspaceRegistry], tier=agent_session.agent_session)
+        self.registry.register_instance(fake_work, keys=[work.WorkspaceWorkManager], tier=agent_session.agent_session)
+
+        # Sequence:
+        # 1. qa blames lib/core.py (consecutive = 1), unblocking lib
+        # 2. lib submits lib/core.py (resets qa's blame state on lib/core.py)
+        # 3. qa blames lib/core.py again (first blame on the newly submitted revision: consecutive = 1, NOT 2)
+        # 4. qa blames lib/core.py again (consecutive = 2 -> triggers restart 1/10)
+        qa_responses = [
+            subagent_coordinator.RoleRoundResult(role="qa", status="blamed", blamed_targets=("lib/core.py",)),
+            subagent_coordinator.RoleRoundResult(role="qa", status="blamed", blamed_targets=("lib/core.py",)),
+            subagent_coordinator.RoleRoundResult(role="qa", status="blamed", blamed_targets=("lib/core.py",)),
+        ]
+        lib_responses = [
+            subagent_coordinator.RoleRoundResult(role="lib", status="clean", submitted_targets=("lib/core.py",)),
+        ]
+
+        class MultiRoleHarness(FakeHarnessAdapter):
+            def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleRoundResult]:
+                if "qa" in task_handle and qa_responses:
+                    res = qa_responses.pop(0)
+                    if res.status == "blamed" and lib_responses:
+                        fake_work.queue_data["lib"] = (([_make_item("lib/core.py", "lib")], ()))
+                    return res
+                if "lib" in task_handle and lib_responses:
+                    res = lib_responses.pop(0)
+                    fake_work.queue_data["lib"] = ((), ())
+                    return res
+                return subagent_coordinator.RoleRoundResult(role="qa", status="clean")
+
+        harness = MultiRoleHarness()
+
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            coord = scope.get_singleton(subagent_coordinator.SubagentCoordinator)
+            import io
+            from unittest.mock import patch
+            with patch("sys.stdout", new_callable=io.StringIO) as mock_out:
+                summary = coord.orchestrate("pkg_a", harness, poll_interval=0.001, max_waves=10)
+                out = mock_out.getvalue()
+            # Restart should occur only after the second blame post-submission (restart 1/10)
+            self.assertIn("restart 1/10", out)
+            self.assertNotIn("restart 2/10", out)
+
+    def test_orchestrate_withholds_downstream_role_while_upstream_worker_active(self) -> None:
+        """Requirement: MUST withhold downstream roles from concurrent dispatch while upstream dependency workers are actively executing."""
+        fake_reg = FakeWorkspaceRegistry([self.impl_role_lib, self.role_qa])
+        fake_work = FakeWorkspaceWorkManager({
+            "lib": (([_make_item("lib/core.py", "lib")], ())),
+            "qa": (([_make_item("qa/core.md", "qa")], ())),
+        })
+        self.registry.register_instance(fake_reg, keys=[role_registry.WorkspaceRegistry], tier=agent_session.agent_session)
+        self.registry.register_instance(fake_work, keys=[work.WorkspaceWorkManager], tier=agent_session.agent_session)
+
+        dispatched_roles: list[str] = []
+        poll_calls = 0
+
+        class ActiveUpstreamHarness(FakeHarnessAdapter):
+            def dispatch_role(self, dispatch: subagent_coordinator.RoleDispatch) -> str:
+                dispatched_roles.append(dispatch.role_name)
+                return f"h_{dispatch.role_name}"
+
+            def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleRoundResult]:
+                nonlocal poll_calls
+                poll_calls += 1
+                if "lib" in task_handle:
+                    if poll_calls < 3:
+                        # lib is still actively working
+                        return None
+                    # lib finishes cleanly
+                    fake_work.queue_data["lib"] = ((), ())
+                    return subagent_coordinator.RoleRoundResult(role="lib", status="clean", submitted_targets=("lib/core.py",))
+                if "qa" in task_handle:
+                    fake_work.queue_data["qa"] = ((), ())
+                    return subagent_coordinator.RoleRoundResult(role="qa", status="clean", submitted_targets=("qa/core.md",))
+                return None
+
+        harness = ActiveUpstreamHarness()
+
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            coord = scope.get_singleton(subagent_coordinator.SubagentCoordinator)
+            summary = coord.orchestrate("pkg_a", harness, poll_interval=0.001, max_waves=10)
+            self.assertTrue(summary.is_converged)
+            # lib MUST be dispatched before qa is dispatched
+            self.assertEqual(dispatched_roles[0], "lib")
+            self.assertEqual(dispatched_roles[1], "qa")
+
+    def test_orchestrate_withholds_downstream_role_when_upstream_also_ready_in_same_cycle(self) -> None:
+        """Requirement: MUST withhold downstream roles when upstream dependencies are also ready in candidate queue."""
+        fake_reg = FakeWorkspaceRegistry([self.impl_role_lib, self.role_qa])
+        fake_work = FakeWorkspaceWorkManager({
+            "lib": (([_make_item("lib/core.py", "lib")], ())),
+            "qa": (([_make_item("qa/core.md", "qa")], ())),
+        })
+        self.registry.register_instance(fake_reg, keys=[role_registry.WorkspaceRegistry], tier=agent_session.agent_session)
+        self.registry.register_instance(fake_work, keys=[work.WorkspaceWorkManager], tier=agent_session.agent_session)
+
+        dispatched_waves: list[list[str]] = []
+        current_wave: list[str] = []
+
+        class WaveTrackingHarness(FakeHarnessAdapter):
+            def dispatch_role(self, dispatch: subagent_coordinator.RoleDispatch) -> str:
+                current_wave.append(dispatch.role_name)
+                return f"h_{dispatch.role_name}"
+
+            def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleRoundResult]:
+                if current_wave:
+                    dispatched_waves.append(list(current_wave))
+                    current_wave.clear()
+                if "lib" in task_handle:
+                    fake_work.queue_data["lib"] = ((), ())
+                    return subagent_coordinator.RoleRoundResult(role="lib", status="clean", submitted_targets=("lib/core.py",))
+                if "qa" in task_handle:
+                    fake_work.queue_data["qa"] = ((), ())
+                    return subagent_coordinator.RoleRoundResult(role="qa", status="clean", submitted_targets=("qa/core.md",))
+                return None
+
+        harness = WaveTrackingHarness()
+
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            coord = scope.get_singleton(subagent_coordinator.SubagentCoordinator)
+            summary = coord.orchestrate("pkg_a", harness, poll_interval=0.001, max_waves=10)
+            self.assertTrue(summary.is_converged)
+            # In wave 1, only lib should have been dispatched; qa must have been withheld
+            self.assertEqual(dispatched_waves[0], ["lib"])
+            # In wave 2, qa is dispatched after lib completed
+            self.assertEqual(dispatched_waves[1], ["qa"])
+
+
+
+    def test_orchestrator_pulls_and_seeds_pending_work_on_dispatch(self) -> None:
+        """Scenario: Coordinator pulls files into preexisting workspace and seeds pending targets."""
+        tmp_dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp_dir, ignore_errors=True)
+        fake_reg = FakeWorkspaceRegistry([self.role_qa], base_dir=tmp_dir)
+        fake_work = FakeWorkspaceWorkManager({
+            "qa": (([_make_item("qa/core.md", "qa")], ())),
+        })
+        fake_sync = FakeWorkspaceSynchronizer()
+        self.registry.register_instance(fake_reg, keys=[role_registry.WorkspaceRegistry], tier=agent_session.agent_session)
+        self.registry.register_instance(fake_work, keys=[work.WorkspaceWorkManager], tier=agent_session.agent_session)
+        self.registry.register_instance(fake_sync, keys=[sync.WorkspaceSynchronizer], tier=agent_session.agent_session)
+
+        class ProvisioningFakeProvisioner(FakeWorkspaceProvisioner):
+            def commission(
+                self,
+                role_name: str,
+                dir_scope: str,
+                repo_root: Optional[str] = None,
+                custom_dest: Optional[str] = None,
+                reset: bool = False,
+                model: Optional[str] = None,
+                **kwargs: Any,
+            ) -> role_registry.WorkspaceDescriptor:
+                desc = super().commission(
+                    role_name,
+                    dir_scope,
+                    repo_root=repo_root,
+                    custom_dest=custom_dest,
+                    reset=reset,
+                    model=model,
+                    **kwargs,
+                )
+                target_dir = fake_reg.compute_workspace_dir(
+                    role_name,
+                    dir_scope=dir_scope,
+                    repo_root=repo_root,
+                    custom_dest=custom_dest,
+                )
+                os.makedirs(os.path.join(target_dir, "bin"), exist_ok=True)
+                return desc
+
+        self.registry.register_instance(
+            ProvisioningFakeProvisioner(),
+            keys=[provision.WorkspaceProvisioner],
+            tier=agent_session.agent_session,
+        )
+
+        ws_dir = fake_reg.compute_workspace_dir("qa", dir_scope="pkg_a", repo_root=tmp_dir)
+
+        class SinglePassHarness(FakeHarnessAdapter):
+            def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleRoundResult]:
+                fake_work.queue_data["qa"] = ((), ())
+                return subagent_coordinator.RoleRoundResult(
+                    role="qa",
+                    status="clean",
+                    submitted_targets=("qa/core.md",),
+                )
+
+        harness = SinglePassHarness()
+
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            coord = scope.get_singleton(subagent_coordinator.SubagentCoordinator)
+            summary = coord.orchestrate("pkg_a", harness, poll_interval=0.001, repo_root=tmp_dir)
+            self.assertTrue(summary.is_converged)
+            self.assertTrue(len(fake_sync.pulled) > 0)
+            self.assertIn(ws_dir, fake_work.pending)
+            self.assertEqual(fake_work.pending[ws_dir], ["qa/core.md"])
 
 
 if __name__ == "__main__":

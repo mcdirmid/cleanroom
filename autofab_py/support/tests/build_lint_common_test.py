@@ -13,6 +13,7 @@ from autofab_py.support.lib.build_lint_common import (
     check_no_frozen_exceptions,
     check_no_private_imports,
     check_no_sys_modules_tampering,
+    check_no_top_level_probes,
     check_syntax,
     check_tautological_assertions,
     check_type_ignore,
@@ -655,6 +656,59 @@ class BuildLintCommonNoErrorTestingTest(unittest.TestCase):
         finally:
             if os.path.exists(temp_path):
                 os.remove(temp_path)
+
+
+class BuildLintCommonTopLevelProbesTest(unittest.TestCase):
+    def test_valid_module_passes(self) -> None:
+        source = (
+            '"""Module docstring."""\n'
+            "import unittest\n"
+            "from typing import Optional\n"
+            "MY_CONST = 42\n"
+            "class MyTest(unittest.TestCase):\n"
+            "    def test_foo(self) -> None:\n"
+            "        pass\n"
+            "if __name__ == '__main__':\n"
+            "    unittest.main()\n"
+        )
+        tree = ast.parse(source)
+        errors = check_no_top_level_probes("test.py", tree=tree)
+        self.assertEqual(errors, [])
+
+    def test_top_level_try_fails(self) -> None:
+        source = (
+            "import unittest\n"
+            "try:\n"
+            "    x = 1\n"
+            "except Exception:\n"
+            "    pass\n"
+        )
+        tree = ast.parse(source)
+        errors = check_no_top_level_probes("test.py", tree=tree)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("Top-level statement 'Try' is prohibited", errors[0])
+        self.assertIn("You are not allowed to execute the test suite or run ad-hoc probes", errors[0])
+
+    def test_top_level_raise_fails(self) -> None:
+        source = "raise RuntimeError('PROBE failed')\n"
+        tree = ast.parse(source)
+        errors = check_no_top_level_probes("test.py", tree=tree)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("Top-level statement 'Raise' is prohibited", errors[0])
+
+    def test_top_level_probe_variable_fails(self) -> None:
+        source = "_PROBE_RESULT10 = 'propagated'\n"
+        tree = ast.parse(source)
+        errors = check_no_top_level_probes("test.py", tree=tree)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("Top-level probe variable '_PROBE_RESULT10' is prohibited", errors[0])
+
+    def test_top_level_probe_class_fails(self) -> None:
+        source = "class _ProbeStateMachine:\n    pass\n"
+        tree = ast.parse(source)
+        errors = check_no_top_level_probes("test.py", tree=tree)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("Top-level probe class '_ProbeStateMachine' is prohibited", errors[0])
 
 
 if __name__ == "__main__":

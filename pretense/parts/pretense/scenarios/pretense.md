@@ -83,7 +83,7 @@ Given: a runner configuration with fuzz iterations 50, coverage threshold 100.0,
 Given: an implementation pseudo state machine subclassing an interface state machine with zero state dataclasses, overriding transitions without `require_arg`.
 
 1. The caller runs property fuzzing against the implementation pseudo state machine.
-   Observed: parameter domains are inherited from the parent interface state machine transitions, pre-state assertions execute before `call_target(target.method(*args))`, the target executes, and post-state assertions verify private internal invariants.
+   Observed: parameter domains and preconditions are inherited from the parent interface state machine transitions, base interface transitions execute model state updates, pre-state assertions execute before `call_target(target.method(*args))`, the target executes, and post-state assertions verify private internal invariants.
 
 2. The caller executes a transition targeting a non-callable target property using `call_target(target.property)`.
    Observed: `call_target(target.property)` returns the property attribute value directly without attempting function invocation.

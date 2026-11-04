@@ -201,8 +201,11 @@ class SubagentCoordinator(Singleton[AgentSessionTier], Protocol):
         - MUST periodically poll active workers through harness.poll_role or harness.await_role at a configurable interval defaulting to 10.0 seconds.
         - WHEN a role round reports status failed, MUST stop execution and return non-converged summary with failure details.
         - WHEN consecutive unproductive rounds for a role on unresolved targets exceed the threshold (defaulting to 5), MUST stop execution and return non-converged summary with impasse details.
-        - WHEN a worker delivers the identical blame signature twice in a row, MUST terminate the active worker, clear persistent session state, and recommission the workspace with a clean baseline.
-        - WHEN a worker exceeds 3 restarts from repeated blame deliveries, MUST stop execution and return non-converged summary indicating circuit breaker tripped.
+        - WHEN a worker delivers the identical blame signature twice in a row on unchanged targets, MUST terminate the active worker, clear persistent session state, recommission the workspace with a clean baseline, and inject a restart advisory into subsequent task prompts.
+        - WHEN a worker exceeds 10 restarts, MUST stop execution and return non-converged summary indicating circuit breaker tripped.
+        - WHEN an author role submits modifications to a previously blamed target, MUST clear consecutive blame tracking against that target.
+        - MUST prevent concurrent dispatch of downstream roles while upstream dependency workers are actively executing or scheduled for concurrent dispatch.
+        - MUST purge preexisting blame buffers prior to role dispatch and consume workspace blame buffers upon round completion.
         - WHEN a role round concludes without submitting, blaming, or failing assigned targets, MUST inject an actionable reminder into the task prompt of the subsequent role dispatch directive.
         - MUST emit real-time progress notifications detailing role dispatch, round outcomes, token consumption, and work queue state.
         - WHEN all units evaluate clean across all roles, MUST automatically delete all provisioned role workspaces in scope and return converged summary.

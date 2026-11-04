@@ -2,7 +2,7 @@
 
 ## Intent
 
-The commands_impl implementation component realizes substantive command execution workflows for Autofab role workspaces, including work evaluation, verification, submission, attribution, coverage, commissioning, and system refresh. It encapsulates domain logic that synchronizes working trees with canonical repositories, validates file boundaries, invokes submission coordinators, attributes defect critiques, measures statement test coverage, and provisions role workspaces within the agent session lifecycle tier.
+The commands_impl implementation component realizes substantive command execution workflows for Autofab role workspaces, including work evaluation, verification, submission, attribution, coverage, commissioning, and system refresh. It encapsulates domain logic that synchronizes working trees with canonical repositories, validates file boundaries, invokes submission coordinators, attributes defect critiques, validates coverage-based blame attribution, measures statement test coverage, and provisions role workspaces within the agent session lifecycle tier.
 
 ## Factored Contracts
 
@@ -14,7 +14,7 @@ The commands_impl implementation component realizes substantive command executio
 
 - In run_get_work and run_check_files, the handler delegates work discovery and file verification directly to the workspace checker. [delegate_check_commands]
 - In run_submit, the handler evaluates role verification checks on the target unless bypassed, enforcing that modified targets have been verified via check_files since modification, rejecting submission when verification fails, delegates target submission to the submission coordinator, appends the submission record to the Autofab log, and clears pending work upon acceptance. [realize_submit]
-- In run_blame and run_feedback, the handler sanitizes critique explanations into a single continuous paragraph, enforces that modified workspace targets have been verified via check_files since modification, delegates critique attribution to the attribution coordinator, records blamed culprit targets into the workspace blame buffer, appends the blame record to the Autofab log, clears matching or single pending workspace work upon acceptance, and emits a prominent round conclusion directive instructing the worker that target attribution is complete, directing them to run bin/get_work to verify remaining units and conclude their round immediately if all ready work is resolved. [realize_blame]
+- In run_blame and run_feedback, the handler sanitizes critique explanations into a single continuous paragraph, enforces that modified workspace targets have been verified via check_files since modification, validates blame attribution against open coverage spans in the coverage status buffer (rejecting test-directed blame when all uncovered spans are library pragma requirements and rejecting identical repeated blames against identical span sets), delegates critique attribution to the attribution coordinator, records blamed culprit targets into the workspace blame buffer, appends the blame record to the Autofab log, clears matching or single pending workspace work upon acceptance, and emits a prominent round conclusion directive instructing the worker that target attribution is complete, directing them to run bin/get_work to verify remaining units and conclude their round immediately if all ready work is resolved. [realize_blame]
 - In run_fail, the handler enforces that modified targets have been verified via check_files since modification, delegates failure diagnostics to the attribution coordinator, and clears matching or single pending workspace work upon acceptance. [realize_fail]
 - In run_coverage, the handler delegates statement coverage evaluation to the coverage evaluator using local workspace files when present and formats diagnostic reports. [realize_coverage]
 - In run_commission and run_refresh_sys, the handler coordinates provisioning, registry lookup, and synchronizer refresh across single roles or all declared roles within a directory scope, mapping positional arguments to directory scope when all roles are requested, requiring or discovering scope without hardcoded defaults, and supporting resetting stale work buffers and stamping model execution profiles. [realize_lifecycle]
@@ -23,7 +23,7 @@ The commands_impl implementation component realizes substantive command executio
 
 - When executing get_work or check_files, the handler delegates to the workspace checker. [delegate_check_commands, commands: [execute_get_work_command, execute_check_files_command], check: [run_workspace_get_work, run_workspace_check_files]]
 - When executing submit, the handler evaluates role verification checks, rejects failing targets, coordinates file submission mutations, and clears pending work buffers upon acceptance. [realize_submit, commands: [execute_submit_command], submit: [execute_file_submission_mutation], pending: [remove_pending_target_path]]
-- When executing blame or feedback, the handler sanitizes critique rules, coordinates defect blame mutations, records blamed targets into the blame buffer, and clears pending work buffers upon acceptance. [realize_blame, commands: [execute_blame_command], attribution: [execute_file_blame_mutation], pending: [remove_pending_target_path]]
+- When executing blame or feedback, the handler sanitizes critique rules, validates blame targets against open coverage deficit spans, coordinates defect blame mutations, records blamed targets into the blame buffer, and clears pending work buffers upon acceptance. [realize_blame, commands: [execute_blame_command], attribution: [execute_file_blame_mutation], pending: [remove_pending_target_path]]
 - When executing fail, the handler coordinates failure mutations and clears pending work buffers upon acceptance. [realize_fail, commands: [execute_fail_command], attribution: [execute_file_failure_mutation], pending: [remove_pending_target_path]]
 - When executing coverage, the handler evaluates statement coverage and formats reports. [realize_coverage, commands: [execute_coverage_command], coverage: [evaluate_module_coverage, format_coverage_report]]
 - When executing commission or refresh-sys, the handler coordinates provisioning and system file refresh across active role workspaces. [realize_lifecycle, commands: [execute_commission_command, execute_refresh_sys_command], provision: [commission_role_workspace], sync: [refresh_system_files_into_workspace], role_registry: [resolve_role_definition, compute_workspace_directory_path]]
@@ -61,7 +61,7 @@ The commands_impl implementation component realizes substantive command executio
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-30T11:00:00Z
-LAST_CHANGED: 2026-10-30T11:00:00Z
-CHANGE: Mandate post-completion bin/get_work verification and sanitize multi-line critiques in realize_blame
+LAST_CHANGED: 2026-11-03T20:40:00Z
+CHANGE: Prohibit bypassing verification via no_verify in active role workspaces
 SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->

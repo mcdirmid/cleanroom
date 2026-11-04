@@ -405,6 +405,12 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
                     dst_init = os.path.join(ws_d, "__init__.py")
                     if not os.path.isfile(dst_init):
                         _copy_projected_file(src_init, dst_init, is_writable=False)
+                for cfg_file in app_info.get_config_filenames():
+                    if cfg_file in filenames:
+                        src_cfg = os.path.join(dirpath, cfg_file)
+                        dst_cfg = os.path.join(ws_d, cfg_file)
+                        if not os.path.isfile(dst_cfg):
+                            copy_file_with_perms(src_cfg, dst_cfg, readonly=True)
             stub_synth = get_singleton(stub.WorkspaceStubSynthesizer)
             writable_rel = _find_matching_files(
                 scope_dir, role_def.writable_file_patterns
@@ -483,6 +489,7 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
             "model_configs.toml",
             "uv.lock",
             ".python-version",
+            *app_info.get_config_filenames(),
         ):
             cfg_src = os.path.join(resolved_root, cfg_name)
             if os.path.isfile(cfg_src):

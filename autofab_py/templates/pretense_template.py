@@ -92,7 +92,30 @@ proto = TargetStateMachine()
 
 
 # ==============================================================================
-# 3. Implementation Pseudo State Machine (Implementation Components)
+# 3. Fixed Scenarios on Fake (Interface Components)
+# ==============================================================================
+
+# class TestTargetFake(unittest.TestCase):
+#     """Verifies that the synthesized fake satisfies all transitions and seeding transitions."""
+#
+#     def setUp(self) -> None:
+#         # Single service:
+#         self.fake = make_target_fake()
+#         self.sm = TargetStateMachine(sut=self.fake)
+#         # Multi-service:
+#         # self.fakes = make_target_fakes()
+#         # self.sm = TargetStateMachine()
+#
+#     def test_transitions_coverage(self) -> None:
+#         """Exercises 100% of transitions and seeding transitions on the fake."""
+#         self.sm.seed_initial()
+#         # Exercise every declared transition and seeding transition on self.fake:
+#         # self.fake.process("sample_1", 10)
+#         # _ = self.fake.items
+
+
+# ==============================================================================
+# 4. Implementation Pseudo State Machine (Implementation Components)
 # ==============================================================================
 
 # class TargetImplPseudoStateMachine(TargetStateMachine):
@@ -101,15 +124,17 @@ proto = TargetStateMachine()
 #     # Selectively override only transitions requiring SUT observation or private invariant checking:
 #     # @transition(TargetClass.process)
 #     # def process(self, item: str, count: int) -> None:
+#     #     target: TargetClass = sut(TargetClass)
 #     #     # Pre-state observation:
-#     #     old_size = sut(TargetClass).size
-#     #     ret = call_target()
+#     #     old_size = target.size
+#     #     ret = call_target(target.process(item, count))
 #     #     # Post-state verification:
-#     #     assert sut(TargetClass).size == old_size + 1
+#     #     assert target.size == old_size + 1
+#     #     return ret
 
 
 # ==============================================================================
-# 4. Real Implementation Tests (Implementation Components)
+# 5. Real Implementation Tests (Implementation Components)
 # ==============================================================================
 
 class TestTargetImplReal(unittest.TestCase):
@@ -143,7 +168,7 @@ class TestTargetImplReal(unittest.TestCase):
 
 
 # ==============================================================================
-# 5. Hypothesis Stateful Fuzzing on Real Implementation (Implementation Components)
+# 6. Hypothesis Stateful Fuzzing on Real Implementation (Implementation Components)
 # ==============================================================================
 
 # Pattern A: Single Singleton SUT Factory

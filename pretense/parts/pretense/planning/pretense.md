@@ -31,7 +31,7 @@ By structuring stateful contracts as executable state transition systems, the co
 - A test-only query (@test_only) declares an observability query accessor on an interface specification for black-box state verification.
 - A transition decorator registers a transition method 1:1 against a target singleton class operation.
 - A state machine declares the complete behavioral contract of an interface through state transitions and system invariants, providing checked adapters (`sm.bind(target)`) and synthesized fake adapters.
-- An implementation pseudo state machine inherits from an interface state machine, defining zero state dataclasses of its own, omitting argument requirements (require_arg), and using typed call_target to capture pre-state snapshots and verify private internal invariants while inheriting parameter domains from the parent interface state machine.
+- An implementation pseudo state machine inherits from an interface state machine, defining zero state dataclasses of its own, omitting argument requirements (require_arg), and using typed call_target to capture pre-state snapshots and verify private internal invariants while inheriting parameter domains, preconditions, and model state updates by executing base interface transitions that delegate to overrides via the AST pivot.
 - A checked adapter acts as a verification proxy conforming to an interface protocol, executing transitions around target invocations.
 - A fake adapter acts as a dynamic test double conforming to an interface protocol, backed by the state machine and verified by compiled Hypothesis fake property fuzz tests.
 - A trace step records the operation name, arguments, and outcome of an executed transition within a state machine run.

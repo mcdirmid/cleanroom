@@ -1,6 +1,6 @@
 # subagent_coordinator_impl implementation component
 
-imports: session, subagent_coordinator, provision, role_registry, work
+imports: session, subagent_coordinator, provision, role_registry, sync, work
 implements: subagent_coordinator
 
 ## Purpose
@@ -11,7 +11,7 @@ Complex software development methodologies partition work into specialized roles
 
 **Out of scope:** The subagent_coordinator_impl implementation component does not directly execute subagent processes or mutate workspace files; these are handled by other components.
 
-**Delegated:** Session lifecycle scoping is delegated to agent_session; workspace role discovery and root resolution are delegated to role_registry; queue evaluation and pending target tracking are delegated to work; role workspace provisioning is delegated to provision.
+**Delegated:** Session lifecycle scoping is delegated to agent_session; workspace role discovery and root resolution are delegated to role_registry; queue evaluation and pending target tracking are delegated to work; role workspace provisioning is delegated to provision; workspace file synchronization is delegated to sync.
 
 ## Types and Behavior
 
@@ -29,13 +29,13 @@ When coordinating multi-agent execution:
 
 - The realization commissions absent role workspaces on demand when ready tasks are identified, recording effective batch size limits into role descriptors.
 
-- The realization dispatches role directives concurrently for roles possessing ready work, tracking active worker handles without static wave partitioning, evaluating unblocked dirty work queues across inactive roles on each polling interval to dispatch newly ready roles immediately without waiting for in-flight active workers to conclude.
+- The realization dispatches role directives concurrently for roles possessing ready work, purging preexisting blame buffers from the role workspace, pulling updated files and refreshing system files from the canonical repository root into the role workspace and recording assigned ready targets in the pending work buffer prior to dispatching each role, tracking active worker handles without static wave partitioning, evaluating unblocked dirty work queues across inactive roles on each polling interval to dispatch newly ready roles immediately without waiting for in-flight active workers to conclude while withholding downstream roles whose upstream dependencies are active or scheduled for concurrent dispatch.
 
-- The realization periodically polls active workers through non-blocking checks on the configured harness adapter at a configurable interval (defaulting to 10 seconds), collecting role round results upon completion, enforcing an initialization grace period before evaluating idle worker state, interrupting idling workers that have resolved all assigned targets and hold zero pending work items across consecutive polling intervals past the grace period, and harvesting persistent idling workers directly when harness termination stalls.
+- The realization periodically polls active workers through non-blocking checks on the configured harness adapter at a configurable interval (defaulting to 10 seconds), collecting role round results and consuming workspace blame buffers upon completion, enforcing an initialization grace period before evaluating idle worker state, interrupting idling workers that have resolved all assigned targets and hold zero pending work items across consecutive polling intervals past the grace period, and harvesting persistent idling workers directly when harness termination stalls.
 
 - The realization tracks consecutive unproductive rounds where a role yields zero submitted and zero blamed targets and its assigned ready targets remain unresolved in the repository, suppressing unproductive round tracking and scolding reminders when assigned ready targets were resolved or cleaned in the repository during the round, and halting orchestration when consecutive unproductive rounds exceed a threshold configured per model or globally (defaulting to 5).
 
-- The realization tracks consecutive identical blame deliveries per role; when a worker delivers an identical blame signature across two consecutive rounds, the realization terminates the active worker, clears persistent session state, and recommissions the workspace with a clean baseline, halting orchestration when a role exceeds 3 restarts.
+- The realization tracks consecutive identical blame deliveries per role on unchanged targets; when a worker delivers an identical blame signature across two consecutive rounds without intervening author modifications, the realization terminates the active worker, clears persistent session state, recommissions the workspace with a clean baseline, and injects a restart advisory into subsequent task prompts, halting orchestration when a role exceeds a maximum budget of 10 restarts. When an author role submits modifications to a previously blamed target, the realization clears consecutive blame tracking against that target for affected roles, while downstream roles are withheld from concurrent dispatch while upstream dependency workers are actively executing or scheduled for concurrent dispatch in the same polling interval.
 
 - When an active worker finishes a round without submitting, blaming, or failing assigned targets and its assigned ready targets remain unresolved in the repository, the realization preserves an unresolved reminder directive and injects it into the task prompt of the subsequent role dispatch directive, reminding the worker that conversational commentary without tools is prohibited while work remains, requiring ready targets to be resolved via check_files and submit, blame, or fail, and directing the worker to conclude immediately with summary text and no tool calls once no work remains.
 

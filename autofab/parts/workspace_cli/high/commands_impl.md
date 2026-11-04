@@ -7,7 +7,7 @@ implements: commands
 
 The commands_impl implementation component realizes substantive command execution workflows for Autofab role workspaces, including work evaluation, verification, submission, attribution, coverage, commissioning, and system refresh.
 
-Operating command-line subagents in isolated workspaces requires domain logic that synchronizes working trees with canonical repositories, validates file boundaries, invokes submission coordinators, attributes defect critiques, measures statement test coverage, and provisions role workspaces. The commands_impl implementation component consolidates these operational workflows into a singleton command handler operating within the agent session lifecycle tier.
+Operating command-line subagents in isolated workspaces requires domain logic that synchronizes working trees with canonical repositories, validates file boundaries, invokes submission coordinators, attributes defect critiques, validates coverage-based blame attribution against open deficit spans, measures statement test coverage, and provisions role workspaces. The commands_impl implementation component consolidates these operational workflows into a singleton command handler operating within the agent session lifecycle tier.
 
 **Out of scope:** The commands_impl implementation component does not parse command-line argument strings; argument parsing is handled by cli_tool_impl.
 
@@ -25,7 +25,7 @@ The realization:
 
 - Evaluates role verification checks on the target file during submit execution, enforcing that modified targets have been verified via check_files since their latest modifications unless bypassed, rejecting submission when verification fails unless bypassed, delegates file validation and metadata stamping to the submission coordinator, reflects stamped files into the role workspace, appends submission records to the event log, and clears the target from pending work on success.
 
-- Auto-sanitizes multi-line critiques into a single continuous paragraph during blame and feedback execution, enforcing that modified workspace targets have been verified via check_files since their latest modifications, delegates attribution to the attribution coordinator, records blamed culprit targets into the workspace blame buffer, appends blame records to the event log, and clears the matching target or single pending workspace target from pending work on success, emitting a prominent directive instructing the worker to call bin/get_work to inspect remaining units and conclude their round immediately with summary text and zero tool calls if all ready targets are resolved.
+- Auto-sanitizes multi-line critiques into a single continuous paragraph during blame and feedback execution, enforcing that modified workspace targets have been verified via check_files since their latest modifications, validates attribution against open coverage spans recorded in the workspace coverage status buffer (rejecting test-directed blame when all uncovered spans are classified as library-owned pragma requirements and rejecting repeating identical blame against the same uncovered span set), delegates attribution to the attribution coordinator, records blamed culprit targets into the workspace blame buffer, appends blame records to the event log, and clears the matching target or single pending workspace target from pending work on success, emitting a prominent directive instructing the worker to call bin/get_work to inspect remaining units and conclude their round immediately with summary text and zero tool calls if all ready targets are resolved.
 
 - Enforces that modified target files have been verified via check_files since their latest modifications, delegates failure tagging and diagnostic recording to the attribution coordinator during fail execution, clearing the matching target or single pending workspace target from pending work on success.
 
@@ -35,7 +35,7 @@ The realization:
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-30T11:00:00Z
-LAST_CHANGED: 2026-10-30T11:00:00Z
-CHANGE: Auto-sanitize blame critiques and direct post-completion get_work verification
+LAST_CHANGED: 2026-11-03T20:40:00Z
+CHANGE: Prohibit bypassing verification via no_verify in active role workspaces
 SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->

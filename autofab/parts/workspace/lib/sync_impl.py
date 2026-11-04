@@ -270,6 +270,7 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
         role_name: str,
         dir_scope: str,
         silent: bool = False,
+        delete_missing: bool = True,
     ) -> int:
         registry = get_singleton(
             role_registry.WorkspaceRegistry
@@ -297,11 +298,35 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
         main_files = _find_matching_files(main_scope_dir, all_patterns)
         main_files_set = set(main_files)
 
-        if os.path.isdir(ws_scope_dir):
+        pending_targets: set[str] = set()
+        pending_candidates = app_info.get_pending_work_filenames()
+        for cand_name in pending_candidates:
+            pending_file = os.path.join(workspace_dir, cand_name)
+            if os.path.isfile(pending_file):
+                try:
+                    with open(pending_file, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    if isinstance(data, dict):
+                        pending_targets = set(data.get("targets", []))
+                    elif isinstance(data, list):
+                        pending_targets = set(data)
+                except (OSError, json.JSONDecodeError):
+                    pass
+                break
+
+        if delete_missing and os.path.isdir(ws_scope_dir):
             ws_files = _find_matching_files(ws_scope_dir, all_patterns)
             for rel in ws_files:
                 if rel not in main_files_set:
                     dst_f = os.path.join(ws_scope_dir, rel)
+                    rel_from_ws = os.path.relpath(dst_f, workspace_dir).replace("\\", "/")
+                    is_pending = (
+                        rel in pending_targets
+                        or rel_from_ws in pending_targets
+                        or any(pt.endswith(f"/{rel}") or rel.endswith(f"/{pt}") for pt in pending_targets)
+                    )
+                    if is_pending:
+                        continue
                     try:
                         os.chmod(dst_f, 0o644)
                     except OSError:
@@ -322,22 +347,6 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
                             os.remove(init_ws)
                         except OSError:
                             pass
-
-        pending_targets: set[str] = set()
-        pending_candidates = app_info.get_pending_work_filenames()
-        for cand_name in pending_candidates:
-            pending_file = os.path.join(workspace_dir, cand_name)
-            if os.path.isfile(pending_file):
-                try:
-                    with open(pending_file, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                    if isinstance(data, dict):
-                        pending_targets = set(data.get("targets", []))
-                    elif isinstance(data, list):
-                        pending_targets = set(data)
-                except (OSError, json.JSONDecodeError):
-                    pass
-                break
 
         for rel in main_files:
             if _is_stub_dep_file(rel, role_def, main_root):

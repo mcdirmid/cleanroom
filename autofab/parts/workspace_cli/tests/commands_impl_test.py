@@ -132,6 +132,7 @@ class FakeWorkspaceSynchronizer:
         role_name: str,
         dir_scope: str = "staging",
         silent: bool = False,
+        delete_missing: bool = True,
     ) -> None:
         self.pulled.append((workspace_dir, repo_root, role_name, dir_scope))
 
@@ -623,10 +624,56 @@ class WorkspaceCommandsImplTest(unittest.TestCase):
         self.assertEqual(ret, 0)
         self.assertEqual(len(self.fake_prov.commissioned), 1)
 
+    def test_run_blame_validates_coverage_deficit_spans(self) -> None:
+        import io
+        from unittest.mock import patch
+
+        role_desc_path = os.path.join(self.test_dir, ".autofab_role.json")
+        with open(role_desc_path, "w", encoding="utf-8") as f:
+            json.dump({"role_name": "coverage"}, f)
+
+        cov_status_path = os.path.join(self.test_dir, ".coverage_spans.json")
+        with open(cov_status_path, "w", encoding="utf-8") as f:
+            json.dump(
+                {
+                    "all_lib_pragma_required": True,
+                    "has_test_owned_spans": False,
+                    "missing_spans": [[20, 22]],
+                },
+                f,
+            )
+
+        test_culprit = os.path.join(self.test_dir, "tests", "alpha_test.py")
+        lib_culprit = os.path.join(self.test_dir, "lib", "alpha.py")
+        os.makedirs(os.path.dirname(test_culprit), exist_ok=True)
+        os.makedirs(os.path.dirname(lib_culprit), exist_ok=True)
+        with open(test_culprit, "w") as f:
+            f.write("# test\n")
+        with open(lib_culprit, "w") as f:
+            f.write("# lib\n")
+
+        # 1. Blaming test file when all open spans are LIB-PRAGMA-REQUIRED must be refused
+        with patch("sys.stderr", new_callable=io.StringIO) as mock_err:
+            ret_test = self.cmd_handler.run_blame(test_culprit, "Missing error test")
+            err_out = mock_err.getvalue()
+        self.assertEqual(ret_test, 1)
+        self.assertIn("misattribution: no test-owned spans in this deficit", err_out)
+
+        # 2. Blaming lib file for pragma annotation succeeds
+        ret_lib = self.cmd_handler.run_blame(lib_culprit, "Precondition error branch unreachable under contract")
+        self.assertEqual(ret_lib, 0)
+
+        # 3. Repeating identical blame against identical unyielding span set must be refused
+        with patch("sys.stderr", new_callable=io.StringIO) as mock_err:
+            ret_repeat = self.cmd_handler.run_blame(lib_culprit, "Repeated blame on same spans")
+            err_repeat = mock_err.getvalue()
+        self.assertEqual(ret_repeat, 1)
+        self.assertIn("repeating identical blame against the same uncovered span set is prohibited", err_repeat)
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-30T11:00:00Z
-# LAST_CHANGED: 2026-10-30T11:00:00Z
-# CHANGE: Test multi-line critique sanitization and mandatory get_work directive in run_blame
+# LAST_CHANGED: 2026-11-03T19:30:00Z
+# CHANGE: Test coverage span misattribution and duplicate blame prevention in run_blame
 # COVERAGE_AUDIT: 2026-10-15T17:42:47Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
