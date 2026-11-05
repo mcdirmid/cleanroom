@@ -1379,7 +1379,7 @@ def _archive_flight_artifacts(
 ) -> Optional[Tuple[str, str]]:
     """Archives synthesized library and test files into the results directory with embedded metrics.
 
-    Results directory pattern: <results_dir>/<benchmark-id>/<model-name+harness-name>/
+    Results directory pattern: <results_dir>/<benchmark-id>/<model-name>/
     Files: lib_<N>.py, test_<N>.py (or pretense_<N>.py), autofab_<N>.log
     lib_<N>.py contains embedded comment header with benchmark flight metrics.
     """
@@ -1395,7 +1395,7 @@ def _archive_flight_artifacts(
     effective_method = method if method is not None else ("pretense" if use_pretense else None)
     is_combined = (effective_method == "combined") or ("combined" in record.methodology)
     is_pretense = not is_combined and (effective_method == "pretense" or use_pretense or ("pretense" in record.methodology))
-    folder_name = f"{model_id}+{resolved_harness}"
+    folder_name = f"{model_id}"
     if is_combined:
         folder_name += "-combined"
     elif is_pretense:

@@ -201,9 +201,11 @@ class DAG(Singleton[SystemTier], Protocol):
         Raises:
             NodeNotFoundError: If either node identifier is missing from the graph.
 
+        PRECONDITIONS:
+        - WHEN upstream_id or downstream_id does not exist, MUST raise NodeNotFoundError.
+
         POSTCONDITIONS:
         - MUST establish a directed dependency edge from upstream_id to downstream_id.
-        - WHEN upstream_id or downstream_id does not exist, MUST raise NodeNotFoundError.
         """
         ...
 
@@ -217,9 +219,11 @@ class DAG(Singleton[SystemTier], Protocol):
         Raises:
             NodeNotFoundError: If node_id does not exist in the graph.
 
+        PRECONDITIONS:
+        - WHEN node_id is absent, MUST raise NodeNotFoundError.
+
         POSTCONDITIONS:
         - MUST remove the node and its incident edges.
-        - WHEN node_id is absent, MUST raise NodeNotFoundError.
         """
         ...
 
@@ -248,9 +252,11 @@ class DAG(Singleton[SystemTier], Protocol):
         Raises:
             NodeNotFoundError: If node_id is not in the graph.
 
+        PRECONDITIONS:
+        - WHEN node_id is absent, MUST raise NodeNotFoundError.
+
         POSTCONDITIONS:
         - MUST return the NodeDefinition matching node_id.
-        - WHEN node_id is absent, MUST raise NodeNotFoundError.
         """
         ...
 
@@ -267,9 +273,11 @@ class DAG(Singleton[SystemTier], Protocol):
         Raises:
             NodeNotFoundError: If node_id is not in the graph.
 
+        PRECONDITIONS:
+        - WHEN node_id is absent, MUST raise NodeNotFoundError.
+
         POSTCONDITIONS:
         - MUST return all direct upstream dependencies.
-        - WHEN node_id is absent, MUST raise NodeNotFoundError.
         """
         ...
 
@@ -286,9 +294,11 @@ class DAG(Singleton[SystemTier], Protocol):
         Raises:
             NodeNotFoundError: If node_id is not in the graph.
 
+        PRECONDITIONS:
+        - WHEN node_id is absent, MUST raise NodeNotFoundError.
+
         POSTCONDITIONS:
         - MUST return all direct downstream dependents.
-        - WHEN node_id is absent, MUST raise NodeNotFoundError.
         """
         ...
 
@@ -309,10 +319,12 @@ class DAG(Singleton[SystemTier], Protocol):
             NodeNotFoundError: If any node references a dependency not in the graph.
             CycleError: If any directed cycle exists in the graph.
 
-        POSTCONDITIONS:
-        - WHEN all referenced nodes exist and no cycle exists, MUST complete without error.
+        PRECONDITIONS:
         - WHEN a dependency node is missing, MUST raise NodeNotFoundError.
         - WHEN a cycle exists, MUST raise CycleError containing the cycle sequence.
+
+        POSTCONDITIONS:
+        - WHEN all referenced nodes exist and no cycle exists, MUST complete without error.
         """
         ...
 
@@ -329,10 +341,12 @@ class DAG(Singleton[SystemTier], Protocol):
         Raises:
             CycleError: If the graph contains a directed cycle.
 
+        PRECONDITIONS:
+        - WHEN a cycle exists, MUST raise CycleError.
+
         POSTCONDITIONS:
         - MUST return a valid topological ordering where every prerequisite precedes its dependents.
         - MUST break ties between concurrent ready nodes using priority descending and name ascending.
-        - WHEN a cycle exists, MUST raise CycleError.
         """
         ...
 
@@ -499,13 +513,15 @@ class DAGRunner(Singleton[SystemTier], Protocol):
             DAGTimeoutError: If execution exceeds timeout_seconds.
             DAGCancelledError: If cancel() is invoked during execution.
 
+        PRECONDITIONS:
+        - WHEN execution exceeds timeout_seconds, MUST raise DAGTimeoutError.
+        - WHEN cancelled during execution, MUST mark running nodes as CANCELLED and raise DAGCancelledError.
+
         POSTCONDITIONS:
         - MUST execute ready nodes concurrently up to the configured concurrency limit.
         - MUST execute retries up to the configured retry count for failed node actions.
         - MUST apply the specified failure_policy to the scheduler upon node failure.
         - MUST return a DAGRunReport capturing all node states, execution durations, and critical path.
-        - WHEN execution exceeds timeout_seconds, MUST raise DAGTimeoutError.
-        - WHEN cancelled during execution, MUST mark running nodes as CANCELLED and raise DAGCancelledError.
         """
         ...
 

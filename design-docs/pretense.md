@@ -37,12 +37,13 @@
    - [Principle 18: Multi-Interface Implementations (`implements: B, C`)](#principle-18-multi-interface-implementations-implements-b-c)
    - [Principle 19: Interface Fixed Conformance Testing (`Test<Target>Fake`)](#principle-19-interface-fixed-conformance-testing-testtargetfake)
    - [Principle 20: Base Interface Transition Delegation & Onion Dispatch](#principle-20-base-interface-transition-delegation--onion-dispatch)
-5. [Contract Exception Taxonomy: `*Error` vs. `*Exception` & Untestability of Preconditions](#5-contract-exception-taxonomy-error-vs-exception--untestability-of-preconditions)
-   - [The Semantic Taxonomy](#the-semantic-taxonomy)
-   - [Untestability of `*Error` (Checked Caller Preconditions)](#untestability-of-error-checked-caller-preconditions)
-   - [Specification Docstring Contract (`low/*.pyi`)](#specification-docstring-contract-lowpyi)
-   - [Static AST Linter Enforcement (`[NO_ERROR_TESTING]`)](#static-ast-linter-enforcement-no_error_testing)
-   - [Coverage Engine Auto-Exclusion of Preconditions & `unreachable()`](#coverage-engine-auto-exclusion-of-preconditions--unreachable)
+5. [Contract Violations, Error Handling, and Reachability: Fuzzing vs. Fixed Scenario Testing](#5-contract-violations-error-handling-and-reachability-fuzzing-vs-fixed-scenario-testing)
+   - [Contract Violations vs. Operational Errors in Specifications](#contract-violations-vs-operational-errors-in-specifications)
+   - [Fuzz Testing Never Explores Contract Violations (Valid by Construction)](#fuzz-testing-never-explores-contract-violations-valid-by-construction)
+   - [Runtime Precondition Failures: SUT Invocations on Fakes Fail Immediately](#runtime-precondition-failures-sut-invocations-on-fakes-fail-immediately)
+   - [Fixed Scenario Testing of Contracted Errors (`require(..., error=...)`)](#fixed-scenario-testing-of-contracted-errors-require-error)
+   - [Reachability Rule: Contracted Errors vs. Uncontracted Guards](#reachability-rule-contracted-errors-vs-uncontracted-guards)
+   - [Elimination of Blanket Coverage Exclusions & Semantic Coverage Auditing](#elimination-of-blanket-coverage-exclusions--semantic-coverage-auditing)
    - [Auditor Circuit Breakers & High-Salience Guidance](#auditor-circuit-breakers--high-salience-guidance)
 6. [Empirical Synthesis: Why Multi-Agent Unit Tests Outperformed Pretense on `deepseek-flash`](#6-empirical-synthesis-why-multi-agent-unit-tests-outperformed-pretense-on-deepseek-flash)
    - [The Empirical Benchmark Telemetry](#the-empirical-benchmark-telemetry)
@@ -611,53 +612,106 @@ To eliminate duplication and prevent cognitive desynchronization between interfa
 
 ---
 
-## 5. Contract Exception Taxonomy: `*Error` vs. `*Exception` & Untestability of Preconditions
+## 5. Contract Violations, Error Handling, and Reachability: Fuzzing vs. Fixed Scenario Testing
 
-A foundational advance in Pretense and Autofab methodology is the formalization of the **Contract Exception Taxonomy**, which resolves a recurring failure mode where models attempt to write tests or fuzz transitions expecting contract errors.
+A foundational advance in Pretense and Autofab methodology is the formalization of contract violations, error handling semantics, and the reachability distinction between generative fuzz testing and deterministic fixed scenario testing.
 
-### The Semantic Taxonomy
+### Contract Violations vs. Operational Errors in Specifications
 
-| Taxonomy Class | Naming Convention | Underlying Semantics | Testability Status | Canonical Mechanism |
-| :--- | :--- | :--- | :--- | :--- |
-| **Contract Violation Error** | `*Error`<br>(e.g. `NodeNotFoundError`, `CycleError`, `CacheKeyNotFoundError`) | **Checked Caller Precondition Failure**.<br>The caller passed illegal arguments or called methods out of order. | **UNTESTABLE**.<br>Must NEVER be tested or expected with `raises()`. | Documented under `PRECONDITIONS:` in `low/*.pyi`. Gated by `require_arg` / `requires` in Pretense. |
-| **Operational Exception** | `*Exception`<br>(e.g. `TimeoutException`, `NetworkException`, `DiskFullException`) | **Non-Contract Operational Failure**.<br>Arises from external, environmental, or non-functional conditions beyond caller control. | **TESTABLE**.<br>Tested via environment seeding, mocking, or failure simulation. | Documented under `RAISES:` in `low/*.pyi`. Tested with `with raises(*Exception):`. |
+Once a contract violation occurs, the system is in an unknown bad state and assumed unusable. Specifications (`low/*.pyi`) distinguish:
+1. **Contracted Operational Errors (`Raises: ...Error` or `*Exception`)**:
+   - The specification explicitly contracts that when a specific operational condition occurs (e.g. `InvalidVersionError`, `InvalidRangeError`, `ResolutionConflictError`), the component throws that specific exception.
+   - These represent **contracted error outcomes** under the specification.
+2. **Uncontracted Caller Preconditions (`ASSUMPTIONS:`)**:
+   - Invariants that the contract specifies the caller must uphold (e.g. non-null arguments, valid state ordering).
+   - If library code retains defensive guards for these uncontracted assumptions, they belong to **no-coverage territory**.
 
-### Untestability of `*Error` (Checked Caller Preconditions)
-A checked precondition represents a contract boundary: the method declares "do not call me with this input; if you do, I will abort with `*Error`."
-- In cleanroom software engineering, **valid software never deliberately violates preconditions**.
-- Tests and state machine transitions exist to verify that the system functions correctly when callers satisfy contracts.
-- Therefore, **tests must NEVER assert or catch `*Error`**. If an `*Error` occurs during execution or stateful fuzzing, the failure is **always a defect in the test/transition harness** (which failed to satisfy or gate the caller precondition), never a defect in the library.
+### Fuzz Testing Never Explores Contract Violations (Valid by Construction)
 
-### Specification Docstring Contract (`low/*.pyi`)
-To prevent LLM ambiguity:
-- **`Raises:` sections in docstrings are reserved exclusively for operational `*Exception` postconditions**.
-- **Documenting `*Error` under `Raises:` is strictly prohibited**.
-- `*Error` conditions must be documented exclusively under `PRECONDITIONS:`, signaling to test authors and Pretense generators that the condition is a caller obligation.
+Fuzz testing explores the valid operational state space of transitions and invariant preservation:
+- **Fuzz testing will never explore contract violations on chosen transitions**, even if what error is thrown is explicitly contracted in the specification.
+- Preconditions on state (`require`) are statically extracted via AST parsing ([`_parse_linear_transition`](file:///Users/seanmcdirmid/projects/cleanroom/pretense/parts/pretense/lib/pretense.py#L2361-L2409)) into boolean rule guards (`t.requirements`), evaluated **before** a transition rule is even selected ([`pretense_impl.py#L268-L272`](file:///Users/seanmcdirmid/projects/cleanroom/pretense/parts/pretense/lib/pretense_impl.py#L268-L272)). Transitions with unmet state preconditions are never chosen.
+- Parameter requirements (`require_arg`) are extracted into domain strategies (`param_domains`), so candidate arguments are generated to satisfy domains by construction.
+- The fuzzer stays 100% within valid domain boundaries and never wastes compute wandering into crash states.
 
-### Static AST Linter Enforcement (`[NO_ERROR_TESTING]`)
-Both unit tests (`test_lint.py`) and Pretense suites (`pretense_lint.py`) enforce the AST rule `check_no_error_testing`:
-- Inspects all `ast.Call` nodes.
-- Flags an immediate error (`[NO_ERROR_TESTING]`) if `self.assertRaises`, `pytest.raises`, `raises(...)`, or `ctx.raises` targets any exception class whose name ends with `Error` (e.g. `raises(NodeNotFoundError)` or `raises(CycleError)`).
-- Supports `# pragma: allow-error-test` exclusively for framework self-tests.
+### Runtime Precondition Failures: SUT Invocations on Fakes Fail Immediately
 
-### Coverage Engine Auto-Exclusion of Preconditions & `unreachable()`
-Because callers are forbidden from deliberately triggering `*Error`, the defensive `raise *Error` statements inside `lib/*.py` cannot be exercised by conforming tests. To avoid forcing models to write forbidden white-box error tests to satisfy 100% coverage:
-1. `CoverageEvaluator.get_non_executable_lines` automatically excludes:
-   - Any `ast.Raise` statement where the exception class ends with `Error`.
-   - Any `ast.If` block whose entire body consists of raising an `*Error`.
-   - Any statement invoking `unreachable(...)`.
-2. These lines are dynamically annotated as non-executable coverage exemptions, preserving the 100% branch and statement coverage standard without compromising contract purity.
+When a test executes (calling into the SUT):
+- If the SUT invokes a fake collaborator with an unsatisfied precondition or out-of-domain argument, that is a **real contract violation and bug in the SUT**.
+- `require` and `require_arg` raise `PretenseSpecificationError` (or the contracted `error`).
+- This unhandled exception bubbles out of the invocation and **immediately fails the Hypothesis test case**.
+- Hypothesis preserves the full state machine call trace, shrinks the counterexample, and reports the SUT defect.
+- Pretense **never** treats runtime precondition failures as antecedent discards or swallows them.
+
+### Fixed Scenario Testing of Contracted Errors (`require(..., error=...)`)
+
+While generative fuzz testing stays strictly within valid operational paths, statement coverage of library error-handling branches requires exercising contracted errors:
+- Pretense's `require` and `require_arg` support an optional `error` parameter:
+  ```python
+  require(condition, error=InvalidVersionError)
+  require_arg(text, len(text) > 0, error=InvalidRangeError)
+  ```
+- In **fixed scenario tests** (deterministic scenario test methods in `Test<Impl>Real` run under `--no-fuzz --cov` to establish statement coverage):
+  - Fixed tests verify contracted operational error outcomes (e.g. `InvalidVersionError`, `InvalidRangeError`, `PackageNotFoundError`, `ResolutionConflictError` declared in `low/*.pyi`).
+  - Contracted errors can be exercised either:
+    1. By executing transitions that intentionally trigger a contract violation, throwing the specified `Error` via `require(..., error=...)` rather than raising a generic framework violation, OR
+    2. By directly asserting the error on the SUT in deterministic scenario test methods using `with self.assertRaises(ContractedError):`.
+  - **Linter Exemption Requirement**: The static linter (`[NO_ERROR_TESTING]`) must resolve `low/*.pyi` declarations. It is strictly prohibited from failing tests that assert exceptions explicitly declared under `Raises:` or as exception types in `low/*.pyi`. Only uncontracted caller preconditions are banned from test assertions.
+
+### The `NO_ERROR_TESTING` Deadlock Problem & Architectural Fix
+
+During benchmarking of `semver_solver` under `combined` methodology (`benchmark_2`), a severe defect in the linter implementation created an insoluble loop:
+1. **The Defect**: `build_lint_common.py` implemented `check_no_error_testing` with a naive syntactic heuristic checking `expr.id.endswith("Error")`. It failed **any** `assertRaises` on any class ending in `Error`, making no distinction between uncontracted caller preconditions and contracted interface exceptions declared in `low/semver_solver.pyi`.
+2. **The Resulting Impasse**:
+   - `pretense_coverage` saw 68.9% statement coverage on `semver_solver_impl.py` due to 99 missed lines across `raise InvalidVersionError`, `raise InvalidRangeError`, `raise PackageNotFoundError`, and `raise ResolutionConflictError`.
+   - `pretense_coverage` blamed `semver_solver_impl_pretense.py` to add coverage for these contracted outcomes.
+   - The `pretense` worker attempted to add `self.assertRaises(...)` tests for these errors, but `bin/check_files` rejected the module with `error [NO_ERROR_TESTING]`.
+   - The `pretense` worker was forced to delete the tests, reaching a hard ceiling of 85.0% coverage, and documented the blocker in `# CHANGE:`.
+   - In Round 2, `pretense_coverage` was blocked by the guide's unyielding deficit rule (forbidding repeated blame against tests), while `lib` could not prune or pragma what `low/*.pyi` explicitly contracted.
+3. **The Architectural Fix**:
+   - `build_lint_common.py` and `pretense_lint.py` must load the active component's `low/*.pyi` specification.
+   - Any exception declared in `low/*.pyi` is classified as a **Contracted Operational Error**.
+   - Asserting Contracted Operational Errors in `tests/*_test.py` and `pretense/*_impl_pretense.py` via `with self.assertRaises(ContractedError):` or `raises(...)` is **fully permitted and exempt** from `NO_ERROR_TESTING`.
+   - `[NO_ERROR_TESTING]` applies exclusively to uncontracted caller preconditions.
+4. **Enforcing Atomic Assertions over `try...except` (`[NO_TRY_EXCEPT_IN_TESTS]`)**:
+   - In `benchmark_1`, the test writer attempted to test `*Error` outcomes using `try: ... except InvalidVersionError: rejected = True; assert rejected`, bypassing syntactic checks on `assertRaises`.
+   - `try...except` blocks in test methods are dangerous and anti-pattern: if the implementation fails to raise the expected exception, execution continues past the `try` block, and unless complex boilerplate flags are maintained, the test silently passes.
+   - The test and pretense linters strictly prohibit `try...except` in test methods and scenarios (`[NO_TRY_EXCEPT_IN_TESTS]`). Testing expected exceptions must use fail-closed context managers: `with self.assertRaises(ContractedError):` or `with pytest.raises(ContractedError):`. If `try...except` is required for non-test machinery (e.g. mock stubs or test runner setup), `# pragma: allow-try-except` must be explicitly annotated. `try...finally` (without except handlers) remains permitted for resource teardown.
+
+### Reachability Rule: Contracted Errors vs. Uncontracted Guards
+
+When uncovered branches appear in `lib/*.py`:
+1. **Contract Violations with Contracted Errors (Must Be Reachable)**:
+   - A contract violation that has a contracted `*Error` in `low/*.pyi` **must be reachable** under fixed testing. Otherwise, there is no point in throwing an error.
+   - The coverage arbiter requires the fixed scenario suite to reach and verify this error branch.
+2. **Contract Violations Without Contracted Errors (Assumed Unreachable)**:
+   - Other defensive guards without contracted errors (caller precondition checks, internal consistency guards) may or may not be physically reachable.
+   - The coverage arbiter **assumes they are unreachable** when uncovered in `lib`.
+   - The library resolves them through one of three valid mechanisms:
+     1. **`unreachable()` Call**: `from pretense import unreachable; unreachable()`, crashing explicitly if ever executed.
+     2. **Pragma Annotation**: Marking the line with `# pragma: no cover (assumption: <specification justification>)`.
+     3. **Code Restructuring**: Pruning redundant or dead code.
+
+### Elimination of Blanket Coverage Exclusions & Semantic Coverage Auditing
+
+Historically, blanket regex exclusions (`raise .*Error\(` and `raise .*Error$`) in test runners allowed library implementations to hallucinate defensive restrictions (such as rejecting relational operators on wildcards `>1.x` in `semver_solver`) and hide them behind 100% false coverage.
+- All blanket `*Error` regex exclusions in `pyproject.toml` have been removed.
+- The `pretense_coverage` arbiter performs a **semantic contract audit**:
+  - Uncovered `raise ...Error` branches are checked against `low/*.pyi`.
+  - If the branch mistakenly rejects valid specification syntax, the arbiter blames `lib` to implement the required specification behavior.
+  - If genuinely a contracted error, it must be exercised by a fixed test.
+  - If an uncontracted caller precondition, it is annotated with `# pragma: no cover (assumption: <reason>)` or `unreachable()`.
 
 ### Auditor Circuit Breakers & High-Salience Guidance
-1. **Terminal Banners**: All role tools emit high-salience negative constraints:
-   `• Preconditions cannot be tested: *Error exceptions designate contract violations and must never be tested or expected with raises(). If an *Error occurs, blame the test/pretense module for failing to satisfy or gate preconditions (use require(...) in pretense), NEVER the library.`
-2. **Circuit Breaker**: When an auditor delivers the identical blame twice in a row, the autonomous harness immediately terminates and restarts the auditor worker with a clean context. If an auditor is restarted 3 times on the same target, the run terminates with an explicit failure, preventing 100-wave deadlock loops.
+
+1. **Terminal Guidance**: Preconditions cannot be tested via generative fuzzing; contracted errors are tested via fixed scenario tests ending in contract-violation transitions.
+2. **Circuit Breaker**: When an auditor delivers identical blame twice in a row, the autonomous harness immediately terminates and restarts the auditor worker with a clean context. If an auditor is restarted 3 times on the same target, the run terminates with an explicit failure, preventing multi-wave deadlock loops.
 
 ---
 
 ## 6. Empirical Synthesis: Why Multi-Agent Unit Tests Outperformed Pretense on `deepseek-flash`
 
-In the empirical benchmark on `dag_engine_lite`, multi-agent unit testing (`deepseek-flash+dsh`) converged substantially faster and with higher token efficiency than multi-agent Pretense (`deepseek-flash+dsh-pretense`):
+In the empirical benchmark on `dag_engine_lite`, multi-agent unit testing (`deepseek-flash`) converged substantially faster and with higher token efficiency than multi-agent Pretense (`deepseek-flash-pretense`):
 
 ### The Empirical Benchmark Telemetry
 
@@ -723,7 +777,7 @@ A common assumption is that because Pretense test suites also include fixed scen
 
 Forensic analysis of the `deepseek-flash` runs on `dag_engine_lite` proves why this assumption breaks down on **omission defects**:
 
-#### 1. In the Multi-Agent Unit Test Run (`deepseek-flash+dsh`):
+#### 1. In the Multi-Agent Unit Test Run (`deepseek-flash`):
 In Wave 1, the `lib` author happened to recognize the re-registration edge-replacement contract from `low/dag_engine_lite.pyi` and authored the cleanup branch:
 ```python
 previous = self._nodes.get(node_id)
@@ -736,7 +790,7 @@ The unit test author in Wave 1 did **not** test re-registration (suffering from 
 `[BLAME] tests/dag_engine_lite_impl_test.py: Several specification postconditions in this test module remain unverified: re-registration of an already-registered node identifier is never asserted...`
 The test author was forced by coverage backpressure to author `test_add_node_reregistration_detaches_previous_dependency_edges`.
 
-#### 2. In the Multi-Agent Pretense Run (`deepseek-flash+dsh-pretense`):
+#### 2. In the Multi-Agent Pretense Run (`deepseek-flash-pretense`):
 Both the `lib` author AND the `pretense` author suffered from the **exact same cognitive blind spot**:
 * **The `lib` author** wrote:
   ```python
@@ -1148,7 +1202,8 @@ The Pretense runtime parses state machine transition bodies using Python's `ast`
 ### Static AST Validation in `pretense_lint.py`
 The linter enforces:
 - `[PRE_LINT_ASSERT_SINGLE_ARG]`: Forbids multi-argument assertions (`assert test, msg`), preventing truthy tuple bugs and enforcing clean Pytest failure introspection.
-- `[NO_ERROR_TESTING]`: Forbids asserting or expecting any `*Error` exception in `raises(...)` or `assertRaises` (checked preconditions are untestable contract boundaries).
+- `[NO_ERROR_TESTING]`: Forbids asserting or expecting uncontracted caller preconditions in `raises(...)` or `assertRaises`. Contracted operational errors explicitly declared in `low/*.pyi` (under `Raises:` or as exception types) are exempt and MAY be verified in fixed scenario tests using standard `with self.assertRaises(ContractedError):` or transition-level `require(..., error=...)`.
+- `[NO_TRY_EXCEPT_IN_TESTS]`: Forbids using `try...except` blocks in test methods and scenarios. Testing expected exceptions must use fail-closed context managers (`with self.assertRaises(ContractedError):` or `with pytest.raises(ContractedError):`) to prevent silent pass bugs. `try...finally` is permitted for teardown. Non-test code requiring `try...except` must be annotated with `# pragma: allow-try-except`.
 - `[PRE_LINT_REQUIRE_ARG_DOMAINS]`: Enforces valid `Domain.*` specifications in `require_arg`.
 - `[PRE_LINT_PSEUDO_ZERO_STATE]`: Prohibits defining state dataclasses in `<Impl>PseudoStateMachine`.
 - `[PRE_LINT_NO_LAMBDA]`: Prohibits lambdas in transition definitions.
@@ -1167,7 +1222,7 @@ The linter enforces:
 ### Roles: `pretense`, `pretense_qa`, `pretense_coverage`
 - **`pretense`**: Double-blind author of interface state machines (`<name>_pretense.py`) and implementation pseudo state machines (`<name>_impl_pretense.py`).
 - **`pretense_qa`**: Verifies deterministic scenario tests and bounded Hypothesis fuzzing (`--max-examples=50`).
-- **`pretense_coverage`**: Asserts 100% statement coverage across `lib/*.py`, automatically respecting `unreachable()` and `*Error` coverage exclusions.
+- **`pretense_coverage`**: Asserts 100% statement coverage and semantic contract postcondition completeness across `lib/*.py` without blanket `*Error` exclusions. Enforces that contracted operational errors are reachable in fixed scenario tests, while uncontracted caller preconditions are assumed unreachable (annotated with `unreachable()` or `# pragma: no cover (assumption: <reason>)`).
 
 ### Symmetrical Blame Attribution
 The QA arbiter evaluates defects symmetrically:
@@ -1224,15 +1279,15 @@ These benchmarks demonstrate that Pretense reliably scales from single-component
 | **Transition Granularity** | Multiple transitions per method (`get_hit`, `get_miss`) | **Strict 1:1 Transition per method** |
 | **Typing & Decorators** | `@transition(Target.method)` with ad-hoc signature | `@transition(Target.method)` matching method signature |
 | **Branching & Exceptions** | Mutually exclusive `@transition` definitions | **Standard Python `if/else` and `with raises`** |
-| **Error Handling Contract** | Untyped exception catching | **Strict `*Error` (precondition) vs `*Exception`** |
-| **Error Testing Rule** | Fuzzing caught `*Error` freely | **`[NO_ERROR_TESTING]` strictly enforced** |
+| **Error Handling Contract** | Untyped exception catching | **Contracted Errors (`low/*.pyi`) vs Uncontracted Caller Preconditions** |
+| **Error Testing Rule** | Fuzzing caught `*Error` freely | **Fuzzing generates valid inputs by construction; fixed scenario tests verify contracted errors via `require(..., error=...)`** |
 | **Return Value Handling** | Magic `ensure_ret(...)` macro | **`ret = make_return_value(...)` / `call_target()`** |
 | **Pre-State Snapshots** | Not supported | **AST Chopper preserves locals before pivot** |
 | **Impl State Machine** | Duplicate `<Impl>State` with parallel syncing | **Implementation Pseudo State Machine (Zero state)** |
 | **Contract Invariants** | Ad-hoc `ensure(...)` crashing on dummy contexts | **Universal native `assert` on SUT and Fake** |
 | **Fake Verification** | Untested synthesized fake | **Interface-level Hypothesis fake fuzzing** |
 | **Interface Fixed Tests** | None (tests only in impl) | **Mandatory `Test<Target>Fake` with 100% transition coverage** |
-| **Dead-Ends & Coverage** | Unreachable fallbacks cause test failures | **`unreachable("reason")` + `*Error` auto-exempt** |
+| **Dead-Ends & Coverage** | Unreachable fallbacks cause test failures | **`unreachable("reason")` + `# pragma: no cover (assumption: <reason>)` (No blanket regex exclusions)** |
 | **Collaborator Testing** | Mock-style proxy interceptors (`as_checked`) | **Dynamic scope (`sut(Collaborator)`) checking Fake state** |
 | **Collaborator Seeding** | Static pre-seeding antipattern in `make_sut()` | **Dynamic `@transition.seeding` via `collaborators` in Hypothesis** |
 | **Pre-Seeding Invariant** | Permitted (led to state exhaustion) | **Blank initial state strictly enforced (`PRE_LINT_NO_PRE_SEEDING`)** |

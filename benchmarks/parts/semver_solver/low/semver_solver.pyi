@@ -179,9 +179,11 @@ class VersionEngine(Protocol):
         Raises:
             InvalidVersionError: If text violates SemVer 2.0.0 grammar or contains leading zeroes.
 
+        PRECONDITIONS:
+        - WHEN text contains leading zeroes in numeric identifiers or violates grammar, MUST raise InvalidVersionError.
+
         POSTCONDITIONS:
         - MUST parse valid SemVer 2.0.0 strings into Version records with major, minor, patch, prerelease, and build tuples.
-        - WHEN text contains leading zeroes in numeric identifiers or violates grammar, MUST raise InvalidVersionError.
         """
         ...
 
@@ -218,13 +220,15 @@ class VersionEngine(Protocol):
         Raises:
             InvalidRangeError: If text contains malformed range syntax.
 
+        PRECONDITIONS:
+        - WHEN text supplies bare partial versions lacking wildcard characters across any comparator or hyphen expression (such as '1', '1.2', '^0.0', or '1.2 - 2.3'), MUST raise InvalidRangeError.
+        - WHEN text is empty, contains only whitespace, contains empty union clauses, uses comma delimiters, or violates range syntax, MUST raise InvalidRangeError.
+
         POSTCONDITIONS:
         - MUST parse range expression text supporting basic comparators (==, =, !=, <, <=, >, >=), caret ranges (^), tilde ranges (~), wildcards (*, x, X, M.x, M.*, M.m.x, M.m.*), hyphen ranges (M1.m1.p1 - M2.m2.p2), and unions (||).
         - MUST trim surrounding whitespace around range expressions and individual clauses, storing the trimmed range expression in raw_text.
         - MUST accept optional whitespace between relational/prefix operators and target versions or wildcards (e.g. '>= 1.0.0' is equivalent to '>=1.0.0').
         - MUST delimit comparators within clauses strictly by whitespace; commas are not permitted.
-        - WHEN text supplies bare partial versions lacking wildcard characters across any comparator or hyphen expression (such as '1', '1.2', '^0.0', or '1.2 - 2.3'), MUST raise InvalidRangeError.
-        - WHEN text is empty, contains only whitespace, contains empty union clauses, uses comma delimiters, or violates range syntax, MUST raise InvalidRangeError.
         """
         ...
 
@@ -282,9 +286,11 @@ class PackageRepository(Protocol):
         Raises:
             PackageNotFoundError: If name is not registered in the repository.
 
+        PRECONDITIONS:
+        - WHEN name is not registered, MUST raise PackageNotFoundError.
+
         POSTCONDITIONS:
         - MUST yield all registered releases for package name ordered by version precedence descending.
-        - WHEN name is not registered, MUST raise PackageNotFoundError.
         """
         ...
 
@@ -336,10 +342,12 @@ class DependencySolver(Protocol):
         Raises:
             ResolutionConflictError: If dependencies cannot be satisfied mutually.
 
+        PRECONDITIONS:
+        - WHEN dependencies are unsatisfiable or reference unregistered packages absent from repository, MUST raise ResolutionConflictError detailing conflicting packages and derivation explanation without allowing PackageNotFoundError to escape.
+
         POSTCONDITIONS:
         - MUST compute a mutually compatible set of package releases satisfying root and transitive dependencies.
         - MUST select the highest precedence compatible version for each package.
-        - WHEN dependencies are unsatisfiable or reference unregistered packages absent from repository, MUST raise ResolutionConflictError detailing conflicting packages and derivation explanation without allowing PackageNotFoundError to escape.
         """
         ...
 

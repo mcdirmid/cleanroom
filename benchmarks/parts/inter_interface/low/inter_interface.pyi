@@ -40,10 +40,10 @@ class Allocator(Protocol):
 
         PRECONDITIONS:
         - WHEN amount is less than or equal to zero, MUST raise AllocationLimitError.
+        - WHEN amount exceeds available vault reserves, MUST raise AllocationLimitError.
 
         POSTCONDITIONS:
         - WHEN collaborator vault is inactive, MUST raise vault.VaultInactiveException.
-        - WHEN amount exceeds available vault reserves, MUST raise AllocationLimitError.
         - WHEN successful, MUST increment allocated by amount.
         """
         ...

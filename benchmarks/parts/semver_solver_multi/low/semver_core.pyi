@@ -88,9 +88,11 @@ class VersionEngine(Protocol):
         Raises:
             InvalidVersionError: If text violates SemVer 2.0.0 grammar or contains leading zeroes.
 
+        PRECONDITIONS:
+        - WHEN text contains leading zeroes in numeric identifiers or violates grammar, MUST raise InvalidVersionError.
+
         POSTCONDITIONS:
         - MUST parse valid SemVer 2.0.0 strings into Version records with major, minor, patch, prerelease, and build tuples.
-        - WHEN text contains leading zeroes in numeric identifiers or violates grammar, MUST raise InvalidVersionError.
         """
         ...
 

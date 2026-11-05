@@ -152,7 +152,7 @@ class BenchmarkEvaluator(Singleton[SystemTier], Protocol):
 
         POSTCONDITIONS:
         - WHEN record.verification_outcomes indicates failure (unit_tests_failed > 0, unit_tests_passed == 0, pyright_errors > 0, or spec_linter_pass is False), MUST skip archival and return None.
-        - WHEN verification gates pass and synthesized source files are present, MUST resolve directory under <results_dir>/<benchmark-id>/<model-name+harness-name>/.
+        - WHEN verification gates pass and synthesized source files are present, MUST resolve directory under <results_dir>/<benchmark-id>/<model-name>/.
         - MUST resolve the next sequential run index N and copy the library file as lib_<N>.py and the test file as test_<N>.py.
         - MUST prepend flight telemetry metrics, role execution rounds, and verification outcomes as comments to lib_<N>.py.
         - MUST archive Autofab event log when present as autofab_<N>.log.

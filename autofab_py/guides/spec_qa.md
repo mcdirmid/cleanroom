@@ -42,7 +42,8 @@ Auditing follows a strict normative triage chain: if a behavior is absent from h
 - [ ] Every domain concept, data record, parameter, and return value specified in `high/<name>.md` is represented in `low/<name>.pyi`
 - [ ] Every operational contract, behavioral rule, and invariant described in `high/<name>.md` is represented under `INVARIANTS:`, `PRECONDITIONS:`, or `POSTCONDITIONS:` in `low/<name>.pyi`
 - [ ] Postconditions map all behavioral outcomes, state transitions, and return values using normative clauses (`- WHEN <condition>, MUST <outcome>.` or `- MUST <outcome>.`)
-- [ ] Every failure mode and error condition specified in `high/<name>.md` is represented under `POSTCONDITIONS:` with exact quoted error strings
+- [ ] Every failure mode and contract violation error (`*Error`) specified in `high/<name>.md` is represented under `PRECONDITIONS:` using `- WHEN <condition>, MUST raise <Error>.`; specifying contract violation errors under `POSTCONDITIONS:` is strictly prohibited
+- [ ] Operational failures (`*Exception`) and guaranteed outcomes are represented under `POSTCONDITIONS:` using exact quoted error strings or outcome descriptions
 - [ ] Member parity: every `@property` and `@operation` declared in an interface stub is implemented with `@override` in the corresponding `_impl.pyi` stub
 - [ ] Interface stubs (`low/<name>.pyi`) define abstract protocols without leaking internal backing fields or collaborator class names
 - [ ] Implementation stubs (`low/<name>_impl.pyi`) define concrete `GROUNDING:` sections naming valid collaborator classes, methods, and backing fields

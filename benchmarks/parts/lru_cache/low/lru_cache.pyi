@@ -72,9 +72,11 @@ class LRUCache(Protocol):
         Raises:
             CacheCapacityError: If capacity is less than or equal to zero.
 
+        PRECONDITIONS:
+        - WHEN capacity is less than or equal to zero, MUST raise CacheCapacityError.
+
         POSTCONDITIONS:
         - MUST update the cache capacity limit to the specified value.
-        - WHEN capacity is less than or equal to zero, MUST raise CacheCapacityError.
         - WHEN new capacity is smaller than current size, MUST evict least-recently-used entries in sequence until size equals capacity, incrementing the evictions counter for each evicted entry.
         """
         ...
@@ -144,9 +146,11 @@ class LRUCache(Protocol):
         Raises:
             CacheKeyNotFoundError: If key is not present in the cache.
 
+        PRECONDITIONS:
+        - WHEN key is absent from cache, MUST raise CacheKeyNotFoundError.
+
         POSTCONDITIONS:
         - WHEN key exists in cache, MUST remove entry, decrement size by 1, and return removed value.
-        - WHEN key is absent from cache, MUST raise CacheKeyNotFoundError.
         """
         ...
 

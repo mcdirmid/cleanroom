@@ -33,6 +33,7 @@ from build_lint_common import (
     check_no_sys_modules_tampering,
     check_no_top_level_probes,
     check_no_error_testing,
+    check_no_try_except_in_tests,
     check_tautological_assertions,
     check_syntax,
     check_test_dry_run,
@@ -515,6 +516,7 @@ def main() -> int:
                 + check_banned_skips(args.module_path)
                 + check_type_ignore(args.module_path)
                 + check_no_error_testing(args.module_path)
+                + check_no_try_except_in_tests(args.module_path)
                 + undeclared_errors
             )
 
@@ -719,6 +721,7 @@ def main() -> int:
             + check_no_sys_modules_tampering(args.module_path)
             + check_no_top_level_probes(args.module_path, error_code="TEST_LINT_NO_TOP_LEVEL_PROBE")
             + check_no_error_testing(args.module_path)
+            + check_no_try_except_in_tests(args.module_path)
             + check_test_mocks(args.module_path)
             + check_test_structure(args.module_path)
             + check_test_getattr(args.module_path)

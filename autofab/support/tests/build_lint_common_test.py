@@ -10,6 +10,7 @@ from autofab_py.support.lib.build_lint_common import (
     check_banned_skips,
     check_exception_eating,
     check_no_error_testing,
+    check_no_try_except_in_tests,
     check_no_frozen_exceptions,
     check_no_private_imports,
     check_no_sys_modules_tampering,
@@ -657,6 +658,34 @@ class BuildLintCommonNoErrorTestingTest(unittest.TestCase):
             if os.path.exists(temp_path):
                 os.remove(temp_path)
 
+    def test_contracted_error_in_companion_spec_allowed(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            part_dir = os.path.join(td, "parts", "my_part")
+            low_dir = os.path.join(part_dir, "low")
+            tests_dir = os.path.join(part_dir, "tests")
+            os.makedirs(low_dir, exist_ok=True)
+            os.makedirs(tests_dir, exist_ok=True)
+
+            pyi_path = os.path.join(low_dir, "my_part.pyi")
+            with open(pyi_path, "w", encoding="utf-8") as f:
+                f.write(
+                    "class CustomContractedError(Exception):\n"
+                    "    message: str\n"
+                )
+
+            test_file = os.path.join(tests_dir, "my_part_test.py")
+            with open(test_file, "w", encoding="utf-8") as f:
+                f.write(
+                    "import unittest\n"
+                    "class MyTest(unittest.TestCase):\n"
+                    "    def test_err(self):\n"
+                    "        with self.assertRaises(CustomContractedError):\n"
+                    "            pass\n"
+                )
+
+            errors = check_no_error_testing(test_file)
+            self.assertEqual(errors, [])
+
 
 class BuildLintCommonTopLevelProbesTest(unittest.TestCase):
     def test_valid_module_passes(self) -> None:
@@ -709,6 +738,114 @@ class BuildLintCommonTopLevelProbesTest(unittest.TestCase):
         errors = check_no_top_level_probes("test.py", tree=tree)
         self.assertEqual(len(errors), 1)
         self.assertIn("Top-level probe class '_ProbeStateMachine' is prohibited", errors[0])
+
+
+class BuildLintCommonNoTryExceptInTestsTest(unittest.TestCase):
+    def test_try_except_in_test_method_rejected(self) -> None:
+        source = (
+            "import unittest\n"
+            "class MyTest(unittest.TestCase):\n"
+            "    def test_error(self):\n"
+            "        try:\n"
+            "            foo()\n"
+            "        except Exception:\n"
+            "            pass\n"
+        )
+        tree = ast.parse(source)
+        errors = check_no_try_except_in_tests("test.py", tree=tree)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("NO_TRY_EXCEPT_IN_TESTS", errors[0])
+        self.assertIn("Test method 'test_error' uses a try/except block", errors[0])
+
+    def test_try_except_in_standalone_test_rejected(self) -> None:
+        source = (
+            "def test_bar():\n"
+            "    try:\n"
+            "        foo()\n"
+            "    except ValueError:\n"
+            "        pass\n"
+        )
+        tree = ast.parse(source)
+        errors = check_no_try_except_in_tests("test.py", tree=tree)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("NO_TRY_EXCEPT_IN_TESTS", errors[0])
+
+    def test_try_except_in_error_helper_rejected(self) -> None:
+        source = (
+            "def _raises_any(fn):\n"
+            "    try:\n"
+            "        fn()\n"
+            "    except Exception:\n"
+            "        return True\n"
+            "    return False\n"
+        )
+        tree = ast.parse(source)
+        errors = check_no_try_except_in_tests("test.py", tree=tree)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("NO_TRY_EXCEPT_IN_TESTS", errors[0])
+
+    def test_try_finally_allowed(self) -> None:
+        source = (
+            "import unittest\n"
+            "class MyTest(unittest.TestCase):\n"
+            "    def test_cleanup(self):\n"
+            "        try:\n"
+            "            foo()\n"
+            "        finally:\n"
+            "            bar()\n"
+        )
+        tree = ast.parse(source)
+        errors = check_no_try_except_in_tests("test.py", tree=tree)
+        self.assertEqual(errors, [])
+
+    def test_pragma_allow_try_except_suppresses_error(self) -> None:
+        source = (
+            "import unittest\n"
+            "class MyTest(unittest.TestCase):\n"
+            "    def test_allowed(self):\n"
+            "        # pragma: allow-try-except\n"
+            "        try:\n"
+            "            foo()\n"
+            "        except Exception:\n"
+            "            pass\n"
+        )
+        with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as f:
+            f.write(source)
+            f.flush()
+            temp_path = f.name
+        try:
+            errors = check_no_try_except_in_tests(temp_path)
+            self.assertEqual(errors, [])
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+
+    def test_try_except_in_non_test_method_allowed(self) -> None:
+        source = (
+            "class MockHelper:\n"
+            "    def parse(self):\n"
+            "        try:\n"
+            "            return int('1')\n"
+            "        except ValueError:\n"
+            "            return 0\n"
+        )
+        tree = ast.parse(source)
+        errors = check_no_try_except_in_tests("test.py", tree=tree)
+        self.assertEqual(errors, [])
+
+    def test_try_except_in_teardown_allowed(self) -> None:
+        source = (
+            "import unittest\n"
+            "class MyTest(unittest.TestCase):\n"
+            "    def tearDown(self):\n"
+            "        try:\n"
+            "            cleanup()\n"
+            "        except OSError:\n"
+            "            pass\n"
+        )
+        tree = ast.parse(source)
+        errors = check_no_try_except_in_tests("test.py", tree=tree)
+        self.assertEqual(errors, [])
 
 
 if __name__ == "__main__":

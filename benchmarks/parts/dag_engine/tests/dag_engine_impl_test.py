@@ -482,16 +482,10 @@ class DAGEngineImplTest(unittest.TestCase):
         self.assertFalse(runner.is_cancelled())
         runner.cancel()
         self.assertTrue(runner.is_cancelled())
-        report: Optional[dag_engine.DAGRunReport] = None
-        cancelled = False
-        try:
-            report = runner.run()
-        except dag_engine.DAGCancelledError:
-            cancelled = True
+        with self.assertRaises(dag_engine.DAGCancelledError):
+            runner.run()
 
         self.assertEqual(executed, [])
-        if not cancelled:
-            self.assertIsNotNone(report)
 
 
 if __name__ == "__main__":

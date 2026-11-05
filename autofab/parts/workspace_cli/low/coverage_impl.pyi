@@ -91,9 +91,10 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
           coverage.ModuleCoverage.missed, coverage.ModuleCoverage.test_passed,
           and coverage.ModuleCoverage.test_error, delegates uncovered source span
           context to this evaluator's format_spans_report under the supplied threshold and
-          max_spans, and appends agent guidance leading with the precondition exemption
-          directing the agent to first classify whether a span is an *Error raise or precondition
-          guard belonging to the library as a pragma annotation rather than a test requirement,
+          max_spans, and appends agent guidance differentiating contracted operational errors from uncontracted
+          caller precondition guards, directing the agent to attribute uncontracted precondition guards
+          to the library as pragma annotations while attributing contracted operational errors and postconditions
+          to test suites,
           permitting line numbers only within the blamed file while strictly forbidding
           exposing details of other files, and instructing the agent when an uncovered span persists
           across rounds or after test updates to deeply examine the library implementation to

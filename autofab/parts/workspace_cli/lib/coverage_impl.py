@@ -24,6 +24,57 @@ from support.lib.lifecycle import (
 from . import coverage
 
 
+def _extract_contracted_errors(file_path: Path | str) -> Set[str]:
+    """Extracts contracted operational errors declared under 'Raises:' in companion low/*.pyi specifications."""
+    try:
+        p = Path(file_path).resolve()
+    except Exception:
+        return set()
+
+    candidate_dirs: List[Path] = []
+    if p.parent.name in ("lib", "tests", "pretense", "high", "planning", "scenarios"):
+        low_dir = p.parent.parent / "low"
+        if low_dir.is_dir():
+            candidate_dirs.append(low_dir)
+
+    curr = p.parent
+    while curr != curr.parent:
+        low_cand = curr / "low"
+        if low_cand.is_dir() and low_cand not in candidate_dirs:
+            candidate_dirs.append(low_cand)
+        parts_dir = curr / "parts"
+        if parts_dir.is_dir():
+            for subpart in parts_dir.iterdir():
+                low_sub = subpart / "low"
+                if low_sub.is_dir() and low_sub not in candidate_dirs:
+                    candidate_dirs.append(low_sub)
+            if candidate_dirs:
+                break
+        if len(candidate_dirs) > 0:
+            break
+        curr = curr.parent
+
+    contracted_errors: Set[str] = set()
+    for l_dir in candidate_dirs:
+        for pyi_file in l_dir.glob("*.pyi"):
+            try:
+                text = pyi_file.read_text(encoding="utf-8")
+                for match in re.finditer(r"Raises:\s*\n((?:\s+.*?\n)+)", text):
+                    block = match.group(1)
+                    for line in block.splitlines():
+                        line = line.strip()
+                        m = re.match(r"^([A-Za-z0-9_.]*(?:Error|Exception))\b", line)
+                        if m:
+                            full_name = m.group(1)
+                            contracted_errors.add(full_name)
+                            if "." in full_name:
+                                contracted_errors.add(full_name.split(".")[-1])
+            except Exception:
+                continue
+
+    return contracted_errors
+
+
 class CoverageEvaluator(coverage.CoverageEvaluator):
     """Realizes the system coverage evaluator as a system service providing AST analysis, traced unit test execution, and coverage report generation."""
 
@@ -95,15 +146,17 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
         except Exception:
             return ("test", "TEST-COVERAGE-DEFICIT: missing unit test assertion")
 
+        contracted_errors = _extract_contracted_errors(src_path)
+
         def _extract_error_name(exc: Any) -> Optional[str]:
             if isinstance(exc, ast.Call):
                 fn = exc.func
                 name = fn.id if isinstance(fn, ast.Name) else getattr(fn, "attr", "")
-                if name.endswith("Error") or name == "unreachable":
+                if name.endswith("Error") or name.endswith("Exception") or name == "unreachable":
                     return name
             elif isinstance(exc, (ast.Name, ast.Attribute)):
                 name = exc.id if isinstance(exc, ast.Name) else getattr(exc, "attr", "")
-                if name.endswith("Error"):
+                if name.endswith("Error") or name.endswith("Exception"):
                     return name
             return None
 
@@ -131,12 +184,16 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
                             err = _extract_error_name(b_stmt.exc) if b_stmt.exc else None
                             if err:
                                 error_names.append(err)
-                                has_precondition_guard = True
+                                if (
+                                    err not in contracted_errors
+                                    and err.split(".")[-1] not in contracted_errors
+                                ):
+                                    has_precondition_guard = True
 
         src_lines = src.splitlines()
         for ln in range(start, min(end + 1, len(src_lines) + 1)):
             line_text = src_lines[ln - 1] if 0 < ln <= len(src_lines) else ""
-            m = re.search(r"\braise\s+([A-Za-z0-9_]*Error)\b", line_text)
+            m = re.search(r"\braise\s+([A-Za-z0-9_.]*(?:Error|Exception))\b", line_text)
             if m:
                 error_names.append(m.group(1))
             if "unreachable(" in line_text:
@@ -144,8 +201,20 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
 
         if error_names:
             unique_errs = sorted(set(error_names))
-            err_str = ", ".join(unique_errs)
-            return ("lib", f"LIB-PRAGMA-REQUIRED: raises {err_str}")
+            contracted_found = [
+                e for e in unique_errs
+                if e in contracted_errors or e.split(".")[-1] in contracted_errors
+            ]
+            uncontracted_found = [
+                e for e in unique_errs
+                if e not in contracted_errors and e.split(".")[-1] not in contracted_errors
+            ]
+            if contracted_found:
+                err_str = ", ".join(contracted_found)
+                return ("test", f"TEST-COVERAGE-DEFICIT: missing contracted error assertion for {err_str}")
+            if uncontracted_found:
+                err_str = ", ".join(uncontracted_found)
+                return ("lib", f"LIB-PRAGMA-REQUIRED: raises {err_str}")
         if has_precondition_guard:
             return ("lib", "LIB-PRAGMA-REQUIRED: precondition guard")
 
@@ -224,14 +293,16 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
             f"{spans_detail}\n"
             f"--------------------------------------------------------------------------------\n"
             f"AGENT GUIDANCE / COVERAGE ARBITER REMINDER [EXPLAIN FEEDBACK IN TERMS OF SPECIFICATION]:\n"
-            f"• First classify: is this span an *Error raise or precondition guard? If so, it belongs to the library as a pragma annotation (# pragma: no cover (assumption: precondition enforced by caller)) — do not translate it into a test requirement.\n"
+            f"• Differentiate contracted operational errors from uncontracted caller preconditions:\n"
+            f"  - Contracted operational errors (documented under Raises: in low/*.pyi) are test-owned deficits ([TEST-COVERAGE-DEFICIT]). Tests MUST assert these error conditions.\n"
+            f"  - Uncontracted caller precondition guards or unreachable defensive checks are library-owned ([LIB-PRAGMA-REQUIRED]). Instruct the library to prune dead code or annotate with '# pragma: no cover (assumption: precondition enforced by caller)'.\n"
             f"• Blame feedback MUST be provided in terms of how the file being blamed is not compliant with the common source of truth specification.\n"
             f"• Line numbers MAY be mentioned ONLY IF they reference the file being blamed.\n"
             f"• DO NOT expose details (line numbers, code snippets, or internal symbols) of other files.\n"
             f"• Translate contracted positive-path postconditions, invariants, or success branches into missing unit test cases.\n"
             f"• If an uncovered branch is an unreachable defensive check or caller assumption guaranteed by the specification, instruct the implementation author to prune it or mark it as unreachable (# pragma: no cover) according to the methodology.\n"
             f"• If an uncovered span persists after tests were updated or across multiple rounds, deeply examine the library implementation: trace control flow and invariants to determine whether the span is structurally or logically unreachable; if so, blame the library rather than repeating blame to tests.\n"
-            f"• If 100% coverage appears unreachable without either testing a precondition violation or deleting contracted behavior, use bin/fail — do not reinterpret a *Error span as a test requirement.\n"
+            f"• If 100% coverage appears unreachable without either testing an uncontracted precondition violation or deleting contracted behavior, use bin/fail — do not reinterpret an uncontracted *Error span as a test requirement.\n"
             f"================================================================================\n"
         )
 

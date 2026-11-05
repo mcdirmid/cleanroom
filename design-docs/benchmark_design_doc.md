@@ -747,7 +747,7 @@ The agent is instructed to self-verify code and tests prior to completing the ro
 1. **Zero Contamination in `benchmark_N`**: The baseline runs entirely within an ephemeral, indexed flight scope directory (`benchmark_N/parts/<task_id>/`). Canonical `benchmarks/` remains completely pristine and read-only.
 2. **No Role Workspaces Overhead**: Unlike Autofab multi-agent flights, no `autofab_autofab_role_workspaces/<repo>_<role>_benchmark_N` sibling sandboxes are provisioned; the baseline developer works directly inside `benchmark_N/parts/<task_id>/` and the entire scope is wiped cleanly in `finally:`.
 3. **Telemetry Parity**: Identical telemetry metrics are harvested ($T_{\text{in}}^{\text{uncached}}, T_{\text{in}}^{\text{cached}}, T_{\text{out}}$, step latencies, wall-clock time, financial costs). Role rounds are recorded as `role_rounds={"baseline": 1}`.
-4. **Two-Pass Verification & Archival**: Evaluates the identical two-pass verification gate. Passing flights are archived to `<results_dir>/<benchmark-id>/<model+harness>-baseline/` with embedded metrics comments and `# Methodology: baseline`.
+4. **Two-Pass Verification & Archival**: Evaluates the identical two-pass verification gate. Passing flights are archived to `<results_dir>/<benchmark-id>/<model>-baseline/` with embedded metrics comments and `# Methodology: baseline`.
 
 #### The Single Source of Truth & Scientific Fairness (Steel-Manning the Baseline)
 In empirical software engineering and AI evaluation, comparative baselines are frequently vulnerable to criticism if they are artificially crippled, denied standard tooling, or provided vague prompts. To guarantee scientific rigor and defensibility, the Autofab baseline control is deliberately **steel-manned**:
@@ -830,7 +830,7 @@ The differential cross-test runner (`bin/run_cross_tests.py`) executes an exhaus
 ./bin/run_cross_tests.py --suite dag_engine_lite
 
 # Target a specific library implementation against all test suites
-./bin/run_cross_tests.py --suite dag_engine_lite --target-model Qwen3.6-35B-A3B-oQ6-mtp+dsh
+./bin/run_cross_tests.py --suite dag_engine_lite --target-model Qwen3.6-35B-A3B-oQ6-mtp
 
 # Evaluate against custom results directory or evaluation sandbox
 ./bin/run_cross_tests.py --results-dir benchmarks/results --eval-base /tmp/cross_eval
@@ -1115,12 +1115,12 @@ To prevent cross-flight cache contamination, state bleed, or accidental reuse of
 ```
 benchmarks/results/
 └── <benchmark-id>/
-    ├── <model-name+harness-name>/             # Autofab multi-role runs (Methodology: autofab)
+    ├── <model-name>/                          # Autofab multi-role runs (Methodology: autofab)
     │   ├── lib_1.py                           # Run 1 synthesized library implementation (with empirical comment header)
     │   ├── test_1.py                          # Run 1 synthesized candidate test suite
     │   ├── lib_2.py                           # Run 2 synthesized library implementation
     │   └── test_2.py                          # Run 2 synthesized candidate test suite
-    └── <model-name+harness-name>-baseline/    # Baseline single-agent runs (Methodology: baseline)
+    └── <model-name>-baseline/                 # Baseline single-agent runs (Methodology: baseline)
         ├── lib_1.py                           # Run 1 baseline library implementation (# Methodology: baseline)
         ├── test_1.py                          # Run 1 baseline unit test suite
         └── autofab_1.log                    # Run 1 event log (when present)
@@ -1130,7 +1130,7 @@ benchmarks/results/
    - Before executing a benchmark flight, `drain_unit_workspace()` wipes any pre-existing code and tests under `unit_dir/lib` and `unit_dir/tests`, and purges any ephemeral `autofab_autofab_role_workspaces/` matching the unit.
    - This marks the unit `DIRTY` in the Autofab DAG and forces synthesis strictly from typed specifications under `low/*.pyi`.
 2. **Post-Flight Sequential Archival (`archive_flight_artifacts`)**:
-   - Synthesized candidate files are saved to `benchmarks/results/<benchmark-id>/<model-name+harness-name>/` (or appending `-baseline` for baseline methodology flights).
+   - Synthesized candidate files are saved to `benchmarks/results/<benchmark-id>/<model-name>/` (or appending `-baseline` for baseline methodology flights).
    - The evaluator dynamically resolves the next sequential run index $N \in \{1, 2, \dots\}$.
    - `test_<N>.py` archives the raw unit test suite synthesized by the test role worker (or baseline developer agent).
    - `lib_<N>.py` prepends a comprehensive, machine-readable metrics comment block directly above the synthesized library code (incorporating `# Methodology: baseline` and single-round `role_rounds: baseline: 1` when evaluated under `--baseline`):
@@ -1190,10 +1190,10 @@ The subject system comprises ~500 LOC of formal specification under `low/dag_eng
 The benchmark evaluated whether autonomous models could compile typed specifications into complete, production-grade library implementations and corresponding unit test suites without human intervention, while preserving double-blind isolation and strict black-box encapsulation.
 
 The four evaluated model configurations span Tier 1 (Free Local) and Tier 2 (Budget Cloud):
-1. **Gemini 3.8 Flash (`gemini-3.8-flash+antigravity`)**: Google Antigravity harness, Tier 2 Budget Cloud.
-2. **DeepSeek Flash (`deepseek-flash+dsh`)**: DeepSeek Harness (DSH), Tier 2 Budget Cloud.
-3. **Qwen 3.6 35B MoE (`Qwen3.6-35B-A3B-oQ6-mtp+dsh`)**: Local Apple Silicon 6-bit quantized MoE, Tier 1 Local via DSH.
-4. **Qwen Flash Next 288 (`qwen-flash-next-288-q4+dsh`)**: Quantized high-capacity local model, Tier 1 Local via DSH.
+1. **Gemini 3.8 Flash (`gemini-3.8-flash`)**: Google Antigravity harness, Tier 2 Budget Cloud.
+2. **DeepSeek Flash (`deepseek-flash`)**: DeepSeek Harness (DSH), Tier 2 Budget Cloud.
+3. **Qwen 3.6 35B MoE (`Qwen3.6-35B-A3B-oQ6-mtp`)**: Local Apple Silicon 6-bit quantized MoE, Tier 1 Local via DSH.
+4. **Qwen Flash Next 288 (`qwen-flash-next-288-q4`)**: Quantized high-capacity local model, Tier 1 Local via DSH.
 
 ### Cross-Model Telemetry & Empirical Outcome Matrix
 
@@ -1210,7 +1210,7 @@ The four evaluated model configurations span Tier 1 (Free Local) and Tier 2 (Bud
 
 ### Qualitative Code Quality Analysis by Model
 
-#### 1. Gemini 3.8 Flash (`gemini-3.8-flash+antigravity`) — Gold Standard Exemplar
+#### 1. Gemini 3.8 Flash (`gemini-3.8-flash`) — Gold Standard Exemplar
 - **Architectural & Contract Fidelity**: Gemini 3.8 Flash exhibited exemplary architectural discipline. Target classes (`DAG`, `WaveScheduler`, `DAGRunner`) adhered strictly to `low/dag_engine.pyi`. Zero uncontracted public methods or properties were hallucinated.
 - **Dependency & Lifecycle Resolution**: Correctly resolved inter-singleton dependencies via constructor injection and the Autofab lifecycle registry (`get_singleton`). `DAGRunner` obtained `WaveScheduler` dynamically respecting lifecycle tier boundaries, without requiring artificial configuration methods.
 - **Test Suite Purity (True Black-Box)**: `test_1.py` contains 51 unit test cases derived purely from contractual invariants (`INVARIANTS:`) and operational postconditions (`POSTCONDITIONS:`). Tests interacted with targets exclusively through public typed protocols.
@@ -1219,12 +1219,12 @@ The four evaluated model configurations span Tier 1 (Free Local) and Tier 2 (Bud
   - **Zero dynamic reflection**: Neither `getattr()` nor `setattr()` was invoked.
 - **Auditing Behavior**: The QA Arbiter and Coverage Arbiter evaluated test failures and coverage deficits strictly against `low/dag_engine.pyi`, producing non-contaminating blame feedback that never leaked implementation details. Concluded in exactly 1 round per role.
 
-#### 2. DeepSeek Flash (`deepseek-flash+dsh`) — High Algorithmic Competence with Encapsulation Leak
+#### 2. DeepSeek Flash (`deepseek-flash`) — High Algorithmic Competence with Encapsulation Leak
 - **Algorithmic Quality**: DeepSeek synthesized mathematically elegant, robust implementations of Tarjan's cycle detection, dynamic critical path memoization, and thread-pooled wave execution.
 - **Scaffolding & Import Fragility**: Exposed a defect in early Autofab scaffolding: test scaffolding emitted unrooted imports (`from lib import dag_engine_impl`), which worked in single-directory test runners but raised `ModuleNotFoundError` during repo-wide collection. Once the framework was hardened to mandate package-qualified imports (`from benchmarks.parts.dag_engine.lib.dag_engine_impl import DAG`), the module passed cleanly.
 - **Test Encapsulation Leak**: In `test_1.py`, to test the `CONTINUE_ON_ERROR` failure policy, the test worker used dynamic reflection (`getattr(runner, '_scheduler')`) to inspect private runner state rather than observing public return values or querying the shared lifecycle scope. While functional, this breached strict black-box encapsulation.
 
-#### 3. Qwen 3.6 35B MoE (`Qwen3.6-35B-A3B-oQ6-mtp+dsh`) — Severe Interface Hallucination & Auditor Collapse
+#### 3. Qwen 3.6 35B MoE (`Qwen3.6-35B-A3B-oQ6-mtp`) — Severe Interface Hallucination & Auditor Collapse
 - **Hallucinated Multi-Phase Initialization**: Failed to wire dependencies through the constructor or lifecycle registry. Instead, Qwen invented ad-hoc public configuration methods:
   - `WaveScheduler.configure(dag: DAG, failure_policy: FailurePolicy)`
   - `DAGRunner.configure(dag: DAG, scheduler: WaveScheduler)`
@@ -1240,7 +1240,7 @@ The four evaluated model configurations span Tier 1 (Free Local) and Tier 2 (Bud
   > *"Retrieve WaveScheduler from scope and configure the runner: cast(Any, runner).configure(dag, scheduler)"*
   This represented a total collapse of the double-blind isolation invariant ($\mathcal{I} = 0$), where an auditor contaminated the test worker with internal implementation symbols.
 
-#### 4. Qwen Flash Next 288 (`qwen-flash-next-288-q4+dsh`) — Defensive Branch Reachability Deadlock
+#### 4. Qwen Flash Next 288 (`qwen-flash-next-288-q4`) — Defensive Branch Reachability Deadlock
 - **The Defensive Code Trap**: `lib` implemented defensive sanity checks protecting internal assumptions (e.g. pre-scheduling cancellation sweeps, unreachable timeout re-raises) that were impossible to trigger through valid public inputs.
 - **Coverage Arbiter Impasse**: The Coverage Arbiter repeatedly blamed `test` for failing to cover these statements, driving coverage from 96.2% to 97.2% before plateauing. Over 8 rounds, the test worker wrote increasingly desperate tests trying to trip unreachable lines.
 - **Worker-Auditor Deadlock**: The test worker correctly noted in its header:

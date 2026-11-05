@@ -41,15 +41,26 @@ Low-level stubs assign planning requirements and grounding resolutions to canoni
 - Defines state consistency rules, scope guarantees, and structural invariants that hold across all instances of the type.
 - **No Precondition Repetition**: Invariants declared on a type hold across all operations of that type and must **never be repeated as preconditions** on operations in that type.
 
-### 2.2 `PRECONDITIONS:` (Invocation Prerequisites)
+### 2.2 `PRECONDITIONS:` (Invocation Prerequisites & Contract Violation Guards)
 - Declared on `@operation` methods.
-- Defines prerequisites and constraints that callers must satisfy before invoking the operation.
+- Defines prerequisites, input domain constraints, and caller obligations that must be satisfied before invoking the operation.
 - Does not repeat type invariants established at the class level.
+- **Preconditions Without an Error**:
+  - *"If this precondition is violated, bad undefined things will happen."*
+  - Represents caller assumptions, axiomatic invariant preservation, or static type contracts.
+  - Stated as caller obligations without an error clause (e.g. `- A caller supplies a valid non-empty identifier.`). The callee implementation assumes these hold and does not branch on violation.
+- **Preconditions With an Error**:
+  - *"If this precondition is violated, an error is raised, and bad undefined things could still happen."*
+  - Represents checked precondition guards where the contract mandates defensive validation of caller inputs or state.
+  - Stated using normative error syntax: `- WHEN <precondition violated>, MUST raise <Error>.` (e.g. `- WHEN text contains leading zeroes in numeric identifiers or violates grammar, MUST raise InvalidVersionError.`).
+- **Strict Prohibition on Errors in Postconditions**:
+  - Requirements of the form `- WHEN <condition>, MUST raise <Error>.` specify contract violation guards and must **NEVER** be documented under `POSTCONDITIONS:`. They belong strictly under `PRECONDITIONS:`.
 
 ### 2.3 `POSTCONDITIONS:` (Operational Outcomes & Normative Guarantees)
 - Declared on `@operation` methods and stateful or constant `@property` members.
-- Defines guaranteed outcomes upon invocation, including return values, state transitions, collaborator delegations, and structured failure responses.
+- Defines guaranteed outcomes upon invocation within the valid operational domain, including return values, state mutations, collaborator delegations, and non-contract external operational failures (`*Exception`, such as timeouts or collaborator unavailability).
 - Uses normative language: `- WHEN <condition>, MUST <outcome>.` and `- MUST <outcome>.`
+- Does not define contract violation errors (`*Error`); all contract violation errors are preconditions documented under `PRECONDITIONS:`.
 
 #### No Verbatim Copy-Down to Refinements/Subtypes
 Postconditions do **not** need to be copied down to overrides or implementation stubs verbatim:
@@ -171,6 +182,6 @@ When writing `lib/<name>_impl.py`, the implementer:
 3. Implements the exact collaborator lookups (`get_singleton(...)`) and invocations specified in `GROUNDING:`.
 
 This completely eliminates guesswork:
-- The interface contracts (`POSTCONDITIONS:`) define the testable invariants and failure responses.
+- The interface contracts (`PRECONDITIONS:` and `POSTCONDITIONS:`) define the testable preconditions, failure guards, and operational guarantees.
 - The implementation grounding (`GROUNDING:`) defines the concrete execution blueprint.
 - No parallel `grounding/*.py` pseudo-code files or Datalog queries are needed.

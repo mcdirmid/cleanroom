@@ -1815,6 +1815,66 @@ ALLOW_ERROR_TEST_RE = re.compile(
 )
 
 
+def _find_contracted_spec_errors(file_path: str) -> set[str]:
+    """Extracts exception names declared in companion low/*.pyi specifications."""
+    declared: set[str] = set()
+    if not file_path or not os.path.exists(file_path):
+        return declared
+
+    dir_path = os.path.abspath(os.path.dirname(file_path))
+    low_dirs: list[str] = []
+    curr = dir_path
+    for _ in range(5):
+        cand = os.path.join(curr, "low")
+        if os.path.isdir(cand) and cand not in low_dirs:
+            low_dirs.append(cand)
+        cand_parent_low = os.path.join(curr, "..", "low")
+        if os.path.isdir(cand_parent_low):
+            cand_norm = os.path.abspath(cand_parent_low)
+            if cand_norm not in low_dirs:
+                low_dirs.append(cand_norm)
+        parent = os.path.dirname(curr)
+        if not parent or parent == curr:
+            break
+        curr = parent
+
+    for ld in low_dirs:
+        try:
+            files = os.listdir(ld)
+        except OSError:
+            continue
+        for f in files:
+            if f.endswith(".pyi"):
+                p = os.path.join(ld, f)
+                try:
+                    with open(p, "r", encoding="utf-8") as pyi_file:
+                        pyi_content = pyi_file.read()
+                        tree = ast.parse(pyi_content, filename=p)
+                    for node in ast.walk(tree):
+                        if isinstance(node, ast.ClassDef):
+                            is_exc = node.name.endswith("Error") or node.name.endswith("Exception")
+                            for b in node.bases:
+                                b_id = getattr(b, "id", "") or getattr(b, "attr", "")
+                                if "Exception" in b_id or "Error" in b_id:
+                                    is_exc = True
+                            if is_exc:
+                                declared.add(node.name)
+                        elif (
+                            (isinstance(node, ast.FunctionDef) and ast.get_docstring(node))
+                            or (isinstance(node, ast.Module) and ast.get_docstring(node))
+                        ):
+                            doc = ast.get_docstring(node) or ""
+                            if "Raises:" in doc or "raises:" in doc:
+                                for line in doc.splitlines():
+                                    parts = line.strip().split(":")
+                                    if parts and parts[0].endswith("Error"):
+                                        declared.add(parts[0].strip())
+                except (SyntaxError, OSError):
+                    pass
+
+    return declared
+
+
 def check_no_error_testing(
     file_path: str, tree: Optional[ast.AST] = None
 ) -> list[str]:
@@ -1837,6 +1897,8 @@ def check_no_error_testing(
             tree = ast.parse(content, filename=file_path)
         except (SyntaxError, OSError):
             return errors
+
+    contracted_errors = _find_contracted_spec_errors(file_path)
 
     def _extract_error_names(expr: ast.AST) -> list[str]:
         names: list[str] = []
@@ -1871,9 +1933,91 @@ def check_no_error_testing(
         if fn_name in ("assertRaises", "assert_raises", "raises") and call_node.args:
             err_names = _extract_error_names(call_node.args[0])
             for err_name in err_names:
+                if err_name in contracted_errors:
+                    continue
                 errors.append(
                     f"{file_path}:{lineno}: error [NO_ERROR_TESTING]: Contract violation errors (*Error) designate checked preconditions that callers must satisfy and cannot be tested (found '{err_name}'). Preconditions cannot be tested, even if explicitly checked in code. Tests and transitions must never assert or expect *Error exceptions; preconditions must be satisfied by the caller (or gated via require(...) in Pretense)."
                 )
+
+    return errors
+
+
+ALLOW_TRY_EXCEPT_RE = re.compile(
+    r"#\s*(?:cleanroom:\s*allow-try-except|pragma:\s*allow-try-except|allow-try-except)\b"
+)
+
+
+def check_no_try_except_in_tests(
+    file_path: str, tree: Optional[ast.AST] = None
+) -> list[str]:
+    """Check that test methods and scenarios do not use try/except blocks.
+    
+    Exception testing must use 'with self.assertRaises(...):' or 'with pytest.raises(...):'
+    for fail-closed assertion semantics.
+    """
+    errors: list[str] = []
+    if not os.path.exists(file_path) and tree is None:
+        return errors
+
+    lines: list[str] = []
+    if os.path.exists(file_path):
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                lines = f.read().splitlines()
+        except OSError:
+            pass
+
+    if tree is None:
+        try:
+            content = "\n".join(lines)
+            tree = ast.parse(content, filename=file_path)
+        except (SyntaxError, OSError):
+            return errors
+
+    test_methods: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef):
+            is_test_class = any(
+                "TestCase" in (getattr(b, "id", "") or getattr(b, "attr", ""))
+                or "Test" in (getattr(b, "id", "") or getattr(b, "attr", ""))
+                or node.name.endswith("Test")
+                or node.name.startswith("Test")
+                for b in node.bases
+            )
+            for item in node.body:
+                if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    if item.name in ("setUp", "tearDown", "setUpClass", "tearDownClass"):
+                        continue
+                    if is_test_class or item.name.startswith("test_"):
+                        test_methods.add(id(item))
+
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            is_test_func = (
+                id(node) in test_methods
+                or node.name.startswith("test_")
+                or any(
+                    (isinstance(dec, ast.Name) and dec.id in ("scenario", "transition"))
+                    or (isinstance(dec, ast.Call) and getattr(dec.func, "id", "") in ("scenario", "transition"))
+                    or (isinstance(dec, ast.Call) and getattr(getattr(dec.func, "value", None), "id", "") == "transition")
+                    for dec in node.decorator_list
+                )
+                or any(term in node.name.lower() for term in ("raise", "error", "reject", "failure", "fail", "except"))
+            )
+            if not is_test_func:
+                continue
+            for inner in ast.walk(node):
+                if isinstance(inner, ast.Try) and inner.handlers:
+                    lineno = getattr(inner, "lineno", 1)
+                    line_has_pragma = any(
+                        0 <= check_idx < len(lines) and ALLOW_TRY_EXCEPT_RE.search(lines[check_idx])
+                        for check_idx in (lineno - 1, lineno - 2)
+                    )
+                    if line_has_pragma:
+                        continue
+                    errors.append(
+                        f"{file_path}:{lineno}: error [NO_TRY_EXCEPT_IN_TESTS]: Test method '{node.name}' uses a try/except block. Testing expected exceptions must use 'with self.assertRaises(ContractedError):' or 'with pytest.raises(ContractedError):' to ensure fail-closed test execution; catching exceptions directly in test methods is prohibited."
+                    )
 
     return errors
 

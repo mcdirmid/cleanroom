@@ -27,6 +27,7 @@ try:
         check_no_sys_modules_tampering,
         check_no_top_level_probes,
         check_no_error_testing,
+        check_no_try_except_in_tests,
         check_syntax,
         check_tautological_assertions,
         check_test_dry_run,
@@ -51,6 +52,7 @@ except ImportError:
         check_no_sys_modules_tampering,
         check_no_top_level_probes,
         check_no_error_testing,
+        check_no_try_except_in_tests,
         check_syntax,
         check_tautological_assertions,
         check_test_dry_run,
@@ -2856,6 +2858,9 @@ def main() -> int:
 
     no_error_test_errs = check_no_error_testing(args.module_path, tree=tree)
     all_errors.extend(no_error_test_errs)
+
+    no_try_except_errs = check_no_try_except_in_tests(args.module_path, tree=tree)
+    all_errors.extend(no_try_except_errs)
 
     sys_module_errs = check_no_sys_modules_tampering(args.module_path, tree=tree)
     all_errors.extend(sys_module_errs)

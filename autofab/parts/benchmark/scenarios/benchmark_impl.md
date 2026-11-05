@@ -63,7 +63,7 @@ Given: a completed flight for model `qwen-35b` on benchmark unit `dag_engine` wi
    Observed: allocates a concise unique flight scope directory (e.g. `benchmark_1`), copies the target unit directory and configuration into `<flight_scope>/parts/<unit>`, explicitly configures the methodology pipeline as `pipeline = "pretense"` or `pipeline = "standard"`, rewrites benchmark package imports to reference the flight scope package while disallowing bare parts imports, drains pre-existing `lib/` and `tests/` directories, and marks specifications clean up to `spec_qa` within the flight scope to isolate code and test generation.
 
 2. The benchmark evaluator archives the artifacts.
-   Observed: creates `lib_1.py`, `test_1.py`, and `autofab_1.log` under `benchmarks/results/dag_engine/qwen-35b+omlx/`, embedding flight telemetry comments in `lib_1.py`.
+   Observed: creates `lib_1.py`, `test_1.py`, and `autofab_1.log` under `benchmarks/results/dag_engine/qwen-35b/`, embedding flight telemetry comments in `lib_1.py`.
 
 3. The caller checks the benchmark unit workspace and flight scope.
    Observed: the unit's `lib/` and `tests/` directories have been drained clean, and the ephemeral flight scope directory has been removed.

@@ -299,6 +299,28 @@ class ToolCoverageImplTest(unittest.TestCase):
             self.assertFalse(data.get("all_lib_pragma_required"))
             self.assertTrue(data.get("has_test_owned_spans"))
 
+            # Now add companion low specification with Raises: ServiceConfigError
+            part_low = td_path / "low"
+            part_low.mkdir(parents=True, exist_ok=True)
+            spec_file = part_low / "sample_service_impl.pyi"
+            spec_file.write_text(
+                "def execute_task(port: int, flag: bool) -> str:\n"
+                '    """Executes task.\n'
+                "\n"
+                "    Raises:\n"
+                "        ServiceConfigError: If port is negative.\n"
+                '    """\n'
+                "    ...\n",
+                encoding="utf-8",
+            )
+            # Re-classify lines 5-6: now should be test-owned deficit!
+            owner_contracted, disp_contracted = self.evaluator.classify_span(impl_file, 5, 6)
+            self.assertEqual(owner_contracted, "test")
+            self.assertIn(
+                "TEST-COVERAGE-DEFICIT: missing contracted error assertion for ServiceConfigError",
+                disp_contracted,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

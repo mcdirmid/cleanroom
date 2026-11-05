@@ -95,7 +95,7 @@ spans `(1, 200)` and `(300, 500)`, and the caller requests a report clamped to 1
 
 1. The caller asks for the coverage report clamped to 10 context lines.
    Observed: the report carries the two uncovered spans labeled with ownership dispositions, at most 10 source code context lines
-   around them, and actionable guidance leading with the precondition exemption directing the agent to first classify whether a span is an *Error raise or precondition guard belonging to the library as a pragma annotation rather than a test requirement, formulating blame feedback strictly
+   around them, and actionable guidance differentiating contracted operational errors from uncontracted caller precondition guards, directing the agent to attribute uncontracted precondition guards to the library as pragma annotations while attributing contracted operational errors and postconditions to test suites, formulating blame feedback strictly
    in terms of how the blamed file is not compliant with the common source of truth specification,
    permitting line numbers only within the blamed file while strictly forbidding exposing details of
    other files, and instructing the agent when an uncovered span persists across rounds or after test updates to deeply examine the library implementation to determine whether the span is structurally or logically unreachable.

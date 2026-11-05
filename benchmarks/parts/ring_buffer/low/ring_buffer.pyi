@@ -67,9 +67,11 @@ class RingBuffer(Protocol):
         Raises:
             BufferEmptyError: If the circular buffer contains zero items.
 
+        PRECONDITIONS:
+        - WHEN size equals zero, MUST raise BufferEmptyError.
+
         POSTCONDITIONS:
         - WHEN size is greater than zero, MUST remove oldest item, decrement size by 1, and return the removed item.
-        - WHEN size equals zero, MUST raise BufferEmptyError.
         """
         ...
 

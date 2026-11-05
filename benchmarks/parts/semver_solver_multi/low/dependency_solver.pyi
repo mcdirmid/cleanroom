@@ -103,9 +103,11 @@ class PackageRepository(Protocol):
         Raises:
             PackageNotFoundError: If name is not registered in the repository.
 
+        PRECONDITIONS:
+        - WHEN name is not registered, MUST raise PackageNotFoundError.
+
         POSTCONDITIONS:
         - MUST yield all registered releases for package name ordered by version precedence descending.
-        - WHEN name is not registered, MUST raise PackageNotFoundError.
         """
         ...
 
@@ -157,12 +159,14 @@ class DependencySolver(Protocol):
         Raises:
             ResolutionConflictError: If dependencies cannot be satisfied mutually or reference missing packages.
 
+        PRECONDITIONS:
+        - WHEN dependency constraints are unsatisfiable, MUST raise ResolutionConflictError identifying conflicting packages.
+        - WHEN a dependency references a package absent from the repository, MUST raise ResolutionConflictError without allowing PackageNotFoundError to escape.
+
         POSTCONDITIONS:
         - MUST compute a mutually compatible version assignment satisfying all transitive package dependencies.
         - MUST select the highest precedence compatible release for each required package.
         - MUST produce a ResolutionOutcome containing the selected version mapping and derivation steps.
-        - WHEN dependency constraints are unsatisfiable, MUST raise ResolutionConflictError identifying conflicting packages.
-        - WHEN a dependency references a package absent from the repository, MUST raise ResolutionConflictError without allowing PackageNotFoundError to escape.
         """
         ...
 

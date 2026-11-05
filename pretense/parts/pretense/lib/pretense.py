@@ -511,24 +511,29 @@ class EnsuresCheck:
 
 def require(
     condition: bool,
-    reason_or_exc: Union[str, Type[PretenseSpecificationError]] = "",
-    exc_class: Optional[Type[PretenseSpecificationError]] = None,
+    reason_or_exc: Union[str, Type[BaseException]] = "",
+    exc_class: Optional[Type[BaseException]] = None,
+    error: Optional[Union[Type[BaseException], BaseException]] = None,
 ) -> None:
     """Precondition requirement assertion enforcing state machine antecedents."""
     if not condition:
-        target_exc_cls = exc_class
+        target_exc: Optional[Union[Type[BaseException], BaseException]] = error or exc_class
         reason = ""
         if isinstance(reason_or_exc, type) and issubclass(reason_or_exc, BaseException):
-            target_exc_cls = reason_or_exc
+            target_exc = target_exc or reason_or_exc
+        elif isinstance(reason_or_exc, BaseException):
+            target_exc = target_exc or reason_or_exc
         elif isinstance(reason_or_exc, str):
             reason = reason_or_exc
 
-        if target_exc_cls is not None:
+        if target_exc is not None:
+            if isinstance(target_exc, BaseException):
+                raise target_exc
             try:
-                raise target_exc_cls()
+                raise target_exc()
             except TypeError:
                 msg = f"Requirement failed: {reason}" if reason else "Requirement failed"
-                raise target_exc_cls(msg)
+                raise target_exc(msg)
         msg = f"Requirement failed: {reason}" if reason else "Requirement failed"
         raise PretenseSpecificationError(msg)
 
@@ -541,27 +546,38 @@ def require_arg(
     val: Sequence[E],
     domain: Union[Domain[Sequence[E]], Domain[List[E]], Domain[Tuple[E, ...]]],
     preferred: Optional[Sequence[Sequence[E]]] = None,
+    error: Optional[Union[Type[BaseException], BaseException]] = None,
 ) -> None: ...
 @overload
 def require_arg(
     val: Optional[Sequence[E]],
     domain: Union[Domain[Optional[Sequence[E]]], Domain[Optional[List[E]]], Domain[Optional[Tuple[E, ...]]]],
     preferred: Optional[Sequence[Optional[Sequence[E]]]] = None,
+    error: Optional[Union[Type[BaseException], BaseException]] = None,
 ) -> None: ...
 @overload
 def require_arg(
     val: T,
     domain: Domain[T],
     preferred: Optional[Sequence[T]] = None,
+    error: Optional[Union[Type[BaseException], BaseException]] = None,
 ) -> None: ...
 def require_arg(
     val: Any,
     domain: Any,
     preferred: Optional[Sequence[Any]] = None,
+    error: Optional[Union[Type[BaseException], BaseException]] = None,
 ) -> None:
     """Argument domain validation and preferred candidate binding."""
     dom: Domain[Any] = domain if isinstance(domain, Domain) else Domain.of(domain)
     if not dom.validate(val):
+        if error is not None:
+            if isinstance(error, BaseException):
+                raise error
+            try:
+                raise error()
+            except TypeError:
+                raise error(f"Argument value {val!r} failed domain validation for {domain}")
         raise PretenseSpecificationError(
             f"Argument value {val!r} failed domain validation for {domain}. "
             "If this argument is valid per the specification contract (e.g. testing error paths or edge cases), "

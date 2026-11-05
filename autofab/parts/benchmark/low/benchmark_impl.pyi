@@ -107,13 +107,13 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
             Tuple of archived library and test file paths, or None if files are missing.
 
         GROUNDING:
-        - Resolves target directory under benchmarks/results/<benchmark-id>/<model-name+harness-name>/ or results_dir.
+        - Resolves target directory under benchmarks/results/<benchmark-id>/<model-name>/ or results_dir.
         - Scans directory to resolve next sequential run index N.
         - Writes test file as test_<N>.py and library file as lib_<N>.py with embedded flight metrics comment block.
 
         POSTCONDITIONS:
         - WHEN record.verification_outcomes indicates failure (unit_tests_failed > 0, unit_tests_passed == 0, pyright_errors > 0, or spec_linter_pass is False), MUST skip archival and return None.
-        - WHEN verification gates pass and synthesized source files are present, MUST resolve directory under <results_dir>/<benchmark-id>/<model-name+harness-name>/ (or appending -baseline for baseline methodology).
+        - WHEN verification gates pass and synthesized source files are present, MUST resolve directory under <results_dir>/<benchmark-id>/<model-name>/ (or appending -baseline for baseline methodology).
         - MUST resolve the next sequential run index N and copy the library file as lib_<N>.py and the test file as test_<N>.py.
         - MUST prepend flight telemetry metrics, role execution rounds, and verification outcomes as comments to lib_<N>.py.
         - MUST preserve multi-file library implementations within lib_<N>.py.

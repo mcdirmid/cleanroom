@@ -52,8 +52,10 @@ class TaskWorker(Protocol):
             WorkerError: If the collaborator task queue contains zero pending tasks.
             WorkerExecutionException: If the collaborator task queue is unavailable.
 
-        POSTCONDITIONS:
+        PRECONDITIONS:
         - WHEN collaborator task queue has zero pending tasks, MUST raise WorkerError.
+
+        POSTCONDITIONS:
         - WHEN collaborator task queue is unavailable, MUST raise WorkerExecutionException.
         - WHEN collaborator dispatch succeeds, MUST execute dispatched task and return task identifier.
         """

@@ -161,14 +161,16 @@ class require:
     def __init__(
         self,
         condition: bool,
-        reason_or_exc: Union[str, Type[PretenseSpecificationError]] = "",
-        exc_class: Optional[Type[PretenseSpecificationError]] = None,
+        reason_or_exc: Union[str, Type[BaseException]] = "",
+        exc_class: Optional[Type[BaseException]] = None,
+        error: Optional[Union[Type[BaseException], BaseException]] = None,
     ) -> None: ...
     def __call__(
         self,
         condition: bool,
-        reason_or_exc: Union[str, Type[PretenseSpecificationError]] = "",
-        exc_class: Optional[Type[PretenseSpecificationError]] = None,
+        reason_or_exc: Union[str, Type[BaseException]] = "",
+        exc_class: Optional[Type[BaseException]] = None,
+        error: Optional[Union[Type[BaseException], BaseException]] = None,
     ) -> None: ...
 
 
@@ -187,6 +189,7 @@ class require_arg(Generic[T]):
         val: Sequence[E],
         domain: Union[Domain[Sequence[E]], Domain[List[E]], Domain[Tuple[E, ...]]],
         preferred: Optional[Sequence[Sequence[E]]] = None,
+        error: Optional[Union[Type[BaseException], BaseException]] = None,
     ) -> None: ...
     @overload
     def __init__(
@@ -194,6 +197,7 @@ class require_arg(Generic[T]):
         val: Optional[Sequence[E]],
         domain: Union[Domain[Optional[Sequence[E]]], Domain[Optional[List[E]]], Domain[Optional[Tuple[E, ...]]]],
         preferred: Optional[Sequence[Optional[Sequence[E]]]] = None,
+        error: Optional[Union[Type[BaseException], BaseException]] = None,
     ) -> None: ...
     @overload
     def __init__(
@@ -201,6 +205,7 @@ class require_arg(Generic[T]):
         val: T,
         domain: Domain[T],
         preferred: Optional[Sequence[T]] = None,
+        error: Optional[Union[Type[BaseException], BaseException]] = None,
     ) -> None: ...
     @overload
     def __call__(
@@ -208,6 +213,7 @@ class require_arg(Generic[T]):
         val: Sequence[E],
         domain: Union[Domain[Sequence[E]], Domain[List[E]], Domain[Tuple[E, ...]]],
         preferred: Optional[Sequence[Sequence[E]]] = None,
+        error: Optional[Union[Type[BaseException], BaseException]] = None,
     ) -> None: ...
     @overload
     def __call__(
@@ -215,6 +221,7 @@ class require_arg(Generic[T]):
         val: Optional[Sequence[E]],
         domain: Union[Domain[Optional[Sequence[E]]], Domain[Optional[List[E]]], Domain[Optional[Tuple[E, ...]]]],
         preferred: Optional[Sequence[Optional[Sequence[E]]]] = None,
+        error: Optional[Union[Type[BaseException], BaseException]] = None,
     ) -> None: ...
     @overload
     def __call__(
@@ -222,6 +229,7 @@ class require_arg(Generic[T]):
         val: T,
         domain: Domain[T],
         preferred: Optional[Sequence[T]] = None,
+        error: Optional[Union[Type[BaseException], BaseException]] = None,
     ) -> None: ...
 
 

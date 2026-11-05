@@ -59,10 +59,12 @@ class TaskQueue(Protocol):
             QueueEmptyError: If the task queue contains zero pending tasks.
             QueueUnavailableException: If the task queue is unavailable.
 
+        PRECONDITIONS:
+        - WHEN pending_count equals 0, MUST raise QueueEmptyError.
+
         POSTCONDITIONS:
         - WHEN queue is unavailable, MUST raise QueueUnavailableException.
         - WHEN pending_count is greater than 0, MUST pop oldest task, decrement pending_count by 1, and return task_id.
-        - WHEN pending_count equals 0, MUST raise QueueEmptyError.
         """
         ...
 

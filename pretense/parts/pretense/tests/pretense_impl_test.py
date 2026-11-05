@@ -53,6 +53,27 @@ class PretenseImplTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             raised.unwrap()
 
+    def test_require_and_require_arg_error_modes(self) -> None:
+        """Verify require and require_arg error parameter behavior and contract violation exceptions."""
+        class CustomContractError(Exception):
+            pass
+
+        # 1. Passing condition succeeds
+        pretense.require(True, error=CustomContractError)
+        pretense.require_arg(5, pretense.Domain.integers(min_value=0), error=CustomContractError)
+
+        # 2. Failing condition throws specified Error
+        with self.assertRaises(CustomContractError):
+            pretense.require(False, error=CustomContractError)
+        with self.assertRaises(CustomContractError):
+            pretense.require_arg(-1, pretense.Domain.integers(min_value=0), error=CustomContractError)
+
+        # 3. Failing condition without specified error throws PretenseSpecificationError
+        with self.assertRaises(pretense.PretenseSpecificationError):
+            pretense.require(False)
+        with self.assertRaises(pretense.PretenseSpecificationError):
+            pretense.require_arg(-1, pretense.Domain.integers(min_value=0))
+
     def test_transition_and_state_machine(self) -> None:
         """Verify transition registration, execution, and invariant checking."""
         t_inc = pretense.Transition("increment")

@@ -41,7 +41,7 @@ Given: a state transition method decorated with `@transition(TargetClass.method)
    Observed: `requires` validates state preconditions, `require_arg` validates arguments against their domain, pre-state snapshots capture values before the pivot, the AST pivot executes the method on target, and single-argument `assert` statements verify postconditions and differentials.
 
 2. The caller evaluates the transition when the `requires` condition is not met.
-   Observed: the requirement check raises an antecedent failure (`UnsatisfiedAntecedentError`), execution is skipped cleanly, and the transition is treated as not ready to fire without failing the test.
+   Observed: the requirement check raises `PretenseSpecificationError` (or the contracted error when specified), failing verification; in fixed scenario tests with an optional error parameter, the requirement check throws the specified error upon contract violation.
 
 3. The caller evaluates an exception transition using `with raises(ExpectedException): make_return_value(None)`.
    Observed: in verification mode, the context manager asserts that the target call raised `ExpectedException` and propagates the exception to callers and test runners; in Fake mode, it raises `ExpectedException` to emulate interface failure semantics.
@@ -63,7 +63,7 @@ Given: a state machine subclass defining 1:1 state transitions and model state.
    Observed: the fake adapter conforms to the target interface protocol, delegates method calls directly to 1:1 transitions, updates model state, and validates single-argument `assert` checks against the fake's observable properties.
 
 2. The caller calls a method on the fake adapter when the state machine's `requires` condition is not satisfied.
-   Observed: the fake adapter raises `UnsatisfiedAntecedentError` indicating unsatisfied precondition state.
+   Observed: the fake adapter raises `PretenseSpecificationError` (or the contracted error) indicating a contract violation, immediately failing verification.
 
 3. The caller compiles a Hypothesis property fuzz test for the fake via `compile_hypothesis_test_case(StateMachine, FakeTarget)`.
    Observed: the test case executes property fuzzing directly against the synthesized fake double, verifying that all state contracts hold across arbitrary operation sequences.

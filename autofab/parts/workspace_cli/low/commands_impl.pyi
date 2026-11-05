@@ -95,8 +95,8 @@ class WorkspaceCommandHandler(commands.WorkspaceCommandHandler):
         - Enforces that modified workspace targets have been checked via check_files since modification,
           sanitizes multi-line critique explanations into a single continuous paragraph,
           validates blame attribution against open coverage spans in the workspace coverage status buffer
-          (rejecting test-directed blame when all uncovered spans are library-owned pragma requirements
-          and rejecting repeating identical blame against the same uncovered span set),
+          (rejecting repeating identical blame against the same uncovered span set while
+          permitting test-directed blame for contracted postconditions and operational errors),
           delegates attribution to attribution.AttributionCoordinator, appends blame message to
           autofab_files_ext.AUTOFAB_LOG_FILE in the directory containing parts,
           records the blamed target in autofab_files_ext.BLAME_BUFFER_FILE in the workspace root,

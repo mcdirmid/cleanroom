@@ -120,9 +120,10 @@ def abbreviate_run_name(name: str) -> str:
     s = re.sub(r"deepseek[-_]?v3", "DeepSeek-V3", s, flags=re.I)
     s = re.sub(r"qwen[-_]?moe", "Qwen-MoE", s, flags=re.I)
     s = re.sub(r"qwen[-_]?3\.6", "Qwen", s, flags=re.I)
-    s = re.sub(r"[+_](?:antigravity|dsh)[-_]pretense[-_]baseline", " Base", s, flags=re.I)
-    s = re.sub(r"[+_](?:antigravity|dsh)[-_]pretense", " Clean", s, flags=re.I)
-    s = re.sub(r"[+_]baseline", " Base", s, flags=re.I)
+    s = re.sub(r"[+_](?:antigravity|dsh)", "", s, flags=re.I)
+    s = re.sub(r"[-_]pretense[-_]baseline", " Base", s, flags=re.I)
+    s = re.sub(r"[-_]pretense", " Clean", s, flags=re.I)
+    s = re.sub(r"[-_]baseline", " Base", s, flags=re.I)
     return s
 
 

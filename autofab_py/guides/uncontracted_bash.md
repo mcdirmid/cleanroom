@@ -43,7 +43,7 @@ Remediation evaluates each uncontracted inventory entry against strict decision 
 
 - [ ] Each uncontracted inventory entry is evaluated to determine whether deletion or specification modification is appropriate
 - [ ] Uncontracted code is recommended for safe deletion when the logic is dead, orphaned, unused by active callers, or redundant with standard library or collaborator capabilities
-- [ ] Uncontracted defensive validation branches that violate caller assumptions (`ASSUMPTIONS:`) or handle uncontracted impossible states are recommended for deletion
+- [ ] Uncontracted defensive validation branches that handle uncontracted caller preconditions (preconditions without an error in `PRECONDITIONS:`) or uncontracted impossible states are recommended for deletion
 - [ ] Legacy prototype functions, obsolete command aliases, and uncontracted test-only conveniences are recommended for deletion
 - [ ] Uncontracted code is recommended for specification retrofitting when the functionality is essential for runtime system execution, active external integration, or critical lifecycle management
 - [ ] External data schemas, serialization envelopes, and manifest headers required by implementation logic are recommended for formalization in external boundary specifications (`high/<name>_ext.md` and `low/<name>_ext.pyi`)

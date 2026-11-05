@@ -734,7 +734,7 @@ class BenchmarkImplTest(unittest.TestCase):
 
                 archived = evaluator.archive_flight_artifacts(record, unit, results_dir=str(results_dir))
                 self.assertIsNotNone(archived)
-                log_archive = results_dir / unit.task_id / f"{model.identifier.replace('/', '_')}+loop" / f"{app_info.APP_NAME}_1.log"
+                log_archive = results_dir / unit.task_id / f"{model.identifier.replace('/', '_')}" / f"{app_info.APP_NAME}_1.log"
                 self.assertTrue(log_archive.is_file())
                 self.assertIn("[CHANGE]", log_archive.read_text(encoding="utf-8"))
 
@@ -970,7 +970,7 @@ class BenchmarkImplTest(unittest.TestCase):
             self.assertIsNotNone(res)
             assert res is not None
             lib_dest, test_dest = res
-            self.assertIn("gemini-flash+antigravity-baseline", lib_dest)
+            self.assertIn("gemini-flash-baseline", lib_dest)
             lib_content = Path(lib_dest).read_text(encoding="utf-8")
             self.assertIn("Methodology: baseline", lib_content)
             self.assertIn("Role Execution Rounds:   baseline: 1 (Total: 1)", lib_content)
@@ -1199,7 +1199,7 @@ class BenchmarkImplTest(unittest.TestCase):
             self.assertIsNotNone(res)
             assert res is not None
             lib_dest, test_dest = res
-            self.assertIn("gemini-flash+antigravity-pretense-baseline", lib_dest)
+            self.assertIn("gemini-flash-pretense-baseline", lib_dest)
             self.assertTrue(test_dest.endswith("pretense_1.py"))
             lib_content = Path(lib_dest).read_text(encoding="utf-8")
             self.assertIn("Methodology: pretense_baseline", lib_content)
@@ -1530,7 +1530,7 @@ class BenchmarkImplTest(unittest.TestCase):
             self.assertIsNotNone(res)
             assert res is not None
             lib_dest, test_dest = res
-            self.assertIn("gemini-flash+antigravity-combined-baseline", lib_dest)
+            self.assertIn("gemini-flash-combined-baseline", lib_dest)
             self.assertTrue(test_dest.endswith("test_1.py"))
             dest_dir = Path(lib_dest).parent
             self.assertTrue((dest_dir / "pretense_1.py").is_file())

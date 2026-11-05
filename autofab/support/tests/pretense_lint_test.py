@@ -1066,6 +1066,46 @@ class PretenseLintTest(unittest.TestCase):
             self.assertEqual(len(check_pretense_structure(tree)), 0)
             self.assertEqual(len(check_pretense_imports(scaffold, pyi_path=tw_pyi, is_impl=True)), 0)
 
+    def test_try_except_in_scenario_rejected(self) -> None:
+        import io
+        from unittest.mock import patch
+        from autofab_py.support.lib.pretense_lint import main
+
+        code = (
+            "from dataclasses import dataclass\n"
+            "from typing import Any\n"
+            "import unittest\n"
+            "from pretense import StateMachine, transition, TransitionContext\n"
+            "@dataclass\n"
+            "class MyState:\n"
+            "    initialized: bool = True\n"
+            "class MyService:\n"
+            "    def poll(self) -> None: ...\n"
+            "class MyMachine(StateMachine[MyState]):\n"
+            "    @transition(MyService.poll)\n"
+            "    def poll(self, ctx: TransitionContext[Any, [], Any]) -> None:\n"
+            "        pass\n"
+            "class MyScenarioTest(unittest.TestCase):\n"
+            "    def test_reject(self) -> None:\n"
+            "        try:\n"
+            "            pass\n"
+            "        except Exception:\n"
+            "            pass\n"
+        )
+        with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as f:
+            f.write(code)
+            bad_path = f.name
+        try:
+            stderr_capture = io.StringIO()
+            with patch("sys.argv", ["pretense_lint", bad_path]), patch("sys.stderr", stderr_capture):
+                exit_code = main()
+                self.assertEqual(exit_code, 1)
+                output = stderr_capture.getvalue()
+                self.assertIn("NO_TRY_EXCEPT_IN_TESTS", output)
+        finally:
+            if os.path.exists(bad_path):
+                os.remove(bad_path)
+
 
 if __name__ == "__main__":
     unittest.main()

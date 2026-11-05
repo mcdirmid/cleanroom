@@ -101,6 +101,4 @@ exclude_also = [
     'assert_never\(',
     'raise AssertionError\(',
     'assert False',
-    'raise [A-Za-z0-9_]*Error\(',
-    'raise [A-Za-z0-9_]*Error$',
 ]
