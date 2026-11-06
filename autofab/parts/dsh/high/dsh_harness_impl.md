@@ -25,7 +25,7 @@ When parsing session telemetry:
 
 - The dsh telemetry parser parses text log streams as fallback when structured records are unavailable.
 
-The dsh harness adapter executes DeepSeek Harness rounds using configurable command lines within target role workspaces, discovering session storage across environment overrides and platform conventions.
+The dsh harness adapter executes DeepSeek Harness rounds using configurable command lines within target role workspaces, discovering session storage across environment overrides and platform conventions (defaulting to DeepSeek Harness Web storage strictly when Web mode is explicitly active).
 
 When dispatching and awaiting role rounds:
 
@@ -41,7 +41,7 @@ The dsh harness manager provides singleton access to the telemetry parser, const
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-30T19:50:00Z
-LAST_CHANGED: 2026-10-30T19:50:00Z
-CHANGE: Isolate candidate cleanroom action logs by tracking pre-dispatch file offsets and prevent historical action records from prior rounds from causing false clean or blame states upon interruption
+LAST_CHANGED: 2026-11-05T21:45:00Z
+CHANGE: Discover DSH Web storage strictly when Web mode is explicitly active
 SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->

@@ -8,6 +8,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -130,6 +131,72 @@ def resolve_common_spec_files(
     return resolved
 
 
+def resolve_feedback_targets(
+    role_name: str,
+    part_dir: str,
+    unit_name: Optional[str],
+    ws_root: str,
+    repo_root: Optional[str] = None,
+) -> List[str]:
+    """Resolves existing candidate feedback target files for blame routing."""
+    if not unit_name:
+        return []
+    clean_r = role_name.split(":")[-1].strip().lower()
+    reg = get_singleton(role_registry.WorkspaceRegistry)
+    try:
+        r_def = reg.resolve_role_definition(clean_r, repo_root=repo_root)
+    except Exception:
+        return []
+
+    fb_deps = list(r_def.feedback_role_deps or ()) + list(getattr(r_def, "star_feedback_role_deps", ()) or ())
+    if not fb_deps:
+        return []
+
+    resolved: List[str] = []
+    base_unit = unit_name[:-5] if unit_name.endswith("_impl") else unit_name
+
+    for fb_role in fb_deps:
+        fb_clean = fb_role.split(":")[-1].strip().lower()
+        try:
+            fb_def = reg.resolve_role_definition(fb_clean, repo_root=repo_root)
+        except Exception:
+            continue
+        if not fb_def.src_pattern:
+            continue
+
+        cands = [fb_def.src_pattern.format(unit_dir=part_dir, unit_name=unit_name)]
+        if base_unit != unit_name:
+            cands.append(fb_def.src_pattern.format(unit_dir=part_dir, unit_name=base_unit))
+
+        found_any = False
+        for c in cands:
+            full_ws = os.path.join(ws_root, c) if not os.path.isabs(c) else c
+            full_repo = os.path.join(repo_root, c) if (repo_root and not os.path.isabs(c)) else None
+
+            path_to_record = None
+            if os.path.isfile(full_ws):
+                path_to_record = os.path.relpath(full_ws, ws_root)
+            elif full_repo and os.path.isfile(full_repo):
+                path_to_record = os.path.relpath(full_repo, repo_root) if repo_root else c
+
+            if path_to_record:
+                if path_to_record not in resolved:
+                    resolved.append(path_to_record)
+                found_any = True
+
+        if not found_any and cands:
+            cand_rel = cands[0]
+            if cand_rel not in resolved:
+                resolved.append(cand_rel)
+
+    return resolved
+
+
+def _is_test_file(target: str) -> bool:
+    norm = target.replace("\\", "/").lower()
+    return "/tests/" in norm or norm.startswith("tests/") or norm.endswith(("_test.py", "_test.pyi", "_pretense.py"))
+
+
 def _is_role_writable_file(role_def: Any, file_path: str) -> bool:
     if not role_def:
         return True
@@ -144,15 +211,72 @@ def _is_role_writable_file(role_def: Any, file_path: str) -> bool:
     fname = os.path.basename(norm_path)
     for pat in patterns:
         pat_norm = pat.replace("\\", "/")
-        if fnmatch.fnmatch(norm_path, f"*{pat_norm}") or fnmatch.fnmatch(fname, pat_norm):
+        file_pat = pat_norm.split("/")[-1] if "/" in pat_norm else pat_norm
+        dir_part = pat_norm.split("/")[0] if "/" in pat_norm else ""
+        if fnmatch.fnmatch(norm_path, f"*{pat_norm}") or fnmatch.fnmatch(norm_path, pat_norm):
             return True
+        if fnmatch.fnmatch(fname, pat_norm) or fnmatch.fnmatch(fname, file_pat):
+            if not dir_part or f"/{dir_part}/" in norm_path or norm_path.startswith(f"{dir_part}/") or norm_path == fname:
+                return True
         if pat_norm.endswith("/*") and pat_norm[:-2] in norm_path:
             return True
         if "/*." in pat_norm:
-            dir_part = pat_norm.split("/")[0]
             if f"/{dir_part}/" in norm_path or norm_path.startswith(f"{dir_part}/"):
                 return True
     return False
+
+
+def _is_target_owned_by_role(
+    target: str,
+    ws_root: str,
+    main_root: str,
+    meta: Optional[Dict[str, Any]],
+    role_name: str,
+    dir_scope: str = "",
+) -> bool:
+    clean_r = role_name.split(":")[-1].strip().lower() if role_name else ""
+    if not clean_r:
+        return True
+
+    # Auditor role check
+    if is_auditor_role(clean_r, repo_root=main_root):
+        if _is_test_file(target):
+            return False
+        sub_coord = get_singleton(submit.SubmissionCoordinator)
+        target_path, _ = sub_coord.resolve_submit_target(target, ws_root, clean_r, dir_scope)
+        if not target_path or not os.path.isfile(target_path):
+            target_path, _ = sub_coord.resolve_submit_target(target, main_root, clean_r, dir_scope)
+        return bool(target_path and os.path.isfile(target_path))
+
+    # Producer / author role check
+    reg = get_singleton(role_registry.WorkspaceRegistry)
+    try:
+        role_def = reg.resolve_role_definition(clean_r, repo_root=main_root)
+    except Exception:
+        role_def = None
+
+    sub_coord = get_singleton(submit.SubmissionCoordinator)
+    target_path, _ = sub_coord.resolve_submit_target(target, ws_root, clean_r, dir_scope)
+    if not target_path or not os.path.isfile(target_path):
+        target_path, _ = sub_coord.resolve_submit_target(target, main_root, clean_r, dir_scope)
+
+    cand = target_path or target
+
+    # 1. Enforce read-only check: if file is in workspace and is read-only, producer does NOT own it
+    if target_path and target_path.startswith(ws_root) and os.path.isfile(target_path):
+        try:
+            st = os.stat(target_path)
+            if not bool(st.st_mode & stat.S_IWUSR):
+                return False
+        except OSError:
+            return False
+
+    # 2. Check writable file patterns
+    if role_def:
+        if not _is_role_writable_file(role_def, cand) and not _is_role_writable_file(role_def, target):
+            return False
+
+    return True
 
 
 def _verify_and_revert_readonly_integrity(
@@ -441,20 +565,34 @@ def _print_triage_summary(
 
     spec_files = resolve_common_spec_files(role_name, part_dir, active_unit, ws_root, repo_root=main_root)
     spec_desc = ", ".join(spec_files) if spec_files else "the common specification"
+    fb_targets = resolve_feedback_targets(role_name, part_dir, active_unit, ws_root, repo_root=main_root)
+    if target_rel and target_rel not in fb_targets:
+        fb_targets = [target_rel] + fb_targets
 
     print("\n" + "=" * 80)
     print(f"======================= {app_info.get_app_title()} Triage Summary =======================")
     print(f"Target: {target_rel}")
     print(f"Author's Latest # CHANGE: \"{change_header}\"")
     print(f"Primary Failure: {primary_failure}")
-    print(f"Candidate Culprit: {candidate_culprit} (or companion test/pretense module)")
+    print(f"Candidate Culprit: {candidate_culprit} (or other candidate feedback target files)")
     print("\nACTION REQUIRED:")
     print("• You are an AUDITOR, not an author. Do NOT write debug scripts.")
     print(f"• Audit the failure against the specification ({spec_desc}).")
-    print(f"• Determine the culprit file: the library module ({target_rel}) if implementation violates contracts, or the companion test/pretense module if tests violate preconditions or assert unmandated behavior.")
     print("• Deliver attribution via: bin/blame <culprit_file> \"<critique>\"")
     print("• After blaming, run 'bin/get_work' to inspect remaining units and conclude.")
     print("=" * 80)
+
+    print("\n" + "-" * 80)
+    print("BLAME ROUTING (DETERMINE CULPRIT FROM SPECIFICATION & FEEDBACK TARGET SOURCE CODE):")
+    print(f"• Ground Truth Specification: {spec_desc}")
+    print("• Candidate Files That Can Receive Feedback:")
+    for fb_path in fb_targets:
+        print(f"  - {fb_path}")
+    print("• Routing Rules:")
+    print("  1. Look at the specification contracts and the source code of the candidate feedback files above.")
+    print("  2. Determine which of those files you should blame for each observed problem against the specification.")
+    print(f"  3. TARGET DISPARITY WARNING: The target you checked is '{target_rel}', but verification involves multiple files. NEVER default to blaming '{target_rel}' simply because it was the file you called bin/check_files on! Look at the specification and the source code of all candidate feedback files above to determine which file actually contains the defect.")
+    print("-" * 80)
 
     if "coverage" in role_name:
         print(
@@ -473,12 +611,11 @@ def _print_triage_summary(
             "• Line numbers MAY be mentioned ONLY IF they reference the file being blamed.\n"
             "• DO NOT expose details (line numbers, code snippets, or internal symbols) of other files.\n"
             "• Frame test failures strictly as contract discrepancies against the specification.\n"
-            "• Checked preconditions (*Error, e.g. NodeNotFoundError, CycleError) CANNOT be tested:\n"
-            "  - NEVER blame the library for raising an *Error on invalid caller inputs.\n"
-            "  - NEVER wrap *Error in with raises() or try/except in test or pretense code.\n"
-            "  - If Hypothesis crashes on *Error, blame the interface state machine (pretense/<iface>_pretense.py) for failing to gate inputs with require(self.state.<cond>).\n"
-            "  - Precondition guards in require(...) MUST ONLY check self.state (rule PN009), NEVER target (SUT).\n"
-            "• Operational postconditions: only contracted runtime failures from seeded conditions use with raises(ExpectedException).\n"
+            "• An unhandled *Error or test failure can indicate:\n"
+            "  - An implementation module is defective (raised an unexpected error, violated postconditions, or misused collaborators).\n"
+            "  - A verification or test module is defective (missing preconditions in require(), invalid transition logic, or invalid assertions).\n"
+            "  - An imported dependency or synthesized fake is modeled incorrectly.\n"
+            "• Precondition guards in require(...) MUST ONLY check self.state (rule PN009), NEVER target (SUT).\n"
             "• Single-paragraph blame: exactly 2 arguments (bin/blame <culprit_file> \"<critique>\"), no newlines."
         )
     else:
@@ -1104,7 +1241,7 @@ class WorkspaceChecker(check.WorkspaceChecker):
             try:
                 reg = get_singleton(role_registry.WorkspaceRegistry)
                 r_def = reg.resolve_role_definition(role_name, repo_root=main_root)
-                has_feedback = bool(r_def.feedback_role_deps if hasattr(r_def, "feedback_role_deps") else ())
+                has_feedback = bool((r_def.feedback_role_deps if hasattr(r_def, "feedback_role_deps") else ()) or (getattr(r_def, "star_feedback_role_deps", ())))
             except Exception:
                 has_feedback = is_auditor_role(role_name)
 
@@ -1197,33 +1334,47 @@ class WorkspaceChecker(check.WorkspaceChecker):
         has_no_work_marker = os.path.isfile(marker)
 
         if not is_fused:
-            if has_no_work_marker:
-                print(
-                    "Error: No pending work assigned to this role workspace.\n"
-                    "Call bin/get_work first to acquire work, or conclude the round if all work is resolved."
-                )
-                return 1
-
-            if pending_targets:
-                if target:
-                    norm_tgt = target.strip().lstrip("/").replace("\\", "/")
-                    tgt_stem = _normalize_unit_stem(norm_tgt)
-                    matched = any(
-                        norm_tgt == pt.strip().lstrip("/").replace("\\", "/")
-                        or norm_tgt.endswith(f"/{pt.strip().lstrip('/').replace('\\', '/')}")
-                        or pt.strip().lstrip("/").replace("\\", "/").endswith(f"/{norm_tgt}")
-                        or (tgt_stem and _normalize_unit_stem(pt) == tgt_stem)
-                        for pt in pending_targets
+            if not target:
+                if has_no_work_marker:
+                    print(
+                        "Error: No pending work assigned to this role workspace.\n"
+                        "Call bin/get_work first to acquire work, or conclude the round if all work is resolved."
                     )
-                    if not matched:
-                        print(
-                            f"Error: Target '{target}' is not in the assigned pending work for this role workspace.\n"
-                            f"Call bin/get_work to view assigned pending targets."
-                        )
+                    return 1
+                if not pending_targets:
+                    print("No pending or specified targets to check.")
+                    return 0
+            else:
+                norm_tgt = target.strip().lstrip("/").replace("\\", "/")
+                tgt_stem = _normalize_unit_stem(norm_tgt)
+                matched = any(
+                    norm_tgt == pt.strip().lstrip("/").replace("\\", "/")
+                    or norm_tgt.endswith(f"/{pt.strip().lstrip('/').replace('\\', '/')}")
+                    or pt.strip().lstrip("/").replace("\\", "/").endswith(f"/{norm_tgt}")
+                    or (tgt_stem and _normalize_unit_stem(pt) == tgt_stem)
+                    for pt in pending_targets
+                )
+                if not matched:
+                    if not _is_target_owned_by_role(
+                        target, ws_root, main_root, meta, role_name, dir_scope=d_scope
+                    ):
+                        if pending_targets:
+                            print(
+                                f"Error: Target '{target}' is not in the assigned pending work for this role workspace.\n"
+                                f"Call bin/get_work to view assigned pending targets."
+                            )
+                        elif has_no_work_marker:
+                            print(
+                                "Error: No pending work assigned to this role workspace.\n"
+                                "Call bin/get_work first to acquire work, or conclude the round if all work is resolved."
+                            )
+                        else:
+                            clean_r = role_name.split(":")[-1].strip().lower() if role_name else ""
+                            print(
+                                f"Error: Target '{target}' is not owned by role '{clean_r}'.\n"
+                                f"Call bin/get_work to view assigned pending targets."
+                            )
                         return 1
-            elif not target:
-                print("No pending or specified targets to check.")
-                return 0
 
         targets_to_check: List[str] = []
         if target:
@@ -1329,11 +1480,24 @@ class WorkspaceChecker(check.WorkspaceChecker):
                 env["BUILD_WORKSPACE_DIRECTORY"] = ws_root
                 if "UV_PROJECT" not in env and main_root:
                     env["UV_PROJECT"] = main_root
+                if "UV_CACHE_DIR" not in env:
+                    env["UV_CACHE_DIR"] = "/tmp/uv_cache"
+                extra_paths: list[str] = []
+                if part_dir:
+                    part_abs = os.path.abspath(part_dir if os.path.isabs(part_dir) else os.path.join(ws_root, part_dir))
+                    part_parent = os.path.dirname(part_abs)
+                    if os.path.isdir(part_parent) and os.path.basename(part_parent) == "parts":
+                        extra_paths.append(part_parent)
+                        scope_dir = os.path.dirname(part_parent)
+                        if os.path.isdir(scope_dir):
+                            extra_paths.append(scope_dir)
+
                 # Dynamic PYTHONPATH assembly strictly bounded to role workspace, isolating from canonical root.
                 if hasattr(app_info, "assemble_pythonpath_str"):
                     env["PYTHONPATH"] = app_info.assemble_pythonpath_str(
                         repo_root=main_root,
                         ws_root=ws_root,
+                        extra_paths=extra_paths,
                         existing_pythonpath=env.get("PYTHONPATH"),
                         isolate_from_repo_root=bool(main_root),
                     )
@@ -1465,8 +1629,8 @@ class WorkspaceChecker(check.WorkspaceChecker):
         record_check_executed(ws_root, target_path, passed)
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-30T11:00:00Z
-# LAST_CHANGED: 2026-11-03T23:45:00Z
-# CHANGE: Instruct coverage auditor when uncovered lines persist to examine library implementation for unreachable code
+# LAST_CHANGED: 2026-11-05T10:35:00Z
+# CHANGE: Allow verification and submit for unassigned targets owned by active role
 # COVERAGE_AUDIT: 2026-10-18T19:13:51Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

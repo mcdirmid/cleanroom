@@ -71,6 +71,10 @@ main repository has since changed the same source to `widget upstream`.
    Realized by: `src_metadata`, now finding no uncommitted local change, and the component's own
    copying of the differing upstream content.
 
+3. Upstream stamps an audit or updates metadata on the canonical widget file without changing its code body. The synchronizer pulls again.
+   Observed: the pull succeeds without conflict, updating the workspace pull baseline.
+   Realized by: `src_metadata`, establishing that the code body has not changed upstream, avoiding false conflict detection on metadata-only updates.
+
 ### Scenario 5 — Refreshing the system files
 
 Given: role alpha is commissioned for scope_a; the workspace holds local modifications to the
@@ -174,8 +178,18 @@ changed.
    Realized by: role guide regeneration delegated to `provision`, which rewrites only the guide file and
    leaves every in-scope source file alone.
 
+### Scenario 11 — Subagent edits in role workspace are preserved on pull when upstream is unchanged
+
+Given: role alpha is commissioned for scope_a at `/ws/alpha_scope_a`, the workspace alpha source
+for widget carries the subagent modification `widget local`, and the canonical main repository has not changed
+since the file was last pulled into the workspace.
+
+1. The synchronizer pulls upstream changes for alpha in scope_a.
+   Observed: the workspace alpha source for widget retains `widget local` without being reverted or clobbered, and the sync result reports zero pulled files.
+   Realized by: comparing canonical files against the pull manifest and skipping files whose upstream hashes have not changed since the last pull.
+
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-22T13:50:00Z
-LAST_CHANGED: 2026-10-30T05:40:00Z
-CHANGE: Strip readme declaration attributes from refreshed pyproject.toml during workspace system file refresh
+LAST_CHANGED: 2026-11-05T11:45:00Z
+CHANGE: Preserve subagent edits on pull when upstream files have not changed
 -->

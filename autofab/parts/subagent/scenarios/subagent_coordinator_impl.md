@@ -144,16 +144,16 @@ Given: a role worker repeatedly delivers an identical blame signature across con
    Observed: the coordinator clears consecutive blame tracking for any roles that had blamed that target so that testing the new revision starts as a fresh evaluation.
    Realized by: the component inspecting author submitted targets, matching against active blame fingerprints, and clearing consecutive identical blame counts.
 
-4. An upstream author role is active or scheduled for concurrent dispatch in the same polling cycle.
-   Observed: the coordinator withholds the downstream auditor role from concurrent dispatch until the upstream author finishes and submits.
-   Realized by: the component checking active workers and current cycle dispatch candidates against transitive upstream role dependencies.
+4. An upstream author role is active or scheduled for concurrent dispatch on the same target unit in the same polling cycle.
+   Observed: the coordinator withholds the downstream role for that target unit from concurrent dispatch until the upstream dependency finishes and submits, while allowing downstream targets on independent units with satisfied upstream dependencies to dispatch concurrently.
+   Realized by: the component checking active workers and current cycle dispatch candidates against transitive upstream role dependencies on the same target unit.
 
 5. A role round finishes or is dispatched.
    Observed: the coordinator and harness consume and clear workspace blame buffers upon reading round outcomes and purge preexisting blame buffers prior to dispatching new rounds.
    Realized by: the component removing workspace blame buffer files at dispatch and consuming them upon round completion.
 
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-30T19:55:00Z
-LAST_CHANGED: 2026-10-30T19:55:00Z
-CHANGE: Enforce initialization grace period before evaluating idle worker reaping
+LAST_CLEANED: 2026-11-06T02:49:00Z
+LAST_CHANGED: 2026-11-06T02:49:00Z
+CHANGE: Scope concurrent downstream role withholding to the active target unit
 -->

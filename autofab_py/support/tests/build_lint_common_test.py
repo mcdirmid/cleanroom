@@ -9,12 +9,15 @@ import unittest
 from autofab_py.support.lib.build_lint_common import (
     check_banned_skips,
     check_exception_eating,
+    check_impl_imports,
     check_no_error_testing,
     check_no_try_except_in_tests,
+    check_no_lifecycle_scope_leaks,
     check_no_frozen_exceptions,
     check_no_private_imports,
     check_no_sys_modules_tampering,
     check_no_top_level_probes,
+    check_singleton_registration,
     check_syntax,
     check_tautological_assertions,
     check_type_ignore,
@@ -842,10 +845,234 @@ class BuildLintCommonNoTryExceptInTestsTest(unittest.TestCase):
             "            cleanup()\n"
             "        except OSError:\n"
             "            pass\n"
-        )
+            )
         tree = ast.parse(source)
         errors = check_no_try_except_in_tests("test.py", tree=tree)
         self.assertEqual(errors, [])
+
+
+class BuildLintCommonImplImportsAndSingletonTest(unittest.TestCase):
+    def _write_temp(self, source: str) -> str:
+        with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as f:
+            f.write(source)
+            f.flush()
+            return f.name
+
+    def test_sys_modules_get_impl_rejected(self) -> None:
+        source = 'import sys\n_m = sys.modules.get("my_pkg.parts.foo.lib.bar_impl")\n'
+        path = self._write_temp(source)
+        try:
+            errors = check_impl_imports(path)
+            self.assertTrue(any("must not access implementation module via sys.modules" in e for e in errors))
+        finally:
+            os.remove(path)
+
+    def test_sys_modules_subscript_impl_rejected(self) -> None:
+        source = 'import sys\n_m = sys.modules["my_pkg.parts.foo.lib.bar_impl"]\n'
+        path = self._write_temp(source)
+        try:
+            errors = check_impl_imports(path)
+            self.assertTrue(any("must not access implementation module via sys.modules" in e for e in errors))
+        finally:
+            os.remove(path)
+
+    def test_sys_modules_assign_impl_rejected(self) -> None:
+        source = 'import sys\nsys.modules["my_pkg.parts.foo.lib.bar_impl"] = mod\n'
+        path = self._write_temp(source)
+        try:
+            errors = check_impl_imports(path)
+            self.assertTrue(any("must not assign implementation module to sys.modules" in e for e in errors))
+        finally:
+            os.remove(path)
+
+    def test_foreign_initialize_call_rejected(self) -> None:
+        source = 'def helper():\n    other_mod.__initialize__()\n'
+        path = self._write_temp(source)
+        try:
+            errors = check_impl_imports(path)
+            self.assertTrue(any("must not invoke foreign '__initialize__'" in e for e in errors))
+        finally:
+            os.remove(path)
+
+    def test_foreign_initialize_hasattr_rejected(self) -> None:
+        source = 'def helper():\n    if hasattr(other_mod, "__initialize__"):\n        pass\n'
+        path = self._write_temp(source)
+        try:
+            errors = check_impl_imports(path)
+            self.assertTrue(any("must not probe for foreign '__initialize__'" in e for e in errors))
+        finally:
+            os.remove(path)
+
+    def test_asm_initialize_call_allowed(self) -> None:
+        source = 'def helper():\n    foo_asm.__initialize__()\n'
+        path = self._write_temp(source)
+        try:
+            errors = check_impl_imports(path)
+            self.assertEqual(errors, [])
+        finally:
+            os.remove(path)
+
+    def test_register_singleton_undefined_class_rejected(self) -> None:
+        source = (
+            "def __initialize__(registry=None):\n"
+            "    reg.register_singleton(ForeignClass, keys=[ForeignClass])\n"
+        )
+        path = self._write_temp(source)
+        try:
+            errors = check_singleton_registration(path)
+            self.assertTrue(any("must not register singleton 'ForeignClass' not defined in this module" in e for e in errors))
+        finally:
+            os.remove(path)
+
+    def test_register_singleton_foreign_attr_rejected(self) -> None:
+        source = (
+            "def __initialize__(registry=None):\n"
+            "    reg.register_singleton(foreign.MyClass, keys=[foreign.MyClass])\n"
+        )
+        path = self._write_temp(source)
+        try:
+            errors = check_singleton_registration(path)
+            self.assertTrue(any("must not register foreign singleton 'foreign.MyClass'" in e for e in errors))
+        finally:
+            os.remove(path)
+
+    def test_register_singleton_outside_initialize_rejected(self) -> None:
+        source = (
+            "class LocalService:\n"
+            "    def configure(self):\n"
+            "        reg.register_singleton(LocalService)\n"
+        )
+        path = self._write_temp(source)
+        try:
+            errors = check_singleton_registration(path)
+            self.assertTrue(any("must only be called inside the auto-generated '__initialize__' function" in e for e in errors))
+        finally:
+            os.remove(path)
+
+    def test_valid_singleton_registration_allowed(self) -> None:
+        source = (
+            "class LocalService:\n"
+            "    pass\n\n"
+            "def __initialize__(registry=None):\n"
+            "    reg.register_singleton(LocalService, keys=[LocalService])\n"
+        )
+        path = self._write_temp(source)
+        try:
+            errors = check_singleton_registration(path)
+            self.assertEqual(errors, [])
+        finally:
+            os.remove(path)
+
+
+class BuildLintCommonLifecycleScopeLeakTest(unittest.TestCase):
+    def _write_temp(self, content: str) -> str:
+        with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as f:
+            f.write(content)
+            f.flush()
+            return f.name
+
+    def test_returning_inside_with_enter_phase_fails(self) -> None:
+        source = (
+            "def helper():\n"
+            "    with enter_phase(system):\n"
+            "        return 42\n"
+        )
+        path = self._write_temp(source)
+        try:
+            errors = check_no_lifecycle_scope_leaks(path)
+            self.assertTrue(any("Returning from inside 'with enter_phase(...)' closes the phase scope upon return" in e for e in errors))
+        finally:
+            os.remove(path)
+
+    def test_helper_method_opening_ephemeral_enter_phase_fails(self) -> None:
+        source = (
+            "class TestFoo(unittest.TestCase):\n"
+            "    def _get_engine(self):\n"
+            "        with enter_phase(system) as scope:\n"
+            "            x = scope.get_singleton(Engine)\n"
+            "        return x\n"
+        )
+        path = self._write_temp(source)
+        try:
+            errors = check_no_lifecycle_scope_leaks(path)
+            self.assertTrue(any("Test helper '_get_engine' opens an ephemeral 'with enter_phase(...)'" in e for e in errors))
+        finally:
+            os.remove(path)
+
+    def test_helper_method_ephemeral_enter_phase_without_return_fails(self) -> None:
+        source = (
+            "class TestFoo(unittest.TestCase):\n"
+            "    def _setup_repo(self, releases):\n"
+            "        with enter_phase(system) as scope:\n"
+            "            repo = scope.get_singleton(Repo)\n"
+            "            repo.register(releases)\n"
+        )
+        path = self._write_temp(source)
+        try:
+            errors = check_no_lifecycle_scope_leaks(path)
+            self.assertTrue(any("Test helper '_setup_repo' opens an ephemeral 'with enter_phase(...)'" in e for e in errors))
+        finally:
+            os.remove(path)
+
+    def test_test_method_with_enter_phase_allowed(self) -> None:
+        source = (
+            "class TestFoo(unittest.TestCase):\n"
+            "    def test_something(self):\n"
+            "        with enter_phase(system) as scope:\n"
+            "            x = scope.get_singleton(Engine)\n"
+            "            self.assertEqual(x.val, 1)\n"
+        )
+        path = self._write_temp(source)
+        try:
+            errors = check_no_lifecycle_scope_leaks(path)
+            self.assertEqual(errors, [])
+        finally:
+            os.remove(path)
+
+    def test_context_manager_helper_allowed(self) -> None:
+        source = (
+            "from contextlib import contextmanager\n\n"
+            "class TestFoo(unittest.TestCase):\n"
+            "    @contextmanager\n"
+            "    def _phase_scope(self):\n"
+            "        with enter_phase(system):\n"
+            "            yield\n"
+        )
+        path = self._write_temp(source)
+        try:
+            errors = check_no_lifecycle_scope_leaks(path)
+            self.assertEqual(errors, [])
+        finally:
+            os.remove(path)
+
+    def test_allow_lifecycle_scope_leak_pragma_suppresses(self) -> None:
+        source = (
+            "def helper():\n"
+            "    # allow-lifecycle-scope-leak\n"
+            "    with enter_phase(system):\n"
+            "        return 42\n"
+        )
+        path = self._write_temp(source)
+        try:
+            errors = check_no_lifecycle_scope_leaks(path)
+            self.assertEqual(errors, [])
+        finally:
+            os.remove(path)
+
+    def test_setup_with_enter_phase_call_allowed(self) -> None:
+        source = (
+            "class TestFoo(unittest.TestCase):\n"
+            "    def setUp(self):\n"
+            "        self.phase_cm = enter_phase(system)\n"
+            "    def tearDown(self):\n"
+            "        self.phase_cm.__exit__(None, None, None)\n"
+        )
+        path = self._write_temp(source)
+        try:
+            errors = check_no_lifecycle_scope_leaks(path)
+            self.assertEqual(errors, [])
+        finally:
+            os.remove(path)
 
 
 if __name__ == "__main__":

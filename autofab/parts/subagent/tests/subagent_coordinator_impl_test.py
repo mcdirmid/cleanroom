@@ -1585,6 +1585,46 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
             # In wave 2, qa is dispatched after lib completed
             self.assertEqual(dispatched_waves[1], ["qa"])
 
+    def test_orchestrate_allows_downstream_role_on_different_unit_when_upstream_busy_on_another_unit(self) -> None:
+        """Requirement: MUST allow downstream role dispatch on independent units when upstream role is active only on a different unit."""
+        fake_reg = FakeWorkspaceRegistry([self.impl_role_lib, self.role_qa])
+        fake_work = FakeWorkspaceWorkManager({
+            "lib": (([_make_item("pkg_a/lib/unit_b.py", "lib")], ())),
+            "qa": (([_make_item("pkg_a/qa/unit_a.md", "qa")], ())),
+        })
+        self.registry.register_instance(fake_reg, keys=[role_registry.WorkspaceRegistry], tier=agent_session.agent_session)
+        self.registry.register_instance(fake_work, keys=[work.WorkspaceWorkManager], tier=agent_session.agent_session)
+
+        dispatched_waves: list[list[str]] = []
+        current_wave: list[str] = []
+
+        class ConcurrentHarness(FakeHarnessAdapter):
+            def dispatch_role(self, dispatch: subagent_coordinator.RoleDispatch) -> str:
+                current_wave.append(dispatch.role_name)
+                return f"h_{dispatch.role_name}"
+
+            def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleRoundResult]:
+                if current_wave:
+                    dispatched_waves.append(list(current_wave))
+                    current_wave.clear()
+                if "lib" in task_handle:
+                    fake_work.queue_data["lib"] = ((), ())
+                    return subagent_coordinator.RoleRoundResult(role="lib", status="clean", submitted_targets=("pkg_a/lib/unit_b.py",))
+                if "qa" in task_handle:
+                    fake_work.queue_data["qa"] = ((), ())
+                    return subagent_coordinator.RoleRoundResult(role="qa", status="clean", submitted_targets=("pkg_a/qa/unit_a.md",))
+                return None
+
+        harness = ConcurrentHarness()
+
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            coord = scope.get_singleton(subagent_coordinator.SubagentCoordinator)
+            summary = coord.orchestrate("pkg_a", harness, poll_interval=0.001, max_waves=10)
+            self.assertTrue(summary.is_converged)
+            # Both lib (on unit_b) and qa (on unit_a) MUST be dispatched in wave 1 concurrently!
+            self.assertIn("lib", dispatched_waves[0])
+            self.assertIn("qa", dispatched_waves[0])
+
 
 
     def test_orchestrator_pulls_and_seeds_pending_work_on_dispatch(self) -> None:

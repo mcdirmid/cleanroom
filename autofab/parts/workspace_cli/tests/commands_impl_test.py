@@ -479,6 +479,18 @@ class WorkspaceCommandsImplTest(unittest.TestCase):
         self.assertEqual(ret, 0)
         self.assertNotIn(target_file, self.fake_pending.pending)
 
+    def test_run_submit_unassigned_target_owned_by_role(self) -> None:
+        target_file = os.path.join(self.test_dir, "lib", "bar.py")
+        os.makedirs(os.path.dirname(target_file), exist_ok=True)
+        with open(target_file, "w") as f:
+            f.write("# sample bar\n")
+        # Target not in pending work
+        self.fake_pending.pending = [os.path.join(self.test_dir, "lib", "foo.py")]
+
+        self.fake_check.record_check_executed(self.test_dir, target_file, passed=True)
+        ret = self.cmd_handler.run_submit(target_file, summary="added bar")
+        self.assertEqual(ret, 0)
+
     def test_run_blame(self) -> None:
         culprit = os.path.join(self.test_dir, "low", "foo.pyi")
         os.makedirs(os.path.dirname(culprit), exist_ok=True)

@@ -9,6 +9,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import time
 from typing import Any, Sequence
 
 def _find_main_repo_root() -> str | None:
@@ -641,6 +642,14 @@ def dispatch_antigravity_coordination(
                     break
         if found:
             agentapi_cmd = [found]
+        else:
+            for cand_server in [
+                Path("/Applications/Antigravity.app/Contents/Resources/bin/language_server"),
+                Path("/Applications/Antigravity IDE.app/Contents/Resources/bin/language_server"),
+            ]:
+                if cand_server.is_file() and os.access(cand_server, os.X_OK):
+                    agentapi_cmd = [str(cand_server), "agentapi"]
+                    break
 
     if not agentapi_cmd:
         return False
@@ -672,8 +681,28 @@ def dispatch_antigravity_coordination(
     else:
         return False
 
+    def _execute_agentapi() -> subprocess.CompletedProcess[str]:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+
     try:
-        res = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+        res = _execute_agentapi()
+        if res.returncode != 0 and mode == "new-conversation" and sys.platform == "darwin":
+            # If agentapi failed and we are on macOS, Antigravity Desktop might not be running.
+            # Attempt to launch Antigravity Desktop and retry once.
+            app_path = None
+            for cand_app in [
+                Path("/Applications/Antigravity.app"),
+                Path("/Applications/Antigravity IDE.app"),
+            ]:
+                if cand_app.exists():
+                    app_path = cand_app
+                    break
+            if app_path:
+                print(f"[Antigravity Desktop IPC] Antigravity Desktop not responding. Launching {app_path.name}...")
+                subprocess.run(["open", "-a", str(app_path)], check=False)
+                time.sleep(3)
+                res = _execute_agentapi()
+
         if res.returncode == 0:
             action_desc = (
                 f"Reactive wakeup message sent to conversation {conv_id}"
@@ -1229,6 +1258,8 @@ def run_work_queue(argv: list[str]) -> int:
             target_role = "baseline"
 
     root = parsed.repo_root or find_workspace_root()
+    if parsed.repo_root:
+        os.environ["BUILD_WORKSPACE_DIRECTORY"] = os.path.abspath(parsed.repo_root)
     active_pipeline = resolve_scope_pipeline(
         scope=scope,
         repo_root=root,
@@ -1444,6 +1475,7 @@ def _compute_role_depths(roles_map: dict[str, dict[str, Any]]) -> dict[str, int]
             "role_deps",
             "star_role_deps",
             "feedback_role_deps",
+            "star_feedback_role_deps",
             "silent_role_deps",
             "silent_cross_role_deps",
             "stub_role_deps",
@@ -2220,6 +2252,16 @@ def run_clean(
         help="Force headless execution even on antigravity harness.",
     )
     parser.add_argument(
+        "--dsh-web",
+        action="store_true",
+        help="Use DeepSeek Harness Web loopback bridge instead of Electron Desktop RPC.",
+    )
+    parser.add_argument(
+        "--dsh-desktop",
+        action="store_true",
+        help="Force DeepSeek Harness Desktop RPC execution even when Web mode is the configured default.",
+    )
+    parser.add_argument(
         "--pipeline",
         "--method",
         dest="pipeline",
@@ -2256,7 +2298,7 @@ def run_clean(
     parser.add_argument(
         "--antigravity-dispatch",
         choices=["message", "new-conversation", "none"],
-        default="message",
+        default=None,
         help="Antigravity Desktop IPC dispatch mode when harness is antigravity.",
     )
     parser.add_argument(
@@ -2335,6 +2377,17 @@ def run_clean(
                 forward_args.append("--pretense")
             if parsed.simulation:
                 forward_args.append("--simulation")
+            if getattr(parsed, "dsh_desktop", False):
+                os.environ["AUTOFAB_DSH_WEB"] = "0"
+                forward_args.append("--dsh-desktop")
+            elif getattr(parsed, "dsh_web", False):
+                os.environ["AUTOFAB_DSH_WEB"] = "1"
+                forward_args.append("--dsh-web")
+            else:
+                app_info = _get_app_info()
+                if app_info and app_info.resolve_default_dsh_web(parsed.repo_root):
+                    os.environ["AUTOFAB_DSH_WEB"] = "1"
+                    forward_args.append("--dsh-web")
             return subagent_tool_mod.main(forward_args)
         print("Error: Subagent tool runner module not found for headless execution.", file=sys.stderr)
         return 1
@@ -2344,6 +2397,8 @@ def run_clean(
     ensure_antigravity_plugin_installed()
 
     root = parsed.repo_root or find_workspace_root()
+    if parsed.repo_root:
+        os.environ["BUILD_WORKSPACE_DIRECTORY"] = os.path.abspath(parsed.repo_root)
     from support.lib.lifecycle import enter_phase, get_singleton
     from autofab.parts.agent.lib import session as agent_session
     from autofab.parts.workspace.lib import role_registry, provision
@@ -2424,13 +2479,7 @@ def run_clean(
             print(f"✔ CLEAN: All nodes in scope '{scope}' evaluate CLEAN{role_suffix}.{cleanup_msg} No work pending.")
             return 0
 
-        if active_harness == "antigravity" and not os.environ.get("ANTIGRAVITY_AGENT"):
-            print(
-                f"Error: Target model '{bound_model}' is configured for harness 'antigravity', which requires running inside the Antigravity agentic environment (ANTIGRAVITY_AGENT not detected).\n"
-                f"In a standalone terminal, either run inside Antigravity or use a model configured with a standalone harness (such as 'dsh' or 'simulation').",
-                file=sys.stderr,
-            )
-            return 1
+        in_antigravity = bool(os.environ.get("ANTIGRAVITY_AGENT")) or bool(os.environ.get("ANTIGRAVITY_CONVERSATION_ID"))
 
         harness = active_harness
         model_to_bind = bound_model
@@ -2465,14 +2514,41 @@ def run_clean(
         target_display = f"{target_input}#{target_role}" if (is_unit and target_role) else (target_input if is_unit else f"{scope}{role_hint}")
         queue_hint = f" {target_input} {target_role}" if (is_unit and target_role) else (f" {target_input}" if is_unit else (f" {target_role}" if target_role else ""))
 
-        # Attempt Antigravity Desktop IPC dispatch
-        dispatch_mode = getattr(parsed, "antigravity_dispatch", "message")
+        # Determine Antigravity dispatch mode:
+        # (a) When called in Antigravity: default to "message" (reactive wakeup to current conversation)
+        #     and print directive directly.
+        # (b) When called outside Antigravity: default to "new-conversation" (spawn tab in Desktop app).
+        raw_dispatch = getattr(parsed, "antigravity_dispatch", None)
+        if raw_dispatch == "none":
+            dispatch_mode = "none"
+        elif raw_dispatch in ("message", "new-conversation"):
+            dispatch_mode = raw_dispatch
+        elif in_antigravity:
+            dispatch_mode = "message"
+        else:
+            dispatch_mode = "new-conversation"
+
         if dispatch_mode != "none":
-            dispatch_antigravity_coordination(
+            dispatched = dispatch_antigravity_coordination(
                 target_display=target_display,
                 mode=dispatch_mode,
                 model=model_to_bind or "flash",
             )
+            if not in_antigravity and dispatch_mode == "new-conversation":
+                if not dispatched:
+                    print(
+                        f"\nError: Target model '{bound_model}' is configured for harness 'antigravity', "
+                        f"but could not dispatch to Antigravity Desktop via agentapi.\n"
+                        f"Please ensure Antigravity Desktop is installed and running, or execute inside the Antigravity agentic environment.",
+                        file=sys.stderr,
+                    )
+                    return 1
+                print("\n" + "=" * 72)
+                print("ANTIGRAVITY DESKTOP COORDINATION DISPATCHED:")
+                print(f"✔ Dedicated conversation opened in Antigravity Desktop for {target_display}.")
+                print("The Antigravity coordinator subagent will execute DAG convergence in the desktop app.")
+                print("=" * 72)
+                return 0
 
         ag_coord_model = "inherit"
         if model_to_bind:
@@ -2528,6 +2604,14 @@ def main_orchestrate(argv: list[str] | None = None) -> int:
 
 
 def run_benchmark_cli(argv: list[str]) -> int:
+    if "--dsh-desktop" in argv:
+        os.environ["AUTOFAB_DSH_WEB"] = "0"
+    elif "--dsh-web" in argv:
+        os.environ["AUTOFAB_DSH_WEB"] = "1"
+    else:
+        app_info = _get_app_info()
+        if app_info and app_info.resolve_default_dsh_web():
+            os.environ["AUTOFAB_DSH_WEB"] = "1"
     normalized_argv: list[str] = []
     i = 0
     while i < len(argv):
@@ -2636,6 +2720,8 @@ def run_commission_cli(argv: list[str]) -> int:
     parsed = parser.parse_args(argv)
 
     root = parsed.repo_root or find_workspace_root()
+    if parsed.repo_root:
+        os.environ["BUILD_WORKSPACE_DIRECTORY"] = os.path.abspath(parsed.repo_root)
 
     target = parsed.target
     secondary = parsed.secondary_target
@@ -3036,6 +3122,8 @@ def _resolve_role_def_dynamically(role_name: str, ws_root: str, main_root: str |
                             fused_roles=r_sec.get("fused_roles", []),
                             common_spec_roles=r_sec.get("common_spec_roles", []),
                             star_role_deps=r_sec.get("star_role_deps", []),
+                            star_feedback_role_deps=r_sec.get("star_feedback_role_deps", []),
+                            feedback_role_deps=r_sec.get("feedback_role_deps", []),
                         )
                 except Exception:
                     pass
@@ -3163,6 +3251,8 @@ def run_verify_micro_binary(role_name: str, argv: list[str]) -> int:
     env["BUILD_WORKSPACE_DIRECTORY"] = ws_root
     if "UV_PROJECT" not in env and main_root and os.path.isdir(main_root):
         env["UV_PROJECT"] = main_root
+    if "UV_CACHE_DIR" not in env:
+        env["UV_CACHE_DIR"] = "/tmp/uv_cache"
     app_inf = _get_app_info()
     if app_inf and hasattr(app_inf, "assemble_cleanroom_pythonpath_str"):
         env["PYTHONPATH"] = app_inf.assemble_cleanroom_pythonpath_str(

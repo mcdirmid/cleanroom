@@ -94,6 +94,11 @@ def _resolve_default_sessions_dir() -> str:
     if "DSH_SESSIONS_DIR" in os.environ and os.environ["DSH_SESSIONS_DIR"].strip():
         return os.environ["DSH_SESSIONS_DIR"].strip()
 
+    home = os.path.expanduser("~")
+    dsh_web_cand = os.path.join(home, ".dsh", "sessions")
+    if os.environ.get("AUTOFAB_DSH_WEB") == "1":
+        return dsh_web_cand
+
     dsh_home = os.environ.get("DSH_HOME")
     if dsh_home and dsh_home.strip():
         h_cand = os.path.join(dsh_home.strip(), "harness", "sessions")
@@ -274,7 +279,7 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
                         time.sleep(1.0 * (attempt + 1))
 
                 if rpc_handle:
-                    if rpc_handle.startswith("dsh_rpc::"):
+                    if rpc_handle.startswith(("dsh_rpc::", "dsh_rpc_web::")):
                         parts = rpc_handle.split("::")
                         if len(parts) >= 2 and parts[1]:
                             os.makedirs(os.path.dirname(session_file), exist_ok=True)

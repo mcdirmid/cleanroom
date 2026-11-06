@@ -1,0 +1,5 @@
+[CHANGE] benchmark_1/parts/ring_buffer/tests/ring_buffer_impl_test.py: Full RingBuffer impl test suite: import path fixed; covers initial state, push below/at capacity with eviction, repeated wrap-around FIFO order, pop ordering, BufferEmptyError preconditions, clear reset, and non-destructive snapshot_items
+[CHANGE] benchmark_1/parts/ring_buffer/lib/ring_buffer.py: Implement abstract interface: BufferError/BufferEmptyError @data_type exceptions, @poly_type RingBuffer protocol with contracted capacity/size/is_empty/is_full properties and push/pop/clear/snapshot_items operations; fix cross-part pretense import to full package path.
+[CHANGE] benchmark_1/parts/ring_buffer/lib/ring_buffer_impl.py: Implement @singleton_type RingBuffer over collections.deque(maxlen=10): capacity/size/is_empty/is_full properties, push with overwrite eviction returning evicted oldest item, pop enforcing BufferEmptyError precondition via requires, clear, and non-destructive snapshot_items; fix pretense import path.
+[AUDIT] benchmark_1/parts/ring_buffer/lib/ring_buffer_impl.py: QA_AUDIT
+[AUDIT] benchmark_1/parts/ring_buffer/lib/ring_buffer_impl.py: COVERAGE_AUDIT

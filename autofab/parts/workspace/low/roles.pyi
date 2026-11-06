@@ -37,6 +37,8 @@ class RoleDefinition:
         task_prompt: Optional prompt template string.
         template: Optional path to template file.
         template_command: Optional shell command template for materializing starter templates.
+        common_spec_roles: Optional sequence of roles supplying specification context.
+        star_feedback_role_deps: Optional sequence of roles receiving cross-unit star feedback.
     """
 
     role_name: str
@@ -66,6 +68,7 @@ class RoleDefinition:
     pipeline: Optional[str] = None
     fused_roles: Sequence[str] = ()
     common_spec_roles: Sequence[str] = ()
+    star_feedback_role_deps: Sequence[str] = ()
 
 
 @singleton_type("agent_session")
@@ -88,8 +91,9 @@ class RoleResolver(Singleton[AgentSessionTier], Protocol):
         - WHEN the queried role is undeclared, MUST raise KeyError.
         - WHEN feedback role dependencies are redundantly declared as role dependencies, MUST raise ValueError.
         - WHEN star role dependencies are redundantly declared as role dependencies, MUST raise ValueError.
+        - WHEN star feedback role dependencies are redundantly declared as feedback role dependencies, star role dependencies, or role dependencies, MUST raise ValueError.
         - WHEN a dependency is declared as both a role dependency and a silent role dependency, MUST raise ValueError.
-        - WHEN an auditor role is declared as a role dependency, a star role dependency, or a feedback role dependency, MUST raise ValueError.
+        - WHEN an auditor role is declared as a role dependency, a star role dependency, a feedback role dependency, or a star feedback role dependency, MUST raise ValueError.
         - MUST return a role definition populated from the resolved declaration with its configured guide path, source pattern, and file patterns.
         """
         ...
@@ -107,8 +111,9 @@ class RoleResolver(Singleton[AgentSessionTier], Protocol):
         - WHEN dir_scope is specified, MUST resolve role definitions from the methodology configuration bound to that directory scope or its package hierarchy and filter resolved roles according to the scope's active pipeline.
         - WHEN feedback role dependencies are redundantly declared as role dependencies, MUST raise ValueError.
         - WHEN star role dependencies are redundantly declared as role dependencies, MUST raise ValueError.
+        - WHEN star feedback role dependencies are redundantly declared as feedback role dependencies, star role dependencies, or role dependencies, MUST raise ValueError.
         - WHEN a dependency is declared as both a role dependency and a silent role dependency, MUST raise ValueError.
-        - WHEN an auditor role is declared as a role dependency, a star role dependency, or a feedback role dependency, MUST raise ValueError.
+        - WHEN an auditor role is declared as a role dependency, a star role dependency, a feedback role dependency, or a star feedback role dependency, MUST raise ValueError.
         - MUST return a role definition for every declared role matching the active pipeline.
         """
         ...

@@ -251,7 +251,11 @@ def _get_unit_contract_files(
     interface_stem = unit_name[:-5] if is_impl else unit_name
 
     dep_roles = [d.split(":")[-1] for d in role_def.role_deps]
-    for d in list(role_def.feedback_role_deps) + list(role_def.star_role_deps):
+    for d in (
+        list(role_def.feedback_role_deps)
+        + list(getattr(role_def, "star_feedback_role_deps", ()))
+        + list(role_def.star_role_deps)
+    ):
         clean_d = d.split(":")[-1]
         if clean_d not in dep_roles:
             dep_roles.append(clean_d)
@@ -343,6 +347,7 @@ def _get_role_upstream_chain(
             all_deps = (
                 list(r_def.role_deps)
                 + list(r_def.feedback_role_deps)
+                + list(getattr(r_def, "star_feedback_role_deps", ()))
                 + list(r_def.star_role_deps)
                 + list(r_def.silent_role_deps)
             )
@@ -377,7 +382,11 @@ def _eval_unit_dirty_internal(
 
     if _is_auditor_role(clean_role, repo_root=main_root):
         audit_tag = role_def.audit_tag or f"{clean_role.upper()}_AUDIT"
-        fb_deps = [d.split(":")[-1] for d in role_def.feedback_role_deps]
+        fb_deps = [
+            d.split(":")[-1]
+            for d in list(role_def.feedback_role_deps)
+            + list(getattr(role_def, "star_feedback_role_deps", ()))
+        ]
         if not fb_deps:
             return {"is_dirty": False, "reasons": []}
 
@@ -510,7 +519,11 @@ def _eval_unit_dirty_internal(
     interface_stem = unit_name[:-5] if is_impl else unit_name
 
     dep_role_labels = [d.split(":")[-1] for d in role_def.role_deps]
-    for d in list(role_def.feedback_role_deps) + list(role_def.star_role_deps):
+    for d in (
+        list(role_def.feedback_role_deps)
+        + list(getattr(role_def, "star_feedback_role_deps", ()))
+        + list(role_def.star_role_deps)
+    ):
         clean_d = d.split(":")[-1]
         if clean_d not in dep_role_labels:
             dep_role_labels.append(clean_d)

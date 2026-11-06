@@ -34,3 +34,4 @@ role_workspaces/
 dist/
 build/
 *.egg-info/
+.dsh/

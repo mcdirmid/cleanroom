@@ -985,7 +985,7 @@ class CleanroomRoleToolTest(unittest.TestCase):
                 'default = "deepseek-v41-flash"\n'
                 'max_unproductive_rounds = 3\n\n'
                 '[models.qwen-moe-q6]\nmodel = "Qwen3.6-35B-A3B-oQ6-mtp"\nharness = "dsh"\n\n'
-                '[models.gemini-3.8-flash]\nmodel = "gemini-3.8-flash"\nharness = "antigravity"\n\n'
+                '[models.gemini-flash]\nmodel = "gemini-flash"\nharness = "antigravity"\n\n'
                 '[models.deepseek-v41-flash]\nmodel = "DeepSeek-V41-Flash"\nharness = "dsh"\n'
             )
 
@@ -994,16 +994,16 @@ class CleanroomRoleToolTest(unittest.TestCase):
         # When model is None, it derives harness from the default model (deepseek-v41-flash -> dsh)
         self.assertEqual(autofab_role_tool.resolve_model_harness(None, self.fake_repo), "dsh")
         self.assertEqual(autofab_role_tool.resolve_model_harness("default", self.fake_repo), "dsh")
-        self.assertEqual(autofab_role_tool.resolve_model_harness("gemini-3.8-flash", self.fake_repo), "antigravity")
+        self.assertEqual(autofab_role_tool.resolve_model_harness("gemini-flash", self.fake_repo), "antigravity")
         self.assertEqual(autofab_role_tool.resolve_model_harness("deepseek-v41-flash", self.fake_repo), "dsh")
         self.assertEqual(autofab_role_tool.resolve_model_harness("qwen-moe-q6", self.fake_repo), "dsh")
         self.assertEqual(autofab_role_tool.resolve_model_harness("unknown-model", self.fake_repo), "dsh")
         self.assertEqual(autofab_role_tool.resolve_model_harness("gemini-custom", self.fake_repo), "antigravity")
 
-        # 1. Commission with --model gemini-3.8-flash -> binds antigravity harness
+        # 1. Commission with --model gemini-flash -> binds antigravity harness
         ret_ag = autofab_role_tool.main([
             "commission", "staging#lib",
-            "--model", "gemini-3.8-flash",
+            "--model", "gemini-flash",
             "--repo-root", self.fake_repo,
         ])
         self.assertEqual(ret_ag, 0)
@@ -1016,7 +1016,7 @@ class CleanroomRoleToolTest(unittest.TestCase):
         self.assertTrue(os.path.isfile(role_cfg_path))
         with open(role_cfg_path, "r", encoding="utf-8") as f:
             role_data = json.load(f)
-        self.assertEqual(role_data.get("model"), "gemini-3.8-flash")
+        self.assertEqual(role_data.get("model"), "gemini-flash")
         self.assertEqual(role_data.get("harness"), "antigravity")
 
         # 2. Commission without --model -> binds default model (deepseek-v41-flash) with dsh harness
@@ -1173,10 +1173,146 @@ class CleanroomRoleToolTest(unittest.TestCase):
         with patch.dict(os.environ, {}, clear=True):
             self.assertFalse(autofab_role_tool.dispatch_antigravity_coordination("my_scope", mode="message"))
 
+    def test_dispatch_antigravity_coordination_language_server_fallback(self) -> None:
+        """Verifies dispatch_antigravity_coordination falls back to language_server directly."""
+        from pathlib import Path
+        from unittest.mock import patch, MagicMock
+        with patch.dict(os.environ, {}, clear=True):
+            with patch("shutil.which", return_value=None):
+                with patch.object(Path, "is_file", autospec=True) as mock_isfile, patch("os.access", return_value=True):
+                    mock_isfile.side_effect = lambda self: "language_server" in str(self)
+                    mock_proc = MagicMock(returncode=0, stdout="", stderr="")
+                    with patch("subprocess.run", return_value=mock_proc) as mock_run:
+                        res = autofab_role_tool.dispatch_antigravity_coordination("my_scope", mode="new-conversation")
+                        self.assertTrue(res)
+                        cmd = mock_run.call_args[0][0]
+                        self.assertIn("language_server", cmd[0])
+                        self.assertEqual(cmd[1], "agentapi")
+                        self.assertEqual(cmd[2], "new-conversation")
+
+    def test_dispatch_antigravity_coordination_auto_launch_desktop(self) -> None:
+        """Verifies dispatch_antigravity_coordination attempts to launch desktop app if agentapi fails initially."""
+        from pathlib import Path
+        from unittest.mock import patch, MagicMock
+        with patch.dict(os.environ, {"ANTIGRAVITY_AGENTAPI_EXE": "/fake/bin/language_server"}):
+            with patch("sys.platform", "darwin"):
+                with patch.object(Path, "exists", autospec=True, return_value=True):
+                    with patch("time.sleep", return_value=None):
+                        fail_proc = MagicMock(returncode=1, stdout="", stderr="connection refused")
+                        succ_proc = MagicMock(returncode=0, stdout="ok", stderr="")
+                        runs = [fail_proc, MagicMock(returncode=0), succ_proc]
+                        with patch("subprocess.run", side_effect=runs) as mock_run:
+                            res = autofab_role_tool.dispatch_antigravity_coordination("my_scope", mode="new-conversation")
+                            self.assertTrue(res)
+                            self.assertEqual(mock_run.call_count, 3)
+                            self.assertEqual(mock_run.call_args_list[0][0][0][2], "new-conversation")
+                            self.assertEqual(mock_run.call_args_list[1][0][0][0], "open")
+                            self.assertEqual(mock_run.call_args_list[2][0][0][2], "new-conversation")
+
+    def test_clean_outside_antigravity_dispatches_new_conversation(self) -> None:
+        """Verifies clean outside Antigravity dispatches new-conversation and exits 0."""
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as td:
+            repo_root = os.path.join(td, "repo")
+            os.makedirs(repo_root, exist_ok=True)
+            from support.lib import app_info
+            main_cfg = os.path.join(repo_root, f"{app_info.APP_NAME}.toml")
+            with open(main_cfg, "w", encoding="utf-8") as f:
+                f.write('methodology = "//autofab_py"\n')
+            cfg_path = os.path.join(repo_root, f"{app_info.APP_NAME}_roles.toml")
+            with open(cfg_path, "w", encoding="utf-8") as f:
+                f.write(
+                    f'[roles.qa]\n'
+                    f'name = "qa"\n'
+                    f'persona = "QA Auditor"\n'
+                    f'src_pattern = "{{unit_dir}}/tests/{{unit_name}}_test.py"\n'
+                    f'model = "gemini-flash"\n'
+                    f'harness = "antigravity"\n'
+                )
+            dummy_target = os.path.join(repo_root, "pkg", "parts", "mod", "tests", "mod_test.py")
+            os.makedirs(os.path.dirname(dummy_target), exist_ok=True)
+            with open(dummy_target, "w") as f:
+                f.write("target\n")
+
+            with patch.dict(os.environ, {}, clear=True):
+                with patch.object(autofab_role_tool, "dispatch_antigravity_coordination", return_value=True) as mock_dispatch:
+                    ret = autofab_role_tool.run_clean([
+                        "pkg",
+                        "--model", "gemini-flash",
+                        "--repo-root", repo_root,
+                    ])
+                    self.assertEqual(ret, 0)
+                    mock_dispatch.assert_called_once()
+                    self.assertEqual(mock_dispatch.call_args[1]["mode"], "new-conversation")
+
+    def test_clean_outside_antigravity_fails_if_dispatch_fails(self) -> None:
+        """Verifies clean outside Antigravity returns 1 if dispatch_antigravity_coordination fails."""
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as td:
+            repo_root = os.path.join(td, "repo")
+            os.makedirs(repo_root, exist_ok=True)
+            from support.lib import app_info
+            main_cfg = os.path.join(repo_root, f"{app_info.APP_NAME}.toml")
+            with open(main_cfg, "w", encoding="utf-8") as f:
+                f.write('methodology = "//autofab_py"\n')
+            cfg_path = os.path.join(repo_root, f"{app_info.APP_NAME}_roles.toml")
+            with open(cfg_path, "w", encoding="utf-8") as f:
+                f.write(
+                    f'[roles.qa]\n'
+                    f'name = "qa"\n'
+                    f'persona = "QA Auditor"\n'
+                    f'src_pattern = "{{unit_dir}}/tests/{{unit_name}}_test.py"\n'
+                    f'model = "gemini-flash"\n'
+                    f'harness = "antigravity"\n'
+                )
+            dummy_target = os.path.join(repo_root, "pkg", "parts", "mod", "tests", "mod_test.py")
+            os.makedirs(os.path.dirname(dummy_target), exist_ok=True)
+            with open(dummy_target, "w") as f:
+                f.write("target\n")
+
+            with patch.dict(os.environ, {}, clear=True):
+                with patch.object(autofab_role_tool, "dispatch_antigravity_coordination", return_value=False):
+                    ret = autofab_role_tool.run_clean([
+                        "pkg",
+                        "--model", "gemini-flash",
+                        "--repo-root", repo_root,
+                    ])
+                    self.assertEqual(ret, 1)
+
     def test_benchmark_subcommand(self) -> None:
         """Verifies cleanroom benchmark command dispatches properly with arguments."""
         ret = autofab_role_tool.main(["benchmark", "--suite=dag-engine", "--models=deepseek-flash", "--dry-run"])
         self.assertEqual(ret, 0)
+
+    def test_revert_and_checkpoint_subcommands(self) -> None:
+        """Verifies autofab checkpoint and revert subcommands."""
+        import subprocess
+        with tempfile.TemporaryDirectory() as td:
+            subprocess.run(["git", "init"], cwd=td, check=True, capture_output=True)
+            subprocess.run(["git", "config", "user.name", "Test Worker"], cwd=td, check=True, capture_output=True)
+            subprocess.run(["git", "config", "user.email", "test@cleanroom.local"], cwd=td, check=True, capture_output=True)
+            sample_f = os.path.join(td, "file.txt")
+            with open(sample_f, "w") as f:
+                f.write("v1\n")
+            subprocess.run(["git", "add", "-A"], cwd=td, check=True, capture_output=True)
+            subprocess.run(["git", "commit", "-m", "v1"], cwd=td, check=True, capture_output=True)
+
+            old_cwd = os.getcwd()
+            try:
+                os.chdir(td)
+                with open(sample_f, "w") as f:
+                    f.write("v2\n")
+                ret_cp = autofab_role_tool.main(["checkpoint", "save-v2"])
+                self.assertEqual(ret_cp, 0)
+
+                with open(sample_f, "w") as f:
+                    f.write("broken\n")
+                ret_rev = autofab_role_tool.main(["revert", "file.txt"])
+                self.assertEqual(ret_rev, 0)
+                with open(sample_f, "r") as f:
+                    self.assertEqual(f.read(), "v2\n")
+            finally:
+                os.chdir(old_cwd)
 
 
 if __name__ == "__main__":

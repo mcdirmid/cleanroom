@@ -1564,13 +1564,44 @@ class BenchmarkImplTest(unittest.TestCase):
             self.assertTrue(_has_materialized_artifacts(u_dir, method="combined"))
             self.assertTrue(_has_materialized_artifacts(u_dir, method="pretense"))
 
+    def test_run_cli_dsh_web_flag(self) -> None:
+        """Scenario 19: run_cli accepts --dsh-web and sets AUTOFAB_DSH_WEB environment."""
+        evaluator = BenchmarkEvaluator()
+        orig_env = os.environ.get("AUTOFAB_DSH_WEB")
+        try:
+            if "AUTOFAB_DSH_WEB" in os.environ:
+                del os.environ["AUTOFAB_DSH_WEB"]
+            ret = evaluator.run_cli(["--dry-run", "--suite=cpython", "--model=deepseek-flash", "--units=1", "--dsh-web"])
+            self.assertEqual(ret, 0)
+            self.assertEqual(os.environ.get("AUTOFAB_DSH_WEB"), "1")
+        finally:
+            if orig_env is not None:
+                os.environ["AUTOFAB_DSH_WEB"] = orig_env
+            elif "AUTOFAB_DSH_WEB" in os.environ:
+                del os.environ["AUTOFAB_DSH_WEB"]
+
+    def test_run_cli_dsh_desktop_flag(self) -> None:
+        """Scenario 19: run_cli accepts --dsh-desktop and sets AUTOFAB_DSH_WEB environment to '0'."""
+        evaluator = BenchmarkEvaluator()
+        orig_env = os.environ.get("AUTOFAB_DSH_WEB")
+        try:
+            os.environ["AUTOFAB_DSH_WEB"] = "1"
+            ret = evaluator.run_cli(["--dry-run", "--suite=cpython", "--model=deepseek-flash", "--units=1", "--dsh-desktop"])
+            self.assertEqual(ret, 0)
+            self.assertEqual(os.environ.get("AUTOFAB_DSH_WEB"), "0")
+        finally:
+            if orig_env is not None:
+                os.environ["AUTOFAB_DSH_WEB"] = orig_env
+            elif "AUTOFAB_DSH_WEB" in os.environ:
+                del os.environ["AUTOFAB_DSH_WEB"]
+
 
 if __name__ == "__main__":
     unittest.main()
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-19T18:45:00Z
-# LAST_CHANGED: 2026-11-04T11:30:00Z
-# CHANGE: Support --method combined, pretense, standard and combined_baseline fused role
+# LAST_CHANGED: 2026-11-06T12:15:00Z
+# CHANGE: Support --dsh-desktop to force DeepSeek Harness Desktop RPC execution
 # SPEC_QA_AUDIT: 2026-10-19T19:35:00Z
 # --- END CLEANROOM METADATA ---

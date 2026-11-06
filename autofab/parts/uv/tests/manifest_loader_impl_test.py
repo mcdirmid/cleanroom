@@ -451,6 +451,54 @@ active_component_types = ["implementation"]
             assert manifest is not None
             self.assertEqual(manifest.label, "//my_scope/parts/widget:widget#lib")
 
+    def test_retrieve_manifest_star_feedback_role_deps(self) -> None:
+        """CUJ: star_feedback_role_deps resolves into intra-unit feedback and cross-unit feedback/star deps."""
+        toml_content = """
+[roles.high]
+src_pattern = "{unit_dir}/high/{unit_name}.md"
+active_component_types = ["implementation", "assembly", "interface", "external"]
+
+[roles.pretense]
+src_pattern = "{unit_dir}/pretense/{unit_name}_pretense.py"
+active_component_types = ["implementation", "interface"]
+
+[roles.lib]
+src_pattern = "{unit_dir}/lib/{unit_name}.py"
+active_component_types = ["implementation"]
+
+[roles.pretense_qa]
+star_feedback_role_deps = ["pretense"]
+feedback_role_deps = ["lib"]
+active_component_types = ["implementation"]
+"""
+        with open(os.path.join(self.test_dir, app_info.DEFAULT_ROLES_FILE), "w", encoding="utf-8") as f:
+            f.write(toml_content)
+
+        widget_dir = os.path.join(self.test_dir, "pkg/parts/widget")
+        os.makedirs(os.path.join(widget_dir, "high"), exist_ok=True)
+        with open(os.path.join(widget_dir, "high/widget.md"), "w", encoding="utf-8") as f:
+            f.write("# implementation component\n\nimports: gadget\n\n## Summary\n")
+
+        gadget_dir = os.path.join(self.test_dir, "pkg/parts/gadget")
+        os.makedirs(os.path.join(gadget_dir, "high"), exist_ok=True)
+        with open(os.path.join(gadget_dir, "high/gadget.md"), "w", encoding="utf-8") as f:
+            f.write("# implementation component\n\n## Summary\n")
+
+        node = _make_dag_node("//pkg/parts/widget:widget", "pretense_qa")
+        with enter_phase("system", registry=self.registry) as scope:
+            loader = scope.get_singleton(UvManifestLoader)
+            manifest = loader.retrieve_manifest(node)
+            self.assertIsNotNone(manifest)
+            assert manifest is not None
+
+            fb_labels = [str(lbl) for lbl in manifest.feedback_dependencies]
+            star_labels = [str(lbl) for lbl in manifest.star_dependencies]
+
+            self.assertIn("//pkg/parts/widget:widget#pretense", fb_labels)
+            self.assertIn("//pkg/parts/widget:widget#lib", fb_labels)
+            self.assertIn("//pkg/parts/gadget:gadget#pretense", fb_labels)
+            self.assertIn("//pkg/parts/gadget:gadget#pretense", star_labels)
+
 
 if __name__ == "__main__":
     unittest.main()

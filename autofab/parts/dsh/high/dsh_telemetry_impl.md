@@ -29,15 +29,15 @@ The dsh telemetry parser:
 
 - Synchronizes session records with titles capturing scope and role (e.g. `[<scope>] <role>`) into desktop storage files and communicates session creation and title events to running desktop applications over local RPC bridges without registering role workspace folders.
 
-- Discovers active desktop application ports and authentication cookies from application cookies storage opened in read-only immutable mode.
+- Discovers active desktop application ports and authentication cookies from application cookies storage opened in read-only immutable mode, or discovers active DeepSeek Harness Web loopback bridge endpoints from bridge configuration when DeepSeek Harness Web mode is enabled.
 
-- Submits role round prompts to the central desktop runtime over the local JSON-RPC bridge, returning active task handles, creating or adopting sessions directly in their physical role workspace directory without workspace folder registration, setting the session title to capture scope and role (e.g. `[<scope>] <role>`), resolving declared model configuration profiles against model configuration definitions discovered in workspace ancestors, working directories, user configuration, or repository hierarchy and mapping local MLX providers to oMLX endpoints.
+- Submits role round prompts to the central desktop runtime or Web loopback bridge over the local JSON-RPC bridge, returning active task handles, creating or adopting sessions directly in their physical role workspace directory without workspace folder registration, setting the session title to capture scope and role (e.g. `[<scope>] <role>`), resolving declared model configuration profiles against model configuration definitions discovered in workspace ancestors, working directories, user configuration, or repository hierarchy and mapping local MLX providers to oMLX endpoints. In DeepSeek Harness Web mode, dispatches role rounds as independent top-level sessions labeled `[<scope>] <role>` under Ungrouped without container attachment or workspace folder registration, providing direct conversation visibility and manual interactivity without subagent monitor dependencies.
 
-- Polls round execution status and extracts cumulative token counts from JSON-RPC status responses until round completion.
+- Polls round execution status and extracts cumulative token counts from JSON-RPC status responses or bridge wait results until round completion, recognizing dictionary outcomes with completed or errored keys alongside terminal string statuses.
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-11-02T17:35:00Z
-CHANGE: Name desktop sessions with scope and role directly in role workspace without creating per-role workspace folders
+LAST_CHANGED: 2026-11-06T11:45:00Z
+CHANGE: Dispatch Web role rounds as independent Ungrouped sessions labeled [scope] role without container
 SPEC_QA_AUDIT: 2026-10-19T22:33:00Z
 -->

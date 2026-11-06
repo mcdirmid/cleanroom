@@ -41,6 +41,7 @@ from build_lint_common import (
     check_exception_eating,
     check_framework_imports,
     check_impl_imports,
+    check_singleton_registration,
     check_lib_structure,
     check_public_functions,
     check_public_types,
@@ -876,6 +877,7 @@ def main() -> int:
         )
         import_errors = check_sibling_imports(dir_name, args.module_path)
         impl_errors = check_impl_imports(args.module_path)
+        singleton_errors = check_singleton_registration(args.module_path)
         exception_errors = check_exception_eating(args.module_path)
         framework_errors = check_framework_imports(args.module_path)
         dataclass_errors = check_dataclass_stubs(args.module_path)
@@ -913,6 +915,7 @@ def main() -> int:
             + import_errors
             + cross_part_errors
             + impl_errors
+            + singleton_errors
             + exception_errors
             + framework_errors
             + dataclass_errors
@@ -1186,6 +1189,7 @@ def main() -> int:
     import_errors = check_sibling_imports(package, args.module_path)
     cross_part_errors = check_cross_part_imports(package, args.module_path)
     impl_errors = check_impl_imports(args.module_path)
+    singleton_errors = check_singleton_registration(args.module_path)
     exception_errors = check_exception_eating(args.module_path)
     framework_errors = check_framework_imports(args.module_path)
     dataclass_errors = check_dataclass_stubs(args.module_path)
@@ -1222,6 +1226,7 @@ def main() -> int:
         + import_errors
         + cross_part_errors
         + impl_errors
+        + singleton_errors
         + exception_errors
         + framework_errors
         + dataclass_errors

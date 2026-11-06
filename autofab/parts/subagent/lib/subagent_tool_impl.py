@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from typing import Optional, Sequence
 
@@ -127,6 +128,16 @@ class SubagentToolRunner(subagent_tool.SubagentToolRunner):
             action="store_true",
             help="Use Pretense testing pipeline.",
         )
+        orch_parser.add_argument(
+            "--dsh-web",
+            action="store_true",
+            help="Use DeepSeek Harness Web loopback bridge instead of Electron Desktop RPC.",
+        )
+        orch_parser.add_argument(
+            "--dsh-desktop",
+            action="store_true",
+            help="Force DeepSeek Harness Desktop RPC execution even when Web mode is the configured default.",
+        )
 
         args_list = list(argv)
         if not args_list or args_list[0] != "orchestrate":
@@ -134,6 +145,10 @@ class SubagentToolRunner(subagent_tool.SubagentToolRunner):
 
         parsed = parser.parse_args(args_list)
         if parsed.command == "orchestrate":
+            if getattr(parsed, "dsh_desktop", False):
+                os.environ["AUTOFAB_DSH_WEB"] = "0"
+            elif getattr(parsed, "dsh_web", False):
+                os.environ["AUTOFAB_DSH_WEB"] = "1"
             scope = parsed.scope_opt or parsed.dir_scope
             if not scope:
                 parser.error("Directory scope must be specified.")

@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import fnmatch
+import hashlib
+import json
 import os
 import re
 import shutil
 import subprocess
-from typing import List, Optional, Sequence
+from typing import Any, List, Optional, Sequence
 
 from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
 try:
@@ -17,6 +19,28 @@ except Exception:
 from autofab.parts.agent.lib import session as agent_session
 from autofab.parts.metadata.lib import src_metadata
 from . import provision, role_registry, roles, scaffold, stub
+
+
+def _compute_file_sha256(path: str) -> Optional[str]:
+    """Computes SHA256 hex digest of a file, returning None if unreadable."""
+    if not os.path.isfile(path):
+        return None
+    try:
+        with open(path, "rb") as f:
+            return hashlib.sha256(f.read()).hexdigest()
+    except OSError:
+        return None
+
+
+def _save_pull_manifest(workspace_dir: str, manifest: dict[str, Any]) -> None:
+    """Saves pull manifest tracking baseline file hashes."""
+    manifest_path = os.path.join(workspace_dir, ".autofab", "pull_manifest.json")
+    try:
+        os.makedirs(os.path.dirname(manifest_path), exist_ok=True)
+        with open(manifest_path, "w", encoding="utf-8") as f:
+            json.dump(manifest, f, indent=2, sort_keys=True)
+    except OSError:
+        pass
 
 
 def _find_methodology_for_scope(root: str, dir_scope: str) -> Optional[str]:
@@ -432,6 +456,26 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
                 dst_f = os.path.join(workspace_dir, dir_scope, rel)
                 _copy_projected_file(src_f, dst_f, is_writable=False)
 
+            initial_manifest: dict[str, dict[str, str]] = {}
+            for rel in writable_rel:
+                src_f = os.path.join(scope_dir, rel)
+                dst_f = os.path.join(workspace_dir, dir_scope, rel)
+                if os.path.isfile(src_f) and os.path.isfile(dst_f):
+                    s_h = _compute_file_sha256(src_f)
+                    w_h = _compute_file_sha256(dst_f)
+                    if s_h and w_h:
+                        initial_manifest[rel] = {"main_hash": s_h, "ws_hash": w_h}
+            for rel in readonly_rel:
+                src_f = os.path.join(scope_dir, rel)
+                dst_f = os.path.join(workspace_dir, dir_scope, rel)
+                if os.path.isfile(src_f) and os.path.isfile(dst_f):
+                    s_h = _compute_file_sha256(src_f)
+                    w_h = _compute_file_sha256(dst_f)
+                    if s_h and w_h:
+                        initial_manifest[rel] = {"main_hash": s_h, "ws_hash": w_h}
+            if initial_manifest:
+                _save_pull_manifest(workspace_dir, initial_manifest)
+
             if role_def.stub_role_deps:
                 stub_synth.sync_all_stub_deps(
                     workspace_dir=workspace_dir,
@@ -519,16 +563,22 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
                     'testpaths = ["."]',
                     ptext,
                 )
+                pypaths_cfg = ['"."']
+                if dir_scope:
+                    clean_scope = dir_scope.strip("/").split("/")[0]
+                    pypaths_cfg.append(f'"{clean_scope}"')
+                    pypaths_cfg.append(f'"{clean_scope}/parts"')
+                pypaths_str = f'pythonpath = [{", ".join(pypaths_cfg)}]'
                 if "pythonpath" in ptext:
                     ptext = re.sub(
                         r'pythonpath\s*=\s*\[[^\]]*\]',
-                        'pythonpath = ["."]',
+                        pypaths_str,
                         ptext,
                     )
                 elif "[tool.pytest.ini_options]" in ptext:
                     ptext = ptext.replace(
                         "[tool.pytest.ini_options]",
-                        '[tool.pytest.ini_options]\npythonpath = ["."]',
+                        f'[tool.pytest.ini_options]\n{pypaths_str}',
                     )
                 with open(ws_pyproject, "w", encoding="utf-8") as f:
                     f.write(ptext)
@@ -630,8 +680,8 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
         return descriptor
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-30T05:28:00Z
-# LAST_CHANGED: 2026-10-30T08:30:00Z
-# CHANGE: Omit git repo initialization for auditor roles with zero writable targets
+# LAST_CHANGED: 2026-11-05T11:45:00Z
+# CHANGE: Record initial inbound pull manifest upon commissioning workspace
 # COVERAGE_AUDIT: 2026-10-15T17:42:47Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

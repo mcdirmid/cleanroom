@@ -310,6 +310,7 @@ class WorkspacePendingManager(pending.WorkspacePendingManager):
                     and (
                         role_def.role_deps
                         or role_def.feedback_role_deps
+                        or getattr(role_def, "star_feedback_role_deps", ())
                         or any(s.split(":")[-1] != eval_role for s in role_def.star_role_deps)
                     )
                 )

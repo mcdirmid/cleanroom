@@ -74,11 +74,13 @@ def _role_audit_tag(role_def: Any) -> Optional[str]:
 
 
 def _role_feedback_deps(role_def: Any) -> Sequence[str]:
-    if hasattr(role_def, "feedback_role_deps"):
-        return role_def.feedback_role_deps or ()
     if isinstance(role_def, dict):
-        return role_def.get("feedback_role_deps") or ()
-    return ()
+        fb = role_def.get("feedback_role_deps") or ()
+        sfb = role_def.get("star_feedback_role_deps") or ()
+        return tuple(dict.fromkeys(list(fb) + list(sfb)))
+    fb = getattr(role_def, "feedback_role_deps", ()) or ()
+    sfb = getattr(role_def, "star_feedback_role_deps", ()) or ()
+    return tuple(dict.fromkeys(list(fb) + list(sfb)))
 
 
 def _bound_file_path(bound_file: Any) -> str:
@@ -235,6 +237,33 @@ def _copy_projected_file(src: str, dst: str, is_writable: bool) -> None:
         _write_file_with_perms(dst, projected, readonly=not is_writable)
     except (UnicodeDecodeError, OSError):
         _copy_file_with_perms(src, dst, readonly=not is_writable)
+
+
+def _file_sha256(path: str) -> Optional[str]:
+    import hashlib
+    try:
+        with open(path, "rb") as f:
+            return hashlib.sha256(f.read()).hexdigest()
+    except OSError:
+        return None
+
+
+def _update_pull_manifest(workspace_dir: str, rel_path: str, main_file: str, ws_file: str) -> None:
+    try:
+        state_dir = app_info.resolve_state_dir(workspace_dir)
+        manifest_path = os.path.join(state_dir, "pull_manifest.json")
+        if os.path.isfile(manifest_path):
+            with open(manifest_path, "r", encoding="utf-8") as f:
+                p_manifest = json.load(f)
+            p_files = p_manifest.setdefault("files", {})
+            mh = _file_sha256(main_file)
+            wh = _file_sha256(ws_file)
+            if mh and wh:
+                p_files[rel_path] = {"main_hash": mh, "ws_hash": wh}
+                with open(manifest_path, "w", encoding="utf-8") as f:
+                    json.dump(p_manifest, f, indent=2)
+    except Exception:
+        pass
 
 
 def _resolve_target_path(target: str, repo_root: str) -> str:
@@ -762,6 +791,7 @@ class SubmissionCoordinator(submit.SubmissionCoordinator):
             msg = f"[CLEAN] {rel_path}"
         if ws_root != main_root and os.path.isfile(main_file):
             _copy_projected_file(main_file, target_path, is_writable=True)
+            _update_pull_manifest(ws_root, rel_path, main_file, target_path)
 
         # Synchronize any companion files declared in src_pats for this unit
         if src_pats and part_dir and active_unit:
@@ -783,6 +813,7 @@ class SubmissionCoordinator(submit.SubmissionCoordinator):
                         src_metadata.update_metadata(main_comp, clear_code_hash=True)
                     if ws_root != main_root and os.path.isfile(main_comp):
                         _copy_projected_file(main_comp, ws_comp, is_writable=True)
+                        _update_pull_manifest(ws_root, comp_rel, main_comp, ws_comp)
 
         return submit.SubmissionOutcome(accepted=True, message=msg)
 # --- CLEANROOM METADATA ---

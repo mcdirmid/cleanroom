@@ -67,11 +67,11 @@ class WorkspaceChecker(check.WorkspaceChecker):
         GROUNDING:
         - Resolves target via submit.SubmissionCoordinator.resolve_submit_target,
           extracts max_failures from active model configuration (defaulting to 5 for local engines and 100 for non-local models) and propagates failure limits to test execution runners,
-          enforces that verification cannot be executed when the role workspace has zero pending work assigned and zero ready items in the active work queue, returning an error directing the agent to call get_work first or conclude the round (while reporting no targets to check when neither target nor pending work is present),
-          verifies that any specified target file belongs to the active pending work buffer or ready work queue before executing checks, returning an error when an unassigned target is requested,
+          enforces that verification cannot be executed when the role workspace has zero pending work assigned and zero ready items in the active work queue when no target is specified, returning an error directing the agent to call get_work first or conclude the round (while reporting no targets to check when neither target nor pending work is present),
+          verifies that any specified target file belongs to the active pending work buffer, ready work queue, or is owned by the active role before executing checks, returning an error when an unassigned target not owned by the active role is requested,
           pulls inbound changes and refreshes system files from the canonical main workspace via sync.WorkspaceSynchronizer.pull and sync.WorkspaceSynchronizer.refresh_system_files before executing verification checks,
           verifies that package __init__.py and other read-only files outside the role's writeable file patterns have not been modified, reporting verification failure and reverting unauthorized modifications when detected,
-          assembles verification environment bounded strictly to the active role workspace and its constituent package directories, isolating verification from the canonical repository root in PYTHONPATH and sys.path,
+          assembles verification environment bounded strictly to the active role workspace and its constituent package directories, isolating verification from the canonical repository root in PYTHONPATH and sys.path and configuring UV_CACHE_DIR under temporary directories (e.g. /tmp/uv_cache) for sandbox containment,
           enforces an execution timeout on verification commands to prevent blocked sub-processes from stalling the workspace developer loop and reports verification failure with code-defect diagnostic messaging when execution expires,
           executes verification checks from role_registry.RoleDefinition,
           sanitizes verification process output by stripping redundant embedded arbiter reminders before display,
@@ -104,7 +104,7 @@ class WorkspaceChecker(check.WorkspaceChecker):
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-30T11:00:00Z
-# LAST_CHANGED: 2026-11-03T23:45:00Z
-# CHANGE: Instruct coverage auditor when uncovered lines persist to examine library implementation for unreachable code
+# LAST_CHANGED: 2026-11-05T20:03:00Z
+# CHANGE: Set UV_CACHE_DIR in check_impl verification environment for sandbox containment
 # SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---

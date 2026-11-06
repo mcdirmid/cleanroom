@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import fnmatch
+import hashlib
 import json
 import os
 import re
@@ -123,6 +124,56 @@ def _resolve_active_methodology_pkg(
 BLAME_BUFFER_FILE: str = getattr(app_info, "DEFAULT_BLAME_BUFFER_FILE", ".autofab_blame_buffer.json")
 AUDIT_BUFFER_FILE: str = getattr(app_info, "DEFAULT_AUDIT_BUFFER_FILE", ".autofab_audit_buffer.json")
 ROLE_CONFIG_FILE: str = getattr(app_info, "DEFAULT_ROLE_DESCRIPTOR", ".autofab_role.json")
+
+
+def _compute_file_sha256(path: str) -> Optional[str]:
+    """Computes SHA-256 hash of a file on disk."""
+    if not os.path.isfile(path):
+        return None
+    try:
+        h = hashlib.sha256()
+        with open(path, "rb") as f:
+            while chunk := f.read(65536):
+                h.update(chunk)
+        return h.hexdigest()
+    except OSError:
+        return None
+
+
+def _get_pull_manifest_path(workspace_dir: str) -> str:
+    """Returns absolute path to pull_manifest.json in the workspace state directory."""
+    state_dir = app_info.resolve_state_dir(workspace_dir)
+    return os.path.join(state_dir, "pull_manifest.json")
+
+
+def _load_pull_manifest(workspace_dir: str) -> Dict[str, Dict[str, str]]:
+    """Loads recorded inbound pull manifest from workspace state directory."""
+    manifest_path = _get_pull_manifest_path(workspace_dir)
+    if not os.path.isfile(manifest_path):
+        return {}
+    try:
+        with open(manifest_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            if isinstance(data, dict):
+                files = data.get("files")
+                if isinstance(files, dict):
+                    return files
+                return data
+    except (OSError, json.JSONDecodeError):
+        pass
+    return {}
+
+
+def _save_pull_manifest(workspace_dir: str, manifest: Dict[str, Dict[str, str]]) -> None:
+    """Saves recorded inbound pull manifest to workspace state directory."""
+    manifest_path = _get_pull_manifest_path(workspace_dir)
+    try:
+        state_dir = os.path.dirname(manifest_path)
+        os.makedirs(state_dir, exist_ok=True)
+        with open(manifest_path, "w", encoding="utf-8") as f:
+            json.dump({"version": 1, "files": manifest}, f, indent=2)
+    except OSError:
+        pass
 
 
 def write_file_with_perms(
@@ -314,6 +365,8 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
                     pass
                 break
 
+        pull_manifest = _load_pull_manifest(workspace_dir)
+
         if delete_missing and os.path.isdir(ws_scope_dir):
             ws_files = _find_matching_files(ws_scope_dir, all_patterns)
             for rel in ws_files:
@@ -333,6 +386,7 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
                         pass
                     try:
                         os.remove(dst_f)
+                        pull_manifest.pop(rel, None)
                     except OSError:
                         pass
 
@@ -361,6 +415,11 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
                 for p in role_def.writable_file_patterns
             )
 
+            current_src_hash = _compute_file_sha256(src_f)
+            if current_src_hash is None:
+                continue
+
+            manifest_entry = pull_manifest.get(rel)
             needs_copy = False
             if not os.path.isfile(dst_f):
                 rel_from_ws = os.path.relpath(dst_f, workspace_dir).replace("\\", "/")
@@ -374,57 +433,114 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
                     needs_copy = False
                 else:
                     needs_copy = True
-            elif not is_writable:
-                try:
-                    with open(src_f, "r", encoding="utf-8") as sf, open(dst_f, "r", encoding="utf-8") as df:
-                        src_content = sf.read()
-                        dst_content = df.read()
-                    src_projected = _project_for_role_workspace(src_content, os.path.basename(src_f), is_writable=False)
-                    if src_projected != dst_content:
-                        needs_copy = True
-                except (UnicodeDecodeError, OSError):
-                    try:
-                        with open(src_f, "rb") as sf, open(dst_f, "rb") as df:
-                            if sf.read() != df.read():
-                                needs_copy = True
-                    except OSError:
-                        needs_copy = True
             else:
-                local_modified = False
-                try:
-                    local_modified = src_metadata.is_code_modified(dst_f)
-                except OSError:
-                    local_modified = False
+                current_ws_hash = _compute_file_sha256(dst_f)
 
-                if local_modified:
-                    main_code_hash = src_metadata.compute_file_code_hash(src_f)
-                    ws_meta = src_metadata.extract_metadata(dst_f)
-                    if (
-                        main_code_hash
-                        and ws_meta
-                        and ws_meta.code_hash
-                        and main_code_hash != ws_meta.code_hash
-                    ):
-                        raise RuntimeError(
-                            f"Conflict detected during pull: upstream '{rel}' code was modified concurrently with local uncommitted edits."
-                        )
+                if manifest_entry is not None:
+                    prev_src_hash = manifest_entry.get("main_hash")
+                    prev_ws_hash = manifest_entry.get("ws_hash")
+                    src_changed_upstream = (prev_src_hash != current_src_hash)
+
+                    if not src_changed_upstream:
+                        # Canonical file has not changed since last pull. Never pull or clobber workspace file!
+                        needs_copy = False
+                    else:
+                        # Canonical file changed upstream. Check whether subagent modified dst_f locally:
+                        if is_writable:
+                            local_code_mod = False
+                            try:
+                                local_code_mod = src_metadata.is_code_modified(dst_f)
+                            except OSError:
+                                local_code_mod = False
+
+                            meta = src_metadata.extract_metadata(dst_f)
+                            ws_base_code_h = meta.code_hash if meta else None
+                            src_code_h = src_metadata.compute_file_code_hash(src_f)
+                            upstream_code_changed = bool(
+                                ws_base_code_h and src_code_h and src_code_h != ws_base_code_h
+                            )
+
+                            if local_code_mod and upstream_code_changed:
+                                raise RuntimeError(
+                                    f"Conflict detected during pull: upstream '{rel}' code was modified concurrently with local uncommitted edits."
+                                )
+                            elif local_code_mod:
+                                # Upstream only modified metadata, local code has uncommitted edits: keep local edits
+                                needs_copy = False
+                                pull_manifest[rel] = {
+                                    "main_hash": current_src_hash,
+                                    "ws_hash": current_ws_hash or "",
+                                }
+                            else:
+                                # Local code is clean: pull updated upstream version
+                                needs_copy = True
+                        else:
+                            local_modified = False
+                            if prev_ws_hash and current_ws_hash != prev_ws_hash:
+                                local_modified = True
+
+                            if local_modified:
+                                # Never clobber subagent edits in workspace
+                                needs_copy = False
+                            else:
+                                needs_copy = True
                 else:
-                    try:
-                        with open(src_f, "r", encoding="utf-8") as sf, open(dst_f, "r", encoding="utf-8") as df:
-                            src_content = sf.read()
-                            dst_content = df.read()
-                        src_projected = _project_for_role_workspace(src_content, os.path.basename(src_f), is_writable=True)
-                        if src_projected != dst_content:
-                            needs_copy = True
-                    except (UnicodeDecodeError, OSError):
+                    # Unmanifested workspace (e.g. preexisting workspace or unit test baseline)
+                    local_modified = False
+                    if is_writable:
                         try:
-                            with open(src_f, "rb") as sf, open(dst_f, "rb") as df:
-                                if sf.read() != df.read():
-                                    needs_copy = True
+                            local_modified = src_metadata.is_code_modified(dst_f)
                         except OSError:
-                            needs_copy = True
+                            local_modified = False
+                    else:
+                        try:
+                            with open(src_f, "r", encoding="utf-8") as sf, open(dst_f, "r", encoding="utf-8") as df:
+                                src_content = sf.read()
+                                dst_content = df.read()
+                            src_projected = _project_for_role_workspace(src_content, os.path.basename(src_f), is_writable=False)
+                            if src_projected != dst_content:
+                                local_modified = True
+                        except Exception:
+                            local_modified = False
 
-                if not needs_copy:
+                    if local_modified:
+                        # Preserving subagent edits: do NOT clobber! Record baseline so future pulls track changes from now on.
+                        pull_manifest[rel] = {
+                            "main_hash": current_src_hash,
+                            "ws_hash": current_ws_hash or "",
+                        }
+                        needs_copy = False
+                    else:
+                        try:
+                            with open(src_f, "r", encoding="utf-8") as sf, open(dst_f, "r", encoding="utf-8") as df:
+                                src_content = sf.read()
+                                dst_content = df.read()
+                            src_projected = _project_for_role_workspace(src_content, os.path.basename(src_f), is_writable=is_writable)
+                            if src_projected != dst_content:
+                                needs_copy = True
+                        except (UnicodeDecodeError, OSError):
+                            try:
+                                with open(src_f, "rb") as sf, open(dst_f, "rb") as df:
+                                    if sf.read() != df.read():
+                                        needs_copy = True
+                            except OSError:
+                                needs_copy = True
+
+                        if not needs_copy:
+                            pull_manifest[rel] = {
+                                "main_hash": current_src_hash,
+                                "ws_hash": current_ws_hash or "",
+                            }
+
+            if needs_copy:
+                _copy_projected_file(src_f, dst_f, is_writable=is_writable)
+                pulled_count += 1
+                pull_manifest[rel] = {
+                    "main_hash": current_src_hash,
+                    "ws_hash": _compute_file_sha256(dst_f) or "",
+                }
+            else:
+                if is_writable:
                     try:
                         st = os.stat(dst_f)
                         if not bool(st.st_mode & stat.S_IWUSR):
@@ -432,10 +548,7 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
                     except OSError:
                         pass
 
-            if needs_copy:
-                _copy_projected_file(src_f, dst_f, is_writable=is_writable)
-                pulled_count += 1
-
+        _save_pull_manifest(workspace_dir, pull_manifest)
         return pulled_count
 
     # Contract: Refreshes non-parts system files into role workspace without altering writable targets.
@@ -517,6 +630,23 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
                     'testpaths = ["."]',
                     ptext,
                 )
+                pypaths_cfg = ['"."']
+                if dir_scope:
+                    clean_scope = dir_scope.strip("/").split("/")[0]
+                    pypaths_cfg.append(f'"{clean_scope}"')
+                    pypaths_cfg.append(f'"{clean_scope}/parts"')
+                pypaths_str = f'pythonpath = [{", ".join(pypaths_cfg)}]'
+                if "pythonpath" in ptext:
+                    ptext = re.sub(
+                        r'pythonpath\s*=\s*\[[^\]]*\]',
+                        pypaths_str,
+                        ptext,
+                    )
+                elif "[tool.pytest.ini_options]" in ptext:
+                    ptext = ptext.replace(
+                        "[tool.pytest.ini_options]",
+                        f'[tool.pytest.ini_options]\n{pypaths_str}',
+                    )
                 # Contract: MUST strip readme declaration attributes from refreshed pyproject.toml to prevent build backend failures.
                 ptext = re.sub(r'(?m)^\s*readme\s*=.*$\n?', '', ptext)
                 with open(ws_pyproject, "w", encoding="utf-8") as f:
@@ -726,6 +856,18 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
                     _copy_projected_file(main_f, ws_f, is_writable=True)
                     harvested_count += 1
 
+            if harvested_count > 0:
+                pull_manifest = _load_pull_manifest(workspace_dir)
+                for rel in writable_files:
+                    ws_f = os.path.join(ws_scope_dir, rel)
+                    main_f = os.path.join(main_scope_dir, rel)
+                    if os.path.isfile(main_f) and os.path.isfile(ws_f):
+                        mh = _compute_file_sha256(main_f)
+                        wh = _compute_file_sha256(ws_f)
+                        if mh and wh:
+                            pull_manifest[rel] = {"main_hash": mh, "ws_hash": wh}
+                _save_pull_manifest(workspace_dir, pull_manifest)
+
         return sync.SyncResult(
             pulled_files=0,
             harvested_files=harvested_count,
@@ -734,8 +876,8 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
         )
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-20T23:45:00Z
-# LAST_CHANGED: 2026-10-30T05:40:00Z
-# CHANGE: Strip readme declaration attributes from refreshed pyproject.toml during workspace system file refresh
+# LAST_CHANGED: 2026-11-05T11:45:00Z
+# CHANGE: Evaluate pull against pull manifest and prevent clobbering subagent edits
 # COVERAGE_AUDIT: 2026-10-15T17:42:47Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

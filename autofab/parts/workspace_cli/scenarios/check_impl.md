@@ -61,7 +61,7 @@ Given: an active role workspace configured with model `gemini-argon` on the `ant
 Given: an active auditor role workspace (such as QA or Coverage) where verification checks fail on a target file.
 
 1. The caller runs `run_check_files`.
-   Observed: upon verification failure, sanitizes subprocess output by stripping redundant embedded arbiter reminders, and outputs a structured triage summary extracting the author's latest # CHANGE: commit header, primary failure exception or assertion, candidate culprit file, and a single prominent auditor reminder directing the agent to formulate blame feedback explaining why the author's change did not resolve the defect strictly in terms of how the blamed file is not compliant with the common source of truth specification (instructing the coverage auditor to examine the library implementation for unreachable code when an uncovered line persists), and to call bin/get_work to verify remaining units and conclude after delivering blame without authoring debug scripts.
+   Observed: upon verification failure, sanitizes subprocess output by stripping redundant embedded arbiter reminders, and outputs a structured triage summary extracting the author's latest # CHANGE: commit header, primary failure exception or assertion, candidate culprit file, blame routing instructions directing the agent to inspect the specification and candidate feedback targets (library, test, and pretense source code) to determine which file contains the defect, and a single prominent auditor reminder directing the agent to formulate blame feedback strictly in terms of how the blamed file is not compliant with the common source of truth specification (instructing the coverage auditor to examine the library implementation for unreachable code when an uncovered line persists), and to call bin/get_work to verify remaining units and conclude after delivering blame without authoring debug scripts.
 
 ## Scenario 10 — Milestone git checkpoint commit on successful check_files
 
@@ -88,14 +88,14 @@ Given: an active role workspace where `__init__.py` or another file outside the 
 
 Given: an active role workspace with no pending targets recorded in the buffer and zero ready items in the work queue.
 
-1. The caller runs `run_check_files` for a target.
+1. The caller runs `run_check_files` with no target or for an unowned target.
    Observed: returns exit code 1 with error diagnostic directing the worker to call get_work first or conclude the round.
 
-## Scenario 14 — Verification rejected when target is not in assigned pending work
+## Scenario 14 — Verification rejected when target is not assigned and not owned by role
 
 Given: an active role workspace with pending targets recorded in the buffer.
 
-1. The caller runs `run_check_files` for an unassigned target.
+1. The caller runs `run_check_files` for an unassigned target not owned by the active role.
    Observed: returns exit code 1 with error diagnostic reporting that the target is not in assigned pending work.
 
 ## Scenario 15 — Pull inbound changes and refresh system files before running check_files
@@ -112,8 +112,22 @@ Given: an active auditor role workspace (such as QA or Coverage) with ready dirt
 1. The caller runs `run_get_work`.
    Observed: aggressively executes verification checks on each dirty target; targets passing verification are automatically submitted with audit attestation and omitted from presented work; targets failing verification are retained in the work queue without outputting failure diagnostics or triage summaries during work acquisition (leaving failure diagnostics to be surfaced when the worker executes `check_files` directly); and when all targets pass, clears pending work, sets the no-pending-work marker, and outputs the round conclusion directive directing the worker to conclude immediately with zero tool calls.
 
+## Scenario 17 — Verification accepted for unassigned target owned by active role
+
+Given: an active role workspace with an unassigned target that is owned by the active role.
+
+1. The caller runs `run_check_files` for the unassigned target owned by the active role.
+   Observed: returns exit code 0 and verifies the target.
+
+## Scenario 18 — Sandbox containment with UV_CACHE_DIR configuration
+
+Given: an active role workspace operating under a workspace-write sandbox policy.
+
+1. The caller runs `run_check_files`.
+   Observed: configures `UV_CACHE_DIR` to a sandbox-accessible directory under temporary directories (e.g. `/tmp/uv_cache`) preventing external cache write denials under workspace-write sandbox containment.
+
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-30T11:00:00Z
-LAST_CHANGED: 2026-11-03T23:45:00Z
-CHANGE: Instruct coverage auditor when uncovered lines persist to examine library implementation for unreachable code
+LAST_CHANGED: 2026-11-05T20:03:00Z
+CHANGE: Set UV_CACHE_DIR in check_impl verification environment for sandbox containment
 -->

@@ -19,6 +19,7 @@ class RoleDefinition:
         writable_file_patterns: Sequence of glob patterns for writable targets.
         readonly_file_patterns: Sequence of glob patterns for immutable contracts.
         feedback_role_deps: Sequence of role names receiving feedback.
+        star_feedback_role_deps: Sequence of cross-unit star role names receiving feedback.
         src_pattern: Primary source file path pattern with placeholders.
         src_patterns: Sequence of source file path patterns with placeholders.
         role_deps: Sequence of intra-unit role dependencies.
@@ -67,6 +68,7 @@ class RoleDefinition:
     pipeline: Optional[str] = None
     fused_roles: Sequence[str] = ()
     common_spec_roles: Sequence[str] = ()
+    star_feedback_role_deps: Sequence[str] = ()
 
 
 # Contract: RoleResolver protocol loads role configurations and validates declaration rules.

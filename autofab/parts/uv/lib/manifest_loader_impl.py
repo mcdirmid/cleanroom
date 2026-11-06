@@ -405,6 +405,12 @@ class UvManifestLoader(manifest_loader.UvManifestLoader):
                     if implied not in deps_list:
                         deps_list.append(implied)
 
+            for sfr in role_cfg.get("star_feedback_role_deps", []):
+                if sfr != role_name:
+                    implied = f"//{pkg_dir}:{unit_name}#{sfr}"
+                    if implied not in deps_list:
+                        deps_list.append(implied)
+
             for srd in role_cfg.get("silent_role_deps", []):
                 silent_deps_list.append(f"//{pkg_dir}:{unit_name}#{srd}")
 
@@ -459,6 +465,11 @@ class UvManifestLoader(manifest_loader.UvManifestLoader):
         for frd in role_cfg.get("feedback_role_deps", []):
             feedback_deps.append(f"//{pkg_dir}:{unit_name}#{frd}")
 
+        for sfrd in role_cfg.get("star_feedback_role_deps", []):
+            implied_fb = f"//{pkg_dir}:{unit_name}#{sfrd}"
+            if implied_fb not in feedback_deps:
+                feedback_deps.append(implied_fb)
+
         for srd in role_cfg.get("silent_role_deps", []):
             silent_deps.append(f"//{pkg_dir}:{unit_name}#{srd}")
 
@@ -466,12 +477,24 @@ class UvManifestLoader(manifest_loader.UvManifestLoader):
             u_norm = self._resolve_unit_package(root, pkg_dir, udep)
             for srd in role_cfg.get("star_role_deps", []):
                 star_deps.append(f"{u_norm}#{srd}")
+            for sfrd in role_cfg.get("star_feedback_role_deps", []):
+                sfb = f"{u_norm}#{sfrd}"
+                if sfb not in star_deps:
+                    star_deps.append(sfb)
+                if sfb not in feedback_deps:
+                    feedback_deps.append(sfb)
             for scr in role_cfg.get("silent_cross_role_deps", []):
                 silent_deps.append(f"{u_norm}#{scr}")
 
         for sr in role_cfg.get("star_role_deps", []):
             if sr != role_name:
                 implied = f"//{pkg_dir}:{unit_name}#{sr}"
+                if implied not in direct_deps:
+                    direct_deps.append(implied)
+
+        for sfrd in role_cfg.get("star_feedback_role_deps", []):
+            if sfrd != role_name:
+                implied = f"//{pkg_dir}:{unit_name}#{sfrd}"
                 if implied not in direct_deps:
                     direct_deps.append(implied)
 

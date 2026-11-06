@@ -51,12 +51,23 @@ Given: an active DeepSeek Harness server or Desktop application listening on a l
 
 Given: a task handle representing an active role round dispatched over the RPC bridge.
 
-1. The telemetry parser polls round status.
-   Observed: a DshRpcRoundStatus record is returned indicating execution state and accumulated token usage.
-   Realized by: querying session status and event records over the JSON-RPC bridge.
+1. The telemetry parser polls round status across string statuses and dictionary outcomes.
+   Observed: a DshRpcRoundStatus record is returned indicating execution state and accumulated token usage, recognizing terminal outcomes in string states ('completed', 'done', 'success', 'closed', 'error', 'failed', 'aborted') or dictionary structures with 'completed' or 'errored' keys.
+   Realized by: querying session status and event records over the JSON-RPC bridge or bridge tool endpoints.
+
+### Scenario 7 — Dispatching round over DSH Web bridge as ungrouped session
+
+Given: DeepSeek Harness Web mode enabled via environment configuration and an active loopback bridge.
+
+1. The telemetry parser evaluates server reachability.
+   Observed: reachability is confirmed via the Web loopback bridge endpoint without requiring desktop cookies.
+   Realized by: discovering active Web bridge endpoint from bridge configuration.
+2. The telemetry parser dispatches a role round.
+   Observed: the role worker is spawned directly as an independent top-level session labeled `[<scope>] <role>` under Ungrouped without container attachment or parent session reference.
+   Realized by: invoking dsh_spawn with the formatted label and cwd without invoking dsh_container or passing parent_session.
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-11-02T17:35:00Z
-CHANGE: Name desktop sessions with scope and role directly in role workspace without creating per-role workspace folders
+LAST_CHANGED: 2026-11-06T11:45:00Z
+CHANGE: Dispatch Web role rounds as independent Ungrouped sessions labeled [scope] role without container
 -->

@@ -38,6 +38,7 @@ from autofab_py.support.lib.pretense_lint import (
     check_multi_transition_disambiguation,
     check_no_call_target_in_interface,
     check_no_pre_seeding,
+    check_no_raises_in_test_cases,
     check_no_relative_parent_imports,
     check_no_scaffold_placeholders,
     check_pretense_imports,
@@ -1105,6 +1106,53 @@ class PretenseLintTest(unittest.TestCase):
         finally:
             if os.path.exists(bad_path):
                 os.remove(bad_path)
+
+    def test_check_no_raises_in_test_cases(self) -> None:
+        """Verify check_no_raises_in_test_cases catches raises() in TestCase while allowing it in SM transitions."""
+        bad_code = (
+            "import unittest\n"
+            "from pretense import raises\n\n"
+            "class TestTargetImplReal(unittest.TestCase):\n"
+            "    def test_precondition_with_raises(self) -> None:\n"
+            "        with raises(ValueError):\n"
+            "            self.checked.do_work()\n\n"
+            "    def test_precondition_with_pretense_raises(self) -> None:\n"
+            "        import pretense\n"
+            "        with pretense.raises(RuntimeError):\n"
+            "            self.checked.do_work()\n"
+        )
+        bad_tree = ast.parse(bad_code)
+        errs = check_no_raises_in_test_cases(bad_tree, "test_file.py")
+        self.assertEqual(len(errs), 2)
+        self.assertTrue(all("PRE_LINT_NO_RAISES_IN_TEST_CASE" in e for e in errs))
+        self.assertTrue(all("self.assertRaises" in e for e in errs))
+
+        # self.assertRaises is allowed
+        good_code = (
+            "import unittest\n\n"
+            "class TestTargetImplReal(unittest.TestCase):\n"
+            "    def test_precondition_assert_raises(self) -> None:\n"
+            "        self.assertRaises(ValueError, self.checked.do_work)\n"
+            "    def test_precondition_with_assert_raises(self) -> None:\n"
+            "        with self.assertRaises(ValueError):\n"
+            "            self.checked.do_work()\n"
+        )
+        good_tree = ast.parse(good_code)
+        good_errs = check_no_raises_in_test_cases(good_tree, "good_file.py")
+        self.assertEqual(len(good_errs), 0)
+
+        # with raises(...) in StateMachine transitions is allowed
+        sm_code = (
+            "from pretense import StateMachine, transition, raises, call_target\n\n"
+            "class TargetImplPseudoStateMachine(TargetStateMachine):\n"
+            "    @transition(Target.method)\n"
+            "    def method(self) -> None:\n"
+            "        with raises(RuntimeError):\n"
+            "            ret = call_target(target.method())\n"
+        )
+        sm_tree = ast.parse(sm_code)
+        sm_errs = check_no_raises_in_test_cases(sm_tree, "sm_file.py")
+        self.assertEqual(len(sm_errs), 0)
 
 
 if __name__ == "__main__":

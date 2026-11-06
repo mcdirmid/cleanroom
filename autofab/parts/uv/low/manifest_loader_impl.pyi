@@ -44,6 +44,7 @@ class UvManifestLoader(manifest_loader.UvManifestLoader):
         - MUST evaluate verification check templates parameterized with unit metadata.
         - MUST evaluate verification success message templates parameterized with unit metadata.
         - MUST cross-product unit dependencies with role dependencies to produce target dependencies.
+        - MUST resolve star feedback role dependencies into feedback dependencies for the active unit and cross-unit feedback and star dependencies for directly imported unit dependencies.
         - MUST incorporate fixed role node dependencies as declared direct dependencies across unit and role dimensions.
         - MUST resolve bare cross-package unit dependency references to their containing packages within parts workspaces, skipping unconfigured or failed parts roots.
         - MUST forward constituent unit dependencies and role dependencies for inactive pass-through nodes.

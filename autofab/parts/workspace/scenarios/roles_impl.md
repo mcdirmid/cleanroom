@@ -40,8 +40,18 @@ Given: a TOML configuration file declaring role `baseline_a` with `src_patterns 
 2. The caller resolves `dependent`.
    Observed: `dependent` has `readonly_file_patterns` containing globs for both of `baseline_a`'s patterns.
 
+## Scenario 5 — Parsing star feedback role dependencies
+
+Given: a TOML configuration file declaring role `auditor_star` with `star_feedback_role_deps = ['pretense']` and `feedback_role_deps = ['lib']`.
+
+1. The caller resolves `auditor_star`.
+   Observed: `auditor_star` has `star_feedback_role_deps` containing `['pretense']` and `feedback_role_deps` containing `['lib']`.
+
+2. The configuration file declares `star_feedback_role_deps = ['pretense']` and redundantly declares `star_role_deps = ['pretense']`.
+   Observed: resolving the role fails explicitly with ValueError.
+
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-11-04T10:33:00Z
-CHANGE: Default active pipeline to standard when no pipeline is explicitly configured
+LAST_CHANGED: 2026-11-05T11:27:00Z
+CHANGE: Add scenario for star feedback role dependencies
 -->

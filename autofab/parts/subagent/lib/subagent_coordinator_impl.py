@@ -209,6 +209,31 @@ def _get_upstream_roles_for_role(
     return visited
 
 
+def _extract_unit_keys(target_path: str) -> Set[Tuple[str, str]]:
+    """Extracts unit keys (part_dir, unit_name) associated with a target file path."""
+    clean = target_path.replace("\\", "/")
+    parent_dir = os.path.dirname(clean)
+    part_dir = os.path.dirname(parent_dir)
+    fname = os.path.basename(clean)
+    stem = os.path.splitext(fname)[0]
+    for suffix in ("_test", "_pretense"):
+        if stem.endswith(suffix):
+            stem = stem[:-len(suffix)]
+            break
+    keys = {(part_dir, stem)}
+    if stem.endswith("_impl"):
+        keys.add((part_dir, stem[:-5]))
+    return keys
+
+
+def _collect_units_for_paths(paths: Sequence[str]) -> Set[Tuple[str, str]]:
+    """Collects all unit keys across a sequence of target file paths."""
+    units: Set[Tuple[str, str]] = set()
+    for p in paths:
+        units.update(_extract_unit_keys(p))
+    return units
+
+
 class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
     """Realizes zero-execution multi-agent workspace coordination across execution waves."""
 
@@ -703,12 +728,30 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
                         all_clean = False
                         blocked_count += len(blocked)
 
+                active_units_by_role = {
+                    r: _collect_units_for_paths(assigned_targets_map.get(r, ()))
+                    for r in active_workers
+                }
+                candidate_units_by_role = {
+                    r: _collect_units_for_paths(t_paths)
+                    for r, t_paths in candidate_ready_map.items()
+                }
+
                 ready_roles_map: Dict[str, Sequence[str]] = {}
                 for r_name, target_paths in candidate_ready_map.items():
                     up_roles = _get_upstream_roles_for_role(r_name, reg, root)
-                    if any(up_r in active_workers or up_r in candidate_ready_map for up_r in up_roles):
-                        continue
-                    ready_roles_map[r_name] = target_paths
+                    unblocked_targets: List[str] = []
+                    for t_path in target_paths:
+                        t_keys = _extract_unit_keys(t_path)
+                        is_withheld = any(
+                            bool(t_keys & active_units_by_role.get(up_r, set()))
+                            or bool(t_keys & candidate_units_by_role.get(up_r, set()))
+                            for up_r in up_roles
+                        )
+                        if not is_withheld:
+                            unblocked_targets.append(t_path)
+                    if unblocked_targets:
+                        ready_roles_map[r_name] = unblocked_targets
 
                 # 3. Clean convergence check
                 if not active_workers and all_clean:

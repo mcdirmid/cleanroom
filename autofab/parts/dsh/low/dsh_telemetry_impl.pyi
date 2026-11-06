@@ -101,7 +101,7 @@ class DshTelemetryParser(dsh_telemetry.DshTelemetryParser):
 
         GROUNDING:
         - Dispatches session/create (using role workspace directory directly without workspaceId), session/rename (setting conversation title to scope and role), session/selectModel (resolving declared model profile names against model configuration definitions discovered in workspace ancestors, user configuration, or repository root and mapping local MLX providers to oMLX endpoints), and session/prompt over the local RPC bridge
-          conforming to dsh_ext without registering per-role workspace folders (dsh_telemetry_mechanics).
+          conforming to dsh_ext without registering per-role workspace folders (dsh_telemetry_mechanics). In DeepSeek Harness Web mode, dispatches role rounds as independent top-level sessions labeled `[<scope>] <role>` under Ungrouped without container attachment or workspace folder registration, providing direct conversation visibility and manual interactivity without subagent monitor dependencies.
         """
         ...
 
@@ -147,7 +147,7 @@ class DshTelemetryParser(dsh_telemetry.DshTelemetryParser):
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-11-02T17:35:00Z
-# CHANGE: Name desktop sessions with scope and role directly in role workspace without creating per-role workspace folders
+# LAST_CHANGED: 2026-11-06T10:40:00Z
+# CHANGE: Recognize dictionary outcomes with completed or errored keys in poll_round_rpc
 # SPEC_QA_AUDIT: 2026-10-19T22:33:00Z
 # --- END CLEANROOM METADATA ---

@@ -77,11 +77,13 @@ def _build_role_definitions(
         raw_role_deps = rkwargs.get("role_deps") or []
         raw_star_deps = rkwargs.get("star_role_deps") or []
         raw_fb_deps = rkwargs.get("feedback_role_deps") or []
+        raw_star_fb_deps = rkwargs.get("star_feedback_role_deps") or []
         raw_silent_deps = rkwargs.get("silent_role_deps") or []
 
         role_deps_clean = {d.split(":")[-1] for d in raw_role_deps}
         star_deps_clean = {d.split(":")[-1] for d in raw_star_deps}
         fb_deps_clean = {d.split(":")[-1] for d in raw_fb_deps}
+        star_fb_deps_clean = {d.split(":")[-1] for d in raw_star_fb_deps}
         silent_deps_clean = {d.split(":")[-1] for d in raw_silent_deps}
 
         # Contract: Postcondition - WHEN feedback role dependencies are redundantly declared as role dependencies, MUST raise ValueError.
@@ -100,8 +102,30 @@ def _build_role_definitions(
                 "star_role_deps are implicitly role_deps."
             )
 
+        # Contract: Postcondition - WHEN star feedback role dependencies are redundantly declared in feedback_role_deps, star_role_deps, or role_deps, MUST raise ValueError.
+        redundant_star_fb = fb_deps_clean & star_fb_deps_clean
+        if redundant_star_fb:
+            raise ValueError(
+                f"Role '{rname}' redundantly declares star_feedback_role_deps {sorted(redundant_star_fb)} in feedback_role_deps. "
+                "star_feedback_role_deps are implicitly feedback_role_deps."
+            )
+
+        redundant_star_fb_star = star_deps_clean & star_fb_deps_clean
+        if redundant_star_fb_star:
+            raise ValueError(
+                f"Role '{rname}' redundantly declares star_feedback_role_deps {sorted(redundant_star_fb_star)} in star_role_deps. "
+                "star_feedback_role_deps are implicitly star_role_deps."
+            )
+
+        redundant_star_fb_role = role_deps_clean & star_fb_deps_clean
+        if redundant_star_fb_role:
+            raise ValueError(
+                f"Role '{rname}' redundantly declares star_feedback_role_deps {sorted(redundant_star_fb_role)} in role_deps. "
+                "star_feedback_role_deps are implicitly role_deps."
+            )
+
         # Contract: Postcondition - WHEN a dependency is declared as both a role dependency and a silent role dependency, MUST raise ValueError.
-        conflicting_silent = silent_deps_clean & (role_deps_clean | star_deps_clean | fb_deps_clean)
+        conflicting_silent = silent_deps_clean & (role_deps_clean | star_deps_clean | fb_deps_clean | star_fb_deps_clean)
         if conflicting_silent:
             raise ValueError(
                 f"Role '{rname}' declares dependency {sorted(conflicting_silent)} as both a role dependency and a silent role dependency."
@@ -129,6 +153,13 @@ def _build_role_definitions(
                 "Auditor roles can only be silent_role_deps."
             )
 
+        auditor_in_star_fb = star_fb_deps_clean & auditor_roles
+        if auditor_in_star_fb:
+            raise ValueError(
+                f"Role '{rname}' declares auditor role {sorted(auditor_in_star_fb)} in star_feedback_role_deps. "
+                "Auditor roles can only be silent_role_deps."
+            )
+
         # Contract: Derives writable and readonly file patterns from source pattern(s) and dependencies.
         raw_pats = rkwargs.get("src_patterns")
         if isinstance(raw_pats, (list, tuple)):
@@ -146,7 +177,7 @@ def _build_role_definitions(
                 if w_glob not in writable:
                     writable.append(w_glob)
         readonly: List[str] = []
-        deps = list(raw_role_deps) + list(raw_star_deps) + list(raw_fb_deps)
+        deps = list(raw_role_deps) + list(raw_star_deps) + list(raw_fb_deps) + list(raw_star_fb_deps)
         for dep in deps:
             dname = dep.split(":")[-1]
             dep_kwargs = raw_roles.get(dname, {})
@@ -211,6 +242,7 @@ def _build_role_definitions(
             pipeline=str(rkwargs["pipeline"]).strip().lower() if rkwargs.get("pipeline") else None,
             fused_roles=(),
             common_spec_roles=rkwargs.get("common_spec_roles") or (),
+            star_feedback_role_deps=[d.split(":")[-1] for d in (rkwargs.get("star_feedback_role_deps") or [])],
         )
 
     # Process fused role definitions
@@ -283,6 +315,7 @@ def _build_role_definitions(
             pipeline=inherited_pipeline,
             fused_roles=constituents_clean,
             common_spec_roles=(),
+            star_feedback_role_deps=(),
         )
 
     return role_defs
@@ -758,6 +791,7 @@ class RoleResolver(roles.RoleResolver):
             pipeline=base.pipeline,
             fused_roles=base.fused_roles,
             common_spec_roles=base.common_spec_roles,
+            star_feedback_role_deps=base.star_feedback_role_deps,
         )
 
     # Contract: Resolves role configuration matching declared roles or addressed packages.

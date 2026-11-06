@@ -99,11 +99,13 @@ def _role_audit_tag(role_def: Any) -> Optional[str]:
 
 def _role_feedback_deps(role_def: Any) -> Sequence[str]:
     """Returns the feedback role dependencies for a role definition or mapping."""
-    if hasattr(role_def, "feedback_role_deps"):
-        return role_def.feedback_role_deps or ()
     if isinstance(role_def, dict):
-        return role_def.get("feedback_role_deps") or ()
-    return ()
+        fb = role_def.get("feedback_role_deps") or ()
+        sfb = role_def.get("star_feedback_role_deps") or ()
+        return tuple(dict.fromkeys(list(fb) + list(sfb)))
+    fb = getattr(role_def, "feedback_role_deps", ()) or ()
+    sfb = getattr(role_def, "star_feedback_role_deps", ()) or ()
+    return tuple(dict.fromkeys(list(fb) + list(sfb)))
 
 
 def _extract_unit_info(node: dag_storage.DagNode) -> Tuple[str, str]:

@@ -11,6 +11,7 @@ import tempfile
 import threading
 from typing import Any
 import unittest
+from unittest.mock import patch
 
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
 from autofab.parts.agent.lib import session as agent_session
@@ -416,11 +417,81 @@ class DshTelemetryImplTest(unittest.TestCase):
         self.assertEqual(req.get("provider"), "omlx")
         self.assertEqual(req.get("model"), "Qwen3.6-35B-A3B-oQ6-mtp")
 
+    def test_resolve_default_sessions_dir_gating(self) -> None:
+        """Verifies _resolve_default_sessions_dir strictly gates web candidate on AUTOFAB_DSH_WEB==1."""
+        home = os.path.expanduser("~")
+        dsh_web_cand = os.path.join(home, ".dsh", "sessions")
+
+        with patch.dict(os.environ, {"AUTOFAB_DSH_WEB": "1"}, clear=False):
+            self.assertEqual(dsh_telemetry_impl._resolve_default_sessions_dir(), dsh_web_cand)
+
+        with patch.dict(os.environ, {}, clear=True):
+            resolved = dsh_telemetry_impl._resolve_default_sessions_dir()
+            self.assertNotEqual(resolved, dsh_web_cand)
+
+    @patch("autofab.parts.dsh.lib.dsh_telemetry_impl._call_web_bridge")
+    @patch("autofab.parts.dsh.lib.dsh_telemetry_impl._discover_web_bridge")
+    def test_dispatch_round_rpc_web_ungrouped(self, mock_discover: Any, mock_call: Any) -> None:
+        """Scenario 7: In Web mode, dispatches role round directly as an ungrouped session labeled [scope] role."""
+        mock_discover.return_value = {"url": "http://127.0.0.1:47821", "port": 47821}
+
+        def fake_call(bridge: Any, tool_name: str, args: Any, timeout: float = 10.0) -> Any:
+            if tool_name == "dsh_spawn":
+                return {"content": [{"type": "text", "text": json.dumps({"sessionId": "worker-session-456"})}]}
+            return None
+
+        mock_call.side_effect = fake_call
+
+        with patch.dict(os.environ, {"AUTOFAB_DSH_WEB": "1"}, clear=False):
+            parser = dsh_telemetry_impl.DshTelemetryParser()
+            handle = parser.dispatch_round_rpc(
+                workspace_dir=self.test_dir,
+                role_name="lib",
+                prompt_text="Task work order",
+                dir_scope="//ring_buffer",
+                model_name="deepseek-flash",
+            )
+            self.assertIsNotNone(handle)
+            self.assertIn("worker-session-456", handle or "")
+
+            # Verify dsh_container was NOT called
+            container_calls = [c for c in mock_call.call_args_list if c[0][1] == "dsh_container"]
+            self.assertEqual(len(container_calls), 0)
+
+            # Verify dsh_spawn received label and no parent_session
+            spawn_calls = [c for c in mock_call.call_args_list if c[0][1] == "dsh_spawn"]
+            self.assertEqual(len(spawn_calls), 1)
+            spawn_args = spawn_calls[0][0][2]
+            self.assertNotIn("parent_session", spawn_args)
+            self.assertEqual(spawn_args.get("label"), "[ring_buffer] lib")
+
+    @patch("autofab.parts.dsh.lib.dsh_telemetry_impl._call_web_bridge")
+    @patch("autofab.parts.dsh.lib.dsh_telemetry_impl._discover_web_bridge")
+    def test_poll_round_rpc_web_dict_status(self, mock_discover: Any, mock_call: Any) -> None:
+        """Scenario 6: Polls active round over Web bridge recognizing dict status {completed: ...}."""
+        mock_discover.return_value = {"url": "http://127.0.0.1:47821", "port": 47821}
+        mock_call.return_value = {
+            "content": [{
+                "type": "text",
+                "text": json.dumps([{
+                    "task_name": "worker_task_1",
+                    "sessionId": "session-123",
+                    "status": {"completed": "Done with all tasks"}
+                }])
+            }]
+        }
+        parser = dsh_telemetry_impl.DshTelemetryParser()
+        status = parser.poll_round_rpc("dsh_rpc_web::session-123::worker_task_1")
+        self.assertFalse(status.is_active)
+        self.assertTrue(status.is_completed)
+
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T18:55:00Z
-# CHANGE: Author unit tests for dsh_telemetry_impl
+# LAST_CHANGED: 2026-11-06T10:40:00Z
+# CHANGE: Add test for poll_round_rpc web bridge dict status outcome
+# SPEC_QA_AUDIT: 2026-10-19T22:33:00Z
+# --- END CLEANROOM METADATA ---
 # COVERAGE_AUDIT: 2026-10-15T17:42:47Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

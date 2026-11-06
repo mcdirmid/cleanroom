@@ -98,6 +98,11 @@ If a test doesn't matter, don't run the test! Do not edit pyrightconfig.json to 
   In other environments (such as DeepSeek Harness / DSH Desktop), run `uv run autofab clean <scope> [target_role]` directly via the terminal tool (configured with a model using the `dsh` harness in `model_configs.toml`).
   For autonomous DAG convergence under Antigravity, run `uv run autofab clean <target>` with a model using the `antigravity` harness.
 
+## DSH Web Remote Access URL
+
+- **Remote Access URL**: The only supported URL for remote access is `http://seans-macbook-pro-2.local:3080/?token=<active_token>`. Never suggest `localhost`, `127.0.0.1`, or raw IP addresses.
+- **Dynamic Active Token (Never Hardcode Stale Tokens)**: Never hardcode a static or stale token. Always extract the active token dynamically from the running DSH Web daemon output (`dsh web: ...?token=<active_token>`) in the task log.
+
 ## Credentials & Package Publishing
 
 - **Credentials Location**: External service and publishing credentials live in `~/.config/autofab/credentials.toml` outside the working tree (contains `UV_PUBLISH_TOKEN`, `OPENAI_API_KEY`, etc.). NEVER log, commit, or duplicate tokens from this file.

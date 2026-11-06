@@ -1686,6 +1686,8 @@ def _execute_flight(
     pretense: bool = False,
     method: Optional[str] = None,
     max_waves: Optional[int] = 100,
+    dsh_web: bool = False,
+    dsh_desktop: bool = False,
 ) -> benchmark.FlightRecord:
     timestamp_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d_%H%M%S")
     flight_id = f"flight_{timestamp_str}_{model.identifier.replace('.', '_')}_{unit.task_id}"
@@ -1858,6 +1860,10 @@ def _execute_flight(
                 cmd.extend(["--max-waves", str(max_waves)])
             if resolved_harness == "antigravity" and antigravity_dispatch:
                 cmd.extend(["--antigravity-dispatch", antigravity_dispatch])
+            if dsh_desktop or os.environ.get("AUTOFAB_DSH_WEB") == "0":
+                cmd.append("--dsh-desktop")
+            elif dsh_web or os.environ.get("AUTOFAB_DSH_WEB") == "1":
+                cmd.append("--dsh-web")
             if resolved_harness != "antigravity":
                 sys.stdout.write("\n" + "=" * 72 + "\n")
                 sys.stdout.write("AUTONOMOUS DSH COORDINATION INITIATED:\n")
@@ -2216,6 +2222,8 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
         pretense: bool = False,
         method: Optional[str] = None,
         max_waves: Optional[int] = 100,
+        dsh_web: bool = False,
+        dsh_desktop: bool = False,
     ) -> benchmark.FlightRecord:
         return _execute_flight(
             repo_root=self._repo_root,
@@ -2234,6 +2242,8 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
             pretense=pretense,
             method=method,
             max_waves=max_waves,
+            dsh_web=dsh_web,
+            dsh_desktop=dsh_desktop,
         )
 
     def harvest_flight(
@@ -2527,9 +2537,31 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
             default=100,
             help="Maximum execution wave iterations before halting (default: 100).",
         )
+        parser.add_argument(
+            "--dsh-web",
+            action="store_true",
+            help="Execute DSH subagent rounds via DSH Web bridge on port 3080/47821.",
+        )
+        parser.add_argument(
+            "--dsh-desktop",
+            action="store_true",
+            help="Force DeepSeek Harness Desktop RPC execution even when Web mode is the configured default.",
+        )
 
         args = parser.parse_args(argv)
         root = self._repo_root
+
+        effective_dsh_web = False
+        if args.dsh_desktop:
+            os.environ["AUTOFAB_DSH_WEB"] = "0"
+            effective_dsh_web = False
+        elif args.dsh_web:
+            os.environ["AUTOFAB_DSH_WEB"] = "1"
+            effective_dsh_web = True
+        else:
+            effective_dsh_web = app_info.resolve_default_dsh_web(root)
+            if effective_dsh_web:
+                os.environ["AUTOFAB_DSH_WEB"] = "1"
 
         if args.harness == "loop":
             print(
@@ -2645,6 +2677,8 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
                     pretense=(args.method == "pretense"),
                     method=args.method,
                     max_waves=args.max_waves,
+                    dsh_web=effective_dsh_web,
+                    dsh_desktop=args.dsh_desktop,
                 )
                 self.save_flight_json(record, str(logs_dir))
                 records.append(record)

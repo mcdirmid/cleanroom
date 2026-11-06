@@ -45,6 +45,8 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
         """Pulls updated upstream contracts and source files into role workspace.
 
         GROUNDING:
+        - Evaluates inbound changes against a pull manifest recorded in the role workspace state directory,
+          pulling only files that have changed upstream since the last pull and never clobbering subagent edits.
         - Copies newer upstream files from main into the role workspace, projecting metadata
           headers to retain only change and feedback fields, stamping ephemeral code hashes
           on writable targets, setting 0o444 on read-only contracts, updating writable
@@ -134,7 +136,7 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-22T13:50:00Z
-# LAST_CHANGED: 2026-10-30T05:40:00Z
-# CHANGE: Strip readme declaration attributes from refreshed pyproject.toml during workspace system file refresh
+# LAST_CHANGED: 2026-11-05T11:45:00Z
+# CHANGE: Evaluate pull against pull manifest and prevent clobbering subagent edits
 # SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

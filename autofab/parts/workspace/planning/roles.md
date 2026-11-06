@@ -8,7 +8,7 @@ Managing autonomous development roles requires consistent mapping between role c
 
 ### Typing
 
-- A role definition record encapsulates a role name, a role address when explicitly targeted, a guide path, a starter template path when defined, a template command when dynamic scaffolding applies, a primary source pattern, optional source patterns (sequence of source file path patterns), writable file patterns, read-only file patterns, role dependencies, star role dependencies, silent role dependencies, stub role dependencies, silent cross-role dependencies, feedback role dependencies, common specification roles, active component types, a verification template, a verification success message, a persona, workspace files, tools, an audit tag when the role performs auditing, and a task prompt when custom instructions apply.
+- A role definition record encapsulates a role name, a role address when explicitly targeted, a guide path, a starter template path when defined, a template command when dynamic scaffolding applies, a primary source pattern, optional source patterns (sequence of source file path patterns), writable file patterns, read-only file patterns, role dependencies, star role dependencies, silent role dependencies, stub role dependencies, silent cross-role dependencies, feedback role dependencies, star feedback role dependencies, common specification roles, active component types, a verification template, a verification success message, a persona, workspace files, tools, an audit tag when the role performs auditing, and a task prompt when custom instructions apply.
 - An agent session's role resolver resolves role specifications and validates role configurations.
 
 ### Contracts
@@ -19,12 +19,13 @@ Managing autonomous development roles requires consistent mapping between role c
 - When resolving an unqualified role definition within a directory scope, the role resolver discovers the methodology configuration bound to that directory scope or its package hierarchy and loads the role definitions that methodology declares. [resolve_unqualified_role_via_methodology]
 - When resolving a qualified role address, the role resolver loads the role definitions declared by the addressed package. [resolve_qualified_role_address]
 - The role resolver rejects role definitions containing redundant role dependency declarations. [reject_redundant_role_dependencies]
+- The role resolver rejects role definitions declaring star feedback role dependencies under feedback role dependencies or star role dependencies. [reject_redundant_feedback_dependencies]
 - The role resolver rejects role definitions declaring a dependency as a role dependency and a silent role dependency. [reject_conflicting_silent_role_dependencies]
-- The role resolver rejects role definitions declaring an auditor role in role dependencies, star role dependencies, or feedback role dependencies. [reject_auditor_role_dependencies]
+- The role resolver rejects role definitions declaring an auditor role in role dependencies, star role dependencies, feedback role dependencies, or star feedback role dependencies. [reject_auditor_role_dependencies]
 
 ### Woven Contracts
 
-- When resolving or listing role configurations, the resolver loads role definitions dynamically from repository role configuration files or build files, resolving unqualified roles through their bound methodology and qualified role addresses through the addressed package, rejecting configurations with redundant role dependencies, conflicting silent role dependencies, or non-silent auditor role dependencies. [resolve_role_definition, list_all_role_definitions, resolve_unqualified_role_via_methodology, resolve_qualified_role_address, reject_redundant_role_dependencies, reject_conflicting_silent_role_dependencies, reject_auditor_role_dependencies]
+- When resolving or listing role configurations, the resolver loads role definitions dynamically from repository role configuration files or build files, resolving unqualified roles through their bound methodology and qualified role addresses through the addressed package, rejecting configurations with redundant role dependencies, redundant feedback dependencies, conflicting silent role dependencies, or non-silent auditor role dependencies. [resolve_role_definition, list_all_role_definitions, resolve_unqualified_role_via_methodology, resolve_qualified_role_address, reject_redundant_role_dependencies, reject_redundant_feedback_dependencies, reject_conflicting_silent_role_dependencies, reject_auditor_role_dependencies]
 
 ## Grounding
 

@@ -17,6 +17,7 @@ from autofab.parts.dsh.lib import dsh_asm, dsh_harness, dsh_telemetry
 from autofab.parts.dsh.lib.dsh_harness_impl import (
     DshHarnessAdapter,
     DshHarnessManager,
+    _resolve_default_sessions_dir,
     __initialize__,
 )
 from autofab.parts.subagent.lib import subagent_coordinator, subagent_harness
@@ -939,14 +940,26 @@ class DshHarnessImplTest(unittest.TestCase):
             res3 = adapter.await_role(handle3)
             self.assertEqual(res3.status, "unresolved")
 
+    def test_resolve_default_sessions_dir_gating(self) -> None:
+        """Verifies _resolve_default_sessions_dir strictly gates web candidate on AUTOFAB_DSH_WEB==1."""
+        home = os.path.expanduser("~")
+        dsh_web_cand = os.path.join(home, ".dsh", "sessions")
+
+        with patch.dict(os.environ, {"AUTOFAB_DSH_WEB": "1"}, clear=False):
+            self.assertEqual(_resolve_default_sessions_dir(), dsh_web_cand)
+
+        with patch.dict(os.environ, {}, clear=True):
+            resolved = _resolve_default_sessions_dir()
+            self.assertNotEqual(resolved, dsh_web_cand)
+
 
 if __name__ == "__main__":
     unittest.main()
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-30T19:50:00Z
-# LAST_CHANGED: 2026-10-30T19:50:00Z
-# CHANGE: Add test for ignoring historical cleanroom log action records prior to dispatch offset
+# LAST_CHANGED: 2026-11-05T21:55:00Z
+# CHANGE: Add test verifying _resolve_default_sessions_dir gating on AUTOFAB_DSH_WEB==1
 # COVERAGE_AUDIT: 2026-10-18T19:13:51Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

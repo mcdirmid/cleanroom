@@ -17,11 +17,12 @@ By resolving package directories against the workspace root, parsing role config
 - The uv manifest loader normalizes repository-relative paths without duplicating package paths. [normalize_repository_paths]
 - The uv manifest loader resolves bare cross-package unit dependency references to their containing packages within parts workspaces, ignoring failed artifact directories and skipping unconfigured candidate roots without errors. [resolve_cross_package_units]
 - The uv manifest loader forwards constituent unit dependencies and role dependencies for inactive pass-through nodes. [forward_pass_through_dependencies]
+- The uv manifest loader resolves star feedback role dependencies into intra-unit feedback dependencies and cross-unit feedback and star dependencies on directly imported units. [resolve_star_feedback_dependencies]
 - The uv manifest loader synthesizes empty node definitions for referenced targets lacking explicit definitions. [synthesize_empty_definitions]
 
 ### Woven Contracts
 
-- Locating role definitions and evaluating parameterized patterns synthesizes target manifests and populates agent storage, resolving cross-package references and forwarding pass-through dependencies. [locate_role_definitions, evaluate_source_patterns, evaluate_prompt_templates, evaluate_verification_success_message_templates, normalize_repository_paths, resolve_cross_package_units, forward_pass_through_dependencies, manifest_loader: [resolve_manifests_into_nodes, resolve_manifests_into_definitions, resolve_manifests_into_prompts, populate_agent_storage]]
+- Locating role definitions and evaluating parameterized patterns synthesizes target manifests and populates agent storage, resolving cross-package references, forwarding pass-through dependencies, and resolving star feedback dependencies. [locate_role_definitions, evaluate_source_patterns, evaluate_prompt_templates, evaluate_verification_success_message_templates, normalize_repository_paths, resolve_cross_package_units, forward_pass_through_dependencies, resolve_star_feedback_dependencies, manifest_loader: [resolve_manifests_into_nodes, resolve_manifests_into_definitions, resolve_manifests_into_prompts, populate_agent_storage]]
 - Missing dependency manifests synthesize empty graph definitions in agent storage to maintain graph reachability. [synthesize_empty_definitions, manifest_loader: [synthesize_missing_dependency_definitions]]
 
 ## Grounding

@@ -13,7 +13,7 @@ Operating across isolated role workspaces requires atomic data movement to preve
 
 ### Contracts
 
-- The workspace synchronizer pulls updated upstream contracts and source files from the canonical main repository into a role workspace, projecting in-band metadata to expose only change, feedback, and ephemeral code hash attributes on writable targets. [pull_upstream_contracts]
+- The workspace synchronizer pulls updated upstream contracts and source files from the canonical main repository into a role workspace only when those files have changed in the canonical repository since the last pull, tracking inbound pull baselines, never clobbering subagent edits, failing fast only when upstream code modifications conflict with uncommitted local code edits, and projecting in-band metadata to expose only change, feedback, and ephemeral code hash attributes on writable targets. [pull_upstream_contracts]
 - The workspace synchronizer delegates test stub synchronization for stub role dependencies to workspace provisioning without copying implementation code. [sync_stub_dependencies]
 - The workspace synchronizer refreshes non-parts system files from the canonical main repository into a role workspace, delegating runner deployment, role guide regeneration, and test stub synchronization, while scoping tool configurations to the role workspace boundaries. [refresh_system_files_into_workspace]
 - The workspace synchronizer scans writable target files in a role workspace to identify modified content. [scan_modified_targets]
@@ -46,7 +46,8 @@ Operating across isolated role workspaces requires atomic data movement to preve
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-11T03:16:09Z
-CHANGE: Declare synchronizer typing and enforce test stub integrity in refresh
+LAST_CHANGED: 2026-11-05T11:45:00Z
+CHANGE: Pull upstream files only when changed since last pull and prevent clobbering subagent edits
+-->
 SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 -->

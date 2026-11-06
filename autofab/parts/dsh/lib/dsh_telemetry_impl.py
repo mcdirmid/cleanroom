@@ -8,6 +8,7 @@ import os
 import re
 import sqlite3
 import subprocess
+import sys
 import time
 from typing import Any, Dict, Optional, Set
 import urllib.request
@@ -57,6 +58,47 @@ def _compute_dsh_rate_card_cost(
 
 
 _notified_desktop_sessions: Set[str] = set()
+
+
+def _resolve_default_sessions_dir() -> str:
+    """Discovers DeepSeek Harness sessions directory across environment and OS candidates."""
+    if "DSH_SESSIONS_DIR" in os.environ and os.environ["DSH_SESSIONS_DIR"].strip():
+        return os.environ["DSH_SESSIONS_DIR"].strip()
+
+    home = os.path.expanduser("~")
+    dsh_web_cand = os.path.join(home, ".dsh", "sessions")
+    if os.environ.get("AUTOFAB_DSH_WEB") == "1":
+        return dsh_web_cand
+
+    dsh_home = os.environ.get("DSH_HOME")
+    if dsh_home and dsh_home.strip():
+        h_cand = os.path.join(dsh_home.strip(), "harness", "sessions")
+        if os.path.isdir(h_cand):
+            return h_cand
+        s_cand = os.path.join(dsh_home.strip(), "sessions")
+        if os.path.isdir(s_cand):
+            return s_cand
+        return h_cand
+
+    candidates = [
+        os.path.join(home, "Library", "Application Support", "dsh-desktop", "harness", "sessions"),
+        os.path.join(home, ".config", "dsh-desktop", "harness", "sessions"),
+        os.path.join(home, ".local", "share", "dsh-desktop", "harness", "sessions"),
+    ]
+    appdata = os.environ.get("APPDATA")
+    if appdata:
+        candidates.append(os.path.join(appdata, "dsh-desktop", "harness", "sessions"))
+
+    for cand in candidates:
+        if os.path.isdir(cand):
+            return cand
+
+    # Platform default fallback
+    if sys.platform == "darwin":
+        return os.path.join(home, "Library", "Application Support", "dsh-desktop", "harness", "sessions")
+    elif sys.platform == "win32":
+        return os.path.join(os.environ.get("APPDATA", home), "dsh-desktop", "harness", "sessions")
+    return os.path.join(home, ".config", "dsh-desktop", "harness", "sessions")
 
 
 def _discover_desktop_server(sessions_dir: Optional[str] = None) -> Optional[tuple[int, str, str]]:
@@ -115,6 +157,56 @@ def _discover_desktop_server(sessions_dir: Optional[str] = None) -> Optional[tup
         return (actual_port, str(cookie_name), str(cookie_value))
     except Exception:
         return None
+
+
+def _discover_web_bridge() -> Optional[Dict[str, Any]]:
+    """Discovers active DeepSeek Harness Web loopback bridge endpoint configuration."""
+    p = os.path.expanduser("~/.dsh/bridge/endpoint.json")
+    if os.path.isfile(p):
+        try:
+            with open(p, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict) and "url" in data and "token" in data:
+                return data
+        except Exception:
+            return None
+    return None
+
+
+def _call_web_bridge(
+    endpoint_data: Dict[str, Any],
+    tool_name: str,
+    arguments: Dict[str, Any],
+    timeout: float = 10.0,
+) -> Optional[Dict[str, Any]]:
+    """Dispatches a tool call request to the DeepSeek Harness Web loopback bridge."""
+    url = endpoint_data.get("url")
+    if not url:
+        return None
+    payload = {
+        "jsonrpc": "2.0",
+        "method": "tools/call",
+        "params": {
+            "name": tool_name,
+            "arguments": arguments,
+        },
+        "id": int(time.time() * 1000) % 1000000,
+    }
+    data_bytes = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=data_bytes,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            if resp.status == 200:
+                body = json.loads(resp.read().decode("utf-8"))
+                return body.get("result")
+    except Exception:
+        return None
+    return None
 
 
 def _call_dsh_rpc(
@@ -529,6 +621,12 @@ class DshTelemetryParser(dsh_telemetry.DshTelemetryParser):
         sessions_dir: Optional[str] = None,
     ) -> bool:
         """Evaluates whether an active DeepSeek Harness Desktop application or background server is reachable."""
+        if os.environ.get("AUTOFAB_DSH_WEB") == "1" and not sessions_dir:
+            bridge = _discover_web_bridge()
+            if bridge:
+                res = _call_web_bridge(bridge, "dsh_list_workers", {}, timeout=2.0)
+                if res is not None:
+                    return True
         server_info = _discover_desktop_server(sessions_dir)
         if not server_info:
             return False
@@ -554,6 +652,83 @@ class DshTelemetryParser(dsh_telemetry.DshTelemetryParser):
         dir_scope: Optional[str] = None,
     ) -> Optional[str]:
         """Dispatches a role round over the local JSON-RPC bridge to the central DeepSeek Harness server."""
+        if os.environ.get("AUTOFAB_DSH_WEB") == "1" and not sessions_dir:
+            bridge = _discover_web_bridge()
+            if not bridge:
+                return None
+            real_ws = os.path.realpath(workspace_dir)
+            clean_scope = re.sub(r"[^a-zA-Z0-9_]", "_", dir_scope.strip("/").strip() if dir_scope else "")
+            clean_role = re.sub(r"[^a-zA-Z0-9_]", "_", role_name.strip() if role_name else "")
+            task_name = f"dsh_{clean_scope}_{clean_role}_{int(time.time() * 1000)}"[:40].strip("_")
+
+            saved_worker: Optional[str] = None
+            if session_id:
+                saved_worker = session_id[len("worker_"):] if session_id.startswith("worker_") else session_id
+
+            if saved_worker:
+                followup_args: Dict[str, Any] = {"worker": saved_worker, "message": prompt_text}
+                if model_name:
+                    sel_prov, sel_model, sel_effort = _resolve_dsh_model_selection(model_name, workspace_dir)
+                    followup_args["model"] = f"{sel_prov}/{sel_model}"
+                    if sel_effort:
+                        followup_args["reasoningEffort"] = sel_effort
+                res = _call_web_bridge(bridge, "dsh_followup", followup_args, timeout=30.0)
+                if res and not res.get("isError"):
+                    task_handle = f"dsh_rpc_web::{session_id}::{saved_worker}"
+                    self._active_rpc_turns[task_handle] = {
+                        "session_id": session_id,
+                        "request_id": saved_worker,
+                        "workspace_dir": workspace_dir,
+                        "role_name": role_name,
+                        "model_name": model_name,
+                        "dir_scope": dir_scope,
+                        "start_time": time.time(),
+                        "port": bridge.get("port", 47821),
+                        "cookie_name": "",
+                        "cookie_value": "",
+                    }
+                    return task_handle
+
+            spawn_args: Dict[str, Any] = {
+                "task_name": task_name,
+                "message": prompt_text,
+                "cwd": real_ws,
+                "label": f"[{clean_scope}] {role_name}" if clean_scope else role_name,
+            }
+            if model_name:
+                sel_prov, sel_model, sel_effort = _resolve_dsh_model_selection(model_name, workspace_dir)
+                spawn_args["model"] = f"{sel_prov}/{sel_model}"
+                if sel_effort:
+                    spawn_args["reasoningEffort"] = sel_effort
+
+            res = _call_web_bridge(bridge, "dsh_spawn", spawn_args, timeout=30.0)
+            if res and not res.get("isError"):
+                actual_sid = task_name
+                content_list = res.get("content", [])
+                if content_list and isinstance(content_list, list):
+                    txt = content_list[0].get("text", "")
+                    if "sessionId" in txt:
+                        try:
+                            parsed_data = json.loads(txt)
+                            actual_sid = parsed_data.get("sessionId", task_name)
+                        except Exception:
+                            pass
+                task_handle = f"dsh_rpc_web::{actual_sid}::{task_name}"
+                self._active_rpc_turns[task_handle] = {
+                    "session_id": actual_sid,
+                    "request_id": task_name,
+                    "workspace_dir": workspace_dir,
+                    "role_name": role_name,
+                    "model_name": model_name,
+                    "dir_scope": dir_scope,
+                    "start_time": time.time(),
+                    "port": bridge.get("port", 47821),
+                    "cookie_name": "",
+                    "cookie_value": "",
+                }
+                return task_handle
+            return None
+
         server_info = _discover_desktop_server(sessions_dir)
         if not server_info:
             return None
@@ -757,6 +932,61 @@ class DshTelemetryParser(dsh_telemetry.DshTelemetryParser):
         sessions_dir: Optional[str] = None,
     ) -> dsh_telemetry.DshRpcRoundStatus:
         """Polls active round status over the local JSON-RPC bridge."""
+        if task_handle.startswith("dsh_rpc_web::"):
+            parts = task_handle.split("::")
+            actual_sid = parts[1] if len(parts) >= 2 else ""
+            task_name = parts[2] if len(parts) >= 3 else actual_sid
+            bridge = _discover_web_bridge()
+            if not bridge:
+                return dsh_telemetry.DshRpcRoundStatus(is_active=False, is_completed=True, error="Web bridge unreachable")
+
+            res = _call_web_bridge(bridge, "dsh_list_workers", {}, timeout=2.0)
+            is_completed = False
+            is_error = False
+            if res:
+                content_list = res.get("content", [])
+                if content_list and isinstance(content_list, list):
+                    txt = content_list[0].get("text", "")
+                    try:
+                        workers = json.loads(txt)
+                        if isinstance(workers, list):
+                            for w in workers:
+                                if isinstance(w, dict) and w.get("task_name") == task_name:
+                                    status = w.get("status")
+                                    if isinstance(status, dict):
+                                        if "completed" in status:
+                                            is_completed = True
+                                        elif "errored" in status or "error" in status:
+                                            is_completed = True
+                                            is_error = True
+                                    elif status in ("completed", "done", "success", "closed"):
+                                        is_completed = True
+                                    elif status in ("error", "failed", "aborted"):
+                                        is_completed = True
+                                        is_error = True
+                                    elif status == "running":
+                                        is_completed = False
+                                    break
+                    except Exception:
+                        pass
+
+            if is_completed:
+                _call_web_bridge(bridge, "dsh_close", {"worker": task_name}, timeout=2.0)
+
+            round_info = self._active_rpc_turns.get(task_handle)
+            w_dir = round_info.get("workspace_dir", "") if round_info else ""
+            m_name = round_info.get("model_name") if round_info else None
+            actual_sessions_dir = sessions_dir or _resolve_default_sessions_dir()
+            metrics = None
+            if w_dir:
+                metrics = self.parse_session_storage(actual_sessions_dir, w_dir, model_name=m_name)
+
+            return dsh_telemetry.DshRpcRoundStatus(
+                is_active=not is_completed,
+                is_completed=is_completed,
+                metrics=metrics,
+            )
+
         turn_info = self._active_rpc_turns.get(task_handle)
         session_id = ""
         port = None

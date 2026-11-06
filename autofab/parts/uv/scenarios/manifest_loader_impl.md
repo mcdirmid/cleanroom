@@ -334,6 +334,14 @@ Given: the workspace root holds an ephemeral failure directory `benchmark_1.fail
    Observed: the manifest is retrieved successfully from `pkg/parts/widget`, mapping `pkg/parts/widget/high/widget.md` directly and ignoring `benchmark_1.failed/parts`.
    Realized by: the component's own file-path normalization to parts package and unit stems, and graceful skipping of unconfigured or failed parts roots.
 
+### Scenario 21 — Resolving star feedback role dependencies across directly imported units
+
+Given: role auditor declares `star_feedback_role_deps = ['pretense']` and `feedback_role_deps = ['lib']`, and unit widget directly imports unit gadget.
+
+1. The caller asks the uv manifest loader for the manifest of the auditor-role target for widget.
+   Observed: the manifest's feedback dependencies contain `//parts:widget#pretense`, `//parts:widget#lib`, and `//parts:gadget#pretense`; the manifest's star dependencies contain `//parts:gadget#pretense`.
+   Realized by: the component's own resolution of star feedback role dependencies into intra-unit feedback dependencies and cross-unit feedback and star dependencies.
+
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-11T03:23:51Z

@@ -347,14 +347,18 @@ class WorkspaceCheckImplTest(unittest.TestCase):
         self.assertEqual(ret, 0)
 
     def test_run_check_files_rejected_when_no_pending_work_and_empty_queue(self) -> None:
-        target_file = os.path.join(self.test_dir, "pkg", "parts", "foo", "lib", "foo.py")
-        os.makedirs(os.path.dirname(target_file), exist_ok=True)
-        with open(target_file, "w", encoding="utf-8") as f:
-            f.write("# sample implementation\n")
+        unowned_file = os.path.join(self.test_dir, "pkg", "parts", "foo", "tests", "foo_test.py")
+        os.makedirs(os.path.dirname(unowned_file), exist_ok=True)
+        with open(unowned_file, "w", encoding="utf-8") as f:
+            f.write("# sample test\n")
         self.fake_pending.pending = []
         self.fake_work.ready_items = []
         self.checker.run_get_work(dir_scope="pkg")
-        ret = self.checker.run_check_files(target=target_file)
+        # Rejected when no target specified
+        ret_no_tgt = self.checker.run_check_files()
+        self.assertEqual(ret_no_tgt, 1)
+        # Rejected when target not owned by active role
+        ret = self.checker.run_check_files(target=unowned_file)
         self.assertEqual(ret, 1)
 
     def test_run_check_files_with_target(self) -> None:
@@ -368,14 +372,32 @@ class WorkspaceCheckImplTest(unittest.TestCase):
         self.assertEqual(ret, 0)
         self.assertTrue(self.checker.is_checked_since_modification(self.test_dir, target_file))
 
-    def test_run_check_files_rejected_when_target_not_pending(self) -> None:
+    def test_run_check_files_rejected_when_target_not_pending_and_unowned(self) -> None:
+        unowned_file = os.path.join(self.test_dir, "pkg", "parts", "foo", "tests", "foo_test.py")
+        os.makedirs(os.path.dirname(unowned_file), exist_ok=True)
+        with open(unowned_file, "w", encoding="utf-8") as f:
+            f.write("# sample test\n")
+        self.fake_pending.pending = ["pkg/parts/other/lib/other.py"]
+        ret = self.checker.run_check_files(target=unowned_file)
+        self.assertEqual(ret, 1)
+
+    def test_run_check_files_accepted_when_unassigned_target_owned_by_role(self) -> None:
         target_file = os.path.join(self.test_dir, "pkg", "parts", "foo", "lib", "foo.py")
         os.makedirs(os.path.dirname(target_file), exist_ok=True)
         with open(target_file, "w", encoding="utf-8") as f:
             f.write("# sample implementation\n")
+        # Target not in pending work
         self.fake_pending.pending = ["pkg/parts/other/lib/other.py"]
         ret = self.checker.run_check_files(target=target_file)
-        self.assertEqual(ret, 1)
+        self.assertEqual(ret, 0)
+        self.assertTrue(self.checker.is_checked_since_modification(self.test_dir, target_file))
+
+        # Target accepted even when queue is empty and .no_pending_work is set
+        self.fake_pending.pending = []
+        self.fake_work.ready_items = []
+        self.checker.run_get_work(dir_scope="pkg")
+        ret_empty = self.checker.run_check_files(target=target_file)
+        self.assertEqual(ret_empty, 0)
 
     def test_run_check_files_pulls_before_check(self) -> None:
         main_repo = tempfile.mkdtemp()
@@ -674,6 +696,54 @@ class WorkspaceCheckImplTest(unittest.TestCase):
         )
         self.assertEqual(resolved, ["pkg/parts/foo/low/foo.pyi"])
 
+    def test_resolve_feedback_targets(self) -> None:
+        role_pretense = role_registry.RoleDefinition(
+            role_name="pretense",
+            guide_path="guides/pretense.md",
+            writable_file_patterns=["*/pretense/*_pretense.py"],
+            readonly_file_patterns=[],
+            feedback_role_deps=[],
+            src_pattern="{unit_dir}/pretense/{unit_name}_pretense.py",
+            role_deps=[],
+            verify_template="# noop",
+            verification_success_message="",
+            active_component_types=["interface", "implementation"],
+        )
+        role_pretense_qa = role_registry.RoleDefinition(
+            role_name="pretense_qa",
+            guide_path="guides/pretense_qa.md",
+            writable_file_patterns=[],
+            readonly_file_patterns=[],
+            feedback_role_deps=["lib", "pretense"],
+            src_pattern="",
+            role_deps=[],
+            audit_tag="PRETENSE_QA_AUDIT",
+            verify_template="# noop",
+            verification_success_message="",
+            active_component_types=["implementation"],
+        )
+        self.fake_reg.roles = [self.role_lib, role_pretense, role_pretense_qa]
+
+        lib_file = os.path.join(self.test_dir, "pkg", "parts", "foo", "lib", "foo_impl.py")
+        pretense_file = os.path.join(self.test_dir, "pkg", "parts", "foo", "pretense", "foo_impl_pretense.py")
+        os.makedirs(os.path.dirname(lib_file), exist_ok=True)
+        os.makedirs(os.path.dirname(pretense_file), exist_ok=True)
+        with open(lib_file, "w") as f:
+            f.write("# lib\n")
+        with open(pretense_file, "w") as f:
+            f.write("# pretense\n")
+
+        fb = check_impl.resolve_feedback_targets(
+            role_name="pretense_qa",
+            part_dir="pkg/parts/foo",
+            unit_name="foo_impl",
+            ws_root=self.test_dir,
+            repo_root=self.test_dir,
+        )
+        self.assertEqual(len(fb), 2)
+        self.assertEqual(fb[0], "pkg/parts/foo/lib/foo_impl.py")
+        self.assertEqual(fb[1], "pkg/parts/foo/pretense/foo_impl_pretense.py")
+
     def test_run_check_files_auditor_spec_reminder_upon_failure(self) -> None:
         role_low = role_registry.RoleDefinition(
             role_name="low",
@@ -920,9 +990,11 @@ class WorkspaceCheckImplTest(unittest.TestCase):
         self.assertEqual(ret, 1)
         reminder_count = out.count("[PRETENSE QA ARBITER REMINDER - RULES ON ERRORS AND PRECONDITIONS]")
         self.assertEqual(reminder_count, 1)
-        self.assertIn("Checked preconditions (*Error, e.g. NodeNotFoundError, CycleError) CANNOT be tested", out)
+        self.assertIn("An unhandled *Error or test failure can indicate:", out)
         self.assertIn("Candidate Culprit:", out)
-        self.assertIn("(or companion test/pretense module)", out)
+        self.assertIn("Candidate Files That Can Receive Feedback:", out)
+        self.assertIn("BLAME ROUTING (DETERMINE CULPRIT FROM SPECIFICATION & FEEDBACK TARGET SOURCE CODE):", out)
+        self.assertIn("Look at the specification contracts and the source code of the candidate feedback files above.", out)
 
     def test_run_get_work_auditor_auto_submits_passing_targets(self) -> None:
         self.fake_reg.roles.append(role_registry.RoleDefinition(

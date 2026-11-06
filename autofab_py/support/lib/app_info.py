@@ -285,6 +285,47 @@ def get_candidate_user_model_config_files() -> tuple[str, ...]:
     return tuple(result)
 
 
+def resolve_default_dsh_web(repo_root: str | Path | None = None) -> bool:
+    """Resolves whether DeepSeek Harness Web loopback bridge should be used as default.
+
+    Inspects model_configs.toml in workspace root, user configuration, or templates
+    for global key `dsh_web = true`, `default_dsh = "web"`, or `dsh_mode = "web"`.
+    """
+    import tomllib
+
+    cands: list[str] = []
+    if repo_root:
+        rp = Path(repo_root)
+        cands.append(str(rp / "model_configs.toml"))
+        cands.append(str(rp.parent / "model_configs.toml"))
+    cands.extend(get_candidate_user_model_config_files())
+    try:
+        cands.append(get_template_model_config_file())
+    except Exception:
+        pass
+
+    seen: set[str] = set()
+    for cand in cands:
+        norm = os.path.abspath(cand)
+        if norm in seen or not os.path.isfile(norm):
+            continue
+        seen.add(norm)
+        try:
+            with open(norm, "rb") as f:
+                data = tomllib.load(f)
+                val = data.get("dsh_web")
+                if isinstance(val, bool):
+                    return val
+                if isinstance(val, str) and val.strip().lower() in ("true", "1", "web"):
+                    return True
+                val_dsh = data.get("default_dsh") or data.get("dsh_mode")
+                if isinstance(val_dsh, str) and val_dsh.strip().lower() in ("web", "dsh_web", "dsh-web"):
+                    return True
+        except Exception:
+            pass
+    return False
+
+
 def get_user_credentials_file() -> str:
     """Returns the expected path to the user's global credentials.toml."""
     return os.path.join(get_user_config_dir(), "credentials.toml")
@@ -393,18 +434,34 @@ def assemble_pythonpath(
 
     role_containers = set(get_role_workspaces_containers())
 
+    for ep in extra_paths:
+        if not ep:
+            continue
+        ep_clean = os.path.abspath(str(ep))
+        _add(ep_clean)
+
     if ws_root:
         ws_p = Path(ws_root).resolve()
         _add(ws_p)
         _add(ws_p / "support" / "lib")
+        if (ws_p / "parts").is_dir():
+            _add(ws_p / "parts")
         try:
             for entry in os.listdir(ws_p):
-                if entry.startswith((".", "bazel-", "venv", "__pycache__")) or entry in role_containers:
+                if (
+                    entry.startswith((".", "bazel-", "venv", "__pycache__", "logs", "bin", "design-docs", "benchmark", "flight_"))
+                    or entry.endswith(".failed")
+                    or entry in role_containers
+                ):
                     continue
                 cand = ws_p / entry
-                if cand.is_dir() and (cand / "support" / "lib").is_dir():
-                    _add(cand)
-                    _add(cand / "support" / "lib")
+                if cand.is_dir():
+                    if (cand / "support" / "lib").is_dir():
+                        _add(cand)
+                        _add(cand / "support" / "lib")
+                    if (cand / "parts").is_dir():
+                        _add(cand)
+                        _add(cand / "parts")
         except OSError:
             pass
 
@@ -416,29 +473,26 @@ def assemble_pythonpath(
         rp = Path(clean_repo_root)
         _add(rp)
         _add(rp / "support" / "lib")
+        if (rp / "parts").is_dir():
+            _add(rp / "parts")
         try:
             for entry in os.listdir(rp):
                 if (
-                    entry.startswith((".", "bazel-", "venv", "__pycache__", "logs", "bin", "design-docs"))
+                    entry.startswith((".", "bazel-", "venv", "__pycache__", "logs", "bin", "design-docs", "benchmark", "flight_"))
                     or entry.endswith(".failed")
                     or entry in role_containers
                 ):
                     continue
                 cand = rp / entry
-                if cand.is_dir() and (cand / "support" / "lib").is_dir():
-                    _add(cand)
-                    _add(cand / "support" / "lib")
+                if cand.is_dir():
+                    if (cand / "support" / "lib").is_dir():
+                        _add(cand)
+                        _add(cand / "support" / "lib")
+                    if (cand / "parts").is_dir():
+                        _add(cand)
+                        _add(cand / "parts")
         except OSError:
             pass
-
-    for ep in extra_paths:
-        if not ep:
-            continue
-        ep_clean = os.path.abspath(str(ep))
-        if isolate_from_repo_root and clean_repo_root:
-            if ep_clean == clean_repo_root or ep_clean.startswith(clean_repo_root + os.sep):
-                continue
-        _add(ep_clean)
 
     raw_pypath = existing_pythonpath if existing_pythonpath is not None else os.environ.get("PYTHONPATH", "")
     if raw_pypath:

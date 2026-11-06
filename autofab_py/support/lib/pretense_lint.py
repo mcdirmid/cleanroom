@@ -28,6 +28,7 @@ try:
         check_no_top_level_probes,
         check_no_error_testing,
         check_no_try_except_in_tests,
+        check_no_lifecycle_scope_leaks,
         check_syntax,
         check_tautological_assertions,
         check_test_dry_run,
@@ -53,6 +54,7 @@ except ImportError:
         check_no_top_level_probes,
         check_no_error_testing,
         check_no_try_except_in_tests,
+        check_no_lifecycle_scope_leaks,
         check_syntax,
         check_tautological_assertions,
         check_test_dry_run,
@@ -1224,6 +1226,73 @@ def check_no_pre_seeding(tree: ast.AST, file_path: str = "") -> list[str]:
                                         errors.append(
                                             f"{file_path}:{stmt.lineno}: error: [PRE_LINT_NO_STATE_POKING] mutating internal model state via '{ast.unparse(stmt.func)}' is prohibited in test methods. Manipulate state exclusively via public operations or declared '@transition.seeding' methods."
                                         )
+    return errors
+
+
+def check_no_raises_in_test_cases(tree: ast.AST, file_path: str = "") -> list[str]:
+    """Ensures test methods in TestCase classes do not use 'with raises(...)', requiring 'self.assertRaises(...)'.
+
+    'raises(...)' is Pretense DSL designed for transition pivot execution. Inside unittest.TestCase
+    methods, 'raises' context manager does not suppress exceptions in standard test execution.
+    Test methods must use standard unittest 'self.assertRaises(...)'.
+    """
+    errors: list[str] = []
+    tree_body: list[ast.stmt] = getattr(tree, "body", [])
+    for node in tree_body:
+        if not isinstance(node, ast.ClassDef):
+            continue
+        if "StateMachine" in node.name or node.name.endswith("State"):
+            continue
+        is_test_case = any(
+            (isinstance(b, ast.Name) and b.id in ("TestCase", "unittest.TestCase"))
+            or (isinstance(b, ast.Attribute) and b.attr == "TestCase")
+            for b in node.bases
+        ) or (
+            (node.name.startswith("Test") or node.name.endswith("Real") or node.name.endswith("Fake"))
+            and any(
+                isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef)) and m.name.startswith("test")
+                for m in node.body
+            )
+        )
+        if not is_test_case:
+            continue
+
+        for item in node.body:
+            if not isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            for child in ast.walk(item):
+                if isinstance(child, ast.With):
+                    for with_item in child.items:
+                        ctx_expr = with_item.context_expr
+                        func_name = ""
+                        if isinstance(ctx_expr, ast.Call):
+                            if isinstance(ctx_expr.func, ast.Name):
+                                func_name = ctx_expr.func.id
+                            elif isinstance(ctx_expr.func, ast.Attribute):
+                                func_name = ctx_expr.func.attr
+                        elif isinstance(ctx_expr, ast.Name):
+                            func_name = ctx_expr.id
+                        elif isinstance(ctx_expr, ast.Attribute):
+                            func_name = ctx_expr.attr
+                        if func_name == "raises":
+                            errors.append(
+                                f"{file_path}:{child.lineno}: error: [PRE_LINT_NO_RAISES_IN_TEST_CASE] "
+                                f"'with raises(...)' is Pretense transition DSL for AST pivots. "
+                                f"Inside unittest.TestCase test methods, use 'self.assertRaises(...)'. "
+                            )
+                elif isinstance(child, ast.Expr) and isinstance(child.value, ast.Call):
+                    call = child.value
+                    func_name = ""
+                    if isinstance(call.func, ast.Name):
+                        func_name = call.func.id
+                    elif isinstance(call.func, ast.Attribute):
+                        func_name = call.func.attr
+                    if func_name == "raises":
+                        errors.append(
+                            f"{file_path}:{child.lineno}: error: [PRE_LINT_NO_RAISES_IN_TEST_CASE] "
+                            f"'raises(...)' is Pretense transition DSL for AST pivots. "
+                            f"Inside unittest.TestCase test methods, use 'self.assertRaises(...)'. "
+                        )
     return errors
 
 
@@ -2862,6 +2931,9 @@ def main() -> int:
     no_try_except_errs = check_no_try_except_in_tests(args.module_path, tree=tree)
     all_errors.extend(no_try_except_errs)
 
+    lifecycle_leak_errs = check_no_lifecycle_scope_leaks(args.module_path, tree=tree)
+    all_errors.extend(lifecycle_leak_errs)
+
     sys_module_errs = check_no_sys_modules_tampering(args.module_path, tree=tree)
     all_errors.extend(sys_module_errs)
 
@@ -2894,6 +2966,9 @@ def main() -> int:
 
     call_target_iface_errs = check_no_call_target_in_interface(tree, args.module_path, is_interface=is_interface)
     all_errors.extend(call_target_iface_errs)
+
+    no_raises_errs = check_no_raises_in_test_cases(tree, args.module_path)
+    all_errors.extend(no_raises_errs)
 
     multi_iface_errs = check_multi_interface_inheritance(tree, args.module_path)
     all_errors.extend(multi_iface_errs)

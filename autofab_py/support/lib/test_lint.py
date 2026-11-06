@@ -34,6 +34,7 @@ from build_lint_common import (
     check_no_top_level_probes,
     check_no_error_testing,
     check_no_try_except_in_tests,
+    check_no_lifecycle_scope_leaks,
     check_tautological_assertions,
     check_syntax,
     check_test_dry_run,
@@ -722,6 +723,7 @@ def main() -> int:
             + check_no_top_level_probes(args.module_path, error_code="TEST_LINT_NO_TOP_LEVEL_PROBE")
             + check_no_error_testing(args.module_path)
             + check_no_try_except_in_tests(args.module_path)
+            + check_no_lifecycle_scope_leaks(args.module_path)
             + check_test_mocks(args.module_path)
             + check_test_structure(args.module_path)
             + check_test_getattr(args.module_path)

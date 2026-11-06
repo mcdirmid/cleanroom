@@ -124,11 +124,15 @@ class BenchmarkEvaluator(Singleton[SystemTier], Protocol):
         baseline: bool = False,
         pretense: bool = False,
         method: Optional[str] = None,
+        dsh_web: bool = False,
+        dsh_desktop: bool = False,
     ) -> FlightRecord:
         """Executes a benchmark flight for a designated model and unit.
 
         POSTCONDITIONS:
         - MUST execute the flight under the requested harness or simulation mode.
+        - WHEN dsh_web is True, MUST execute subagent rounds via the DSH Web loopback bridge.
+        - WHEN dsh_desktop is True, MUST force Desktop RPC execution (overriding configured DSH Web defaults).
         - WHEN baseline is True and harness is 'loop', MUST raise ValueError rejecting loop harness.
         - WHEN baseline is True, MUST provide the low-level specification and instruct the agent to consult it, implement the two-file library structure in lib/ while consulting guides/low_to_lib.md for singleton lifecycle conventions, test _impl.py (or author pretense suites in pretense/ consulting guides/pretense.md), and achieve 100% test coverage with opt-outs.
         - WHEN baseline is True, MUST record exactly one execution round under baseline role.
@@ -221,7 +225,7 @@ class BenchmarkEvaluator(Singleton[SystemTier], Protocol):
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-19T18:45:00Z
-# LAST_CHANGED: 2026-11-04T11:30:00Z
-# CHANGE: Support --method combined, pretense, standard and combined_baseline fused role
+# LAST_CHANGED: 2026-11-06T12:15:00Z
+# CHANGE: Support --dsh-desktop to force DeepSeek Harness Desktop RPC execution
 # SPEC_QA_AUDIT: 2026-10-19T18:45:00Z
 # --- END CLEANROOM METADATA ---

@@ -19,13 +19,15 @@ When pulling changes from the canonical main repository into a role workspace, t
 
 - Identifies the files within the target directory scope, the declared role dependencies, and the stub role dependencies.
 
+- Evaluates inbound changes against a pull manifest recorded in the role workspace state directory, pulling only files that have changed in the canonical main repository since the role workspace last pulled files from the canonical repository.
+
 - Delegates test stub synchronization to workspace provisioning to verify that the workspace files matching stub role dependencies are valid read-only test stubs that contain no implementation details, synthesizing read-only test stubs raising `NotImplementedError` from companion specification files of the main repository when such a file is missing, is outdated against its companion specification, or contains leaked implementation code, and deleting orphaned stubs whose companion specifications no longer exist in the main repository.
 
-- Copies newer files from the main repository into the role workspace, enforcing read-only permissions on upstream dependencies and read-write permissions on role targets, projecting metadata headers to expose only change, feedback, and code hash attributes while omitting lifecycle timestamps, and computing code body hashes on all writable files in the scope. An existing writable target is pulled from the main repository whenever the local target carries no uncommitted code modification and the main repository version differs in content or metadata, preserving pending local targets and deleted targets that await template regeneration.
+- Copies newer files from the main repository into the role workspace, enforcing read-only permissions on upstream dependencies and read-write permissions on role targets, projecting metadata headers to expose only change, feedback, and code hash attributes while omitting lifecycle timestamps, and computing code body hashes on all writable files in the scope. It records the canonical source file hash and projected workspace file hash in the pull manifest upon copying. It never clobbers local edits made by the subagent in the role workspace: if a workspace file has been modified locally, the synchronizer preserves those edits and does not copy the canonical file over the modified local file. An existing writable target is pulled from the main repository only when the upstream version has changed since the last pull and the local target carries no uncommitted code modification, preserving pending local targets and deleted targets that await template regeneration.
 
-- Preserves the uncommitted local modifications of a writable target, failing fast when an upstream modification conflicts with an active local change.
+- Preserves the uncommitted local modifications of role targets, failing fast when an upstream code modification conflicts with an active local code change. An upstream change conflicts with a writable target only when the canonical code body differs from the workspace baseline and the workspace target carries uncommitted code modifications; upstream metadata-only updates and non-conflicting code pulls to clean targets proceed without conflict.
 
-- Deletes the files within the role workspace scope that no longer exist in the canonical main repository.
+- Deletes the files within the role workspace scope that no longer exist in the canonical main repository when deleting missing files, preserving locally created and pending targets.
 
 When refreshing system files, the workspace synchronizer recopies project configurations, runtime support libraries (`./support/lib/`), and the role's assigned companion guide (`./guides/`) belonging exclusively to the active methodology binding from the main repository into the role workspace root without copying templates, unneeded configuration files (`autofab_roles.toml`, `pyright_spec.json`), redundant package directories, or unbound repository root directories, stripping readme declaration attributes from refreshed pyproject.toml to prevent build backend failures, delegates runner packaging, role guide regeneration, and test stub synchronization to workspace provisioning without touching an in-scope source file, and validates that every stub role dependency file remains a read-only test stub.
 
@@ -41,7 +43,7 @@ When flushing blame feedback, the workspace synchronizer reads the local blame b
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-22T13:50:00Z
-LAST_CHANGED: 2026-10-30T05:40:00Z
-CHANGE: Strip readme declaration attributes from refreshed pyproject.toml during workspace system file refresh
+LAST_CHANGED: 2026-11-05T11:45:00Z
+CHANGE: Evaluate pull against pull manifest and prevent clobbering subagent edits
 SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 -->

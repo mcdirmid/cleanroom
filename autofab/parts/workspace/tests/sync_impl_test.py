@@ -994,14 +994,207 @@ class WorkspaceSyncImplTest(unittest.TestCase):
             self.assertNotIn("LAST_CLEANED:", wf_content)
             self.assertNotIn("LAST_CHANGED:", wf_content)
 
+    def test_pull_only_pulls_changed_files_and_preserves_subagent_edits(self) -> None:
+        with tempfile.TemporaryDirectory() as main_root, tempfile.TemporaryDirectory() as ws_dir:
+            main_scope = os.path.join(main_root, "scope")
+            ws_scope = os.path.join(ws_dir, "scope")
+            os.makedirs(os.path.join(main_scope, "lib"), exist_ok=True)
+            os.makedirs(os.path.join(main_scope, "low"), exist_ok=True)
+
+            main_lib = os.path.join(main_scope, "lib", "unit.py")
+            main_low = os.path.join(main_scope, "low", "unit.pyi")
+            with open(main_lib, "w", encoding="utf-8") as f:
+                f.write("# --- CLEANROOM METADATA ---\n# CHANGE: initial\n# --- END CLEANROOM METADATA ---\ndef foo(): return 1\n")
+            with open(main_low, "w", encoding="utf-8") as f:
+                f.write("def foo() -> int: ...\n")
+
+            # First pull materializes both files into workspace
+            pulled1 = self.synchronizer.pull(
+                workspace_dir=ws_dir,
+                main_root=main_root,
+                role_name="lib",
+                dir_scope="scope",
+            )
+            self.assertEqual(pulled1, 2)
+
+            ws_lib = os.path.join(ws_scope, "lib", "unit.py")
+            ws_low = os.path.join(ws_scope, "low", "unit.pyi")
+            self.assertTrue(os.path.isfile(ws_lib))
+            self.assertTrue(os.path.isfile(ws_low))
+
+            # Second pull without changes in main pulls 0 files
+            pulled2 = self.synchronizer.pull(
+                workspace_dir=ws_dir,
+                main_root=main_root,
+                role_name="lib",
+                dir_scope="scope",
+            )
+            self.assertEqual(pulled2, 0)
+
+            # Subagent edits ws_lib (writable file) in role workspace
+            with open(ws_lib, "w", encoding="utf-8") as f:
+                f.write("# --- CLEANROOM METADATA ---\n# CHANGE: subagent edit\n# --- END CLEANROOM METADATA ---\ndef foo(): return 999\n")
+
+            # Subagent also modifies ws_low (read-only spec in this role)
+            os.chmod(ws_low, 0o644)
+            with open(ws_low, "w", encoding="utf-8") as f:
+                f.write("# subagent comment\ndef foo() -> int: ...\n")
+            os.chmod(ws_low, 0o444)
+
+            # Call pull again (simulating check_files or get_work call). Main has NOT changed.
+            pulled3 = self.synchronizer.pull(
+                workspace_dir=ws_dir,
+                main_root=main_root,
+                role_name="lib",
+                dir_scope="scope",
+            )
+            self.assertEqual(pulled3, 0)
+
+            # Both files MUST retain subagent edits without being reverted!
+            with open(ws_lib, "r", encoding="utf-8") as f:
+                content_lib = f.read()
+            self.assertIn("return 999", content_lib)
+            self.assertIn("CHANGE: subagent edit", content_lib)
+
+            with open(ws_low, "r", encoding="utf-8") as f:
+                content_low = f.read()
+            self.assertIn("# subagent comment", content_low)
+
+    def test_pull_propagates_upstream_change_when_unmodified_locally(self) -> None:
+        with tempfile.TemporaryDirectory() as main_root, tempfile.TemporaryDirectory() as ws_dir:
+            main_scope = os.path.join(main_root, "scope")
+            ws_scope = os.path.join(ws_dir, "scope")
+            os.makedirs(os.path.join(main_scope, "low"), exist_ok=True)
+
+            main_low = os.path.join(main_scope, "low", "unit.pyi")
+            with open(main_low, "w", encoding="utf-8") as f:
+                f.write("def foo() -> int: ...\n")
+
+            pulled1 = self.synchronizer.pull(
+                workspace_dir=ws_dir,
+                main_root=main_root,
+                role_name="lib",
+                dir_scope="scope",
+            )
+            self.assertEqual(pulled1, 1)
+
+            # Upstream updates low spec
+            with open(main_low, "w", encoding="utf-8") as f:
+                f.write("def foo(x: int) -> int: ...\n")
+
+            # Workspace has NOT modified ws_low
+            pulled2 = self.synchronizer.pull(
+                workspace_dir=ws_dir,
+                main_root=main_root,
+                role_name="lib",
+                dir_scope="scope",
+            )
+            self.assertEqual(pulled2, 1)
+
+            ws_low = os.path.join(ws_scope, "low", "unit.pyi")
+            with open(ws_low, "r", encoding="utf-8") as f:
+                content = f.read()
+            self.assertIn("def foo(x: int) -> int: ...", content)
+
+    def test_pull_writable_target_handles_upstream_metadata_update_without_conflict(self) -> None:
+        with tempfile.TemporaryDirectory() as main_root, tempfile.TemporaryDirectory() as ws_dir:
+            main_scope = os.path.join(main_root, "scope")
+            ws_scope = os.path.join(ws_dir, "scope")
+            os.makedirs(os.path.join(main_scope, "lib"), exist_ok=True)
+
+            main_lib = os.path.join(main_scope, "lib", "unit.py")
+            with open(main_lib, "w", encoding="utf-8") as f:
+                f.write(
+                    "def foo() -> int:\n    return 42\n\n"
+                    "# --- AUTOFAB METADATA ---\n"
+                    "# LAST_CLEANED: 2026-11-05T19:00:00Z\n"
+                    "# CODE_HASH: 1234567890ab\n"
+                    "# --- END AUTOFAB METADATA ---\n"
+                )
+
+            # First pull: initializes manifest and workspace
+            pulled1 = self.synchronizer.pull(
+                workspace_dir=ws_dir,
+                main_root=main_root,
+                role_name="lib",
+                dir_scope="scope",
+            )
+            self.assertEqual(pulled1, 1)
+
+            # Upstream updates metadata only (e.g. QA audit stamp or cleaned timestamp)
+            with open(main_lib, "w", encoding="utf-8") as f:
+                f.write(
+                    "def foo() -> int:\n    return 42\n\n"
+                    "# --- AUTOFAB METADATA ---\n"
+                    "# LAST_CLEANED: 2026-11-05T20:00:00Z\n"
+                    "# QA_AUDIT: 2026-11-05T20:00:00Z\n"
+                    "# --- END AUTOFAB METADATA ---\n"
+                )
+
+            # Pull again: must succeed without raising "Conflict detected during pull"
+            pulled2 = self.synchronizer.pull(
+                workspace_dir=ws_dir,
+                main_root=main_root,
+                role_name="lib",
+                dir_scope="scope",
+            )
+            self.assertEqual(pulled2, 1)
+
+            ws_lib = os.path.join(ws_scope, "lib", "unit.py")
+            with open(ws_lib, "r", encoding="utf-8") as f:
+                content = f.read()
+            self.assertIn("return 42", content)
+
+            # Subagent makes local uncommitted code edits (modifying code while keeping existing CODE_HASH baseline)
+            with open(ws_lib, "w", encoding="utf-8") as f:
+                f.write(content.replace("return 42", "return 100"))
+
+            # Upstream updates metadata again: must preserve subagent uncommitted edits without raising
+            with open(main_lib, "w", encoding="utf-8") as f:
+                f.write(
+                    "def foo() -> int:\n    return 42\n\n"
+                    "# --- AUTOFAB METADATA ---\n"
+                    "# LAST_CLEANED: 2026-11-05T21:00:00Z\n"
+                    "# QA_AUDIT: 2026-11-05T21:00:00Z\n"
+                    "# --- END AUTOFAB METADATA ---\n"
+                )
+
+            pulled3 = self.synchronizer.pull(
+                workspace_dir=ws_dir,
+                main_root=main_root,
+                role_name="lib",
+                dir_scope="scope",
+            )
+            self.assertEqual(pulled3, 0)
+            with open(ws_lib, "r", encoding="utf-8") as f:
+                content3 = f.read()
+            self.assertIn("return 100", content3)
+
+            # Upstream updates actual code concurrently: must raise RuntimeError conflict
+            with open(main_lib, "w", encoding="utf-8") as f:
+                f.write(
+                    "def foo() -> int:\n    return 999\n\n"
+                    "# --- AUTOFAB METADATA ---\n"
+                    "# --- END AUTOFAB METADATA ---\n"
+                )
+
+            with self.assertRaises(RuntimeError) as ctx:
+                self.synchronizer.pull(
+                    workspace_dir=ws_dir,
+                    main_root=main_root,
+                    role_name="lib",
+                    dir_scope="scope",
+                )
+            self.assertIn("Conflict detected during pull", str(ctx.exception))
+
 
 if __name__ == "__main__":
     unittest.main()
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-20T23:45:00Z
-# LAST_CHANGED: 2026-10-30T05:40:00Z
-# CHANGE: Test that refreshed pyproject.toml has readme declaration attributes stripped
+# LAST_CHANGED: 2026-11-05T11:45:00Z
+# CHANGE: Test that pull only pulls changed files and never clobbers subagent edits
 # COVERAGE_AUDIT: 2026-10-15T17:42:47Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

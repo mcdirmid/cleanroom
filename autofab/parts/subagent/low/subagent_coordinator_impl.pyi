@@ -87,7 +87,7 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
         - Iterates dynamic process supervision until work queues are clean, a round fails,
           consecutive unproductive rounds on unresolved targets exceed the threshold (suppressing unproductive counts and reminders when assigned ready targets are resolved or cleaned in the repository), or max_waves is exceeded (draining in-flight active workers to completion or cleanly interrupting active workers upon loop termination),
           terminating active workers, clearing persistent session state, recommissioning workspaces with a clean baseline, and injecting restart advisories when identical blame signatures are delivered twice in a row on unchanged targets (halting orchestration when a role exceeds 10 restarts, and clearing consecutive blame tracking when an author submits modifications to a previously blamed target),
-          evaluating work queues on each polling interval to dispatch newly unblocked roles without awaiting completion of active workers while withholding downstream roles whose upstream dependencies are actively executing or scheduled for concurrent dispatch,
+          evaluating work queues on each polling interval to dispatch newly unblocked roles without awaiting completion of active workers while withholding downstream roles whose upstream dependencies on the same target unit are actively executing or scheduled for concurrent dispatch,
           prior to dispatching each role, purging preexisting blame buffers, pulling updated files and refreshing system files from the canonical repository root via sync.WorkspaceSynchronizer.pull and sync.WorkspaceSynchronizer.refresh_system_files, and recording assigned ready targets in the pending work buffer via work.WorkspaceWorkManager.set_pending_work,
           consuming workspace blame buffers upon round completion,
           interrupting idling workers that have resolved assigned targets and hold zero pending items across consecutive intervals past an initialization grace period,
@@ -136,8 +136,8 @@ def __orphan__() -> None:
     ...
 
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-30T19:55:00Z
-# LAST_CHANGED: 2026-10-30T19:55:00Z
-# CHANGE: Enforce initialization grace period before evaluating idle worker reaping
+# LAST_CLEANED: 2026-11-06T02:49:00Z
+# LAST_CHANGED: 2026-11-06T02:49:00Z
+# CHANGE: Scope concurrent downstream role withholding to the active target unit
 # SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---

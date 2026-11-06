@@ -18,7 +18,7 @@ The roles_impl implementation component provides concrete algorithms to parse co
 
 ### Woven Contracts
 
-- When resolving role definitions, the resolver evaluates TOML or build file AST declarations, discovers methodologies, parses fused role declarations, validates dependency constraints, qualifies role addresses, and caches results. [parse_role_toml_files, parse_fused_role_declarations, evaluate_build_file_ast, discover_package_methodologies, validate_dependency_declarations, qualify_resolved_role_address, cache_parsed_role_definitions, roles: [resolve_role_definition, list_all_role_definitions, resolve_unqualified_role_via_methodology, resolve_qualified_role_address, reject_redundant_role_dependencies, reject_conflicting_silent_role_dependencies, reject_auditor_role_dependencies]]
+- When resolving role definitions, the resolver evaluates TOML or build file AST declarations, discovers methodologies, parses fused role declarations, validates dependency constraints, qualifies role addresses, and caches results. [parse_role_toml_files, parse_fused_role_declarations, evaluate_build_file_ast, discover_package_methodologies, validate_dependency_declarations, qualify_resolved_role_address, cache_parsed_role_definitions, roles: [resolve_role_definition, list_all_role_definitions, resolve_unqualified_role_via_methodology, resolve_qualified_role_address, reject_redundant_role_dependencies, reject_redundant_feedback_dependencies, reject_conflicting_silent_role_dependencies, reject_auditor_role_dependencies]]
 
 ## Grounding
 

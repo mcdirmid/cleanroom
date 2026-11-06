@@ -179,7 +179,11 @@ def _find_all_dirty_in_scope(
                 if eval_res.is_dirty:
                     target_file = r_def.src_pattern.format(unit_dir=part_dir, unit_name=unit_name) if r_def.src_pattern else f"{part_dir}/{r_name}/{unit_name}"
                     if not r_def.src_pattern:
-                        fb_deps = [d.split(":")[-1] for d in r_def.feedback_role_deps]
+                        fb_deps = [
+                            d.split(":")[-1]
+                            for d in list(r_def.feedback_role_deps)
+                            + list(getattr(r_def, "star_feedback_role_deps", ()))
+                        ]
                         fb_def = reg.resolve_role_definition(fb_deps[0], repo_root=repo_root) if fb_deps else None
                         if fb_def and fb_def.src_pattern:
                             target_file = fb_def.src_pattern.format(unit_dir=part_dir, unit_name=unit_name)
@@ -239,6 +243,7 @@ def _get_role_upstream_chain(
         dep_labels = (
             list(r_def.role_deps)
             + list(r_def.feedback_role_deps)
+            + list(getattr(r_def, "star_feedback_role_deps", ()))
             + list(r_def.star_role_deps)
             + list(r_def.silent_role_deps)
         )
@@ -390,9 +395,17 @@ class WorkspaceWorkManager(work.WorkspaceWorkManager):
             item_role_def = reg.resolve_role_definition(item_role, repo_root=repo_root)
             item_upstream_roles = _get_role_upstream_chain(item_role, repo_root=repo_root)
             item_is_auditor = _is_auditor_role(item_role, repo_root=repo_root)
-            item_feedback_roles = [d.split(":")[-1] for d in item_role_def.feedback_role_deps]
+            item_feedback_roles = [
+                d.split(":")[-1]
+                for d in list(item_role_def.feedback_role_deps)
+                + list(getattr(item_role_def, "star_feedback_role_deps", ()))
+            ]
             item_silent_cross = [d.split(":")[-1] for d in item_role_def.silent_cross_role_deps]
-            item_star_roles = [d.split(":")[-1] for d in item_role_def.star_role_deps]
+            item_star_roles = [
+                d.split(":")[-1]
+                for d in list(item_role_def.star_role_deps)
+                + list(getattr(item_role_def, "star_feedback_role_deps", ()))
+            ]
 
             part_dir = item.get("part_dir", "") or all_units.get(uname, "")
             blocked_reasons: List[str] = []

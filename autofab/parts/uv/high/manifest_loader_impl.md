@@ -27,7 +27,7 @@ The uv manifest loader:
 
 - Loads and decodes unit specifications and role definitions to synthesize target manifest records across unit and role dimensions.
 
-- Synthesizes target node manifests carrying source files, templates, declared dependencies, feedback dependencies, silent dependencies, and star dependencies across unit and role dimensions.
+- Synthesizes target node manifests carrying source files, templates, declared dependencies, feedback dependencies, silent dependencies, and star dependencies across unit and role dimensions, resolving declared star feedback role dependencies into feedback dependencies for the active unit and cross-unit feedback and star dependencies for directly imported unit dependencies.
 
 - Incorporates fixed role node dependencies as declared direct dependencies across unit and role dimensions.
 

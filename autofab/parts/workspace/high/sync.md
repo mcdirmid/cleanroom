@@ -21,7 +21,7 @@ An agent session's *workspace synchronizer* transfers files and in-band metadata
 
 The workspace synchronizer:
 
-- Pulls updated upstream contracts, guides, and source files from the canonical main repository into a role workspace, projecting in-band metadata to expose only change summary, unacted feedback, and code hash attributes while computing code body hashes on writable targets, and preserving read-only permissions on upstream contracts while delegating test stub synchronization for stub role dependencies to ensure read-only test stub integrity without copying implementation code.
+- Pulls updated upstream contracts, guides, and source files from the canonical main repository into a role workspace only when those files have changed in the canonical main repository since the role workspace last pulled files from the canonical repository, tracking inbound pull baselines and never clobbering uncommitted edits or modifications made by the subagent within the role workspace, projecting in-band metadata to expose only change summary, unacted feedback, and code hash attributes while computing code body hashes on writable targets, failing fast only when upstream code changes conflict with uncommitted local code edits on writable targets, and preserving read-only permissions on upstream contracts while delegating test stub synchronization for stub role dependencies to ensure read-only test stub integrity without copying implementation code.
 
 - Refreshes the non-parts system files, including build macros, guide documents, tools, and linters, delegating runner tool deployment, role guide regeneration, and test stub synchronization, while scoping tool configurations to the role workspace boundaries to keep role workspaces aligned and hermetic.
 
@@ -32,7 +32,7 @@ The workspace synchronizer:
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-08T18:30:00Z
-CHANGE: document stub role dependencies synchronization in pull and refresh contracts
+LAST_CHANGED: 2026-11-05T11:45:00Z
+CHANGE: Pull upstream files only when changed since last pull and prevent clobbering subagent edits
 SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 -->

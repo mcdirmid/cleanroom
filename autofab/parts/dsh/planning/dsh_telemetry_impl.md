@@ -16,9 +16,9 @@ Harvesting token telemetry requires parsing JSON stream events from headless dsh
 - The telemetry parser realization applies pricing rates for the active model family to calculate USD expenditures. [apply_dsh_pricing_rates]
 - The telemetry parser realization parses token metrics from stdout log text when structured records are absent. [parse_log_text_fallback]
 - The telemetry parser realization synchronizes session records titled with scope and role (e.g. `[<scope>] <role>`) into Desktop files and invokes Desktop RPC endpoints without registering role workspace folders. [sync_desktop_sessions]
-- The telemetry parser realization probes local cookie storage in immutable mode to determine if the desktop server is reachable. [eval_dsh_server_available]
-- The telemetry parser realization dispatches role rounds by creating or adopting sessions directly within their physical role workspace directory, setting conversation name to capture scope and role (e.g. `[<scope>] <role>`), resolving declared model profile names against model configuration definitions discovered in workspace ancestors, working directories, user configuration, or repository hierarchy and mapping local MLX providers to oMLX endpoints, and enqueueing prompts via session/prompt over the JSON-RPC bridge without registering role workspace folders. [dispatch_dsh_round_rpc]
-- The telemetry parser realization polls round execution status and extracts token counts until completion. [poll_dsh_round_rpc]
+- The telemetry parser realization probes local cookie storage in immutable mode, or checks active Web loopback bridge configuration, to determine if the desktop server or Web bridge is reachable. [eval_dsh_server_available]
+- The telemetry parser realization dispatches role rounds by creating or adopting sessions directly within their physical role workspace directory, setting conversation name to capture scope and role (e.g. `[<scope>] <role>`), resolving declared model profile names against model configuration definitions discovered in workspace ancestors, working directories, user configuration, or repository hierarchy and mapping local MLX providers to oMLX endpoints, and enqueueing prompts via session/prompt or bridge tools over the JSON-RPC bridge without registering role workspace folders. In DeepSeek Harness Web mode, dispatches role rounds as independent top-level sessions labeled `[<scope>] <role>` under Ungrouped without container attachment or workspace folder registration, providing direct conversation visibility and manual interactivity without subagent monitor dependencies. [dispatch_dsh_round_rpc]
+- The telemetry parser realization polls round execution status and extracts token counts until completion, recognizing dictionary outcomes with completed or errored keys alongside terminal string statuses. [poll_dsh_round_rpc]
 
 ### Woven Contracts
 
@@ -43,7 +43,7 @@ Harvesting token telemetry requires parsing JSON stream events from headless dsh
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-11-02T17:35:00Z
-CHANGE: Name desktop sessions with scope and role directly in role workspace without creating per-role workspace folders
+LAST_CHANGED: 2026-11-06T11:45:00Z
+CHANGE: Dispatch Web role rounds as independent Ungrouped sessions labeled [scope] role without container
 SPEC_QA_AUDIT: 2026-10-19T22:33:00Z
 -->

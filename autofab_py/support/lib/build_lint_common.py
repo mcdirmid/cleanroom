@@ -846,6 +846,121 @@ def check_impl_imports(file_path: str) -> list[str]:
                         errors.append(
                             f"{file_path}:{node.lineno}: error: non-assembly module must not dynamically import implementation module '{arg0.value}'"
                         )
+            if isinstance(func, ast.Attribute):
+                if func.attr in ("SourceFileLoader", "spec_from_file_location", "spec_from_loader"):
+                    if node.args:
+                        arg0 = node.args[0]
+                        if isinstance(arg0, ast.Constant) and isinstance(arg0.value, str):
+                            if any(p.endswith("_impl") for p in arg0.value.split(".")) or arg0.value.endswith("Impl"):
+                                errors.append(
+                                    f"{file_path}:{node.lineno}: error: non-assembly module must not dynamically load implementation module '{arg0.value}'"
+                                )
+                elif func.attr == "get":
+                    val = func.value
+                    is_sys_mod = (
+                        (isinstance(val, ast.Attribute) and val.attr == "modules" and isinstance(val.value, ast.Name) and val.value.id == "sys")
+                        or (isinstance(val, ast.Name) and val.id == "modules")
+                    )
+                    if is_sys_mod and node.args:
+                        arg0 = node.args[0]
+                        if isinstance(arg0, ast.Constant) and isinstance(arg0.value, str):
+                            if any(p.endswith("_impl") for p in arg0.value.split(".")) or arg0.value.endswith("Impl"):
+                                errors.append(
+                                    f"{file_path}:{node.lineno}: error: non-assembly module must not access implementation module via sys.modules '{arg0.value}'"
+                                )
+                elif func.attr == "__initialize__":
+                    val = func.value
+                    target_name = getattr(val, "id", getattr(val, "attr", ""))
+                    if not target_name.endswith("_asm"):
+                        errors.append(
+                            f"{file_path}:{node.lineno}: error: non-assembly module must not invoke foreign '__initialize__'; only assembly modules (*_asm.py) may initialize constituents"
+                        )
+            elif isinstance(func, ast.Name) and func.id == "hasattr" and len(node.args) >= 2:
+                arg0 = node.args[0]
+                arg1 = node.args[1]
+                target_name = getattr(arg0, "id", getattr(arg0, "attr", ""))
+                if isinstance(arg1, ast.Constant) and arg1.value == "__initialize__" and not target_name.endswith("_asm"):
+                    errors.append(
+                        f"{file_path}:{node.lineno}: error: non-assembly module must not probe for foreign '__initialize__'"
+                    )
+        elif isinstance(node, ast.Subscript):
+            val = node.value
+            is_sys_mod = (
+                (isinstance(val, ast.Attribute) and val.attr == "modules" and isinstance(val.value, ast.Name) and val.value.id == "sys")
+                or (isinstance(val, ast.Name) and val.id == "modules")
+            )
+            if is_sys_mod:
+                sl = node.slice
+                if isinstance(sl, ast.Constant) and isinstance(sl.value, str):
+                    if any(p.endswith("_impl") for p in sl.value.split(".")) or sl.value.endswith("Impl"):
+                        errors.append(
+                            f"{file_path}:{node.lineno}: error: non-assembly module must not access implementation module via sys.modules '{sl.value}'"
+                        )
+        elif isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Subscript):
+                    val = target.value
+                    is_sys_mod = (
+                        (isinstance(val, ast.Attribute) and val.attr == "modules" and isinstance(val.value, ast.Name) and val.value.id == "sys")
+                        or (isinstance(val, ast.Name) and val.id == "modules")
+                    )
+                    if is_sys_mod:
+                        sl = target.slice
+                        if isinstance(sl, ast.Constant) and isinstance(sl.value, str):
+                            if any(p.endswith("_impl") for p in sl.value.split(".")) or sl.value.endswith("Impl"):
+                                errors.append(
+                                    f"{file_path}:{node.lineno}: error: non-assembly module must not assign implementation module to sys.modules '{sl.value}'"
+                                )
+    return errors
+
+
+def check_singleton_registration(file_path: str) -> list[str]:
+    """Check that implementation modules only register singletons defined in the module itself."""
+    errors: list[str] = []
+    base = os.path.basename(file_path)
+    if not base.endswith(".py") or base.endswith("_asm.py"):
+        return errors
+    if not os.path.exists(file_path):
+        return errors
+    try:
+        with open(file_path, encoding="utf-8") as f:
+            tree = ast.parse(f.read(), filename=file_path)
+    except (OSError, SyntaxError):
+        return errors
+
+    defined_classes: set[str] = {
+        node.name for node in tree.body if isinstance(node, ast.ClassDef)
+    }
+
+    init_func_nodes: set[ast.AST] = {
+        node
+        for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.name == "__initialize__"
+    }
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            func = node.func
+            if isinstance(func, ast.Attribute) and func.attr == "register_singleton":
+                is_inside_init = any(
+                    any(c is node for c in ast.walk(ifn)) for ifn in init_func_nodes
+                )
+                if not is_inside_init:
+                    errors.append(
+                        f"{file_path}:{node.lineno}: error: 'register_singleton' must only be called inside the auto-generated '__initialize__' function"
+                    )
+                if node.args:
+                    arg0 = node.args[0]
+                    if isinstance(arg0, ast.Name):
+                        if arg0.id not in defined_classes:
+                            errors.append(
+                                f"{file_path}:{node.lineno}: error: implementation module must not register singleton '{arg0.id}' not defined in this module"
+                            )
+                    elif isinstance(arg0, ast.Attribute):
+                        errors.append(
+                            f"{file_path}:{node.lineno}: error: implementation module must not register foreign singleton '{ast.unparse(arg0)}'"
+                        )
     return errors
 
 
@@ -2083,6 +2198,152 @@ def check_no_sys_modules_tampering(
     return errors
 
 
+ALLOW_LIFECYCLE_SCOPE_LEAK_RE = re.compile(
+    r"#\s*(?:cleanroom:\s*allow-lifecycle-scope-leak|pragma:\s*allow-lifecycle-scope-leak|allow-lifecycle-scope-leak)\b"
+)
+
+
+def check_no_lifecycle_scope_leaks(
+    file_path: str, tree: Optional[ast.AST] = None
+) -> list[str]:
+    """Check that test modules do not leak lifecycle phase scopes or open ephemeral phases.
+
+    Specifically enforces:
+    1. No returning from inside 'with enter_phase(...)', which closes the phase context upon return.
+    2. No test helper methods opening ephemeral 'with enter_phase(...)', which destroy instantiated
+       singletons as soon as the helper returns.
+    """
+    errors: list[str] = []
+    if not os.path.exists(file_path) and tree is None:
+        return errors
+
+    lines: list[str] = []
+    if os.path.exists(file_path):
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                lines = f.read().splitlines()
+        except OSError:
+            pass
+
+    if tree is None:
+        try:
+            content = "\n".join(lines)
+            tree = ast.parse(content, filename=file_path)
+        except (SyntaxError, OSError):
+            return errors
+
+    def _has_pragma(lineno: int) -> bool:
+        return any(
+            0 <= check_idx < len(lines)
+            and ALLOW_LIFECYCLE_SCOPE_LEAK_RE.search(lines[check_idx])
+            for check_idx in (lineno - 1, lineno - 2)
+        )
+
+    def _is_enter_phase_call(expr: ast.AST) -> bool:
+        if isinstance(expr, ast.Call):
+            func = expr.func
+            if isinstance(func, ast.Name) and func.id == "enter_phase":
+                return True
+            if isinstance(func, ast.Attribute) and func.attr == "enter_phase":
+                return True
+        elif isinstance(expr, ast.Name) and expr.id == "enter_phase":
+            return True
+        elif isinstance(expr, ast.Attribute) and expr.attr == "enter_phase":
+            return True
+        return False
+
+    def _with_has_enter_phase(with_node: ast.AST) -> bool:
+        if not isinstance(with_node, (ast.With, ast.AsyncWith)):
+            return False
+        for item in with_node.items:
+            if _is_enter_phase_call(item.context_expr):
+                return True
+        return False
+
+    def _find_returns_in_body(body: list[ast.stmt]) -> list[ast.Return]:
+        returns: list[ast.Return] = []
+        stack: list[ast.AST] = list(body)
+        while stack:
+            curr = stack.pop()
+            if isinstance(curr, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
+                continue
+            if isinstance(curr, ast.Return):
+                returns.append(curr)
+            for child in ast.iter_child_nodes(curr):
+                stack.append(child)
+        return returns
+
+    # 1. Check for return statements inside 'with enter_phase(...)'
+    for node in ast.walk(tree):
+        if _with_has_enter_phase(node):
+            with_lineno = getattr(node, "lineno", 1)
+            returns = _find_returns_in_body(getattr(node, "body", []))
+            for ret_node in returns:
+                ret_lineno = getattr(ret_node, "lineno", 1)
+                if not (_has_pragma(ret_lineno) or _has_pragma(with_lineno)):
+                    errors.append(
+                        f"{file_path}:{ret_lineno}: error [LIFECYCLE_SCOPE_LEAK]: "
+                        f"Returning from inside 'with enter_phase(...)' closes the phase scope upon return, "
+                        f"causing singletons or context state to leak or be destroyed outside the active scope. "
+                        f"Enclose the test method or setup in 'enter_phase' instead of returning from within an ephemeral phase block."
+                    )
+
+    # 2. Check for test helper methods/functions opening ephemeral 'with enter_phase(...)'
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            fn_node = node
+            fn_lineno = getattr(fn_node, "lineno", 1)
+            is_test_func = (
+                fn_node.name.startswith("test_")
+                or fn_node.name in (
+                    "setUp",
+                    "tearDown",
+                    "setUpClass",
+                    "tearDownClass",
+                    "setUpModule",
+                    "tearDownModule",
+                )
+                or any(
+                    (isinstance(dec, ast.Name) and dec.id in ("scenario", "transition"))
+                    or (isinstance(dec, ast.Call) and getattr(dec.func, "id", "") in ("scenario", "transition"))
+                    or (isinstance(dec, ast.Call) and getattr(getattr(dec.func, "value", None), "id", "") == "transition")
+                    for dec in fn_node.decorator_list
+                )
+            )
+            is_context_mgr = (
+                any(
+                    "contextmanager"
+                    in (
+                        getattr(dec, "id", "")
+                        or getattr(getattr(dec, "value", None), "id", "")
+                        or getattr(dec, "attr", "")
+                    )
+                    for dec in fn_node.decorator_list
+                )
+                or any(isinstance(n, (ast.Yield, ast.YieldFrom)) for n in ast.walk(fn_node))
+            )
+
+            if not is_test_func and not is_context_mgr:
+                stack: list[ast.AST] = list(fn_node.body)
+                while stack:
+                    curr = stack.pop()
+                    if isinstance(curr, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                        continue
+                    if _with_has_enter_phase(curr):
+                        with_lineno = getattr(curr, "lineno", 1)
+                        if not (_has_pragma(with_lineno) or _has_pragma(fn_lineno)):
+                            errors.append(
+                                f"{file_path}:{with_lineno}: error [LIFECYCLE_SCOPE_LEAK]: "
+                                f"Test helper '{fn_node.name}' opens an ephemeral 'with enter_phase(...)'. "
+                                f"Singletons instantiated or mutated within ephemeral scopes are destroyed or detached when the helper returns. "
+                                f"Test methods must execute setup, operations, and assertions within an active phase scope opened in 'setUp'/'tearDown' or wrapping the test method body."
+                            )
+                    for child in ast.iter_child_nodes(curr):
+                        stack.append(child)
+
+    return errors
+
+
 def check_no_top_level_probes(
     file_path: str,
     tree: Optional[ast.AST] = None,
@@ -2651,12 +2912,25 @@ def check_test_dry_run(lib_pkg: str, module_path: str) -> list[str]:
         os.path.abspath(test_dir),
         ws_root,
     ]
+    pkg_top = lib_pkg.replace("\\", "/").split("/")[0] if lib_pkg else ""
+    if pkg_top and os.path.exists(module_path):
+        curr = os.path.abspath(os.path.dirname(module_path))
+        while curr and curr != os.path.dirname(curr):
+            if os.path.isdir(os.path.join(curr, pkg_top)):
+                if curr not in prioritized_dirs:
+                    prioritized_dirs.append(curr)
+                break
+            curr = os.path.dirname(curr)
+
     if os.path.isdir(ws_root):
         for entry in os.listdir(ws_root):
             cand = os.path.join(ws_root, entry)
             if os.path.isdir(cand) and not entry.startswith((".", "bazel-", "venv", "__pycache__")):
                 if cand not in prioritized_dirs:
                     prioritized_dirs.append(cand)
+                parts_dir = os.path.join(cand, "parts")
+                if os.path.isdir(parts_dir) and parts_dir not in prioritized_dirs:
+                    prioritized_dirs.append(parts_dir)
                 sup = os.path.join(cand, "support", "lib")
                 if os.path.isdir(sup) and sup not in prioritized_dirs:
                     prioritized_dirs.append(sup)
@@ -5461,6 +5735,7 @@ def check_lib_targets(
             if py_name.endswith(".py"):
                 py_path = os.path.join(lib_dir, py_name)
                 errors.extend(check_impl_imports(py_path))
+                errors.extend(check_singleton_registration(py_path))
 
     return errors
 

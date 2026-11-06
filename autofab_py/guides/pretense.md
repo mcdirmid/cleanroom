@@ -35,6 +35,7 @@ Transitions model public target methods 1:1 using `@transition(TargetClass.metho
 - [ ] Preconditions via `require(...)` must only inspect `self.state` (`PN009`); referencing SUT objects or input arguments inside `require(...)` is prohibited
 - [ ] State machines operate purely on abstract model state (`self.state`) and never instantiate target service classes or invoke `get_singleton`
 - [ ] State machines never define nested algorithmic functions or while loops within transitions; tests never clear `sys.modules`; residual placeholders (`_unimplemented_transition`, `Domain.required`, `self.fail`) are prohibited
+- [ ] Pretense transition DSL 'raises(...)' is prohibited inside TestCase test methods (`PRE_LINT_NO_RAISES_IN_TEST_CASE`); test methods use 'self.assertRaises(...)' for exception verification
 
 ## Document layout and imports
 

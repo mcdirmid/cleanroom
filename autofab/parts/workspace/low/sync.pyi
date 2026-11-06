@@ -43,6 +43,8 @@ class WorkspaceSynchronizer(Singleton[AgentSessionTier], Protocol):
         """Pulls updated upstream contracts and source files into role workspace.
 
         POSTCONDITIONS:
+        - MUST only pull files that have changed in the canonical main repository since the role workspace last pulled files from the canonical repository.
+        - MUST never clobber local edits or modifications made by the subagent within the role workspace.
         - MUST copy newer upstream files into the role workspace.
         - MUST preserve 0o444 read-only permissions on upstream contracts.
         - WHEN copying files into the role workspace, MUST project metadata headers to only retain CHANGE and FEEDBACK fields, computing and injecting an ephemeral CODE_HASH on writable targets while omitting LAST_CLEANED, LAST_CHANGED, and audit tags.
@@ -114,7 +116,7 @@ class WorkspaceSynchronizer(Singleton[AgentSessionTier], Protocol):
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-11T03:37:02Z
-# CHANGE: Align synchronizer typing and test stub integrity; remove unused import
+# LAST_CHANGED: 2026-11-05T11:45:00Z
+# CHANGE: Pull upstream files only when changed since last pull and prevent clobbering subagent edits
 # SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

@@ -57,11 +57,13 @@ def _role_audit_tag(role_def: Any) -> Optional[str]:
 
 
 def _role_feedback_deps(role_def: Any) -> Sequence[str]:
-    if hasattr(role_def, "feedback_role_deps"):
-        return role_def.feedback_role_deps or ()
     if isinstance(role_def, dict):
-        return role_def.get("feedback_role_deps") or ()
-    return ()
+        fb = role_def.get("feedback_role_deps") or ()
+        sfb = role_def.get("star_feedback_role_deps") or ()
+        return tuple(dict.fromkeys(list(fb) + list(sfb)))
+    fb = getattr(role_def, "feedback_role_deps", ()) or ()
+    sfb = getattr(role_def, "star_feedback_role_deps", ()) or ()
+    return tuple(dict.fromkeys(list(fb) + list(sfb)))
 
 
 def _bound_file_path(bound_file: Any) -> str:
@@ -200,6 +202,7 @@ class WorkScheduler(work_scheduler.WorkScheduler):
         for r_name, r_cfg in role_defs.items():
             rd = list(r_cfg.role_deps if hasattr(r_cfg, "role_deps") else ())
             rd += list(r_cfg.feedback_role_deps if hasattr(r_cfg, "feedback_role_deps") else ())
+            rd += list(r_cfg.star_feedback_role_deps if hasattr(r_cfg, "star_feedback_role_deps") else ())
             rd += list(r_cfg.silent_role_deps if hasattr(r_cfg, "silent_role_deps") else ())
             rd += [
                 s
