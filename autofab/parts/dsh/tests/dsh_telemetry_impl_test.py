@@ -464,6 +464,22 @@ class DshTelemetryImplTest(unittest.TestCase):
             spawn_args = spawn_calls[0][0][2]
             self.assertNotIn("parent_session", spawn_args)
             self.assertEqual(spawn_args.get("label"), "[ring_buffer] lib")
+            task_name_1 = spawn_args.get("task_name", "")
+            self.assertTrue(task_name_1.startswith("dsh_ring_buffer_lib_"))
+
+            # Verify consecutive dispatches generate globally unique task names
+            handle_2 = parser.dispatch_round_rpc(
+                workspace_dir=self.test_dir,
+                role_name="lib",
+                prompt_text="Task work order 2",
+                dir_scope="//ring_buffer",
+                model_name="deepseek-flash",
+            )
+            self.assertIsNotNone(handle_2)
+            spawn_calls_2 = [c for c in mock_call.call_args_list if c[0][1] == "dsh_spawn"]
+            self.assertEqual(len(spawn_calls_2), 2)
+            task_name_2 = spawn_calls_2[1][0][2].get("task_name", "")
+            self.assertNotEqual(task_name_1, task_name_2)
 
     @patch("autofab.parts.dsh.lib.dsh_telemetry_impl._call_web_bridge")
     @patch("autofab.parts.dsh.lib.dsh_telemetry_impl._discover_web_bridge")

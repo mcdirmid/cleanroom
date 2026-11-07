@@ -8,7 +8,7 @@ Distributing work across disjoint workspaces introduces data synchronization rac
 
 ### Contracts
 
-- The workspace synchronizer copies newer upstream files from main to workspace comparing files against a recorded pull manifest to pull only files that have changed upstream since the last pull without clobbering subagent edits, setting 0o444 permissions on contracts and updating unmodified writable targets with 0o644 permissions while projecting metadata headers with ephemeral code hashes, failing fast on conflicting upstream code modifications only when writable targets carry uncommitted local code edits, and deleting missing files. [copy_upstream_files_with_perms]
+- The workspace synchronizer copies newer upstream files from main to workspace comparing files against a recorded pull manifest to pull only files that have changed upstream since the last pull without clobbering subagent edits, always overwriting read-only upstream files when their canonical versions change in main while updating unmodified writable targets with 0o644 permissions and projecting metadata headers with ephemeral code hashes, failing fast on conflicting upstream code modifications only when writable targets carry uncommitted local code edits, and deleting missing files. [copy_upstream_files_with_perms]
 - The workspace synchronizer delegates test stub synchronization for stub role dependencies to workspace provisioning. [sync_stub_role_dependencies]
 - The workspace synchronizer recopies project configurations, runtime support libraries (`./support/lib/`), and the assigned companion guide (`./guides/`) belonging exclusively to the active methodology binding into the workspace root without copying templates, unneeded configuration files, or unbound repository root directories, stripping readme declaration attributes from refreshed pyproject.toml, delegating runner deployment, role guide regeneration, and test stub synchronization to workspace provisioning without altering targets. [recopy_system_files_fast]
 - The workspace synchronizer computes on-disk SHA-256 code hashes and extracts in-band metadata to identify modified files. [evaluate_target_file_modifications]
@@ -48,8 +48,8 @@ Distributing work across disjoint workspaces introduces data synchronization rac
   - Grounded: [workspace_pull_algorithms, workspace_harvest_algorithms]
 
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-22T13:50:00Z
-LAST_CHANGED: 2026-11-05T11:45:00Z
-CHANGE: Evaluate pull against pull manifest and prevent clobbering subagent edits
-SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+LAST_CLEANED: 2026-11-06T20:48:01Z
+LAST_CHANGED: 2026-11-06T20:48:01Z
+CHANGE: Always overwrite read-only upstream files on pull when canonical version changes in main
+SPEC_QA_AUDIT: 2026-11-06T20:48:01Z
 -->

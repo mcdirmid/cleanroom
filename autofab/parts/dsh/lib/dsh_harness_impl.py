@@ -251,61 +251,44 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
             proc = None
         else:
             server_available = self._telemetry_parser.is_desktop_server_available(self._sessions_dir)
-            if server_available:
-                session_file = os.path.join(app_info.resolve_state_dir(dispatch.workspace_dir), "dsh_session_id.txt")
-                saved_sid: Optional[str] = None
-                if os.path.isfile(session_file):
-                    try:
-                        with open(session_file, "r", encoding="utf-8") as sf:
-                            saved_sid = sf.read().strip() or None
-                    except OSError:
-                        pass
-
-                # Retry up to 3 times with backoff on transient connection failures when desktop server is available
-                rpc_handle = None
-                for attempt in range(3):
-                    rpc_handle = self._telemetry_parser.dispatch_turn_rpc(
+            if not server_available:
+                if self._custom_cmd:
+                    cmd = self._custom_cmd.format(
                         workspace_dir=dispatch.workspace_dir,
+                        prompt_file=prompt_file,
+                        task_prompt=prompt_text,
+                        patch_file=patch_file,
                         role_name=dispatch.role_name,
-                        prompt_text=prompt_text,
-                        session_id=saved_sid,
-                        sessions_dir=self._sessions_dir,
-                        model_name=self._model_name,
-                        dir_scope=dispatch.dir_scope,
                     )
-                    if rpc_handle:
-                        break
-                    if attempt < 2:
-                        time.sleep(1.0 * (attempt + 1))
-
-                if rpc_handle:
-                    if rpc_handle.startswith(("dsh_rpc::", "dsh_rpc_web::")):
-                        parts = rpc_handle.split("::")
-                        if len(parts) >= 2 and parts[1]:
-                            os.makedirs(os.path.dirname(session_file), exist_ok=True)
-                            try:
-                                with open(session_file, "w", encoding="utf-8") as sf:
-                                    sf.write(parts[1])
-                            except OSError:
-                                pass
-
+                    log_f = open(log_path, "w", encoding="utf-8")
+                    env = os.environ.copy()
+                    env["DSH_HOME"] = os.environ.get("DSH_HOME") or os.path.dirname(self._sessions_dir)
+                    env["DSH_PERMISSION_MODE"] = "danger-full-access"
+                    proc = subprocess.Popen(
+                        cmd,
+                        shell=True,
+                        cwd=dispatch.workspace_dir,
+                        stdout=log_f,
+                        stderr=subprocess.STDOUT,
+                        env=env,
+                    )
                     self._tasks[task_handle] = _ActiveDshTask(
                         handle=task_handle,
                         dispatch=dispatch,
-                        process=None,
+                        process=proc,
                         pending_before=pending_before,
                         start_time=time.time(),
                         prompt_file=prompt_file,
                         log_file=log_path,
-                        is_rpc=True,
-                        rpc_handle=rpc_handle,
                         had_disk_pending=had_disk_pending,
+                        log_offsets=log_offsets,
                     )
                     return task_handle
                 else:
-                    # When Desktop server is present, do NOT fall back to incompatible headless CLI runner.
-                    # Desktop sessions run under standard preset, which one-shot CLI cannot compose.
-                    err_msg = "DeepSeek Harness Desktop RPC is unavailable after retries (desktop server restarting or unreachable)"
+                    err_msg = (
+                        "DeepSeek Harness server is unreachable (neither DSH Web bridge nor DSH Desktop RPC is available). "
+                        "Headless execution is strictly banned."
+                    )
                     with open(log_path, "w", encoding="utf-8") as lf:
                         lf.write(f'{{"type":"error","message":"{err_msg}"}}\n')
                     self._tasks[task_handle] = _ActiveDshTask(
@@ -323,65 +306,75 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
                     return task_handle
 
             session_file = os.path.join(app_info.resolve_state_dir(dispatch.workspace_dir), "dsh_session_id.txt")
-            session_arg = ""
+            saved_sid: Optional[str] = None
             if os.path.isfile(session_file):
                 try:
                     with open(session_file, "r", encoding="utf-8") as sf:
-                        saved_sid = sf.read().strip()
-                    if saved_sid:
-                        encoded_ws = "--" + os.path.realpath(dispatch.workspace_dir).strip("/").replace("/", "-") + "--"
-                        lock_path = os.path.join(self._sessions_dir, encoded_ws, saved_sid, "session.lock")
-                        is_locked = False
-                        if os.path.exists(lock_path):
-                            try:
-                                with open(lock_path, "r+") as lf:
-                                    fcntl.flock(lf, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                                    fcntl.flock(lf, fcntl.LOCK_UN)
-                            except (BlockingIOError, OSError):
-                                is_locked = True
-                        if not is_locked:
-                            session_arg = f'--session-id "{saved_sid}" '
-                except Exception:
+                        saved_sid = sf.read().strip() or None
+                except OSError:
                     pass
 
-            if self._custom_cmd:
-                cmd = self._custom_cmd.format(
+            # Retry up to 3 times with backoff on transient connection failures when server is available
+            rpc_handle = None
+            for attempt in range(3):
+                rpc_handle = self._telemetry_parser.dispatch_turn_rpc(
                     workspace_dir=dispatch.workspace_dir,
-                    prompt_file=prompt_file,
-                    task_prompt=prompt_text,
-                    patch_file=patch_file,
                     role_name=dispatch.role_name,
+                    prompt_text=prompt_text,
+                    session_id=saved_sid,
+                    sessions_dir=self._sessions_dir,
+                    model_name=self._model_name,
+                    dir_scope=dispatch.dir_scope,
                 )
-            else:
-                cmd = f'cat "{prompt_file}" | dsh --patch "{patch_file}" --profile headless {session_arg}--json -'
+                if rpc_handle:
+                    break
+                if attempt < 2:
+                    time.sleep(1.0 * (attempt + 1))
 
-            log_f = open(log_path, "w", encoding="utf-8")
-            env = os.environ.copy()
-            env["DSH_HOME"] = os.environ.get("DSH_HOME") or os.path.dirname(self._sessions_dir)
-            env["DSH_PERMISSION_MODE"] = "danger-full-access"
+            if not rpc_handle:
+                err_msg = (
+                    "DeepSeek Harness Desktop RPC is unavailable after retries (desktop server restarting or unreachable). "
+                    "Headless execution is strictly banned."
+                )
+                with open(log_path, "w", encoding="utf-8") as lf:
+                    lf.write(f'{{"type":"error","message":"{err_msg}"}}\n')
+                self._tasks[task_handle] = _ActiveDshTask(
+                    handle=task_handle,
+                    dispatch=dispatch,
+                    process=None,
+                    pending_before=pending_before,
+                    start_time=time.time(),
+                    prompt_file=prompt_file,
+                    log_file=log_path,
+                    is_rpc=False,
+                    had_disk_pending=had_disk_pending,
+                    log_offsets=log_offsets,
+                )
+                return task_handle
 
-            proc = subprocess.Popen(
-                cmd,
-                shell=True,
-                cwd=dispatch.workspace_dir,
-                stdout=log_f,
-                stderr=subprocess.STDOUT,
-                env=env,
+            if rpc_handle.startswith(("dsh_rpc::", "dsh_rpc_web::")):
+                parts = rpc_handle.split("::")
+                if len(parts) >= 2 and parts[1]:
+                    os.makedirs(os.path.dirname(session_file), exist_ok=True)
+                    try:
+                        with open(session_file, "w", encoding="utf-8") as sf:
+                            sf.write(parts[1])
+                    except OSError:
+                        pass
+
+            self._tasks[task_handle] = _ActiveDshTask(
+                handle=task_handle,
+                dispatch=dispatch,
+                process=None,
+                pending_before=pending_before,
+                start_time=time.time(),
+                prompt_file=prompt_file,
+                log_file=log_path,
+                is_rpc=True,
+                rpc_handle=rpc_handle,
+                had_disk_pending=had_disk_pending,
             )
-
-            # Sync desktop session immediately so the new session is placed under its workspace in the UI
-            if self._sessions_dir:
-                try:
-                    time.sleep(0.3)
-                    self._telemetry_parser.sync_desktop_session(
-                        sessions_dir=self._sessions_dir,
-                        workspace_dir=dispatch.workspace_dir,
-                        role_name=dispatch.role_name,
-                        dir_scope=dispatch.dir_scope,
-                        start_time=time.time(),
-                    )
-                except Exception:
-                    pass
+            return task_handle
 
         self._tasks[task_handle] = _ActiveDshTask(
             handle=task_handle,
@@ -419,6 +412,27 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
                 role=task.dispatch.role_name,
                 status="failed",
                 failure_reason=rpc_status.error,
+                wall_clock_seconds=wall_clock,
+            )
+
+        if not self._simulation_mode and not task.is_rpc and task.process is None:
+            failure_reason = "DeepSeek Harness server is unreachable. Headless execution is strictly banned."
+            if os.path.isfile(task.log_file):
+                try:
+                    with open(task.log_file, "r", encoding="utf-8", errors="replace") as lf:
+                        for line in lf:
+                            line_str = line.strip()
+                            if line_str.startswith("{"):
+                                ev = json.loads(line_str)
+                                if ev.get("type") == "error":
+                                    failure_reason = ev.get("message", failure_reason)
+                                    break
+                except Exception:
+                    pass
+            return subagent_coordinator.RoleRoundResult(
+                role=task.dispatch.role_name,
+                status="failed",
+                failure_reason=failure_reason,
                 wall_clock_seconds=wall_clock,
             )
 

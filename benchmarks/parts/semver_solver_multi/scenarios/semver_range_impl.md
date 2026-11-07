@@ -38,6 +38,18 @@ Realized by: Storing trimmed expression text in the immutable version range reco
 Observed: Version `1.0.0-alpha` does not satisfy the range because precedence ordering ranks `1.0.0-alpha` strictly lower than boundary `1.0.0`.
 Realized by: Evaluating candidate version directly against lower bound `>=1.0.0` via precedence comparison without shifting numerical boundaries.
 
+### Scenario 4 — Operator-wildcard composition and wildcard hyphen range matching
+
+Given: A newly initialized range engine.
+
+1. Parse range expressions combining operators with wildcards `  >= 1.x  `, `  != 1.x  `, `  ^ 1.x  `, `  ~ 1.x  `, and `  >= *  `, and wildcard hyphen range `  1.0.0 - 2.x  `.
+Observed: All expressions parse successfully into valid version ranges.
+Realized by: Compiling relational and prefix operators with wildcard operands and hyphen ranges with wildcard endpoints into comparator boundary inequalities.
+
+2. Evaluate satisfaction of version `1.5.0` against `>=1.x`, `1.2.0` against `!=1.x`, `1.5.0` against `^1.x`, `2.5.0` against `1.0.0 - 2.x`, and `3.0.0` against `1.0.0 - 2.x`.
+Observed: Version `1.5.0` matches range `>=1.x`, version `1.2.0` does not match range `!=1.x`, version `1.5.0` matches range `^1.x`, version `2.5.0` matches range `1.0.0 - 2.x`, and version `3.0.0` does not match range `1.0.0 - 2.x`.
+Realized by: Testing candidate versions against compiled comparator inequalities.
+
 ## Implementation-only
 
 <!-- CLEANROOM METADATA

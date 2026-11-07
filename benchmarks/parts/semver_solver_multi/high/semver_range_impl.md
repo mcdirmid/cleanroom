@@ -17,7 +17,7 @@ A system's *concrete range engine* realizes the range engine protocol. Range com
 
 - Disjunctive normal form clauses containing sets of relational comparator bounds separated by union alternatives, trimming surrounding whitespace around expressions and clauses while permitting optional whitespace between comparator operators and target version tokens, delimiting comparators within clauses strictly by whitespace, and raising invalid range error on empty or whitespace-only inputs, empty union clauses, comma-separated comparators, and bare partial version numbers lacking wildcard characters across all comparator and hyphen expressions.
 
-- Explicit upper and lower boundary pairs expanded from caret, tilde, wildcard, and hyphen range tokens.
+- Explicit upper and lower boundary pairs expanded from caret, tilde, wildcard, and hyphen range tokens, expanding relational and prefix wildcards and wildcard hyphen bounds into comparator inequalities.
 
 Satisfaction testing evaluates candidate semantic versions against compiled comparator clauses, enforcing pre-release exclusion unless explicitly requested or specified in range bounds.
 

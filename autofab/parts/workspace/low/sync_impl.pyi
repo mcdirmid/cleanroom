@@ -46,7 +46,7 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
 
         GROUNDING:
         - Evaluates inbound changes against a pull manifest recorded in the role workspace state directory,
-          pulling only files that have changed upstream since the last pull and never clobbering subagent edits.
+          pulling only files that have changed upstream since the last pull, never clobbering uncommitted edits on writable targets, and always overwriting read-only upstream files when their canonical versions change in the main repository.
         - Copies newer upstream files from main into the role workspace, projecting metadata
           headers to retain only change and feedback fields, stamping ephemeral code hashes
           on writable targets, setting 0o444 on read-only contracts, updating writable
@@ -135,8 +135,8 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
         ...
 
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-22T13:50:00Z
-# LAST_CHANGED: 2026-11-05T11:45:00Z
-# CHANGE: Evaluate pull against pull manifest and prevent clobbering subagent edits
-# SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+# LAST_CLEANED: 2026-11-06T20:48:03Z
+# LAST_CHANGED: 2026-11-06T20:48:03Z
+# CHANGE: Always overwrite read-only upstream files on pull when canonical version changes in main
+# SPEC_QA_AUDIT: 2026-11-06T20:48:03Z
 # --- END CLEANROOM METADATA ---

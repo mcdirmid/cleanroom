@@ -63,11 +63,11 @@ Given: DeepSeek Harness Web mode enabled via environment configuration and an ac
    Observed: reachability is confirmed via the Web loopback bridge endpoint without requiring desktop cookies.
    Realized by: discovering active Web bridge endpoint from bridge configuration.
 2. The telemetry parser dispatches a role round.
-   Observed: the role worker is spawned directly as an independent top-level session labeled `[<scope>] <role>` under Ungrouped without container attachment or parent session reference.
-   Realized by: invoking dsh_spawn with the formatted label and cwd without invoking dsh_container or passing parent_session.
+   Observed: the role worker is spawned directly as an independent top-level session with a globally unique task name labeled `[<scope>] <role>` under Ungrouped without container attachment or parent session reference.
+   Realized by: invoking dsh_spawn with a unique task name, formatted label, and cwd without invoking dsh_container or passing parent_session.
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-11-06T11:45:00Z
-CHANGE: Dispatch Web role rounds as independent Ungrouped sessions labeled [scope] role without container
+LAST_CHANGED: 2026-11-06T17:48:00Z
+CHANGE: Ensure globally unique task names for Web role round dispatches
 -->

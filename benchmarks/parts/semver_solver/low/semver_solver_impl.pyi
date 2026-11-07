@@ -60,7 +60,7 @@ class VersionEngine(semver_solver.VersionEngine):
 
         GROUNDING:
         - Trims surrounding whitespace around range expressions and individual clauses, storing trimmed expression in semver_solver.VersionRange.
-        - Accepts optional whitespace between relational/prefix operators and target versions or wildcards (e.g. '>= 1.0.0' is equivalent to '>=1.0.0').
+        - Accepts optional whitespace between relational/prefix operators and target versions or wildcards (e.g. '>= 1.0.0' is equivalent to '>=1.0.0', '>= 1.x' is equivalent to '>=1.x').
         - Delimits comparators within clauses strictly by whitespace, rejecting comma-separated comparators.
         - Validates syntax of basic comparators, caret, tilde, wildcard, and hyphen expressions across union alternatives.
         - Raises semver_solver.InvalidRangeError when input is empty, contains only whitespace, contains empty clauses between union tokens, uses commas, supplies bare partial versions lacking wildcards across any comparator or hyphen expression, or contains malformed syntax.
@@ -80,9 +80,9 @@ class VersionEngine(semver_solver.VersionEngine):
 
         GROUNDING:
         - Compiles range expression into disjunctive normal form comparator sets.
-        - Expands caret prefixes based on first non-zero component boundaries.
-        - Expands tilde prefixes into lower and upper minor boundaries.
-        - Normalizes wildcards and hyphen ranges into paired comparator inequalities.
+        - Expands caret prefixes on full versions and wildcards based on first non-zero component boundaries (e.g. ^1.x expands to >=1.0.0 <2.0.0).
+        - Expands tilde prefixes on full versions and wildcards into lower and upper minor boundaries (e.g. ~1.x expands to >=1.0.0 <2.0.0).
+        - Normalizes wildcards and hyphen ranges into paired comparator inequalities (e.g. >=1.x expands to >=1.0.0, !=1.x expands to <1.0.0 || >=2.0.0, >=* is satisfied by all versions, 1.0.0 - 2.x expands to >=1.0.0 <3.0.0).
         - When version is a prerelease and include_prerelease is False, evaluates to False unless range explicitly targets that prerelease by specifying a prerelease identifier sharing the same major, minor, and patch numbers.
         - When include_prerelease is True, evaluates candidate prerelease version directly against comparator boundary inequalities using precedence ordering without shifting numerical boundaries.
         - Tests candidate version against each comparator in a clause.

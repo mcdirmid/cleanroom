@@ -875,7 +875,8 @@ def run_pretense_cli(argv: Optional[List[str]] = None) -> int:
             unit_name = stem[:-9] if stem.endswith("_pretense") else stem
             candidate = lib_dir / f"{unit_name}.py"
             if candidate.is_file():
-                res.add(str(candidate.resolve()))
+                if not (lib_dir / f"{unit_name}_impl.py").is_file():
+                    res.add(str(candidate.resolve()))
             else:
                 res.update(_collect_lib_impls_from_dir(lib_dir))
         return res

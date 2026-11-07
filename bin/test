@@ -88,6 +88,39 @@ autofab_asm.__initialize__()
 scaffold_impl.WorkspaceScaffolder().deploy_runner_zipapps("bin")
 '
     echo ""
+
+    echo "=== Verifying Runner Zipapps (bin/) ==="
+    python3 -c '
+import subprocess, sys, os
+
+tools = ["get_work", "check_files", "submit", "blame", "fail"]
+pythons = [sys.executable]
+homebrew_py = "/opt/homebrew/bin/python3"
+if os.path.isfile(homebrew_py) and homebrew_py != sys.executable:
+    pythons.append(homebrew_py)
+
+for tool in tools:
+    tpath = os.path.join("bin", tool)
+    if not os.path.isfile(tpath):
+        print(f"FAILED: missing tool {tpath}", file=sys.stderr)
+        sys.exit(1)
+    
+    # 1. Test direct execution via shebang / launcher
+    res = subprocess.run([tpath, "--help"], capture_output=True, text=True)
+    if res.returncode != 0:
+        print(f"FAILED: direct execution of {tpath} failed (code {res.returncode}):\n{res.stderr}", file=sys.stderr)
+        sys.exit(1)
+        
+    # 2. Test execution under available host Python interpreters
+    for py in pythons:
+        res = subprocess.run([py, tpath, "--help"], capture_output=True, text=True)
+        if res.returncode != 0:
+            print(f"FAILED: execution of {tpath} under {py} failed (code {res.returncode}):\n{res.stderr}", file=sys.stderr)
+            sys.exit(1)
+
+print("[OK] All runner zipapps verified cleanly across available interpreters.")
+'
+    echo ""
 fi
 
 # Execute specification linters dynamically based on parts/autofab.toml and autofab_roles.toml

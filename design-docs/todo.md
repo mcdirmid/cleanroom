@@ -32,7 +32,7 @@
    - [Native Python Packaging (`pyproject.toml` + `uv`)](#native-python-packaging-pyprojecttoml--uv)
    - [Comprehensive CLI Reference](#comprehensive-cli-reference)
 7. [Multi-Harness Telemetry & Desktop Integration](#7-multi-harness-telemetry--desktop-integration)
-   - [DeepSeek Harness (`dsh`), Direct JSON-RPC Integration & Cordis Shell](#deepseek-harness-dsh-direct-json-rpc-integration--cordis-shell)
+   - [DeepSeek Harness (`dsh`), DSH Web Daemon, Direct JSON-RPC Integration & Cordis Shell](#deepseek-harness-dsh-dsh-web-daemon-direct-json-rpc-integration--cordis-shell)
    - [Google Antigravity Integration & Rate Economics](#google-antigravity-integration--rate-economics)
 8. [Current Implementation Progress & Verification Health](#8-current-implementation-progress--verification-health)
 9. [Master Actionable Roadmap & Next TODOs](#9-master-actionable-roadmap--next-todos)
@@ -41,6 +41,7 @@
    - [Task 3: Contract Slug Integration in Low-Level Specifications & Test Requirement Traceability](#task-3-contract-slug-integration-in-low-level-specifications--test-requirement-traceability)
    - [Task 4: Feedback Embargo Checker Sub-Agent & Anti-Pruning Verification Gate](#task-4-feedback-embargo-checker-sub-agent--anti-pruning-verification-gate)
    - [Task 5: 100% Statement & Branch Coverage Enforcement in Property Fuzzing](#task-5-100-statement--branch-coverage-enforcement-in-property-fuzzing)
+   - [Task 6: DSH Web Visual Subagent Hierarchy & Custom Cordis Dashboard Plugin](#task-6-dsh-web-visual-subagent-hierarchy--custom-cordis-dashboard-plugin)
 
 ---
 
@@ -416,23 +417,42 @@ All commands are invoked via `uv run autofab <command>`:
 
 ## 7. Multi-Harness Telemetry & Desktop Integration
 
-### DeepSeek Harness (`dsh`), Direct JSON-RPC Integration & Cordis Shell
+### DeepSeek Harness (`dsh`), DSH Web Daemon, Direct JSON-RPC Integration & Cordis Shell
 
-Autofab provides deep integration with DeepSeek Harness (`dsh`) across both direct JSON-RPC client-server communication and local CLI workflows:
+Autofab provides deep integration with DeepSeek Harness (`dsh`) across direct JSON-RPC client-server communication, background daemon streaming, and browser-accessible DSH Web services:
 
-1. **Direct JSON-RPC Remote Orchestration**:
-   - Autofab connects directly to the running DeepSeek Harness server over JSON-RPC via HTTP.
+1. **DSH Web Service Architecture & Daemon Management**:
+   - **Daemon Service**: DSH Web runs as a macOS background service managed via `launchd`: `~/Library/LaunchAgents/com.deepseek.dsh-web.plist`, listening on port 3080 with bridge on port 47821.
+   - **Remote Access URL & Active Token**: The only supported remote access endpoint is `http://seans-macbook-pro-2.local:3080/?token=<active_token>` (extracted dynamically from `~/.dsh/dsh-web.log`).
+   - **Security Fence**: The `/api` browser-trust fence accepts connections matching `trustedHosts` configured in `~/.dsh/profiles/web/cordis.patch.yml` under `@deepseek-ai/dsh-client-connection`.
+
+2. **The Operational Baseline: Ungrouped First-Class Sessions & Lean Preset Parity**:
+   - **First-Class Navigation**: Role workers (`lib`, `test`, `qa`, `coverage`, `pretense`) spawn as independent top-level sessions labeled `[<scope>] <role>` (e.g. `[ring_buffer] lib`) residing in DSH Web's sidebar under **Ungrouped**.
+   - **Zero Gateway Authorization Errors**: Because these sessions open with standard `{ kind: "session" }` addresses, clicking them in Mac or iPad Safari opens the full streaming conversation without tripping `subagent/unauthorized`.
+   - **Lean Preset Parity**: The Cordis profile `~/.dsh/profiles/web/cordis.patch.yml` enforces the Cleanroom Lean Preset (`preset-standard`). Tool token overhead is reduced from 5.5K to 1.7K tokens (exposing only `bash_run`), and system prompts are compacted from 1.5K to 967 tokens, matching DSH Desktop identically.
+   - **Environment Isolation**: Unit test and mock harness suites are decoupled from live Web sessions by gating Web mode strictly on `AUTOFAB_DSH_WEB="1"`. CLI flags (`--dsh-web`, `--dsh-desktop`) and `model_configs.toml` (`dsh_web = true` / `dsh_mode = web`) allow effortless runtime toggling.
+
+3. **The Subagent Hierarchy Invariant in DSH Web (Open UI Problem)**:
+   - While ungrouped sessions execute cleanly, spawning 5 to 10 top-level sessions per benchmark flight clutters the DSH Web sidebar.
+   - Direct nesting as `{ kind: "subagent" }` fails due to DSH internal invariants:
+     - **Closed Lifecycle Invariant**: `@deepseek-ai/dsh-base` and `@deepseek-ai/dsh-subagent` expect subagents to be spawned via internal LLM dispatch loop (`tool-subagent` or `agent-team`).
+     - **Immutable v4 Journal Headers**: Binary session journals (`session.v4.jsonl.zstd`) commit `origin: "subagent"`, `parentSession: "<parent_id>"`, and `delegationDepth: 1` immutably at creation time; in-memory mutation is discarded on reload.
+     - **Strict API Gateway Validation**: `@deepseek-ai/dsh-api-session-controller` throws `subagent/unauthorized` if on-disk headers lack matching parent records.
+   - Active forward roadmap: Scaffold dedicated Cordis UI plugin `@autofab/dsh-ui-dashboard` or inject native headers in `dsh-subagent-bridge` (detailed in [Task 7](#task-7-dsh-web-visual-subagent-hierarchy--custom-cordis-dashboard-plugin)).
+
+4. **Direct JSON-RPC Desktop Remote Orchestration**:
+   - Autofab connects directly to the running DeepSeek Harness desktop server over JSON-RPC via HTTP.
    - Discovers active desktop endpoints and authentication credentials dynamically from the Cordis desktop SQLite cookie store (`cookies.sqlite`).
    - Invokes structured RPC methods (`workspace/create`, `session/create`, `session/prompt`) to drive subagent rounds directly against the running server.
    - Completely eliminates kernel write-lease contention (`flock` on `session.lock`) when running alongside an active Cordis desktop UI session, preventing UI session forking and deadlocks.
    - Retains automatic fallback to headless CLI invocation (`dsh exec`) when no desktop server instance is discovered.
 
-2. **`dsh_telemetry` Background Daemon**:
+5. **`dsh_telemetry` Background Daemon**:
    - Runs a non-blocking UNIX domain socket server listening for subagent lifecycle events.
    - Emits structured JSON events: `{"event": "subagent_start", "scope": "...", "role": "...", "workspace": "..."}`.
    - Tracks per-round token usage, execution time, and tool call frequency.
 
-3. **Cordis Desktop Shell Overlay**:
+6. **Cordis Desktop Shell Overlay**:
    - Injects real-time status badges into the Cordis desktop shell.
    - Displays active cleaning waves, dirty dependency DAGs, and subagent process health.
 
@@ -535,6 +555,22 @@ In Google Antigravity environments:
   - **Milestone Verification Snapshots**: In `check_impl.run_check_files`, whenever all checks pass with zero errors, a milestone commit (`Checkpoint: verified <target>`) is committed, preserving verified working states permanently in git history.
   - **Runner Zipapps & CLI Commands**: `bin/revert` and `bin/checkpoint` are packaged as standalone executable zipapps in `scaffold_impl.deploy_runner_zipapps`. `bin/revert [target]` executes file-level or whole-workspace restore from `HEAD`, and `bin/checkpoint [label]` commits the active workspace state.
   - **Agent Guidance**: `AGENTS.md` instructions updated across all roles with "Workspace Undo & Checkpoint Architecture" and refined boundary rules explicitly permitting and directing local git rollback and diff commands (`git restore <target>`, `git diff <target>`, `bin/revert [target]`) while forbidding external git operations.
+- [x] **Phase 14: DSH Web Remote Integration & Lean Preset Parity**
+  - Integrated DSH Web (port 3080 daemon and 47821 bridge) using first-class ungrouped sessions labeled `[<scope>] <role>` under DSH Web's Ungrouped sidebar.
+  - Enforced Lean Preset parity (`preset-standard` exposing only `bash_run`, ~1.7K tool tokens, 967 prompt tokens), matching DSH Desktop token economy identically.
+  - Gated live Web mode strictly on `AUTOFAB_DSH_WEB="1"` in `dsh_telemetry_impl.py` and `dsh_harness_impl.py` to isolate unit test and mock harness suites from live background daemon sessions.
+  - Resolved `PYTHONPATH` isolation in `app_info.py` across concurrent benchmark flights and sub-workspaces.
+  - Added `--dsh-desktop` flag, `--dsh-web` CLI switch, and `model_configs.toml` global toggle (`dsh_web = true` / `dsh_mode = web`).
+  - Cascaded HLS-downstream specification alignment across `high/`, `planning/`, `scenarios/`, `low/`, `lib/`, and `tests/` for benchmark and workspace tools.
+  - Validated across benchmark flights and logs for `ring_buffer` and `dag_engine_lite` suites.
+- [x] **Phase 15: Specification Contract Preconditions, Checked Errors & Semantic Coverage De-Coercion**
+  - Removed blanket regex exclusions (`raise .*Error\(` and `raise .*Error$`) from `pyproject.toml` `[tool.coverage.report] exclude_also` to ensure contracted error branches are tracked and covered.
+  - Low-level specifications (`low/*.pyi`) partition contracted operational errors under `PRECONDITIONS: - WHEN <condition>, MUST raise <Error>.` instead of generic `POSTCONDITIONS:`. Checked preconditions specifying explicit errors must be tested and covered; uncontracted caller preconditions remain undefined behavior / library assumptions.
+  - De-coerced static AST linters (`build_lint_common.py`, `pretense_lint.py`, `test_lint.py`) with `_find_contracted_spec_errors` to inspect companion `low/*.pyi` stubs and exempt declared operational errors from `NO_ERROR_TESTING`.
+  - Added `NO_TRY_EXCEPT_IN_TESTS` rule in `build_lint_common.py` prohibiting `try...except` blocks in test methods and scenarios, enforcing fail-closed assertions (`assertRaises` / `pytest.raises`) with `# pragma: allow-try-except` support for mock doubles.
+  - Updated `workspace_cli` (`coverage_impl.py` and `commands_impl.py`) to classify contracted error spans as `TEST-COVERAGE-DEFICIT` and uncontracted caller precondition guards as `LIB-PRAGMA-REQUIRED`, lifting the mechanical prohibition on test-directed blame for contracted error postconditions.
+  - Extended Pretense framework (`pretense/`): added optional `error` parameter to `pretense.require` and `pretense.require_arg`, raising `PretenseSpecificationError` (or the contracted error) upon requirement failures.
+  - Verified benchmark parity across `semver_solver` and `semver_solver_multi` across baseline, pretense, and combined methodologies, eliminating wildcard operator defects and lifting differential cross-test soundness to 97.5%–100%.
 
 ### Current Verification Health
 
@@ -647,17 +683,27 @@ The following prioritized roadmap outlines the active forward engineering tasks 
   3. **Guide Alignment**:
      - Update `autofab_py/guides/pretense.md` and `autofab_py/guides/pretense_coverage.md` with explicit criteria requiring 100% branch coverage from state-machine fuzz transitions.
 
-### Task 6: Contracted Operational Exceptions (Category 2 Exceptions)
+### Task 6: DSH Web Visual Subagent Hierarchy & Custom Cordis Dashboard Plugin
 - **Priority**: Medium
-- **Component**: `pretense/`, `autofab_py/guides/`
-- **Objective**: Design and implement support for true expected operational exceptions in the contract and property fuzzing pipeline.
+- **Component**: `autofab/parts/dsh/`, `~/.dsh/plugins/` (Cordis DSH Web plugin)
+- **Design Specification**: Homed in Section 7 ([Multi-Harness Telemetry & Desktop Integration](#deepseek-harness-dsh-dsh-web-daemon-direct-json-rpc-integration--cordis-shell))
+- **Objective**: Replace the current flat proliferation of top-level ungrouped sessions in DSH Web with an integrated, visual Subagent Dashboard presenting a single top-level coordinator entry per flight run, an interactive role status card, and clean drill-down navigation without `subagent/unauthorized` errors.
 - **Problem Statement**:
-  - In Pretense Next, exceptions are categorized into:
-    1. *API Misuse / Precondition Contract Errors*: Exceptions occurring because an operation was invoked when preconditions were not met (e.g. popping an empty buffer). Because state is observable (`is_empty`), invalid calls violate API contracts. These are represented as zero-argument `PretenseSpecificationError` subclasses guarded by `requires(condition, ExceptionClass)`. Fixed tests do not check for them; fuzzers treat them as unsatisfied antecedents.
-    2. *True Expected Operational Exceptions*: Exceptions that can occur even when the client uses the API completely correctly (e.g. network disconnect, resource over-subscription).
-  - Currently, handling for Category 2 operational exceptions is deferred; all unexpected exceptions encountered during nominal test runs are treated as test failures.
-- **Future Design Work**:
-  - Establish a formal contract declaration mechanism (e.g. `@contract(raises=OperationalError)` or fuzz fault-injection adapters) to distinguish expected environmental failures from unexpected bug crashes during randomized state exploration.
+  - While ungrouped first-class sessions (`[<scope>] <role>`) execute reliably in production with lean preset parity, spawning 5 to 10 top-level sessions per benchmark flight clutters the DSH Web sidebar.
+  - Attempting to force sessions into standard `{ kind: "subagent" }` paths fails because DSH Web's API Gateway strictly requires immutable v4 journal headers (`origin: "subagent"`, `parentSession: "<parent_id>"`) and expects agents to be spawned via internal LLM dispatch loops (`tool-subagent`).
+- **Implementation Steps**:
+  1. **Scaffold Cordis UI Dashboard Plugin (`@autofab/dsh-ui-dashboard`)**:
+     - Scaffold a dedicated Cordis web plugin package in `~/.dsh/plugins/autofab-dashboard/` or repo distribution.
+     - Register a custom dashboard card/panel in DSH Web querying `sessionController.list()` and grouping all sessions carrying the `[<scope>]` tag or Autofab flight metadata under a single collapsible Flight Run container.
+     - Render an interactive DAG topology / role status board displaying worker progress (`lib`, `test`, `qa`, `coverage`, `pretense`), latencies, and token costs.
+  2. **Native Direct Navigation via `{ kind: "session" }` with Group-By-Scope Sidebar Filtering**:
+     - Wire role worker cards to open child sessions via standard `{ kind: "session", sessionId }`, ensuring zero `subagent/unauthorized` errors while visually presenting as a hierarchical run.
+     - Implement sidebar session filtering to collapse child worker sessions out of the main "Ungrouped" list into their parent run container.
+  3. **Bridge Native Header Injection Probe**:
+     - Prototype hooking `service.create()` options in `dsh-subagent-bridge` to test if `origin: 'subagent'` and `parentSession: parentId` can be baked cleanly into the v4 binary journal (`session.v4.jsonl.zstd`) at format instantiation without Homebrew core patching.
+     - Test address resolution `{ kind: "subagent", parentSessionId, childSessionId }` across browser reloads to verify if DSH Gateway accepts the resulting session.
+  4. **Interactive Subagent Drawer Integration**:
+     - Integrate a role inspector drawer into DSH Web so clicking a child worker slides out the streaming conversation thread without navigating away from the flight coordinator view.
 
 
 

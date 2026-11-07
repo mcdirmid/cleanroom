@@ -15,7 +15,7 @@ By compiling ranges into normalized comparator sets and evaluating candidate ver
 ### Contracts
 
 - A concrete range engine compiles range expressions into disjunctive normal form clauses containing sets of relational comparator bounds, trimming surrounding whitespace around expressions and clauses while permitting optional whitespace between comparator operators and target version tokens, delimiting comparators within clauses strictly by whitespace, and raising invalid range error on empty or whitespace-only inputs, empty union clauses, comma-separated comparators, and bare partial versions lacking wildcard characters across all comparator and hyphen expressions. [compile_range_comparator_sets]
-- A concrete range engine expands caret, tilde, wildcard, and hyphen range tokens into explicit upper and lower boundary pairs. [expand_range_boundary_pairs]
+- A concrete range engine expands caret, tilde, wildcard, and hyphen range tokens into explicit upper and lower boundary pairs, expanding relational wildcards, prefix wildcards, and wildcard hyphen ranges into comparator inequalities. [expand_range_boundary_pairs]
 - A concrete range engine evaluates candidate versions against compiled comparator clauses. [evaluate_range_disjunction]
 - A concrete range engine enforces pre-release filtering rules during satisfaction evaluation. [enforce_prerelease_range_rules]
 

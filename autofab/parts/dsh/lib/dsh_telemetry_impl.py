@@ -114,6 +114,8 @@ def _discover_desktop_server(sessions_dir: Optional[str] = None) -> Optional[tup
             return None
 
     if not cookies_path:
+        if os.environ.get("PYTEST_CURRENT_TEST") and not os.environ.get("AUTOFAB_ALLOW_TEST_BRIDGE"):
+            return None
         home = os.path.expanduser("~")
         candidates = [
             os.path.join(home, "Library", "Application Support", "dsh-desktop", "Cookies"),
@@ -161,6 +163,8 @@ def _discover_desktop_server(sessions_dir: Optional[str] = None) -> Optional[tup
 
 def _discover_web_bridge() -> Optional[Dict[str, Any]]:
     """Discovers active DeepSeek Harness Web loopback bridge endpoint configuration."""
+    if os.environ.get("PYTEST_CURRENT_TEST") and not os.environ.get("AUTOFAB_ALLOW_TEST_BRIDGE"):
+        return None
     p = os.path.expanduser("~/.dsh/bridge/endpoint.json")
     if os.path.isfile(p):
         try:
@@ -621,7 +625,8 @@ class DshTelemetryParser(dsh_telemetry.DshTelemetryParser):
         sessions_dir: Optional[str] = None,
     ) -> bool:
         """Evaluates whether an active DeepSeek Harness Desktop application or background server is reachable."""
-        if os.environ.get("AUTOFAB_DSH_WEB") == "1" and not sessions_dir:
+        dsh_web_dir = os.path.expanduser("~/.dsh/sessions")
+        if os.environ.get("AUTOFAB_DSH_WEB") == "1" and (not sessions_dir or os.path.abspath(sessions_dir) == os.path.abspath(dsh_web_dir)):
             bridge = _discover_web_bridge()
             if bridge:
                 res = _call_web_bridge(bridge, "dsh_list_workers", {}, timeout=2.0)
@@ -652,14 +657,16 @@ class DshTelemetryParser(dsh_telemetry.DshTelemetryParser):
         dir_scope: Optional[str] = None,
     ) -> Optional[str]:
         """Dispatches a role round over the local JSON-RPC bridge to the central DeepSeek Harness server."""
-        if os.environ.get("AUTOFAB_DSH_WEB") == "1" and not sessions_dir:
+        dsh_web_dir = os.path.expanduser("~/.dsh/sessions")
+        if os.environ.get("AUTOFAB_DSH_WEB") == "1" and (not sessions_dir or os.path.abspath(sessions_dir) == os.path.abspath(dsh_web_dir)):
             bridge = _discover_web_bridge()
             if not bridge:
                 return None
             real_ws = os.path.realpath(workspace_dir)
-            clean_scope = re.sub(r"[^a-zA-Z0-9_]", "_", dir_scope.strip("/").strip() if dir_scope else "")
-            clean_role = re.sub(r"[^a-zA-Z0-9_]", "_", role_name.strip() if role_name else "")
-            task_name = f"dsh_{clean_scope}_{clean_role}_{int(time.time() * 1000)}"[:40].strip("_")
+            clean_scope = re.sub(r"[^a-zA-Z0-9_]", "_", dir_scope.strip("/").strip() if dir_scope else "")[:16]
+            clean_role = re.sub(r"[^a-zA-Z0-9_]", "_", role_name.strip() if role_name else "")[:16]
+            entropy = uuid.uuid4().hex[:8]
+            task_name = f"dsh_{clean_scope}_{clean_role}_{int(time.time() * 1000)}_{entropy}".strip("_")
 
             saved_worker: Optional[str] = None
             if session_id:
@@ -727,6 +734,12 @@ class DshTelemetryParser(dsh_telemetry.DshTelemetryParser):
                     "cookie_value": "",
                 }
                 return task_handle
+            if res and res.get("isError"):
+                content_list = res.get("content", [])
+                err_text = ""
+                if content_list and isinstance(content_list, list):
+                    err_text = content_list[0].get("text", "")
+                sys.stderr.write(f"[DSH_WEB] dsh_spawn failed for {task_name}: {err_text}\n")
             return None
 
         server_info = _discover_desktop_server(sessions_dir)

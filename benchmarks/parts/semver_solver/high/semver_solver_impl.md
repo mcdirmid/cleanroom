@@ -19,7 +19,7 @@ A system's *concrete version engine* realizes the version engine protocol using 
 
 - Disjunctive normal form clauses containing sets of relational comparator bounds separated by union alternatives, trimming surrounding whitespace around expressions and clauses while permitting optional whitespace between comparator operators and target version tokens, delimiting comparators within clauses strictly by whitespace, and raising invalid range error on empty or whitespace-only inputs, empty union clauses, comma-separated comparators, and bare partial version numbers lacking wildcard characters across all comparator and hyphen expressions.
 
-- Explicit upper and lower boundary pairs expanded from caret, tilde, wildcard, and hyphen range tokens.
+- Explicit upper and lower boundary pairs expanded from caret, tilde, wildcard, and hyphen range tokens, expanding relational and prefix wildcards and wildcard hyphen bounds into comparator inequalities.
 
 Precedence comparison executes short-circuiting evaluation across numeric tuples and pre-release segment iterators, ignoring build metadata. Satisfaction testing evaluates candidate versions against compiled comparator clauses.
 

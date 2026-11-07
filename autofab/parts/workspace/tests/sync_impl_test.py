@@ -1060,6 +1060,25 @@ class WorkspaceSyncImplTest(unittest.TestCase):
                 content_low = f.read()
             self.assertIn("# subagent comment", content_low)
 
+            # Now upstream updates main_low (e.g. after blame/fix in main).
+            # Even though ws_low was modified locally (e.g. by blame reflection),
+            # because ws_low is read-only (not writable), pull MUST overwrite ws_low
+            # with the updated canonical version from main so auditor/consumer workspaces never keep stale copies!
+            with open(main_low, "w", encoding="utf-8") as f:
+                f.write("def foo(x: int) -> int: ...\n")
+
+            pulled4 = self.synchronizer.pull(
+                workspace_dir=ws_dir,
+                main_root=main_root,
+                role_name="lib",
+                dir_scope="scope",
+            )
+            self.assertEqual(pulled4, 1)
+            with open(ws_low, "r", encoding="utf-8") as f:
+                content_low_updated = f.read()
+            self.assertIn("def foo(x: int) -> int: ...", content_low_updated)
+            self.assertNotIn("# subagent comment", content_low_updated)
+
     def test_pull_propagates_upstream_change_when_unmodified_locally(self) -> None:
         with tempfile.TemporaryDirectory() as main_root, tempfile.TemporaryDirectory() as ws_dir:
             main_scope = os.path.join(main_root, "scope")
@@ -1192,9 +1211,9 @@ if __name__ == "__main__":
     unittest.main()
 
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-20T23:45:00Z
-# LAST_CHANGED: 2026-11-05T11:45:00Z
-# CHANGE: Test that pull only pulls changed files and never clobbers subagent edits
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
+# LAST_CLEANED: 2026-11-06T20:48:04Z
+# LAST_CHANGED: 2026-11-06T20:48:04Z
+# CHANGE: Test that pull overwrites read-only upstream files when canonical version changes in main
+# COVERAGE_AUDIT: 2026-11-06T20:48:05Z
+# QA_AUDIT: 2026-11-06T20:48:05Z
 # --- END CLEANROOM METADATA ---

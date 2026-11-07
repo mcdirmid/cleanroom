@@ -221,13 +221,15 @@ class VersionEngine(Protocol):
             InvalidRangeError: If text contains malformed range syntax.
 
         PRECONDITIONS:
-        - WHEN text supplies bare partial versions lacking wildcard characters across any comparator or hyphen expression (such as '1', '1.2', '^0.0', or '1.2 - 2.3'), MUST raise InvalidRangeError.
+        - WHEN text supplies bare partial versions lacking wildcard characters across any comparator or hyphen expression (such as '1', '1.2', '>1.2', '^0.0', or '1.2 - 2.3'), MUST raise InvalidRangeError.
         - WHEN text is empty, contains only whitespace, contains empty union clauses, uses comma delimiters, or violates range syntax, MUST raise InvalidRangeError.
 
         POSTCONDITIONS:
-        - MUST parse range expression text supporting basic comparators (==, =, !=, <, <=, >, >=), caret ranges (^), tilde ranges (~), wildcards (*, x, X, M.x, M.*, M.m.x, M.m.*), hyphen ranges (M1.m1.p1 - M2.m2.p2), and unions (||).
+        - MUST parse range expression text supporting basic comparators (==, =, !=, <, <=, >, >=), caret ranges (^), and tilde ranges (~) applied to either full semantic versions or wildcard expressions (e.g. '>=1.x', '!=1.x', '>1.*', '^1.x', '~1.2.x', '>=*').
+        - MUST parse hyphen ranges connecting two version bounds ('bound1 - bound2'), where each bound is either a full semantic version or a wildcard expression (e.g. '1.0.0 - 2.x', '1.x - 2.x').
+        - MUST parse union alternatives separated by '||'.
         - MUST trim surrounding whitespace around range expressions and individual clauses, storing the trimmed range expression in raw_text.
-        - MUST accept optional whitespace between relational/prefix operators and target versions or wildcards (e.g. '>= 1.0.0' is equivalent to '>=1.0.0').
+        - MUST accept optional whitespace between relational/prefix operators and target versions or wildcards (e.g. '>= 1.0.0' is equivalent to '>=1.0.0', '>= 1.x' is equivalent to '>=1.x').
         - MUST delimit comparators within clauses strictly by whitespace; commas are not permitted.
         """
         ...

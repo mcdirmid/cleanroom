@@ -1,0 +1,16 @@
+[CLEAN] benchmarks/parts/dag_engine/high/dag_engine_impl.md
+[CHANGE] benchmarks/parts/dag_engine/scenarios/dag_engine_impl.md: Reuse interface Scenario 7 (runner cancellation status inspection) with realization, renumber implementation-only concurrent runner scenario to 8, and remove duplicated cancellation scenario
+[CLEAN] benchmarks/parts/semver_solver/scenarios/semver_solver_impl.md
+[CHANGE] benchmarks/parts/inter_interface/tests/inter_interface_impl_test.py: Author allocator contract tests: zero initial allocated, allocate withdraw+increment accumulation, non-positive AllocationLimitError, insufficient-funds and inactive-vault propagation, release deposit+decrement, release limit errors, inactive release; mock vault collaborator registered under system tier phase scope.
+[CHANGE] benchmarks/parts/inter_interface/tests/vault_impl_test.py: Author vault contract tests: zero balance/active initial state, deposit increment and non-positive error, inactive deposit/withdraw exceptions, withdraw decrement and over-balance error, set_active availability toggle; singleton resolved via isolated registry phase scope.
+[CLEAN] benchmarks/parts/semver_solver_multi/low/dependency_solver.pyi
+[CLEAN] benchmarks/parts/semver_solver_multi/low/dependency_solver_impl.pyi
+[CLEAN] benchmarks/parts/lru_cache/low/lru_cache_impl.pyi
+[CLEAN] benchmarks/parts/ring_buffer/low/ring_buffer_impl.pyi
+[AUDIT] benchmarks/parts/lru_cache/high/lru_cache.md: SPEC_QA_AUDIT
+[AUDIT] benchmarks/parts/lru_cache/high/lru_cache_impl.md: SPEC_QA_AUDIT
+[AUDIT] benchmarks/parts/ring_buffer/high/ring_buffer.md: SPEC_QA_AUDIT
+[AUDIT] benchmarks/parts/ring_buffer/high/ring_buffer_impl.md: SPEC_QA_AUDIT
+[CLEAN] benchmarks/parts/dag_engine/planning/dag_engine.md
+[CLEAN] benchmarks/parts/dag_engine/planning/dag_engine_impl.md
+[CLEAN] benchmarks/parts/dag_engine_lite/planning/dag_engine_lite_impl.md

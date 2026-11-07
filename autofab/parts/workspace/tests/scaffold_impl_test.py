@@ -3,6 +3,8 @@
 import json
 import os
 import stat
+import subprocess
+import sys
 import tempfile
 import unittest
 import zipfile
@@ -96,6 +98,17 @@ class WorkspaceScaffoldImplTest(unittest.TestCase):
                                 name.endswith((".pyc", ".py", ".toml")),
                                 f"Expected module .pyc, .py, or .toml in zipapp but found: {name}",
                             )
+
+                # Verify that the tool executes cleanly as a standalone binary
+                res_tool = subprocess.run([tool_path, "--help"], capture_output=True, text=True)
+                self.assertEqual(res_tool.returncode, 0, f"Execution of {tool} failed: {res_tool.stderr}")
+                self.assertIn("usage:", res_tool.stdout.lower())
+
+                # Also verify with Homebrew python if present (e.g. Python 3.14 on macOS)
+                homebrew_py = "/opt/homebrew/bin/python3"
+                if os.path.isfile(homebrew_py) and homebrew_py != sys.executable:
+                    res_alt = subprocess.run([homebrew_py, tool_path, "--help"], capture_output=True, text=True)
+                    self.assertEqual(res_alt.returncode, 0, f"Execution of {tool} under {homebrew_py} failed: {res_alt.stderr}")
 
             # When deployed for a role without blame capability, blame and feedback are omitted
             role_no_blame = roles.RoleDefinition(

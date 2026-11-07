@@ -438,7 +438,6 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
 
                 if manifest_entry is not None:
                     prev_src_hash = manifest_entry.get("main_hash")
-                    prev_ws_hash = manifest_entry.get("ws_hash")
                     src_changed_upstream = (prev_src_hash != current_src_hash)
 
                     if not src_changed_upstream:
@@ -475,15 +474,8 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
                                 # Local code is clean: pull updated upstream version
                                 needs_copy = True
                         else:
-                            local_modified = False
-                            if prev_ws_hash and current_ws_hash != prev_ws_hash:
-                                local_modified = True
-
-                            if local_modified:
-                                # Never clobber subagent edits in workspace
-                                needs_copy = False
-                            else:
-                                needs_copy = True
+                            # Read-only upstream dependency or audited target changed in main: always pull updated version
+                            needs_copy = True
                 else:
                     # Unmanifested workspace (e.g. preexisting workspace or unit test baseline)
                     local_modified = False
@@ -491,16 +483,6 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
                         try:
                             local_modified = src_metadata.is_code_modified(dst_f)
                         except OSError:
-                            local_modified = False
-                    else:
-                        try:
-                            with open(src_f, "r", encoding="utf-8") as sf, open(dst_f, "r", encoding="utf-8") as df:
-                                src_content = sf.read()
-                                dst_content = df.read()
-                            src_projected = _project_for_role_workspace(src_content, os.path.basename(src_f), is_writable=False)
-                            if src_projected != dst_content:
-                                local_modified = True
-                        except Exception:
                             local_modified = False
 
                     if local_modified:
@@ -875,11 +857,11 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
             flushed_blames=flushed_blames,
         )
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-20T23:45:00Z
-# LAST_CHANGED: 2026-11-05T11:45:00Z
-# CHANGE: Evaluate pull against pull manifest and prevent clobbering subagent edits
-# COVERAGE_AUDIT: 2026-10-15T17:42:47Z
-# QA_AUDIT: 2026-10-15T17:42:47Z
+# LAST_CLEANED: 2026-11-06T20:48:04Z
+# LAST_CHANGED: 2026-11-06T20:48:04Z
+# CHANGE: Always overwrite read-only upstream files on pull when canonical version changes in main
+# COVERAGE_AUDIT: 2026-11-06T20:48:05Z
+# QA_AUDIT: 2026-11-06T20:48:05Z
 # --- END CLEANROOM METADATA ---
 
 

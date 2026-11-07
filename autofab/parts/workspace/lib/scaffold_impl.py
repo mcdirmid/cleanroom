@@ -278,17 +278,23 @@ def _collect_and_compile_runner_pycs(bin_dir: str) -> dict[str, bytes]:
             empty_init_bytes = f.read()
 
         pycs["support/__init__.pyc"] = empty_init_bytes
+        pycs["support/__init__.py"] = b""
         pycs["support/lib/__init__.pyc"] = empty_init_bytes
+        pycs["support/lib/__init__.py"] = b""
         for sdir in support_dirs:
             try:
                 pkg_dir = os.path.dirname(os.path.dirname(os.path.abspath(sdir)))
                 pkg_name = os.path.basename(pkg_dir)
                 if pkg_name:
                     pycs[f"{pkg_name}/__init__.pyc"] = empty_init_bytes
+                    pycs[f"{pkg_name}/__init__.py"] = b""
                     pycs[f"{pkg_name}/support/__init__.pyc"] = empty_init_bytes
+                    pycs[f"{pkg_name}/support/__init__.py"] = b""
                     pycs[f"{pkg_name}/support/lib/__init__.pyc"] = empty_init_bytes
+                    pycs[f"{pkg_name}/support/lib/__init__.py"] = b""
                     if os.path.isdir(os.path.join(pkg_dir, "parts")):
                         pycs[f"{pkg_name}/parts/__init__.pyc"] = empty_init_bytes
+                        pycs[f"{pkg_name}/parts/__init__.py"] = b""
 
                 for fname in os.listdir(sdir):
                     if fname.endswith(".py"):
@@ -306,7 +312,11 @@ def _collect_and_compile_runner_pycs(bin_dir: str) -> dict[str, bytes]:
                             if not is_lifecycle or is_canonical_lifecycle or arcname_py not in pycs:
                                 try:
                                     with open(src_path, "rb") as sf:
-                                        pycs[arcname_py] = sf.read()
+                                        src_bytes = sf.read()
+                                        pycs[arcname_py] = src_bytes
+                                        pycs[f"support/lib/{arcname_py}"] = src_bytes
+                                        if pkg_name:
+                                            pycs[f"{pkg_name}/support/lib/{arcname_py}"] = src_bytes
                                 except Exception:
                                     pass
                             if not is_lifecycle or is_canonical_lifecycle or arcname_pyc not in pycs:
@@ -334,11 +344,17 @@ def _collect_and_compile_runner_pycs(bin_dir: str) -> dict[str, bytes]:
                                     k = "/".join(long_segs[:i]) + "/__init__.pyc"
                                     if k not in pycs:
                                         pycs[k] = empty_init_bytes
+                                    k_py = "/".join(long_segs[:i]) + "/__init__.py"
+                                    if k_py not in pycs:
+                                        pycs[k_py] = b""
                                 short_segs = rel_short.split("/")
                                 for i in range(1, len(short_segs)):
                                     k = "/".join(short_segs[:i]) + "/__init__.pyc"
                                     if k not in pycs:
                                         pycs[k] = empty_init_bytes
+                                    k_py = "/".join(short_segs[:i]) + "/__init__.py"
+                                    if k_py not in pycs:
+                                        pycs[k_py] = b""
 
                                 for f in files:
                                     if f.endswith(".py"):
@@ -350,6 +366,10 @@ def _collect_and_compile_runner_pycs(bin_dir: str) -> dict[str, bytes]:
                                                 pyc_data = pf.read()
                                                 pycs[f"{rel_long}/{f}c"] = pyc_data
                                                 pycs[f"{rel_short}/{f}c"] = pyc_data
+                                            with open(src, "rb") as sf:
+                                                py_data = sf.read()
+                                                pycs[f"{rel_long}/{f}"] = py_data
+                                                pycs[f"{rel_short}/{f}"] = py_data
                                         except Exception:
                                             pass
         except Exception:
@@ -568,6 +588,35 @@ if not main_root and embedded_main and os.path.isdir(embedded_main):
 if main_root:
     os.environ["AUTOFAB_MAIN_ROOT"] = main_root
     os.environ["UV_PROJECT"] = main_root
+
+if sys.version_info[:2] != (3, 12):
+    import shutil
+    _cands = []
+    if main_root:
+        _cands.extend([
+            os.path.join(main_root, ".venv", "bin", "python"),
+            os.path.join(main_root, ".venv", "bin", "python3"),
+            os.path.join(main_root, ".venv", "bin", "python3.12"),
+        ])
+    _venv = os.environ.get("VIRTUAL_ENV")
+    if _venv:
+        _cands.extend([
+            os.path.join(_venv, "bin", "python"),
+            os.path.join(_venv, "bin", "python3"),
+            os.path.join(_venv, "bin", "python3.12"),
+        ])
+    _home = os.path.expanduser("~")
+    _cands.extend([
+        os.path.join(_home, ".pyenv", "shims", "python3.12"),
+        os.path.join(_home, ".pyenv", "shims", "python3"),
+        shutil.which("python3.12"),
+    ])
+    for _cand in _cands:
+        if _cand and os.path.isfile(_cand) and os.access(_cand, os.X_OK):
+            try:
+                os.execv(_cand, [_cand] + sys.argv)
+            except OSError:
+                pass
 
 if curr and os.path.isdir(curr):
     if curr not in sys.path:

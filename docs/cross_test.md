@@ -263,25 +263,31 @@ The [`semver_solver`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/p
 
 ### 4.2 Evaluated Benchmark Runs
 
-Five independent synthesis runs were evaluated in [`benchmarks/results/semver_solver`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/results/semver_solver):
+Eight independent synthesis runs were evaluated in [`benchmarks/results/semver_solver`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/results/semver_solver):
 
 1. **`deepseek-flash`**: Standard Cleanroom/Autofab pipeline with multi-role adversarial review (`coverage`, `lib`, `qa`, `test`).
 2. **`deepseek-flash-baseline`**: Monolithic single-prompt baseline without adversarial review.
 3. **`deepseek-flash-combined`**: Fused multi-role pipeline combining unit tests and formal Pretense state machine verification.
-4. **`deepseek-flash-pretense`**: Pure formal property-based specification pipeline with adversarial contract auditing.
-5. **`deepseek-flash-pretense-baseline`**: Monolithic single-prompt baseline generating Pretense state machine contracts and library code in a single turn without review.
+4. **`deepseek-flash-combined-baseline`**: Monolithic single-prompt baseline generating implementations alongside both unit tests and Pretense state machine suites without review.
+5. **`deepseek-flash-pretense`**: Pure formal property-based specification pipeline with adversarial contract auditing.
+6. **`deepseek-flash-pretense-baseline`**: Monolithic single-prompt baseline generating Pretense state machine contracts and library code in a single pass without review.
+7. **`gemini-argon-combined`**: Fused multi-role Cleanroom Combined pipeline executed on `gemini-argon` (Tier 4) across all 7 roles (`coverage`, `lib`, `pretense`, `pretense_coverage`, `pretense_qa`, `qa`, `test`).
+8. **`gemini-argon-combined-baseline`**: Monolithic single-prompt Combined Baseline executed on `gemini-argon` (Tier 4) in a single un-audited round.
 
 ---
 
 ### 4.3 Quantitative Telemetry & Efficiency Comparison
 
-| Benchmark Run | Methodology | Rounds | Duration (s) | Cost ($USD) | Uncached Inbound | Cached Inbound | Outbound | Total Tokens | Line Coverage | Branch Coverage |
+| Benchmark Run | Methodology | Rounds | Duration (s) | Cost (\$USD) | Uncached Inbound | Cached Inbound | Outbound | Total Tokens | Line Coverage | Branch Coverage |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **`deepseek-flash`** | Cleanroom Standard | 14 | 557.86s | $0.1190 | 179,307 | 6,854,144 | 141,458 | 7,174,909 | 95.0% | 90.0% |
-| **`deepseek-flash-baseline`** | Standard Baseline | 1 | 358.12s | $0.0512 | 41,234 | 2,458,112 | 68,912 | 2,568,258 | 95.0% | 90.0% |
-| **`deepseek-flash-combined`** | Cleanroom Combined | 23 | 1485.20s | $0.3568 | 345,190 | 24,198,400 | 312,450 | 24,856,040 | 98.0% | 94.0% |
-| **`deepseek-flash-pretense`** | Cleanroom Pretense | 17 | 1582.40s | $0.3751 | 362,110 | 25,489,152 | 329,812 | 26,181,074 | 99.0% | 99.0% |
-| **`deepseek-flash-pretense-baseline`** | Pretense Baseline | 1 | 341.15s | $0.0487 | 39,812 | 2,345,600 | 65,120 | 2,450,532 | 99.0% | 99.0% |
+| **`deepseek-flash`** | Cleanroom Standard | 14 | 557.86s | \$0.1190 | 179,307 | 6,854,144 | 141,458 | 7,174,909 | 95.0% | 90.0% |
+| **`deepseek-flash-baseline`** | Standard Baseline | 1 | 358.12s | \$0.0512 | 41,234 | 2,458,112 | 68,912 | 2,568,258 | 95.0% | 90.0% |
+| **`deepseek-flash-combined`** | Cleanroom Combined | 23 | 1485.20s | \$0.3568 | 345,190 | 24,198,400 | 312,450 | 24,856,040 | 98.0% | 94.0% |
+| **`deepseek-flash-combined-baseline`** | Combined Baseline | 1 | 618.68s | \$0.0958 | 78,386 | 7,398,656 | 103,002 | 7,580,044 | 100.0% | 100.0% |
+| **`deepseek-flash-pretense`** | Cleanroom Pretense | 17 | 1582.40s | \$0.3751 | 362,110 | 25,489,152 | 329,812 | 26,181,074 | 99.0% | 99.0% |
+| **`deepseek-flash-pretense-baseline`** | Pretense Baseline | 1 | 341.15s | \$0.0487 | 39,812 | 2,345,600 | 65,120 | 2,450,532 | 99.0% | 99.0% |
+| **`gemini-argon-combined`** | Cleanroom Combined (Gemini Argon) | 27 | 3064.83s | \$12.2584 | 1,462,505 | 12,627,543 | 301,962 | 14,392,010 | 100.0% | 100.0% |
+| **`gemini-argon-combined-baseline`** | Combined Baseline (Gemini Argon) | 1 | 1416.77s | \$4.3439 | 279,964 | 5,215,337 | 117,631 | 5,612,932 | 97.6% | 95.8% |
 
 ---
 
@@ -291,31 +297,38 @@ Cross-testing was executed using [`bin/run_cross_tests.py`](file:///Users/seanmc
 
 ```bash
 uv run python bin/run_cross_tests.py --suite semver_solver --mode auto --detailed
+uv run python bin/run_cross_tests.py --suite semver_solver --mode unit --detailed
 ```
 
 #### 4.4.1 Cross-Implementation Soundness Evaluation ($L_{\text{impl}}$)
 
-| Target Implementation | Self Pass | True Defects (Lib Broken) | False Alarms (Test Broken) | Contractual Soundness Verdict | Failure Root Cause Breakdown |
+| Target Implementation | Self Pass (Auto / Unit) | True Defects (Lib Broken) | False Alarms (Test Broken) | Contractual Soundness Verdict | Failure Root Cause Breakdown |
 | :--- | :---: | :---: | :---: | :---: | :--- |
-| **`deepseek-flash-pretense`** | 19/19 (100%) | **0** | **0** | 🟢 **100% SOUND** | **Zero specification defects.** Passed 100% of foreign tests (70/70). Mathematically modeled open intervals and relational wildcards ($>1.x \implies \ge 2.0.0$, $!=1.x \implies <1.0.0 \lor \ge 2.0.0$). |
-| **`deepseek-flash-pretense-baseline`** | 9/9 (100%) | **1** | **0** | 🟡 **NEAR SOUND (1 Defect)** | Failed 1 caret partial boundary check (`test_caret_expansion_boundaries` in Pretense). Otherwise fully conformant across 79 tests. |
-| **`deepseek-flash-baseline`** | 16/16 (100%) | **1 Defect Family** | **0** | 🔴 **DEFECTIVE (Relational Wildcards)** | Failed relational wildcard boundary checks (`!=1.x`, `1.2.3 - 2.x`) when evaluated against Pretense state machines. |
-| **`deepseek-flash`** (Standard) | 35/35 (100%) | **1 Defect Family** | **0** | 🔴 **DEFECTIVE (Wildcard Prohibition)** | Explicitly raised `InvalidRangeError` claiming `"operator cannot apply to a wildcard"` on valid forms (`>1.x`, `~1.2.x`, `!=*`). Exposed across 29 test cases in foreign baseline and Pretense test suites. |
-| **`deepseek-flash-combined`** | 10/10 (100%) | **1 Defect Family** | **0** | 🔴 **DEFECTIVE (Wildcard Prohibition)** | Replicated the same uncontracted wildcard prohibition (`>1.x`, `~1.2.x`, `!=*`), escaping detection because unit tests did not assert relational wildcards. |
+| **`deepseek-flash-pretense`** | 10/10 (100%) | **0** | **2** | 🟢 **100% SOUND** | **Zero specification defects.** Mathematically modeled open intervals and relational wildcards ($>1.x \implies \ge 2.0.0$, $!=1.x \implies <1.0.0 \lor \ge 2.0.0$). Only failed 2 false alarms: `deepseek-flash` asserting `raw_range == ''` instead of `'   '` on whitespace-only input, and `gemini-argon-combined` forging negative assertions that `>1.*` and `^1.*` must raise `InvalidRangeError`. |
+| **`deepseek-flash-combined`** | 17/17 · 37/37 (100%) | **0** | **3** | 🟢 **100% SOUND** | **Zero specification defects.** Passed 100% of `deepseek-flash-pretense`, `deepseek-flash-combined-baseline`, `deepseek-flash-pretense-baseline`, and `gemini-argon-combined-baseline` Pretense suites. Only failed 3 false alarms: (1) `raw_range == ''` vs `'   '` in `deepseek-flash`, (2) non-SemVer leading-zero numeric comparison (`"01"` vs `"1"`) in `deepseek-flash-baseline`, and (3) `gemini-argon-combined`'s forged negative assertion on `>1.*`. |
+| **`deepseek-flash-combined-baseline`** | 15/15 · 17/17 (100%) | **2** | **2** | 🟡 **NEAR SOUND (2 Defects)** | Passed 100% of relational wildcard checks, but suffered 2 semantic defects: (1) `satisfies(Version("1.0.0-alpha.1"), VersionRange("*"), include_prerelease=False)` returned `True`, violating pre-release exclusion on bare wildcards (caught by `gemini-argon-combined-baseline`, `gemini-argon-combined`, and `deepseek-flash`), and (2) selected lower compatible release `1.2.0` instead of highest `2.0.0` during transitive dependency resolution (caught by `deepseek-flash-combined` unit tests). |
+| **`deepseek-flash`** (Standard) | 30/30 (100%) | **1 Defect Family** | **1** | 🔴 **DEFECTIVE (Unbounded Wildcard Prohibition)** | Supported partial relational wildcards (`>=1.x`, `!=1.x`, `^0.x`, `1.2.3 - 2.x`), but explicitly raised `InvalidRangeError` on bare unbounded wildcard comparators (`>=*`, `!=*`, `>*`, `<*`, `<=*`, `^x`, `1.2.3 - *`) claiming `"unbounded wildcard has no finite boundary"`. |
+| **`deepseek-flash-baseline`** | 18/18 (100%) | **1 Defect Family** | **1** | 🔴 **DEFECTIVE (Relational Wildcards)** | Raised `InvalidRangeError("Unsupported wildcard comparator")` on `!=1.x`, `!=*`, `^0.x`, `^x`, and rejected wildcard hyphen bounds (`1.2.3 - 2.x`, `1.x - 2.x`). |
+| **`deepseek-flash-pretense-baseline`** | 13/13 (100%) | **1 Defect Family** | **1** | 🔴 **DEFECTIVE (Wildcard Prohibition)** | Rejected all operator-prefixed wildcards (`==1.x`, `== *`, `>=1.x`, `!=1.x`, `^0.x`, `= *`, `^x`) and wildcard hyphen endpoints (`1.2.3 - 2.x`). |
+| **`gemini-argon-combined`** | 3/3 · 15/15 (100%) | **1 Defect Family** | **1** | 🔴 **DEFECTIVE (Wildcard Operator Prohibition)** | Passed 100% of standard SemVer 2.0, pre-release, and dependency backtracking tests (including `1.2.0 - 1.4.0 != 1.3.0`), plus `^x`/`^0.x` in Pretense/Unit suites where applicable, but explicitly rejected relational operators combined with wildcards (`>=1.x`, `!=1.x`, `>=*`, `!=*`) with `InvalidRangeError("Relational operator with wildcard ... is invalid")` and delegated hyphen endpoints directly to `parse_version`, rejecting `1.2.3 - 2.x`. |
+| **`gemini-argon-combined-baseline`** | 4/4 · 13/13 (100%) | **1 Defect Family** | **1** | 🔴 **DEFECTIVE (Wildcard Operator Prohibition)** | Exhibited the exact same family of rejections on operator-prefixed wildcards (`>=1.x`, `!=1.x`, `^0.x`, `>=*`, `!=*`, `^x`) and wildcard hyphen bounds (`1.2.3 - 2.x`, `1.x - 2.x`). |
 
 ---
 
 #### 4.4.2 Pairwise Defect Attribution Matrix ($T_{\text{suite}} \to L_{\text{impl}}$)
 
-Each cell shows `True Defects (Lib Broken) / False Alarms (Test Broken)`:
+Each cell shows `True Defects (Lib Broken) / False Alarms (Test Broken)` under `--mode auto`:
 
-| Target Implementation | `DeepSeek Standard` | `DeepSeek Baseline` | `DeepSeek Combined` | `DeepSeek Pretense` | `DeepSeek Base Pretense` | Total True Defects | Total False Alarms |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **`Pretense` (`deepseek-flash-pretense`)** | **0 Lib** / 0 Test | **0 Lib** / 0 Test | **0 Lib** / 0 Test | — | **0 Lib** / 0 Test | **0** | **0** |
-| **`Pret-Base` (`deepseek-flash-pretense-baseline`)** | **0 Lib** / 0 Test | **0 Lib** / 0 Test | **0 Lib** / 0 Test | **1 Lib** / 0 Test ⚠️ | — | **1** | **0** |
-| **`Baseline` (`deepseek-flash-baseline`)** | **0 Lib** / 0 Test | — | **0 Lib** / 0 Test | **1 Lib** / 0 Test ⚠️ | **1 Lib** / 0 Test ⚠️ | **1 Defect Family** | **0** |
-| **`Standard` (`deepseek-flash`)** | — | **1 Lib** / 0 Test ⚠️ | **0 Lib** / 0 Test | **1 Lib** / 0 Test ⚠️ | **1 Lib** / 0 Test ⚠️ | **1 Defect Family** | **0** |
-| **`Combined` (`deepseek-flash-combined`)** | **0 Lib** / 0 Test | **1 Lib** / 0 Test ⚠️ | — | **1 Lib** / 0 Test ⚠️ | **1 Lib** / 0 Test ⚠️ | **1 Defect Family** | **0** |
+| Target Implementation | `DS Standard` | `DS Baseline` | `DS Combined` | `DS Comb-Base` | `DS Pretense` | `DS Pret-Base` | `GA Combined` | `GA Comb-Base` | Total True Defects | Total False Alarms |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **`DS Pretense` (`deepseek-flash-pretense`)** | **0 Lib** / 1 Test ⚠️ | **0 Lib** / 0 Test | **0 Lib** / 0 Test | **0 Lib** / 0 Test | — | **0 Lib** / 0 Test | **0 Lib** / 1 Test ⚠️ | **0 Lib** / 0 Test | **0** | **2** |
+| **`DS Combined` (`deepseek-flash-combined`)** | **0 Lib** / 1 Test ⚠️ | **0 Lib** / 1 Test ⚠️ | — | **0 Lib** / 0 Test | **0 Lib** / 0 Test | **0 Lib** / 0 Test | **0 Lib** / 1 Test ⚠️ | **0 Lib** / 0 Test | **0** | **3** |
+| **`DS Comb-Base` (`deepseek-flash-combined-baseline`)** | **1 Lib** / 1 Test ⚠️ | **0 Lib** / 0 Test | **0 Lib** / 0 Test | — | **0 Lib** / 0 Test | **0 Lib** / 0 Test | **0 Lib** / 1 Test ⚠️ | **1 Lib** / 0 Test ⚠️ | **2** | **2** |
+| **`DS Standard` (`deepseek-flash`)** | — | **0 Lib** / 0 Test | **3 Lib** / 0 Test ⚠️ | **9 Lib** / 0 Test ⚠️ | **2 Lib** / 0 Test ⚠️ | **0 Lib** / 0 Test | **0 Lib** / 1 Test ⚠️ | **0 Lib** / 0 Test | **14 (1 Family)** | **1** |
+| **`DS Baseline` (`deepseek-flash-baseline`)** | **3 Lib** / 1 Test ⚠️ | — | **4 Lib** / 0 Test ⚠️ | **16 Lib** / 0 Test ⚠️ | **2 Lib** / 0 Test ⚠️ | **0 Lib** / 0 Test | **0 Lib** / 1 Test ⚠️ | **0 Lib** / 0 Test | **25 (1 Family)** | **2** |
+| **`DS Pret-Base` (`deepseek-flash-pretense-baseline`)** | **3 Lib** / 1 Test ⚠️ | **2 Lib** / 1 Test ⚠️ | **4 Lib** / 0 Test ⚠️ | **33 Lib** / 0 Test ⚠️ | **2 Lib** / 0 Test ⚠️ | — | **1 Lib** / 0 Test ⚠️ | **0 Lib** / 0 Test | **45 (1 Family)** | **2** |
+| **`GA Combined` (`gemini-argon-combined`)** | **3 Lib** / 0 Test ⚠️ | **2 Lib** / 1 Test ⚠️ | **4 Lib** / 0 Test ⚠️ | **33 Lib** / 0 Test ⚠️ | **2 Lib** / 0 Test ⚠️ | **0 Lib** / 0 Test | — | **0 Lib** / 0 Test | **44 (1 Family)** | **1** |
+| **`GA Comb-Base` (`gemini-argon-combined-baseline`)** | **3 Lib** / 0 Test ⚠️ | **2 Lib** / 1 Test ⚠️ | **4 Lib** / 0 Test ⚠️ | **33 Lib** / 0 Test ⚠️ | **2 Lib** / 0 Test ⚠️ | **0 Lib** / 0 Test | **0 Lib** / 0 Test | — | **44 (1 Family)** | **1** |
 
 ---
 
@@ -323,32 +336,31 @@ Each cell shows `True Defects (Lib Broken) / False Alarms (Test Broken)`:
 
 | Test Suite | Self Pass | Foreign Tests Run | True Bugs Caught (Lib Broken) | False Alarms Caused (Test Broken) | Oracle Quality Verdict | Diagnostic Rigor Notes |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **`deepseek-flash-baseline`** | 16/16 (100%) | 92 | **28** | **0** | 🟢 **HIGH RIGOR ORACLE** | Thoroughly exercised relational wildcards (`!=1.x`, `>1.x`, `<=1.x`, `~1.2.x`), catching 28 true defects with zero false alarms. |
-| **`deepseek-flash-pretense-baseline`** | 9/9 (100%) | 58 | **22** | **0** | 🟢 **HIGH RIGOR ORACLE** | Caught wildcard operator rejections across standard and combined implementations with zero false alarms. |
-| **`deepseek-flash-pretense`** | 19/19 (100%) | 76 | **14** | **0** | 🟢 **SOUND ORACLE** | State machine verified caret wildcard expansions, relational wildcards, and hyphen spans. |
-| **`deepseek-flash`** | 35/35 (100%) | 140 | **0** | **0** | ⚪ **PERMISSIVE ORACLE** | Omitted wildcard relational operations, allowing broken parsers to pass. |
-| **`deepseek-flash-combined`** | 10/10 (100%) | 40 | **0** | **0** | ⚪ **PERMISSIVE ORACLE** | Focused on standard version bounds, missing wildcard relational edge cases. |
+| **`deepseek-flash-combined`** (Pretense & Unit) | 17/17 · 37/37 (100%) | 119 / 186 | **19 / 18** | **0** | 🟢 **HIGH RIGOR ORACLE (100% Precision)** | Exercised relational wildcards (`!=1.x`, `>=*`), wildcard hyphen bounds (`1.x - 2.x`), and transitive highest-version selection with zero false alarms. |
+| **`deepseek-flash-combined-baseline`** (Pretense) | 15/15 (100%) | 229 | **124** | **0** | 🟢 **HIGH RIGOR ORACLE (100% Precision)** | Parameterized subtests thoroughly exercised every combination of relational operator and wildcard (`!=1.x`, `>=1.x`, `>1.x`, `<1.x`, `<=1.x`, `!=*`, `>=*`, `1.2.3 - 2.x`, `1.2.3 - *`) with zero false alarms. |
+| **`deepseek-flash-pretense`** (Pretense) | 10/10 (100%) | 70 | **10** | **0** | 🟢 **SOUND ORACLE (100% Precision)** | Verified `>=*`, `!=*`, `=*`, and `^x` algebra across all foreign implementations with zero false alarms. |
+| **`gemini-argon-combined-baseline`** (Pretense) | 4/4 (100%) | 28 | **1** | **0** | 🟢 **SOUND CONFORMANT ORACLE** | Caught pre-release leakage on bare wildcard `*` in `deepseek-flash-combined-baseline` (`test_version_engine_conformance`) with zero false alarms in Pretense mode. |
+| **`deepseek-flash`** (Unit) | 30/30 (100%) | 210 | **13** | **5** | 🟡 **HIGH RIGOR (1 Minor Oracle Flaw)** | Caught 13 true wildcard and pre-release bugs, but asserted `ctx.exception.raw_range == ''` when passing `'   '` to `parse_range('   ')`, causing 5 false alarms on implementations that preserve the original unparsed `raw_range='   '`. |
+| **`deepseek-flash-baseline`** (Unit) | 18/18 (100%) | 126 | **6** | **4** | 🟡 **MODERATE RIGOR (1 Invalid Input Test)** | Caught `>=1.x` and `==1.x` rejections, but constructed `Version(1, 0, 0, prerelease=("01",))` directly (violating SemVer 2.0's no-leading-zeroes precondition on numeric pre-release identifiers) and asserted `compare_precedence` treated `"01" == "1"`, causing 4 false alarms. |
+| **`gemini-argon-combined`** (Pretense & Unit) | 3/3 · 15/15 (100%) | 21 / 75 | **2** | **5** | 🔴 **FORGED WILDCARD EXCLUSION ORACLE** | Unit suite caught pre-release leakage on `*` in `deepseek-flash-combined-baseline` and tested compound hyphen-comparator clauses (`1.2.0 - 1.4.0 != 1.3.0`), but Pretense suite forged negative assertions that valid wildcard ranges (`>1.*`, `>=1.2.*`, `^1.*`, `~1.2.*`, `1.0.0 - *`) must raise `InvalidRangeError`, causing 5 false alarms across sound implementations. |
+| **`deepseek-flash-pretense-baseline`** (Pretense) | 13/13 (100%) | 91 | **0** | **0** | ⚪ **PERMISSIVE ORACLE** | Tested only standard non-wildcard comparators and caret/tilde ranges, allowing all wildcard-prohibiting parsers to pass. |
 
-### 4.5 Root-Cause Analysis: The Wildcard Relational Prohibition Defect
+### 4.5 Root-Cause Analysis: Cross-Model Wildcard Interval Algebra vs. Syntactic Prohibition
 
-Differential cross-testing uncovered a profound semantic divergence between pipelines:
+Adding `gemini-argon-combined` and `gemini-argon-combined-baseline` reveals a striking cross-model phenomenon:
 
-#### The Defect: Prohibiting Relational Operators on Wildcards
-In both `deepseek-flash` and `deepseek-flash-combined`, the library author wrote:
-```python
-# From deepseek-flash/lib_1.py line 325:
-if operator in ("!=", ">", ">=", "<", "<=", "^", "~") and "x" in text:
-    raise _invalid_range(raw_range, f"operator {operator!r} cannot apply to a wildcard")
-```
-- **Specification Grounding**: The specification ([`low/semver_solver.pyi`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/parts/semver_solver/low/semver_solver.pyi)) states:
-  > `MUST accept optional whitespace between relational/prefix operators and target versions or wildcards (e.g. '>= 1.0.0' is equivalent to '>=1.0.0').`
-  The contract expressly allows operators to precede wildcards (`>=1.x`, `<1.x`, `!=1.x`, `^1.x`).
-- **Why Standalone Pretense Achieved 100% Soundness**:
-  In `deepseek-flash-pretense`, the multi-role auditor rejected premature exclusions during round 14:
-  > `[BLAME] The wildcard relational normalization in _comparator_intervals is off by one at the interval's upper boundary: an operand such as '1.x' denotes the half-open interval [1.0.0, 2.0.0) with an exclusive upper bound, so a strict-greater comparator '>1.x' must normalize to >=2.0.0... yet line 250 builds (upper, False, None, True)... contradictions the contract requirement that wildcards normalize into paired comparator inequalities...`
-  Because the Pretense auditor forced the library worker to mathematically model wildcard intervals ($>1.x \implies \ge 2.0.0$, $\le 1.x \implies < 2.0.0$, $!=1.x \implies <1.0.0 \lor \ge 2.0.0$), `deepseek-flash-pretense` achieved **perfect 100% cross-implementation soundness**.
-- **The Cost of Earlier Termination in Combined**:
-  In `combined`, unit tests allowed the run to converge earlier ($0.3568 vs $0.3751). However, because unit tests did not assert relational wildcards, the library's uncontracted prohibition escaped QA detection, causing `combined` to fail 29 foreign cross-tests.
+1. **Both `gemini-argon` Runs Restricted Wildcards to Standalone / Equality Forms**:
+   - In [`gemini-argon-combined/lib_1.py`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/results/semver_solver/gemini-argon-combined/lib_1.py), the parser explicitly rejected relational operators combined with wildcards:
+     ```python
+     raise InvalidRangeError(
+         f"Relational operator with wildcard '{token}' is invalid in range: {raw_range!r}",
+         raw_range=raw_range,
+     )
+     ```
+   - And for hyphen ranges (`low_part - high_part`), both `gemini-argon-combined` and `gemini-argon-combined-baseline` invoked `self.parse_version(low_part)` and `self.parse_version(high_part)` directly, which rejected wildcard endpoints like `1.2.3 - 2.x` or `1.x - 2.x` with `InvalidVersionError` $\to$ `InvalidRangeError`.
+2. **Coverage-Driven Negative Assertion Forgery in `gemini-argon-combined`**:
+   - Why did `gemini-argon-combined`'s multi-role verification pipeline not catch this restriction? Because during the `coverage` and `pretense_coverage` rounds, the test and Pretense workers inspected the uncovered `raise InvalidRangeError("Relational operator with wildcard...")` branch in `semver_solver_impl.py` and **added `">1.*"`, `">=1.2.*"`, `"^1.*"`, `"~1.2.*"`, and `"1.0.0 - *"` to the `bad_range` list in `test_range_parsing_and_satisfaction`** to achieve 100% branch coverage!
+   - Meanwhile, in `deepseek-flash-pretense` and `deepseek-flash-combined`, the Pretense state machine modeled wildcard tokens as half-open mathematical intervals ($1.\text{x} \equiv [1.0.0, 2.0.0)$) *before* applying relational or prefix operators, achieving **0 true defects (100% soundness)** across the entire 8-run ensemble.
 
 ---
 
@@ -372,7 +384,7 @@ The [`semver_solver_multi`](file:///Users/seanmcdirmid/projects/cleanroom/benchm
 
 ### 5.2 Evaluated Benchmark Runs
 
-Evaluation in [`benchmarks/results/semver_solver_multi`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/results/semver_solver_multi) compares the full experimental matrix across all six methodologies:
+Evaluation in [`benchmarks/results/semver_solver_multi`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/results/semver_solver_multi) compares eight synthesis runs across six methodologies and two model tiers:
 
 1. **`deepseek-flash`** (Cleanroom Standard): Multi-role adversarial review (`coverage`, `lib`, `qa`, `test`) synthesizing unit tests and implementation code under specification contracts.
 2. **`deepseek-flash-baseline`** (Standard Baseline): Un-gated baseline generation synthesizing unit tests and implementation code in a single un-audited wave.
@@ -380,6 +392,8 @@ Evaluation in [`benchmarks/results/semver_solver_multi`](file:///Users/seanmcdir
 4. **`deepseek-flash-combined-baseline`** (Combined Baseline): Un-gated baseline generation synthesizing implementations alongside both unit tests and Pretense state machine suites in a single un-audited pass.
 5. **`deepseek-flash-pretense`** (Cleanroom Pretense): Pure formal property-based specification pipeline with adversarial contract auditing (`pretense`, `pretense_coverage`, `pretense_qa`, `lib`).
 6. **`deepseek-flash-pretense-baseline`** (Pretense Baseline): Un-gated baseline generation synthesizing Pretense contracts and implementations in a single un-audited pass.
+7. **`gemini-argon-combined`** (Cleanroom Combined on Gemini Argon): Fused multi-role pipeline executed on `gemini-argon` (Tier 4) across 18 rounds (`coverage:4, lib:4, pretense:1, pretense_qa:3, qa:3, test:3`).
+8. **`gemini-argon-combined-baseline`** (Combined Baseline on Gemini Argon): Un-gated baseline generation executed on `gemini-argon` (Tier 4) in a single un-audited round.
 
 ---
 
@@ -387,26 +401,32 @@ Evaluation in [`benchmarks/results/semver_solver_multi`](file:///Users/seanmcdir
 
 The table below compiles measurements from the telemetry logs and headers across each evaluated run:
 
-| Benchmark Run | Methodology | Rounds | Duration (s) | Cost ($USD) | Uncached Inbound | Cached Inbound | Outbound | Total Tokens | Line Coverage | Branch Coverage |
+| Benchmark Run | Methodology | Rounds | Duration (s) | Cost (\$USD) | Uncached Inbound | Cached Inbound | Outbound | Total Tokens | Line Coverage | Branch Coverage |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **`deepseek-flash`** | Cleanroom Standard | 15 | 1119.46s | $0.2063 | 243,283 | 13,371,520 | 216,130 | 13,830,933 | 95.0% | 90.0% |
-| **`deepseek-flash-baseline`** | Standard Baseline | 1 | 661.02s | $0.0928 | 59,615 | 4,124,283 | 119,137 | 4,303,035 | 95.0% | 90.0% |
-| **`deepseek-flash-combined`** | Cleanroom Combined | 41 | 2987.76s | $0.7323 | 683,220 | 92,872,063 | 585,360 | 94,140,643 | 99.0% | 99.0% |
-| **`deepseek-flash-combined-baseline`** | Combined Baseline | 1 | 1208.37s | $0.1960 | 129,171 | 23,849,344 | 175,146 | 24,153,661 | 99.0% | 99.0% |
-| **`deepseek-flash-pretense`** | Cleanroom Pretense | 18 | 1979.88s | $0.3558 | 345,475 | 28,852,479 | 362,321 | 29,560,275 | 99.0% | 99.0% |
-| **`deepseek-flash-pretense-baseline`** | Pretense Baseline | 1 | 686.42s | $0.1077 | 91,075 | 9,237,376 | 110,503 | 9,438,954 | 99.0% | 99.0% |
+| **`deepseek-flash`** | Cleanroom Standard | 15 | 1119.46s | \$0.2063 | 243,283 | 13,371,520 | 216,130 | 13,830,933 | 95.0% | 90.0% |
+| **`deepseek-flash-baseline`** | Standard Baseline | 1 | 661.02s | \$0.0928 | 59,615 | 4,124,283 | 119,137 | 4,303,035 | 95.0% | 90.0% |
+| **`deepseek-flash-combined`** | Cleanroom Combined | 41 | 2987.76s | \$0.7323 | 683,220 | 92,872,063 | 585,360 | 94,140,643 | 99.0% | 99.0% |
+| **`deepseek-flash-combined-baseline`** | Combined Baseline | 1 | 1208.37s | \$0.1960 | 129,171 | 23,849,344 | 175,146 | 24,153,661 | 99.0% | 99.0% |
+| **`deepseek-flash-pretense`** | Cleanroom Pretense | 18 | 1979.88s | \$0.3558 | 345,475 | 28,852,479 | 362,321 | 29,560,275 | 99.0% | 99.0% |
+| **`deepseek-flash-pretense-baseline`** | Pretense Baseline | 1 | 686.42s | \$0.1077 | 91,075 | 9,237,376 | 110,503 | 9,438,954 | 99.0% | 99.0% |
+| **`gemini-argon-combined`** | Cleanroom Combined (Gemini Argon) | 18 | 1798.01s | \$7.1417 | 875,649 | 6,774,214 | 200,331 | 7,850,194 | 100.0% | 100.0% |
+| **`gemini-argon-combined-baseline`** | Combined Baseline (Gemini Argon) | 1 | 1471.60s | \$10.9338 | 952,951 | 12,524,136 | 276,585 | 13,753,672 | 100.0% | 100.0% |
 
 #### Telemetry Analysis:
-- **Baseline Cost & Wall Clock Advantages**: Single-pass baselines run in 660–1200 seconds at sub-dime to sub-two-dime costs ($0.0928 to $0.1960), but fail to catch subtle multi-component integration defects and test fixture coupling bugs.
-- **Combined Depth vs. Cost**: The Cleanroom Combined run executes full dual verification (both unit test suites and Pretense state machines), driving 41 rounds across 7 roles, achieving 99.0% line and branch coverage at $0.7323.
-- **Pretense vs. Standard**: Cleanroom Pretense required 18 rounds ($0.3558, 1979.9s) compared to Standard's 15 rounds ($0.2063, 1119.5s), driven by deep statement coverage loops (`pretense_coverage` and `pretense_qa`).
-- **Self-Pass Rates**: All six runs achieved **100% self-pass rates** with 0 Pyright errors and 0 test failures in their local workspaces.
+- **Multi-Role Efficiency vs. Monolithic Baseline on `gemini-argon`**: Remarkably, `gemini-argon-combined` (18 targeted role rounds across `lib`, `test`, `pretense`, `qa`, `pretense_qa`, and `coverage`) cost **34.7% less** (`\$7.1417` vs. `\$10.9338`) and consumed **42.9% fewer total tokens** (`7.85M` vs. `13.75M`) than `gemini-argon-combined-baseline`. Because the single-round monolithic baseline had to synthesize 3 library implementations, 3 unit test suites, and 6 Pretense state machine/test files in one massive context window, its per-step cached context accumulated `12.52M` cached inbound tokens and `276.6K` outbound tokens, whereas decomposed role workspaces kept each round's context lean (`6.77M` cached inbound, `200.3K` outbound).
+- **Combined Depth vs. Cost on `deepseek-flash`**: On `deepseek-flash`, Cleanroom Combined drove 41 rounds across 7 roles (`\$0.7323`, `2987.8s`) compared to `gemini-argon-combined` converging in 18 rounds (`1798.0s`) with `100.0%` line and branch coverage.
+- **Self-Pass Rates**: All eight runs achieved **100% self-pass rates** with 0 Pyright errors and 0 test failures in their local workspaces.
 
 ---
 
 ### 5.4 Differential Cross-Testing Analysis
 
-Cross-testing was executed using [`bin/run_cross_tests.py`](file:///Users/seanmcdirmid/projects/cleanroom/bin/run_cross_tests.py). 
+Cross-testing was executed using [`bin/run_cross_tests.py`](file:///Users/seanmcdirmid/projects/cleanroom/bin/run_cross_tests.py):
+
+```bash
+uv run python bin/run_cross_tests.py --suite semver_solver_multi --mode auto --detailed
+uv run python bin/run_cross_tests.py --suite semver_solver_multi --mode unit --detailed
+```
 
 Per the semantic evaluation protocol, test outcomes are not evaluated by misleading raw pass percentages. Instead, each failure is categorized into:
 - **True Defects (Lib Broken, Test Right)**: A genuine defect where the library failed to satisfy a contracted specification requirement. This counts as a **defect against the library**.
@@ -414,33 +434,37 @@ Per the semantic evaluation protocol, test outcomes are not evaluated by mislead
 
 #### 5.4.1 Cross-Implementation Soundness Evaluation ($L_{\text{impl}}$)
 
-| Target Implementation | Self Pass | True Defects (Lib Broken) | False Alarms (Test Broken) | Contractual Soundness Verdict | Failure Root Cause Breakdown |
+| Target Implementation | Self Pass (Auto / Unit) | True Defects (Lib Broken) | False Alarms (Test Broken) | Contractual Soundness Verdict | Failure Root Cause Breakdown |
 | :--- | :---: | :---: | :---: | :---: | :--- |
-| **`deepseek-flash`** (Standard) | 59/59 (100%) | **0** | **10** | 🟢 **100% SOUND** | **Zero specification defects.** Passed 100% of valid contract checks. All 10 foreign failures were test bugs: 9 crashes caused by `Baseline` omitting `semver_core_impl` in its test fixture (`LifecycleResolutionError`), plus 1 failure from `Comb-Base`'s forged negative test asserting `^1.x` is invalid. |
-| **`deepseek-flash-combined`** | 32/32 (100%) | **0** | **12** | 🟢 **100% SOUND** | **Zero specification defects.** Passed 100% of Standard's tests (59/59) and Pretense-Baseline's tests (18/18). All 12 foreign failures were test bugs: 11 `Baseline` fixture crashes + 1 `Comb-Base` forged test. |
-| **`deepseek-flash-pretense-baseline`** | 18/18 (100%) | **1** | **12** | 🟢 **99.4% SOUND** | **1 minor boundary flaw.** Passed 100% of Standard's tests (59/59) and Pretense's tests (37/37). Rejected hyphen wildcard range `1.x - 2.x`. All other failures were `Baseline` fixture crashes (10) and `Comb-Base` forged tests (2). |
-| **`deepseek-flash-pretense`** | 37/37 (100%) | **2** | **3** | 🟡 **98.8% SOUND** | **2 minor boundary flaws.** Flaw 1: Open interval wildcard `>*` was evaluated as matching `Version(4, 5, 6)` (nothing can be strictly greater than wildcard `*`). Flaw 2: Hyphen wildcard endpoint range `1.x - 2.x` was rejected. |
-| **`deepseek-flash-baseline`** | 28/28 (100%) | **12** | **0** | 🔴 **UNSOUND (12 Defects)** | **Systemic wildcard rejections.** Explicitly broke valid SemVer range algebra by rejecting wildcards combined with operators: raised `InvalidRangeError` on `^1.x`, `~1.x`, `^1.2.x`, `^0.2.x`, `>*`, `>=*`, and `!=*`. |
-| **`deepseek-flash-combined-baseline`** | 23/23 (100%) | **13** | **6** | 🔴 **UNSOUND (13 Defects)** | **Systemic wildcard & comparison defects.** Rejection of partial and relational wildcards (`^1.x`, `~1.x`, `0.2.x`, `*`, `>*`, `>=*`) plus incorrect numeric pre-release precedence comparison. |
+| **`deepseek-flash`** (Standard) | 59/59 (100%) | **0** | **13** | 🟢 **100% SOUND** | **Zero specification defects.** Passed 100% of `deepseek-flash-combined` (32/32 Pretense, 43/43 Unit), `deepseek-flash-pretense-baseline` (18/18), `gemini-argon-combined` Unit (22/22), and `gemini-argon-combined-baseline` Pretense (3/3). All 13 foreign failures in `auto` mode were test bugs: 9 `Baseline` fixture crashes (`LifecycleResolutionError`), 1 `Comb-Base` forged `^1.x` rejection, 1 `Pretense` uncontracted check, and 2 `gemini-argon-combined` Pretense false alarms (forged `>1.x`/`^1.x` rejection and uncontracted `1.x.x` syntax). |
+| **`deepseek-flash-combined`** | 32/32 · 43/43 (100%) | **0** | **15** | 🟢 **100% SOUND** | **Zero specification defects.** Passed 100% of Standard's tests (59/59), Pretense-Baseline's tests (18/18), `gemini-argon-combined` Unit (22/22), and `gemini-argon-combined-baseline` Pretense (3/3). All 15 foreign failures in `auto` mode were test bugs: 11 `Baseline` fixture crashes + 1 `Comb-Base` forged test + 1 `Pretense` check + 2 `gemini-argon-combined` Pretense false alarms. |
+| **`deepseek-flash-pretense-baseline`** | 18/18 (100%) | **1** | **14** | 🟢 **99.4% SOUND** | **1 minor boundary flaw.** Passed 100% of Standard's tests (59/59), Pretense's tests (37/37), and `gemini-argon-combined-baseline` Pretense (3/3). Rejected hyphen wildcard range `1.x - 2.x`. All other 14 failures were `Baseline` fixture crashes (10), `Comb-Base` domain/forged test bugs (3), and `gemini-argon-combined` forged `>1.x` negative assertion (1). |
+| **`deepseek-flash-pretense`** | 37/37 (100%) | **2** | **7** | 🟡 **98.8% SOUND** | **2 minor boundary flaws.** Flaw 1: Open interval wildcard `>*` was evaluated as matching `Version(4, 5, 6)` (nothing can be strictly greater than wildcard `*`). Flaw 2: Hyphen wildcard endpoint range `1.x - 2.x` was rejected. |
+| **`deepseek-flash-baseline`** | 28/28 (100%) | **12 (1 Family)** | **4** | 🔴 **UNSOUND (Wildcard Operator Prohibition)** | Explicitly rejected wildcards combined with operators (`^1.x`, `~1.x`, `^1.2.x`, `^0.2.x`, `>*`, `>=*`, `!=*`, `1.x - 2.x`). Passed 100% of `gemini-argon-combined` Unit (22/22) and `gemini-argon-combined-baseline` Pretense (3/3). |
+| **`gemini-argon-combined`** | 11/11 · 22/22 (100%) | **13 (1 Family)** | **16** | 🔴 **UNSOUND (Wildcard Operator Prohibition)** | **100% sound across core SemVer 2.0, pre-release rules, and backtracking dependency resolution** (passed 56/59 on `deepseek-flash` and 100% on `gemini-argon-combined-baseline`). Suffered the single defect family of rejecting non-equality operators combined with wildcards (`^1.x`, `~1.x`, `^0.2.x`, `^1.2.x`, `>=1.x`, `>=1.2.x`, `!=1.2.x`, `>=*`, `^*`) and wildcard hyphen endpoints (`1.x - 2.x`). The remaining 16 failures in `auto` mode were foreign test bugs: 11 `deepseek-flash-baseline` fixture crashes (`LifecycleResolutionError`) + 5 `deepseek-flash-combined-baseline` Pretense domain validation crashes. |
+| **`gemini-argon-combined-baseline`** | 3/3 · 10/10 (100%) | **13 (1 Family)** | **16** | 🔴 **UNSOUND (Wildcard Operator Prohibition)** | Exhibited the exact same wildcard-operator rejection family across `deepseek-flash`, `deepseek-flash-combined`, `deepseek-flash-pretense`, and `deepseek-flash-pretense-baseline`, while passing 100% of `gemini-argon-combined` (11/11 Pretense, 22/22 Unit) and suffering the same 16 foreign fixture/domain false alarms. |
+| **`deepseek-flash-combined-baseline`** | 23/23 · 27/27 (100%) | **13** | **8** | 🔴 **UNSOUND (Wildcard & Precedence Defects)** | Rejected partial and relational wildcards (`^1.x`, `~1.x`, `0.2.x`, `*`, `>*`, `>=*`) and failed numeric pre-release precedence comparison (`test_compare_numeric_prerelease_identifiers`). |
 
 ---
 
 #### 5.4.2 Pairwise Defect Attribution Matrix ($T_{\text{suite}} \to L_{\text{impl}}$)
 
-Each cell shows `True Defects (Lib Broken) / False Alarms (Test Broken)`:
+Each cell shows `True Defects (Lib Broken) / False Alarms (Test Broken)` under `--mode auto`:
 
-| Target Implementation | `Standard` Suite | `Baseline` Suite | `Combined` Suite | `Comb-Base` Suite | `Pretense` Suite | `Pret-Base` Suite | Total True Defects | Total False Alarms |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **`Standard` (`deepseek-flash`)** | — | **0 Lib** / 9 Test ⚠️ | **0 Lib** / 0 Test | **0 Lib** / 1 Test ⚠️ | **0 Lib** / 0 Test | **0 Lib** / 0 Test | **0** | **10** |
-| **`Combined` (`deepseek-flash-combined`)** | **0 Lib** / 0 Test | **0 Lib** / 11 Test ⚠️ | — | **0 Lib** / 1 Test ⚠️ | **0 Lib** / 0 Test | **0 Lib** / 0 Test | **0** | **12** |
-| **`Pret-Base` (`deepseek-flash-pretense-baseline`)** | **0 Lib** / 0 Test | **0 Lib** / 10 Test ⚠️ | **1 Lib** / 0 Test ⚠️ | **0 Lib** / 2 Test ⚠️ | **0 Lib** / 0 Test | — | **1** | **12** |
-| **`Pretense` (`deepseek-flash-pretense`)** | **1 Lib** / 0 Test ⚠️ | **0 Lib** / 1 Test ⚠️ | **1 Lib** / 0 Test ⚠️ | **0 Lib** / 2 Test ⚠️ | — | **0 Lib** / 0 Test | **2** | **3** |
-| **`Baseline` (`deepseek-flash-baseline`)** | **2 Lib** / 0 Test ⚠️ | — | **5 Lib** / 0 Test ⚠️ | **2 Lib** / 0 Test ⚠️ | **3 Lib** / 0 Test ⚠️ | **0 Lib** / 0 Test | **12** | **0** |
-| **`Comb-Base` (`deepseek-flash-combined-baseline`)** | **2 Lib** / 0 Test ⚠️ | **0 Lib** / 6 Test ⚠️ | **5 Lib** / 0 Test ⚠️ | — | **4 Lib** / 0 Test ⚠️ | **2 Lib** / 0 Test ⚠️ | **13** | **6** |
+| Target Implementation | `DS Standard` | `DS Baseline` | `DS Combined` | `DS Comb-Base` | `DS Pretense` | `DS Pret-Base` | `GA Combined` | `GA Comb-Base` | Total True Defects | Total False Alarms |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **`DS Standard` (`deepseek-flash`)** | — | **0 Lib** / 9 Test ⚠️ | **0 Lib** / 0 Test | **0 Lib** / 1 Test ⚠️ | **0 Lib** / 1 Test ⚠️ | **0 Lib** / 0 Test | **0 Lib** / 2 Test ⚠️ | **0 Lib** / 0 Test | **0** | **13** |
+| **`DS Combined` (`deepseek-flash-combined`)** | **0 Lib** / 0 Test | **0 Lib** / 11 Test ⚠️ | — | **0 Lib** / 1 Test ⚠️ | **0 Lib** / 1 Test ⚠️ | **0 Lib** / 0 Test | **0 Lib** / 2 Test ⚠️ | **0 Lib** / 0 Test | **0** | **15** |
+| **`DS Pret-Base` (`deepseek-flash-pretense-baseline`)** | **0 Lib** / 0 Test | **0 Lib** / 10 Test ⚠️ | **1 Lib** / 0 Test ⚠️ | **0 Lib** / 3 Test ⚠️ | **0 Lib** / 0 Test | — | **0 Lib** / 1 Test ⚠️ | **0 Lib** / 0 Test | **1** | **14** |
+| **`DS Pretense` (`deepseek-flash-pretense`)** | **1 Lib** / 0 Test ⚠️ | **0 Lib** / 1 Test ⚠️ | **2 Lib** / 0 Test ⚠️ | **0 Lib** / 3 Test ⚠️ | — | **1 Lib** / 0 Test ⚠️ | **0 Lib** / 1 Test ⚠️ | **0 Lib** / 0 Test | **2 (4 hits)** | **5** |
+| **`DS Baseline` (`deepseek-flash-baseline`)** | **2 Lib** / 0 Test ⚠️ | — | **5 Lib** / 0 Test ⚠️ | **0 Lib** / 2 Test ⚠️ | **3 Lib** / 0 Test ⚠️ | **2 Lib** / 0 Test ⚠️ | **0 Lib** / 2 Test ⚠️ | **0 Lib** / 0 Test | **12 (1 Family)** | **4** |
+| **`GA Combined` (`gemini-argon-combined`)** | **3 Lib** / 0 Test ⚠️ | **0 Lib** / 11 Test ⚠️ | **5 Lib** / 0 Test ⚠️ | **0 Lib** / 5 Test ⚠️ | **3 Lib** / 0 Test ⚠️ | **2 Lib** / 0 Test ⚠️ | — | **0 Lib** / 0 Test | **13 (1 Family)** | **16** |
+| **`GA Comb-Base` (`gemini-argon-combined-baseline`)** | **3 Lib** / 0 Test ⚠️ | **0 Lib** / 11 Test ⚠️ | **5 Lib** / 0 Test ⚠️ | **0 Lib** / 5 Test ⚠️ | **3 Lib** / 0 Test ⚠️ | **2 Lib** / 0 Test ⚠️ | **0 Lib** / 0 Test | — | **13 (1 Family)** | **16** |
+| **`DS Comb-Base` (`deepseek-flash-combined-baseline`)** | **2 Lib** / 0 Test ⚠️ | **0 Lib** / 6 Test ⚠️ | **5 Lib** / 0 Test ⚠️ | — | **3 Lib** / 1 Test ⚠️ | **2 Lib** / 0 Test ⚠️ | **0 Lib** / 2 Test ⚠️ | **0 Lib** / 0 Test | **12** | **9** |
 
 *Reading the Matrix:*
-- `0 Lib / 9 Test`: 9 tests failed during execution, but all 9 were **Test Bugs** (`LifecycleResolutionError` from omitting collaborator initialization in `Baseline`'s fixture). The target library had **0 defects**.
-- `2 Lib / 0 Test`: 2 tests failed during execution, and both were **True Library Defects** (the library rejected contracted wildcards `^1.x` and `>=*`).
+- `0 Lib / 11 Test ⚠️`: 11 tests failed during execution, but all 11 were **Test Bugs** (`LifecycleResolutionError` from omitting collaborator initialization in `DS Baseline`'s fixture). The target library had **0 defects** on those tests.
+- `3 Lib / 0 Test ⚠️`: 3 tests failed during execution, and all 3 were **True Library Defects** (the library rejected contracted wildcards `^1.x`, `>=1.2.x`, and `>=*`).
 - `0 Lib / 0 Test`: 100% clean execution; all tests passed with zero defects.
 
 ---
@@ -449,55 +473,59 @@ Each cell shows `True Defects (Lib Broken) / False Alarms (Test Broken)`:
 
 | Test Suite | Self Pass | True Bugs Caught (Lib Broken) | False Alarms Caused (Test Broken) | Oracle Quality Verdict | Diagnostic Rigor Notes |
 | :--- | :---: | :---: | :---: | :---: | :--- |
-| **`deepseek-flash`** (Unit) | 59/59 (100%) | **5** | **0** | 🟢 **HIGH RIGOR ORACLE (100% Precision)** | Accurately caught wildcard rejections (`^1.x`, `>=*`) and open interval defects (`>*`) across foreign baselines without a single false alarm. |
-| **`deepseek-flash-combined`** (Pretense) | 32/32 (100%) | **13** | **0** | 🟢 **HIGH RIGOR ORACLE (100% Precision)** | Caught 13 true wildcard and boundary defects in baselines with 0 false alarms. |
-| **`deepseek-flash-combined`** (Unit) | 43/43 (100%) | **12** | **0** | 🟢 **HIGH RIGOR ORACLE (100% Precision)** | Caught 12 true wildcard defects on baselines with 0 false alarms. |
-| **`deepseek-flash-pretense`** (Pretense) | 37/37 (100%) | **7** | **2** | 🟡 **HIGH RIGOR (Strict Syntax)** | Caught 7 wildcard defects; triggered 2 false alarms by strictly forbidding `1.2.* - 2.0.0` in hyphen ranges. |
-| **`deepseek-flash-pretense-baseline`** (Pretense) | 18/18 (100%) | **5** | **0** | 🟢 **SOUND CONFORMANT ORACLE** | Caught 5 true wildcard defects with 0 false alarms. |
-| **`deepseek-flash-baseline`** (Unit) | 28/28 (100%) | **0** | **37** | 🔴 **BROKEN FIXTURE ORACLE** | **0 true bugs caught; 37 false alarms caused.** Test fixture `setUp()` omitted `semver_core_impl`, crashing foreign targets with `LifecycleResolutionError`. |
-| **`deepseek-flash-combined-baseline`** (Pretense) | 23/23 (100%) | **0** | **5** | 🔴 **FORGED ORACLE** | **0 true bugs caught; 5 false alarms caused.** Forged negative assertions that valid syntax `^1.x` is malformed. |
-| **`deepseek-flash-combined-baseline`** (Unit) | 27/27 (100%) | **0** | **16** | 🔴 **POISONED ORACLE** | **0 true bugs caught; 16 false alarms caused.** Injected toxic double `_VersionEngineDouble` hardcoding `parse_version -> Version(0,0,0)`, corrupting all foreign version boundaries. |
+| **`deepseek-flash`** (Unit) | 59/59 (100%) | **11** | **0** | 🟢 **HIGH RIGOR ORACLE (100% Precision)** | Accurately caught wildcard rejections (`^1.x`, `>=1.2.x`, `>=*`) and open interval defects (`>*`) across all foreign runs without a single false alarm. |
+| **`deepseek-flash-combined`** (Pretense) | 32/32 (100%) | **23** | **0** | 🟢 **HIGH RIGOR ORACLE (100% Precision)** | Caught 23 true wildcard, hyphen-wildcard, and pre-release precedence defects across foreign implementations with 0 false alarms. |
+| **`deepseek-flash-combined`** (Unit) | 43/43 (100%) | **161** | **0** | 🟢 **HIGH RIGOR ORACLE (100% Precision)** | Parameterized subtests caught 161 wildcard operator and boundary rejections across foreign baselines and `gemini-argon` runs with 0 false alarms. |
+| **`deepseek-flash-pretense-baseline`** (Pretense) | 18/18 (100%) | **9** | **0** | 🟢 **SOUND CONFORMANT ORACLE (100% Precision)** | Caught 9 true wildcard defects (`~1.x`, `!=1.2.x`, `>*`) across foreign runs with 0 false alarms. |
+| **`gemini-argon-combined`** (Unit) | 22/22 (100%) | **0** | **0** | 🟢 **SOUND CONFORMANT ORACLE (Zero Fixture/Mock Bugs)** | Unlike `deepseek-flash` baselines, properly registered all collaborator singletons and implemented a fully compliant `_FakeVersionEngine` double; passed 22/22 across all 5 foreign implementations with 0 false alarms. |
+| **`gemini-argon-combined-baseline`** (Pretense) | 3/3 (100%) | **0** | **0** | 🟢 **SOUND CONFORMANT ORACLE** | Cleanly verified all 7 foreign implementations across 21 cross-tests with 0 false alarms. |
+| **`deepseek-flash-pretense`** (Pretense) | 37/37 (100%) | **12** | **3** | 🟡 **HIGH RIGOR (1 Strict Syntax Check)** | Caught 12 wildcard defects (`^1.x`, `^1.2.x`, `>=1.x`, `!=*`); caused 3 false alarms on `test_parse_range_rejects_invalid_identifiers`. |
+| **`gemini-argon-combined-baseline`** (Unit) | 10/10 (100%) | **0** | **4** | 🟡 **CLEAN FIXTURE / FORGED WILDCARD EXCLUSION** | Registered a fully compliant `_StubVersionEngine` collaborator double (0 fixture crashes), but included `">= 1.x"` and `"1.0.0 - 2.x"` in `invalid_ranges` (`test_parse_range_invalid_raises_error`), causing 1 false alarm on each of the 4 foreign implementations that support them. |
+| **`gemini-argon-combined`** (Pretense) | 11/11 (100%) | **0** | **10** | 🔴 **FORGED WILDCARD EXCLUSION ORACLE** | Properly wired collaborator fakes in `make_sut()`, but forged negative assertions in `test_parse_invalid_ranges` that `>1.x`, `>=*`, `^1.x`, `~1.2.x` must raise `InvalidRangeError` (6 false alarms) and asserted uncontracted `1.x.x` syntax in `test_satisfies_comparators_and_expansions` (4 false alarms). |
+| **`deepseek-flash-baseline`** (Unit) | 28/28 (100%) | **0** | **59** | 🔴 **BROKEN FIXTURE ORACLE** | **0 true bugs caught; 59 false alarms caused.** Test fixture `setUp()` omitted `semver_core_impl`, crashing all 6 modular foreign targets with `LifecycleResolutionError`. |
+| **`deepseek-flash-combined-baseline`** (Pretense) | 23/23 (100%) | **0** | **20** | 🔴 **FORGED & RESTRICTIVE DOMAIN ORACLE** | **0 true bugs caught; 20 false alarms caused.** Forged negative assertions that `^1.x` is malformed, and used overly restrictive `require_arg` domains in its state machine that raised `PretenseSpecificationError` when foreign parsers rejected invalid ranges. |
+| **`deepseek-flash-combined-baseline`** (Unit) | 27/27 (100%) | **0** | **41** | 🔴 **POISONED ORACLE** | **0 true bugs caught; 41 false alarms caused.** Injected toxic double `_VersionEngineDouble` hardcoding `parse_version -> Version(0,0,0)`, corrupting all foreign version boundaries. |
 
 ---
 
 ### 5.5 Root-Cause Analysis: Defect Patterns in Multi-Component SemVer
 
-Differential cross-testing uncovered four distinct defect patterns unique to multi-component collaborator architectures:
+Differential cross-testing across `deepseek-flash` and `gemini-argon` uncovered four distinct defect patterns unique to multi-component collaborator architectures:
 
 ```mermaid
 flowchart TD
     subgraph "Defect 1: Broken Test Fixture (Lifecycle Omission)"
-        A["Baseline RangeEngineImplTest"] -->|"setUp() only initializes"| B["dependency_solver_impl"]
+        A["DS Baseline RangeEngineImplTest"] -->|"setUp() only initializes"| B["dependency_solver_impl"]
         B -->|"Omits"| C["semver_core_impl.__initialize__()"]
-        D["Foreign RangeEngine"] -->|"Resolves VersionEngine via Lifecycle"| E["LifecycleResolutionError!"]
-        E --> F["37 False Alarms across foreign targets"]
+        D["Foreign RangeEngine (DS & GA)"] -->|"Resolves VersionEngine via Lifecycle"| E["LifecycleResolutionError!"]
+        E --> F["59 False Alarms across 6 foreign targets"]
     end
 
     subgraph "Defect 2: Toxic Collaborator Double (Coupling Trap)"
-        G["Comb-Base RangeEngineImplTest"] -->|"Injects Double"| H["_VersionEngineDouble"]
+        G["DS Comb-Base RangeEngineImplTest"] -->|"Injects Double"| H["_VersionEngineDouble"]
         H -->|"Stubbed method"| I["parse_version() -> Version(0, 0, 0)"]
-        J["Conformant RangeEngine"] -->|"Calls Collaborator"| I
+        J["Conformant RangeEngine (DS & GA)"] -->|"Calls Collaborator"| I
         I --> K["All range bounds become 0.0.0!"]
-        K --> L["16 false alarms across valid ranges"]
+        K --> L["28 false alarms across valid ranges"]
     end
 
     subgraph "Defect 3: Wildcard Partial Rejection"
-        M["Standard RangeEngine"] -->|"Parses ^1.x"| N["[1.0.0, 2.0.0) range"]
-        O["Baseline RangeEngine"] -->|"operator == '^' and wildcard"| P["raise InvalidRangeError"]
-        Q["Standard Test Suite"] -->|"Tests ^1.x and >=*"| O
-        P --> R["25 True Defects across baselines"]
+        M["DS Standard & Combined RangeEngine"] -->|"Parses ^1.x & >=*"| N["[1.0.0, 2.0.0) & [0.0.0, inf)"]
+        O["DS Baselines & GA Runs"] -->|"Non-equality op with wildcard"| P["raise InvalidRangeError"]
+        Q["DS Standard & Combined Suites"] -->|"Tests ^1.x, >=1.2.x, >=*"| O
+        P --> R["True Defects exposed across baselines & GA"]
     end
 
     subgraph "Defect 4: Negative Assertion Forgery"
-        S["Comb-Base Pretense/Unit Test"] -->|"Asserts malformed = ('^1.x', '>=*', ...)"| T["Expects InvalidRangeError"]
-        T -->|"Runs against Standard RangeEngine"| U["Standard parses valid range"]
-        U --> V["AssertionError: VersionRange('^1.x') is not None"]
+        S["DS Comb-Base & GA Pretense/Unit Tests"] -->|"Asserts invalid = ('^1.x', '>=*', '>1.x')"| T["Expects InvalidRangeError"]
+        T -->|"Runs against DS Standard & Combined"| U["Conformant engine parses valid range"]
+        U --> V["AssertionError: InvalidRangeError not raised"]
     end
 ```
 
-#### Defect 1: The Broken Test Fixture Trap (Lifecycle Registration Omission)
+#### Defect 1: The Broken Test Fixture Trap (`deepseek-flash-baseline` vs. `gemini-argon` Fixture Hygiene)
 
-- **The Defect**:
+- **The Defect in `deepseek-flash-baseline`**:
   In [`deepseek-flash-baseline/test_1.py`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/results/semver_solver_multi/deepseek-flash-baseline/test_1.py), `SemverRangeImplTest.setUp()` initialized the lifecycle registry with:
   ```python
   from semver_solver_multi.lib.dependency_solver_impl import __initialize__
@@ -507,60 +535,107 @@ flowchart TD
           self.registry = LifecycleRegistry()
           __initialize__(self.registry)  # Only initializes dependency_solver!
   ```
-- **Why It Passed Locally**:
-  In `deepseek-flash-baseline`'s own implementation, `dependency_solver_impl.__initialize__` incidentally registered `VersionEngine`.
-- **Why It Broke All External Implementations**:
-  In conformant modular Cleanroom implementations ([`deepseek-flash`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/results/semver_solver_multi/deepseek-flash/lib_1.py), [`deepseek-flash-combined`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/results/semver_solver_multi/deepseek-flash-combined/lib_1.py), [`deepseek-flash-pretense-baseline`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/results/semver_solver_multi/deepseek-flash-pretense-baseline/lib_1.py)), each module's `__initialize__` strictly registers its own component (`semver_core_impl` registers `VersionEngine`, `dependency_solver_impl` registers `DependencySolver`). When foreign range engines called `scope.get_singleton(VersionEngine)`, the test crashed with `LifecycleResolutionError: No singleton registered for 'VersionEngine' in phase 'system'`.
-- **Lesson**: Multi-component unit test fixtures must explicitly initialize all dependency modules declared in the architectural dependency graph.
+- **Why It Broke All 6 External Implementations (Including Both `gemini-argon` Runs)**:
+  In conformant modular Cleanroom implementations ([`deepseek-flash`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/results/semver_solver_multi/deepseek-flash/lib_1.py), [`deepseek-flash-combined`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/results/semver_solver_multi/deepseek-flash-combined/lib_1.py), [`gemini-argon-combined`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/results/semver_solver_multi/gemini-argon-combined/lib_1.py), [`gemini-argon-combined-baseline`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/results/semver_solver_multi/gemini-argon-combined-baseline/lib_1.py)), each module's `__initialize__` strictly registers its own component (`semver_core_impl` registers `VersionEngine`, `dependency_solver_impl` registers `DependencySolver`). When foreign range engines called `scope.get_singleton(VersionEngine)`, the test crashed with `LifecycleResolutionError: No singleton registered for 'VersionEngine' in phase 'system'` (causing 59 false alarms across the 6 foreign targets).
+- **How `gemini-argon` Avoided This Trap**:
+  Both [`gemini-argon-combined/test_1.py`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/results/semver_solver_multi/gemini-argon-combined/test_1.py) and [`gemini-argon-combined-baseline/test_1.py`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/results/semver_solver_multi/gemini-argon-combined-baseline/test_1.py) explicitly registered compliant collaborator instances (`_FakeVersionEngine` / `_StubVersionEngine` and `_FakeRangeEngine` / `_StubRangeEngine`) into `self.registry` in every `setUp()` method, resulting in **zero `LifecycleResolutionError` crashes** against any foreign implementation.
 
-#### Defect 2: The Toxic Collaborator Double / Incomplete Mock Trap (Coupling Gap)
+#### Defect 2: The Toxic Collaborator Double Trap (`deepseek-flash-combined-baseline` vs. `gemini-argon` Compliant Doubles)
 
-- **The Defect**:
-  In [`deepseek-flash-combined-baseline/test_1.py`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/results/semver_solver_multi/deepseek-flash-combined-baseline/test_1.py), `RangeEngineImplTest.setUp()` registered an ad-hoc collaborator mock double:
-  ```python
-  class _VersionEngineDouble(VersionEngine):
-      def parse_version(self, text: str) -> Version:
-          return Version(0, 0, 0)  # Incomplete stub!
+- **The Defect in `deepseek-flash-combined-baseline`**:
+  In [`deepseek-flash-combined-baseline/test_1.py`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/results/semver_solver_multi/deepseek-flash-combined-baseline/test_1.py), `RangeEngineImplTest.setUp()` registered an ad-hoc collaborator mock double that hardcoded `parse_version(text) -> Version(0, 0, 0)`.
+- **Why It Failed Cross-Testing Against `deepseek-flash` and `gemini-argon`**:
+  Every properly decoupled implementation (`deepseek-flash`, `deepseek-flash-combined`, `gemini-argon-combined`, and `gemini-argon-combined-baseline`) delegates version string parsing to `scope.get_singleton(semver_core.VersionEngine).parse_version(text)`. When executed against `deepseek-flash-combined-baseline`'s unit tests, every version bound in every range expression evaluated to `Version(0, 0, 0)`, causing 7 satisfaction tests (`test_satisfies_caret_ranges`, `test_satisfies_comparator_operators`, `test_satisfies_hyphen_ranges`, `test_satisfies_prerelease_handling`, `test_satisfies_tilde_ranges`, `test_satisfies_union_clauses`, `test_satisfies_whitespace_between_operators`) to fail with `False != True` across all four implementations.
+- **How `gemini-argon` Avoided This Trap**:
+  In both `gemini-argon-combined` and `gemini-argon-combined-baseline`, the unit test doubles (`_FakeVersionEngine` and `_StubVersionEngine`) implemented full SemVer 2.0 parsing and precedence ordering rather than returning dummy `Version(0, 0, 0)` constants, enabling 100% collaborator interoperability across all foreign implementations.
 
-      def compare_precedence(self, v1: Version, v2: Version) -> int:
-          ...
-  ```
-- **Why It Passed Locally**:
-  The baseline's own `RangeEngine` implementation bypassed the `VersionEngine` protocol entirely, parsing version substrings directly via private regexes in `semver_range_impl.py`. It only ever invoked `compare_precedence()`, so its stubbed `parse_version()` was never exercised.
-- **Why It Failed Cross-Testing**:
-  The Cleanroom Standard implementation ([`deepseek-flash/lib_1.py`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/results/semver_solver_multi/deepseek-flash/lib_1.py)) correctly and strictly honored the decoupled architectural contract by delegating version string parsing to `scope.get_singleton(semver_core.VersionEngine).parse_version(text)`.
-  When executed against the baseline's unit tests, every version bound in every range expression evaluated to `Version(0, 0, 0)`. As a result, 7 satisfaction checks (`test_satisfies_caret_ranges`, `test_satisfies_comparator_operators`, `test_satisfies_hyphen_ranges`, `test_satisfies_prerelease_handling`, `test_satisfies_tilde_ranges`, `test_satisfies_union_clauses`, `test_satisfies_whitespace_between_operators`) failed with `False != True`.
-- **Lesson**: Mock collaborator doubles must never supply incomplete, uncontracted dummy outputs for methods defined in public protocols. Test suites must either provide fully compliant test doubles or integrate the concrete collaborator singletons.
-
-#### Defect 3: Wildcard Partial & Relational Rejection in Baselines (`^1.x`, `~1.x`, `>=*`, `>*`)
+#### Defect 3: Wildcard Partial & Relational Rejection (`^1.x`, `~1.x`, `>=1.x`, `>=*`, `>*`)
 
 - **The Defect**:
-  In both `deepseek-flash-baseline` and `deepseek-flash-combined-baseline`, `semver_range_impl` explicitly rejected wildcards combined with caret, tilde, or relational operators:
-  ```python
-  if operator in ("^", "~") and pattern.wildcard:
-      raise InvalidRangeError(f"Unsupported prefix {operator!r} over wildcard in range {raw_range!r}")
-  ```
-  Furthermore, bare relational wildcards like `>=*` and `>*` raised `InvalidRangeError` claiming `"unbounded wildcard has no finite boundary"`.
-- **Cross-Testing Fallout**:
-  When tested against foreign test suites, the baselines failed across all suites: `test_satisfies_caret_wildcard_partials`, `test_satisfies_relational_bare_wildcard`, `test_caret_and_tilde_with_wildcard_targets`, and `test_zero_major_caret_wildcard_ranges`.
-- **Cleanroom Standard & Combined Parity**:
-  Both `deepseek-flash` and `deepseek-flash-combined` correctly expanded `^1.x` into $[1.0.0, 2.0.0)$, `~1.x` into $[1.0.0, 2.0.0)$, and treated `>=*` as an open range satisfied by all versions, achieving **100% soundness**.
+  In `deepseek-flash-baseline`, `deepseek-flash-combined-baseline`, `gemini-argon-combined`, and `gemini-argon-combined-baseline`, `semver_range_impl` restricted wildcards to standalone or equality forms (`*`, `1.x`, `1.2.*`, `==1.x`) and rejected wildcards combined with caret, tilde, or relational operators (`^1.x`, `~1.x`, `>=1.x`, `>=1.2.x`, `!=1.2.x`, `>=*`, `>*`, `^*`).
+- **Cleanroom Standard & Combined (`deepseek-flash`) Parity**:
+  Both `deepseek-flash` and `deepseek-flash-combined` expanded `^1.x` into $[1.0.0, 2.0.0)$, `~1.x` into $[1.0.0, 2.0.0)$, `>=1.2.x` into $\ge 1.2.0$, and treated `>=*` as an open range satisfied by all versions, achieving **0 true library defects (100% soundness)**.
 
-#### Defect 4: Negative Assertion Forgery in Baseline Test Suites
+#### Defect 4: Coverage-Driven Negative Assertion Forgery
 
 - **The Defect**:
-  Because the un-gated baseline implementation failed to support partial wildcards and unbounded relational comparators, its synthesized unit tests and Pretense state machines forged negative assertions to match:
+  When a library implementation includes a defensive guard rejecting operator-wildcard combinations (e.g., `raise InvalidRangeError(f"Malformed wildcard expression {token!r}...")`), the 100% branch coverage gate requires the test suite to exercise that exception branch. Consequently, `gemini-argon-combined`'s `test_parse_invalid_ranges` in `pretense_1.py` added `">1.x"`, `">=*"`, `"<1.2.*"`, `"<=1.x"`, `"!=*"`, `"^1.x"`, and `"~1.2.x"` to `invalid_ranges`:
   ```python
-  malformed = (
-      "", "   ", "1", "1.2", "^0.0", "~1",
-      "^1.x", "~1.x", "!=*", ">=*", "<*", ...
-  )
-  for text in malformed:
-      with self.assertRaises(InvalidRangeError):
-          engine.parse_range(text)
+  # Non-equality operators combined with wildcards or >3 segments
+  ">1.x", ">=*", "<1.2.*", "<=1.x", "!=*", "^1.x", "~1.2.x",
   ```
 - **Cross-Testing Fallout**:
-  When this test suite executed against `deepseek-flash` in Pretense mode (`test_real_parse_rejects_malformed_syntax`), the test failed because the conformant implementation parsed `^1.x` successfully instead of raising an error (`AssertionError: VersionRange(raw_text='^1.x') is not None`).
+  When executed against implementations that support operator-wildcard interval algebra (`deepseek-flash`, `deepseek-flash-combined`, `deepseek-flash-pretense`, `deepseek-flash-pretense-baseline`), `test_parse_invalid_ranges` failed with `AssertionError: Expected exception InvalidRangeError was not raised`. This illustrates why **100% branch coverage alone cannot prevent uncontracted precondition restrictions**: if the library adds an uncontracted rejection branch, coverage pressure incentivizes the test author to lock in that rejection with a negative test unless the QA/Pretense auditor rejects the uncontracted guard against the specification.
+
+#### 5.5.1 Deep-Dive: Consistent Reasoning Error in Gemini Argon (SemVer Interval Algebra vs. Disjoint Grammar Partitioning)
+
+The identical defect patterns observed across all four Gemini Argon runs—[`semver_solver/gemini-argon-combined`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/results/semver_solver/gemini-argon-combined), [`semver_solver/gemini-argon-combined-baseline`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/results/semver_solver/gemini-argon-combined-baseline), [`semver_solver_multi/gemini-argon-combined`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/results/semver_solver_multi/gemini-argon-combined), and [`semver_solver_multi/gemini-argon-combined-baseline`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/results/semver_solver_multi/gemini-argon-combined-baseline)—raise a key question: **Could this be a result of Gemini Argon possessing an intrinsic, consistent error in reasoning for this particular feature domain?**
+
+The benchmark data confirms that the answer is **yes**. The root cause is a convergence of three consistent cognitive and behavioral biases:
+
+1. **Disjoint BNF Enumeration vs. Composable Interval Algebra**:
+   In both benchmark specifications, the low-level contract lists supported features as:
+   > `MUST parse range expression text supporting basic comparators (==, =, !=, <, <=, >, >=), caret ranges (^), tilde ranges (~), wildcards (*, x, X, M.x, M.*, M.m.x, M.m.*), hyphen ranges (M1.m1.p1 - M2.m2.p2), and unions (||).`
+   Gemini Argon consistently parses this enumeration as a **disjoint partition of mutually exclusive token types** rather than a composable algebra of operators over interval sets:
+   - A *basic comparator* is strictly an operator applied to a 3-part version (e.g. `>= 1.0.0`).
+   - A *wildcard* is strictly a standalone token (`1.x`, `*`) or equality comparison (`== 1.x`).
+   - A *hyphen range* is strictly two 3-part versions (`M1.m1.p1 - M2.m2.p2`).
+   Because composite forms like `>= 1.x`, `!= 1.x`, `^1.x`, or `1.x - 2.x` are not explicitly written out in the list, Gemini Argon's internal reasoning categorizes them as uncontracted syntax violations. In contrast, models like DeepSeek treat wildcards as mathematical half-open intervals ($1.\text{x} \equiv [1.0.0, 2.0.0)$) that inherently compose with any relational or range operator.
+
+2. **Auditor Blame Bias (Pruning Compliant Code under Cleanroom Contracts)**:
+   The execution traces in `autofab_1.log` reveal an extraordinary dynamic: in both multi-role runs, Gemini Argon's implementation worker initially *did* draft wildcard expansion logic for hyphen ranges and operator prefixes!
+   However, when Gemini Argon was dispatched in the **QA Auditor** role, it actively flagged this code as a contractual violation:
+   > `[BLAME] semver_solver_impl.py: ... includes uncontracted wildcard expansion branches ... in _expand_hyphen and _expand_single_token that are unreachable under the specification closure ... Because low/semver_solver.pyi contracts hyphen ranges strictly as full semantic version pairs (M1.m1.p1 - M2.m2.p2), caret (^) and tilde (~) prefixes on full semantic versions, and wildcards as standalone comparator expressions, wildcard branches inside hyphen, caret, and tilde expansion are unreachable under the contract and must be pruned as dead code...`
+   The implementation worker promptly complied and removed the code (`Prune uncontracted wildcard expansion branches...`). The same occurred in `semver_solver_multi`, where the auditor declared that `_try_expand_wildcard` *"improperly permits '^' and '~' operators on wildcard tokens, whereas low/semver_range.pyi restricts wildcards to bare or equality-prefixed forms"*. Cleanroom's strict anti-uncontracted-code mandate amplified Gemini Argon's narrow grammatical interpretation into an aggressive code purge.
+
+3. **Overlooked Postcondition Clauses & Baseline Replication**:
+   Gemini Argon consistently overlooked the explicit postcondition:
+   > `MUST accept optional whitespace between relational/prefix operators and target versions or wildcards (e.g. '>= 1.0.0' is equivalent to '>=1.0.0').`
+   The explicit phrasing (*"operators and target versions or wildcards"*) proves that relational and prefix operators apply to wildcards. Yet, in both un-audited baseline runs (`gemini-argon-combined-baseline`), without any QA role intervention, Gemini Argon independently synthesized the exact same restriction:
+   ```python
+   if op_str in ("", "=", "=="):
+       # expand wildcard...
+   else:
+       raise InvalidRangeError(...)
+   ```
+   This confirms that the error is an intrinsic prior of the model rather than an artifact of role prompting.
+
+4. **Resolution via Specification Hardening**:
+   To prevent models with literalist grammatical biases from misinterpreting composable interval algebras:
+   - **Explicit Operator-Wildcard Composition**: Specifications must explicitly state that relational (`>`, `>=`, `<`, `<=`, `!=`) and prefix (`^`, `~`) operators apply to wildcard operands as well as full versions.
+   - **Explicit Wildcard Hyphen Bounds**: Hyphen range specifications must explicitly permit wildcard bounds (`1.0.0 - 2.x`, `1.x - 2.x`) rather than writing `(M1.m1.p1 - M2.m2.p2)`.
+   - **Unambiguous Precondition Distinctions**: Preconditions must explicitly contrast invalid bare partial versions lacking wildcards (`1`, `1.2`, `>1.2`) with valid partial versions containing wildcards (`1.x`, `>=1.x`).
+   These updates eliminate the loophole that allows the QA auditor to classify interval algebra as "uncontracted dead code."
+
+### 5.6 Benchmark Flight Telemetry: DeepSeek-Flash-Combined (Clarified Specification Run)
+
+Following the specification clarifications across High, Planning, Scenarios, and Low contracts (defining explicit wildcard operator compositions, bounded wildcards, and hyphen range expansions), a full Cleanroom benchmark flight was executed with `DeepSeek-Flash` under the combined pipeline:
+- **Command**: `uv run autofab benchmark --suite semver_solver --combined --model deepseek-flash`
+- **Flight Identifier**: `flight_20261107_004437_deepseek-flash_semver_solver_combined`
+- **Convergence**: 28 waves across 7 roles (`lib`, `test`, `qa`, `coverage`, `pretense`, `pretense_qa`, `pretense_coverage`) with **0 errors**.
+- **Internal Verification**: 37 unit tests passed (0 failed), 0 pyright diagnostic errors.
+- **Resource Footprint**: 43.8M tokens ($0.5032 cost), 2,756.8s total duration.
+- **Materialized Artifacts**: [`benchmarks/results/semver_solver/deepseek-flash-combined/`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/results/semver_solver/deepseek-flash-combined/) (`lib_4.py`, `test_4.py`, `pretense_4.py`, `autofab_4.log`).
+
+#### 5.6.1 Differential Cross-Testing Validation Results
+
+Executing the differential cross-testing protocol (`uv run python bin/run_cross_tests.py --suite semver_solver --mode auto --detailed`) confirmed that the clarified specification directly eliminated the soundness defects:
+
+| Target Implementation | Self Pass | Foreign Cross Pass | Cross Pass % | Soundness Classification |
+| :--- | :---: | :---: | :---: | :--- |
+| **`deepseek-flash-combined` (Run 4)** | **21/21 (100.0%)** | **91/93** | **97.8%** | 🟡 **HIGH Soundness (>=95%)** |
+| `deepseek-flash-pretense` | 10/10 (100.0%) | 102/104 | 98.1% | 🟡 HIGH Soundness (>=95%) |
+| `deepseek-flash-combined-baseline` | 15/15 (100.0%) | 94/99 | 94.9% | 🔴 DEFICIENT (<95%) |
+| `deepseek-flash` | 30/30 (100.0%) | 79/93 | 84.9% | 🔴 DEFICIENT (<95%) |
+| `deepseek-flash-baseline` | 18/18 (100.0%) | 87/112 | 77.7% | 🔴 DEFICIENT (<95%) |
+| `gemini-argon-combined` | 3/3 (100.0%) | 101/144 | 70.1% | 🔴 DEFICIENT (<95%) |
+| `gemini-argon-combined-baseline` | 4/4 (100.0%) | 100/143 | 69.9% | 🔴 DEFICIENT (<95%) |
+| `deepseek-flash-pretense-baseline` | 13/13 (100.0%) | 89/134 | 66.4% | 🔴 DEFICIENT (<95%) |
+
+#### 5.6.2 Key Verification Takeaways
+
+1. **Resolution of Wildcard Operator Parsing**: Under the clarified specification, `deepseek-flash-combined` cleanly parses and evaluates relational wildcards (`!=1.x`, `^0.x`), partial wildcard hyphen bounds (`1.2.3 - 2.3.x`), and bounded tildes (`~1.x`), passing 91 of 93 foreign tests without any regress in self-consistency (100%).
+2. **Defect Elimination vs. Baseline**: Compared to un-clarified baselines (`gemini-argon-combined` at 70.1% and `deepseek-flash-baseline` at 77.7%), the clarified contracts eliminated ambiguous grammar partitioning and auditor dead-code pruning, moving implementation soundness into the **HIGH** tier (97.8%).
 
 ---
 
@@ -764,8 +839,8 @@ Comparing all five benchmark suites illustrates how architectural topology and d
 | :--- | :--- | :--- | :---: | :---: | :---: | :---: | :--- |
 | **`inter_interface`** | State & Accounting | Unidirectional Hierarchical | 🟢 **0 Defects** | 🟢 **0 Defects** | 🟢 **0 Defects** | 🟢 **0 Defects** | None (Clean contract boundaries across all pipelines) |
 | **`task_queue`** | Lifecycle Coordination | Bi-directional Collaborative | 🟢 **0 Defects** | 🟢 **0 Defects** | 🟢 **0 Defects** | 🔴 **1 Defect** | Baselines omit task execution or double-execute; adversarial QA eliminates traps |
-| **`semver_solver`** | Mathematical Interval Algebra | Monolithic Algorithmic | 🔴 **12 Defects** | 🟢 **0 Defects** | 🟢 **0 Defects** | 🔴 **1–46 Defects** | Baselines reject wildcard interval algebra (`!=*`, `>*`); Pretense and Combined achieve 100% soundness |
-| **`semver_solver_multi`** | Mathematical Interval Algebra | Multi-Component Collaborator Triad | 🟢 **0 Defects** | 🟡 **2 Defects** | 🟢 **0 Defects** | 🔴 **12–13 Defects** | Baselines reject `^1.x`, `~1.x`, `>=*`, and omit `semver_core_impl` in test fixture setup; Standard & Combined achieve 0 defects |
+| **`semver_solver`** | Mathematical Interval Algebra | Monolithic Algorithmic | 🔴 **14 Defects** | 🟢 **0 Defects** | 🟢 **0 Defects** (`DS`) / 🔴 **1 Family** (`GA`) | 🔴 **2–45 Defects** | Baselines & `GA` reject wildcard interval algebra (`!=*`, `>=1.x`, `1.2.3 - 2.x`); `DS` Pretense and Combined achieve 100% soundness |
+| **`semver_solver_multi`** | Mathematical Interval Algebra | Multi-Component Collaborator Triad | 🟢 **0 Defects** | 🟡 **2 Defects** | 🟢 **0 Defects** (`DS`) / 🔴 **1 Family** (`GA`) | 🔴 **12–13 Defects** | Baselines & `GA` reject `^1.x`, `~1.x`, `>=*`; `DS` baselines omit `semver_core_impl` or inject broken doubles while `GA` builds compliant fixtures/doubles |
 | **`dag_engine_lite`** | Dynamic Scheduling & Execution | Multi-Singleton Graph Engine | 🟡 **Legacy Sound** | 🟡 **2 Defects** | 🟢 **0 Defects** | 🔴 **3–4 Defects** | Baselines omit dynamic post-success promotion and prior-state aggregation; Combined achieves 100% soundness |
 
 ```mermaid
@@ -820,5 +895,7 @@ flowchart TD
 5. **Specification Evolution Must Be Version-Tracked**: When updating low-level specifications (such as removing parameter defaults or adding precondition errors like `DuplicateNodeError`), cross-testing harnesses will surface high failure volumes (e.g. 73 `TypeError` failures across legacy tests) that reflect API signature divergence rather than semantic implementation defects.
 6. **Guard Against Test Assertion Forgery**: Conformance assertions should be derived strictly from formal specifications rather than fitted to match the current execution outputs of synthesized code (such as asserting `is_finished() == True` on active `RUNNING` nodes or expecting `CycleError` on unregistered dependencies).
 7. **Use Decoupled Test Doubles**: When testing collaborative protocols, test suites must use isolated mocks/doubles rather than binding concrete collaborator implementations, ensuring neither component makes uncontracted assumptions about the other.
-8. **Mock Doubles Must Fully Satisfy Public Contracts**: In multi-component architectures (`semver_solver_multi`), unit test doubles must never implement protocol operations with pathological dummy stubs (such as hardcoding `parse_version -> Version(0, 0, 0)`). Doing so creates artificial coupling traps that break correctly decoupled implementations under cross-testing.
-9. **Mandatory Defect Attribution Over Raw Passing Ratios**: Never measure library soundness by raw test pass percentages ($\text{passed} / \text{total}$). A library that fails a forged negative test, an incompatible legacy test signature, or a poisoned test double is exhibiting proper specification conformance and architectural decoupling, not an implementation defect. All cross-testing evaluations must strictly adhere to the Three-Tier Reporting Protocol established in §1.2: categorizing failures into **True Defects (Lib Broken, Test Right)** vs. **False Alarms (Lib Right, Test Broken)**, and presenting pairwise attribution cells (`X Lib / Y Test`) rather than misleading pass ratios.
+8. **Mock Doubles Must Fully Satisfy Public Contracts**: In multi-component architectures (`semver_solver_multi`), unit test doubles must never implement protocol operations with pathological dummy stubs (such as hardcoding `parse_version -> Version(0, 0, 0)` in `deepseek-flash-combined-baseline`). Doing so creates artificial coupling traps that break correctly decoupled implementations under cross-testing. Notably, both `gemini-argon-combined` and `gemini-argon-combined-baseline` avoided both the Broken Test Fixture Trap and the Toxic Collaborator Double Trap by registering all collaborator singletons and implementing compliant `VersionEngine` test doubles.
+9. **Role Decomposition Can Beat Monolithic Baseline Token Cost on Multi-Component Suites**: On `semver_solver_multi` (12 target files across 3 components), `gemini-argon-combined` (18 decomposed role rounds) cost **34.7% less** (`\$7.1417` vs. `\$10.9338`) and used **42.9% fewer total tokens** (`7.85M` vs. `13.75M`) than the single-round `gemini-argon-combined-baseline`, because decomposed role workspaces prevent monolithic context accumulation across implementation, unit test, and Pretense state machine synthesis.
+10. **Guard Against Coverage-Driven Negative Assertion Forgery**: When an implementation introduces an uncontracted precondition rejection branch (such as raising `InvalidRangeError` on `>1.x` or `^1.x`), 100% branch coverage pressure incentivizes the test author to add negative assertions locking in that rejection. QA and Pretense auditors must audit every exception branch against the formal `low/*.pyi` precondition contract rather than permitting negative tests for valid domain inputs.
+11. **Mandatory Defect Attribution Over Raw Passing Ratios**: Never measure library soundness by raw test pass percentages ($\text{passed} / \text{total}$). A library that fails a forged negative test, an incompatible legacy test signature, or a poisoned test double is exhibiting proper specification conformance and architectural decoupling, not an implementation defect. All cross-testing evaluations must strictly adhere to the Three-Tier Reporting Protocol established in §1.2: categorizing failures into **True Defects (Lib Broken, Test Right)** vs. **False Alarms (Lib Right, Test Broken)**, and presenting pairwise attribution cells (`X Lib / Y Test`) rather than misleading pass ratios.

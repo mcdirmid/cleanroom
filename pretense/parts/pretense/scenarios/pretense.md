@@ -44,7 +44,7 @@ Given: a state transition method decorated with `@transition(TargetClass.method)
    Observed: the requirement check raises `PretenseSpecificationError` (or the contracted error when specified), failing verification; in fixed scenario tests with an optional error parameter, the requirement check throws the specified error upon contract violation.
 
 3. The caller evaluates an exception transition using `with raises(ExpectedException): make_return_value(None)`.
-   Observed: in verification mode, the context manager asserts that the target call raised `ExpectedException` and propagates the exception to callers and test runners; in Fake mode, it raises `ExpectedException` to emulate interface failure semantics.
+   Observed: in verification mode, the context manager asserts that the target call raised `ExpectedException` and propagates the exception to callers and test runners; in Fake mode, it synthesizes and raises `ExpectedException` (including multi-argument or structured exception classes) to emulate interface failure semantics.
 
 4. The caller defines pre-state and post-state assertions.
    Observed: assertions are written using native Python single-argument `assert condition` syntax without custom string messages.

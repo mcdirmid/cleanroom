@@ -23,7 +23,7 @@ When pulling changes from the canonical main repository into a role workspace, t
 
 - Delegates test stub synchronization to workspace provisioning to verify that the workspace files matching stub role dependencies are valid read-only test stubs that contain no implementation details, synthesizing read-only test stubs raising `NotImplementedError` from companion specification files of the main repository when such a file is missing, is outdated against its companion specification, or contains leaked implementation code, and deleting orphaned stubs whose companion specifications no longer exist in the main repository.
 
-- Copies newer files from the main repository into the role workspace, enforcing read-only permissions on upstream dependencies and read-write permissions on role targets, projecting metadata headers to expose only change, feedback, and code hash attributes while omitting lifecycle timestamps, and computing code body hashes on all writable files in the scope. It records the canonical source file hash and projected workspace file hash in the pull manifest upon copying. It never clobbers local edits made by the subagent in the role workspace: if a workspace file has been modified locally, the synchronizer preserves those edits and does not copy the canonical file over the modified local file. An existing writable target is pulled from the main repository only when the upstream version has changed since the last pull and the local target carries no uncommitted code modification, preserving pending local targets and deleted targets that await template regeneration.
+- Copies newer files from the main repository into the role workspace, enforcing read-only permissions on upstream dependencies and read-write permissions on role targets, projecting metadata headers to expose only change, feedback, and code hash attributes while omitting lifecycle timestamps, and computing code body hashes on all writable files in the scope. It records the canonical source file hash and projected workspace file hash in the pull manifest upon copying. When a canonical file has not changed since the last pull, the synchronizer preserves the workspace file without copying over any local edits. When a canonical file has changed upstream since the last pull, read-only upstream dependencies and audited targets are always overwritten with the projected canonical version so auditor and consumer workspaces never retain stale upstream copies, whereas an existing writable target is pulled only when the local target carries no uncommitted code modification, preserving pending local targets and deleted targets that await template regeneration.
 
 - Preserves the uncommitted local modifications of role targets, failing fast when an upstream code modification conflicts with an active local code change. An upstream change conflicts with a writable target only when the canonical code body differs from the workspace baseline and the workspace target carries uncommitted code modifications; upstream metadata-only updates and non-conflicting code pulls to clean targets proceed without conflict.
 
@@ -42,8 +42,8 @@ When harvesting changes from a role workspace back to the canonical main reposit
 When flushing blame feedback, the workspace synchronizer reads the local blame buffer file, extracts culprit file paths and critique messages, locates target files in the canonical main repository, appends unacted feedback entries with UTC timestamps to target headers in-place, and deletes the blame buffer file upon successful application.
 
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-22T13:50:00Z
-LAST_CHANGED: 2026-11-05T11:45:00Z
-CHANGE: Evaluate pull against pull manifest and prevent clobbering subagent edits
-SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
+LAST_CLEANED: 2026-11-06T20:48:00Z
+LAST_CHANGED: 2026-11-06T20:48:00Z
+CHANGE: Always overwrite read-only upstream files on pull when canonical version changes in main
+SPEC_QA_AUDIT: 2026-11-06T20:48:00Z
 -->

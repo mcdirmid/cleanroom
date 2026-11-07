@@ -1867,9 +1867,9 @@ def _execute_flight(
             if resolved_harness != "antigravity":
                 sys.stdout.write("\n" + "=" * 72 + "\n")
                 sys.stdout.write("AUTONOMOUS DSH COORDINATION INITIATED:\n")
-                sys.stdout.write(f"Harness: {resolved_harness} (Local Engine / Headless Execution)\n")
+                sys.stdout.write(f"Harness: {resolved_harness} (DSH Server Bridge)\n")
                 sys.stdout.write(f"Target Scope: {flight_scope}\n")
-                sys.stdout.write("Status: Running headlessly via local engine loop.\n")
+                sys.stdout.write("Status: Dispatching to live DSH Web/Desktop server.\n")
                 sys.stdout.write("Action: None required. Do NOT invoke coordinator or interfere with workspaces.\n")
                 sys.stdout.write("=" * 72 + "\n\n")
                 sys.stdout.flush()

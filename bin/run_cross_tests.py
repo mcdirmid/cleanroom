@@ -382,37 +382,38 @@ _initialize_ = __initialize__
             target_test_paths.append(target_test_file)
 
     # 4. Inject pytest conftest in test directory to harmonize sys.modules and singleton registration
+    lib_mod_stems = [Path(fn).stem for fn in lib_files.keys() if fn.endswith(".py") and Path(fn).stem != "__init__"]
     conftest_path = target_test_dir / "conftest.py"
     conftest_content = f"""
 import sys
 import importlib
 
-# Force identical module identity between unqualified and qualified imports
+# Force identical module identity between unqualified, suite-qualified, and scope-qualified imports
 try:
     _pkg = importlib.import_module("benchmark_1.parts.{suite_name}")
     sys.modules["{suite_name}"] = _pkg
-    _pkg_mod = importlib.import_module("benchmark_1.parts.{suite_name}.lib.{suite_name}")
-    for attr in dir(_pkg_mod):
-        if not attr.startswith("__"):
-            setattr(_pkg, attr, getattr(_pkg_mod, attr))
-    for b in ("benchmark_1", "benchmark_2", "benchmark_3", "benchmark_4", "benchmark_5"):
-        sys.modules[f"{{b}}.parts.{suite_name}.lib.{suite_name}"] = _pkg_mod
+    _lib_pkg = importlib.import_module("benchmark_1.parts.{suite_name}.lib")
+    sys.modules["{suite_name}.lib"] = _lib_pkg
 except ImportError:
+    _pkg = None
+
+for _stem in {lib_mod_stems!r}:
     try:
-        _pkg_mod = importlib.import_module("benchmark_1.parts.{suite_name}.lib.{suite_name}")
-        sys.modules["{suite_name}"] = _pkg_mod
-        for b in ("benchmark_1", "benchmark_2", "benchmark_3", "benchmark_4", "benchmark_5"):
-            sys.modules[f"{{b}}.parts.{suite_name}.lib.{suite_name}"] = _pkg_mod
+        _mod = importlib.import_module(f"benchmark_1.parts.{suite_name}.lib.{{_stem}}")
+        sys.modules[_stem] = _mod
+        sys.modules[f"lib.{{_stem}}"] = _mod
+        sys.modules[f"{suite_name}.{{_stem}}"] = _mod
+        sys.modules[f"{suite_name}.lib.{{_stem}}"] = _mod
+        sys.modules[f"parts.{suite_name}.lib.{{_stem}}"] = _mod
+        sys.modules[f"benchmarks.parts.{suite_name}.lib.{{_stem}}"] = _mod
+        for _b in ("benchmark_1", "benchmark_2", "benchmark_3", "benchmark_4", "benchmark_5", "benchmark_6", "benchmark_7", "benchmark_8"):
+            sys.modules[f"{{_b}}.parts.{suite_name}.lib.{{_stem}}"] = _mod
+        if _stem == "{suite_name}" and _pkg is not None:
+            for _attr in dir(_mod):
+                if not _attr.startswith("__"):
+                    setattr(_pkg, _attr, getattr(_mod, _attr))
     except ImportError:
         pass
-
-try:
-    _pkg_impl = importlib.import_module("benchmark_1.parts.{suite_name}.lib.{suite_name}_impl")
-    sys.modules["{suite_name}_impl"] = _pkg_impl
-    for b in ("benchmark_1", "benchmark_2", "benchmark_3", "benchmark_4", "benchmark_5"):
-        sys.modules[f"{{b}}.parts.{suite_name}.lib.{suite_name}_impl"] = _pkg_impl
-except ImportError:
-    pass
 """
     conftest_path.write_text(conftest_content, encoding="utf-8")
 

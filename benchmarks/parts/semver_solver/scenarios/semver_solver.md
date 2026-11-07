@@ -87,6 +87,16 @@ Observed: The range's raw text property contains trimmed string `>=1.0.0 <2.0.0`
 3. Evaluate satisfaction of version `1.0.0-alpha` against range `>=1.0.0 <2.0.0` with explicit pre-release inclusion requested.
 Observed: Version `1.0.0-alpha` does not satisfy the range because precedence ordering ranks `1.0.0-alpha` strictly lower than boundary `1.0.0`.
 
+## Scenario 10 — Operator-wildcard composition and wildcard hyphen range matching
+
+Given: A newly initialized version engine.
+
+1. Parse range expressions combining operators with wildcards `  >= 1.x  `, `  != 1.x  `, `  ^ 1.x  `, `  ~ 1.x  `, and `  >= *  `, and wildcard hyphen range `  1.0.0 - 2.x  `.
+Observed: All expressions parse successfully into valid version ranges.
+
+2. Evaluate satisfaction of version `1.5.0` against `>=1.x`, `1.2.0` against `!=1.x`, `1.5.0` against `^1.x`, `2.5.0` against `1.0.0 - 2.x`, and `3.0.0` against `1.0.0 - 2.x`.
+Observed: Version `1.5.0` matches range `>=1.x`, version `1.2.0` does not match range `!=1.x`, version `1.5.0` matches range `^1.x`, version `2.5.0` matches range `1.0.0 - 2.x`, and version `3.0.0` does not match range `1.0.0 - 2.x`.
+
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-21T20:57:14Z
 LAST_CHANGED: 2026-10-27T22:30:00Z

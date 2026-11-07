@@ -166,18 +166,21 @@ class raises:
             _expected_raises.reset(self._token)
         if exc_val is not None:
             if issubclass(exc_type, self.exc_type):
-                if self.match and self.match not in str(exc_val):
-                    raise AssertionError(f"Exception message '{exc_val}' does not match pattern '{self.match}'")
+                exc_str = str(exc_val)
+                if self.match and self.match not in exc_str:
+                    raise AssertionError(f"Exception message '{exc_str}' does not match pattern '{self.match}'")
                 self.caught = exc_val
                 return False
             return False
         if _is_verification.get():
             raise AssertionError(f"Expected exception {self.exc_type.__name__} was not raised")
         else:
-            try:
-                raise self.exc_type()
-            except TypeError:
-                raise self.exc_type(f"Contracted {self.exc_type.__name__} raised by synthesized fake")
+            inst = _safe_instantiate_exception(
+                cast(Type[Exception], self.exc_type),
+                self.match or f"Contracted {self.exc_type.__name__} raised by synthesized fake",
+            )
+            _ = str(inst)
+            raise inst
 
 
 def make_return_value(fake_val: Any = None) -> Any:
@@ -440,17 +443,18 @@ def _safe_instantiate_exception(exc_cls: Type[Exception], match: str = "") -> Ex
                 continue
             if param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
                 continue
-            if param.annotation is int:
+            ann_str = str(param.annotation) if param.annotation is not inspect.Parameter.empty else ""
+            if param.annotation is int or ann_str == "int":
                 args.append(0)
-            elif param.annotation is float:
+            elif param.annotation is float or ann_str == "float":
                 args.append(0.0)
-            elif param.annotation is bool:
+            elif param.annotation is bool or ann_str == "bool":
                 args.append(False)
-            elif param.annotation is list or param.annotation is Sequence:
+            elif param.annotation is list or param.annotation is Sequence or ann_str.startswith(("list", "List", "Sequence")):
                 args.append([])
-            elif param.annotation is tuple:
+            elif param.annotation is tuple or ann_str.startswith(("tuple", "Tuple")):
                 args.append(())
-            elif param.annotation is dict:
+            elif param.annotation is dict or ann_str.startswith(("dict", "Dict", "Mapping")):
                 args.append({})
             elif i == 0 or "message" in name.lower() or "msg" in name.lower():
                 args.append(msg)

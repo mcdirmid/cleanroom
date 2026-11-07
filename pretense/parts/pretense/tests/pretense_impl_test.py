@@ -1314,6 +1314,19 @@ ctx.returns(lambda v, r: v.is_prerelease)
         self.assertGreaterEqual(runner.sm.state.count, 1)
         self.assertGreaterEqual(counter_sut.sut_count, 1)
 
+    def test_raises_synthesizes_multi_arg_dataclass_exception_in_fake_mode(self) -> None:
+        @dataclass
+        class MultiArgError(Exception):
+            message: str
+            raw_text: str
+            packages: tuple[str, ...]
+
+        with self.assertRaises(MultiArgError) as ctx:
+            with pretense.raises(MultiArgError):
+                pretense.make_return_value(None)
+        self.assertEqual(ctx.exception.packages, ())
+        self.assertEqual(ctx.exception.raw_text, "<mock_raw_text>")
+
 
 if __name__ == "__main__":
     unittest.main()

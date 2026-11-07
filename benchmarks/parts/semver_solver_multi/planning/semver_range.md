@@ -16,7 +16,7 @@ By factoring range expression compilation and constraint evaluation into decoupl
 
 ### Contracts
 
-- A range engine parses range expression text into a version range supporting basic comparators, caret ranges, tilde ranges, wildcards, hyphen ranges, and union alternatives, trimming surrounding whitespace around range expressions and individual clauses while tolerating optional whitespace between operators and version targets, delimiting comparators within clauses strictly by whitespace. [parse_version_range]
+- A range engine parses range expression text into a version range supporting basic comparators, caret ranges, and tilde ranges applied to either full versions or wildcard expressions, hyphen ranges with full version or wildcard endpoints, and union alternatives, trimming surrounding whitespace around range expressions and individual clauses while tolerating optional whitespace between operators and version or wildcard targets, delimiting comparators within clauses strictly by whitespace. [parse_version_range]
 - When a range expression contains syntax errors, is empty, consists solely of whitespace, contains empty clauses between union delimiters, uses comma delimiters between comparators, or supplies bare partial versions lacking wildcard tokens across any comparator or hyphen expression, the range engine raises invalid range error carrying the unparseable raw range text. [raise_invalid_range_on_syntax_error]
 - A version range tests whether a semantic version matches its constraints. [match_range_against_version]
 - Coercing a version range to a string delegates to returning its range expression text. [coerce_range_to_expression_text]

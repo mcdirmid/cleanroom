@@ -178,7 +178,7 @@ changed.
    Realized by: role guide regeneration delegated to `provision`, which rewrites only the guide file and
    leaves every in-scope source file alone.
 
-### Scenario 11 — Subagent edits in role workspace are preserved on pull when upstream is unchanged
+### Scenario 11 — Subagent edits in role workspace are preserved on pull when upstream is unchanged, while updated upstream read-only files are always pulled
 
 Given: role alpha is commissioned for scope_a at `/ws/alpha_scope_a`, the workspace alpha source
 for widget carries the subagent modification `widget local`, and the canonical main repository has not changed
@@ -188,8 +188,12 @@ since the file was last pulled into the workspace.
    Observed: the workspace alpha source for widget retains `widget local` without being reverted or clobbered, and the sync result reports zero pulled files.
    Realized by: comparing canonical files against the pull manifest and skipping files whose upstream hashes have not changed since the last pull.
 
+2. A read-only upstream dependency `beta/high/beta.md` in the workspace is modified locally (such as by an in-band blame reflection) and its canonical version in the main repository is subsequently updated by the upstream producer. The synchronizer pulls upstream changes for alpha in scope_a.
+   Observed: the workspace `beta/high/beta.md` is overwritten with the projected canonical version from the main repository with read-only permissions, and the pull manifest records the updated canonical and workspace hashes.
+   Realized by: unconditionally pulling read-only files whenever their canonical hash in the main repository has changed since the last pull.
+
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-22T13:50:00Z
-LAST_CHANGED: 2026-11-05T11:45:00Z
-CHANGE: Preserve subagent edits on pull when upstream files have not changed
+LAST_CLEANED: 2026-11-06T20:48:02Z
+LAST_CHANGED: 2026-11-06T20:48:02Z
+CHANGE: Always overwrite read-only upstream files on pull when canonical version changes in main
 -->

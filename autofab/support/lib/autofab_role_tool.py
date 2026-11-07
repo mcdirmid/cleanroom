@@ -2342,16 +2342,20 @@ def run_clean(
     else:
         active_harness = resolve_model_harness(bound_model, repo_root=parsed.repo_root)
 
-    # Headless / CI Mode (or dsh / simulation harnesses)
-    is_headless = parsed.headless or parsed.simulation or active_harness in ("dsh", "simulation", "deepseek", "deepseek-harness")
-    if is_headless:
+    if parsed.headless:
+        print("Error: Headless execution is banned. Crash immediately.", file=sys.stderr)
+        return 1
+
+    # Autonomous DSH / Simulation execution
+    is_autonomous = parsed.simulation or active_harness in ("dsh", "simulation", "deepseek", "deepseek-harness")
+    if is_autonomous:
         subagent_tool_mod = _find_subagent_tool_mod(scope, argv)
         if subagent_tool_mod is not None:
             print("\n" + "=" * 72)
             print("AUTONOMOUS DSH COORDINATION INITIATED:")
-            print(f"Harness: {active_harness} (Local Engine / Headless Execution)")
+            print(f"Harness: {active_harness} (DSH Server Bridge)")
             print(f"Target Scope: {scope}")
-            print("Status: Running headlessly via local engine loop.")
+            print("Status: Dispatching to live DSH Web/Desktop server.")
             print("Action: None required. Do NOT invoke coordinator or interfere with workspaces.")
             print("=" * 72 + "\n", flush=True)
             forward_args = ["clean", "--scope", scope]
