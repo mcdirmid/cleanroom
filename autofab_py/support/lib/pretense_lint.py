@@ -538,7 +538,7 @@ def check_pretense_next_transition(
                         errors.append(
                             f"{file_path}:{child.lineno}: error [PN009_REQUIRE_PURITY]: require() cannot reference transition input argument '{sub.id}'. "
                             f"Preconditions only evaluate state. To constrain input arguments relative to state collections (such as entity existence), use: "
-                            f"'require_arg({sub.id}, Domain.in_set(self.state.<collection>), error=ExpectedError)' (or positional 'require_arg({sub.id}, Domain.in_set(self.state.<collection>), ExpectedError)')."
+                            f"'require_arg({sub.id}, Domain.in_set(self.state.<collection>))' (optionally with 'error=ExpectedError' as documentation)."
                         )
 
     # Pivot Node Verification (only for non-seeding transitions)
@@ -1736,7 +1736,7 @@ def check_no_raises_for_errors(tree: ast.AST, file_path: str = "") -> list[str]:
 
     Contract violations (*Error) designate precondition or domain failures (invalid inputs or state).
     They must be gated via 'require(..., error=ExpectedError)' (for state preconditions) or
-    'require_arg(param, Domain.in_set(...), error=ExpectedError)' (for argument domains).
+    'require_arg(param, Domain.in_set(...), error=ExpectedError)' (for argument domains, where error is optional documentation).
     'raises(...)' is reserved exclusively for operational exceptions (*Exception).
     In test cases, contract violations must be tested via 'self.checked.violating(ExpectedError).method(...)'.
     """
@@ -1786,7 +1786,7 @@ def check_no_raises_for_errors(tree: ast.AST, file_path: str = "") -> list[str]:
                         f"{file_path}:{node.lineno}: error: [PRE_LINT_NO_RAISES_ERROR] 'raises({err_name})' is invalid for contract violation errors (*Error). "
                         f"'raises(...)' is reserved exclusively for operational exceptions (*Exception). Contract errors designate invalid inputs or state preconditions; "
                         f"gate them using 'require(..., error={err_name})' (or positional 'require(..., {err_name})') for state preconditions, or "
-                        f"'require_arg(<param>, Domain.in_set(self.state.<collection>), error={err_name})' (or positional 'require_arg(<param>, Domain.in_set(self.state.<collection>), {err_name})') for argument domains. "
+                        f"'require_arg(<param>, Domain.in_set(self.state.<collection>), error={err_name})' (or positional 'require_arg(<param>, Domain.in_set(self.state.<collection>), {err_name})') for argument domains (error is optional documentation of the contracted violation). "
                         f"To verify {err_name} in test cases, use 'self.checked.violating({err_name}).method(...)'. "
                         f"DO NOT rename or redefine {err_name} to an *Exception; exception types are strictly dictated by the Low-Level Specification (low/*.pyi)."
                     )
@@ -2480,7 +2480,7 @@ def generate_pretense_scaffold(
                 "# 1. State Machine Specification (Model & Transitions)",
                 "# ==============================================================================",
                 "# NOTE: Transitions model target methods 1:1 (@transition(TargetClass.method)).",
-                "# Contract violations (*Error, e.g. NodeNotFoundError) are preconditions: use require_arg(arg, Domain.in_set(self.state.items), error=ExpectedError) or require(condition, error=ExpectedError). NEVER use with raises(...) for *Error!",
+                "# Contract violations (*Error, e.g. NodeNotFoundError) are preconditions: use require_arg(arg, Domain.in_set(self.state.items)) or require(condition) (optional error=ExpectedError is documentation only). NEVER use with raises(...) for *Error!",
                 "# with raises(ExpectedException): self.inner_method(...) is reserved exclusively for operational exceptions (*Exception).",
                 "# require_arg defines the caller precondition contract (checked at runtime on real calls).",
                 "# Use Domain.type(T) or open domain; use preferred=[...] to cluster/bias fuzz inputs without restricting the contract.",
@@ -3181,7 +3181,7 @@ def generate_pretense_scaffold(
             "# 1. State Machine Specification (Model & Transitions)",
             "# ==============================================================================",
             "# NOTE: Transitions model target methods 1:1 (@transition(TargetClass.method)).",
-            "# Contract violations (*Error, e.g. NodeNotFoundError) are preconditions: use require_arg(arg, Domain.in_set(self.state.items), error=ExpectedError) or require(condition, error=ExpectedError). NEVER use with raises(...) for *Error!",
+            "# Contract violations (*Error, e.g. NodeNotFoundError) are preconditions: use require_arg(arg, Domain.in_set(self.state.items)) or require(condition) (optional error=ExpectedError is documentation only). NEVER use with raises(...) for *Error!",
             "# with raises(ExpectedException): self.inner_method(...) is reserved exclusively for operational exceptions (*Exception).",
             "# require_arg defines the caller precondition contract (checked at runtime on real calls).",
             "# Use Domain.type(T) or open domain; use preferred=[...] to cluster/bias fuzz inputs without restricting the contract.",
