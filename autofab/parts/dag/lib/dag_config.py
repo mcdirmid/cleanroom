@@ -25,6 +25,7 @@ class DagConfig(Singleton[SystemTier], Protocol):
         """Bound on the number of dirty nodes of the same role address collected into a single cleaning batch."""
         ...
 
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-11T04:59:19Z

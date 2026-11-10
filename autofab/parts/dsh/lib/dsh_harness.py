@@ -5,7 +5,7 @@ from autofab.parts.agent.lib.session import AgentSessionTier
 from support.lib.lifecycle import Singleton
 
 from dataclasses import dataclass
-from typing import Any, Optional, Protocol
+from typing import Any, Mapping, Optional, Protocol, Sequence
 from autofab.parts.subagent.lib import subagent_coordinator
 
 
@@ -27,13 +27,29 @@ class DshHarnessAdapter(subagent_coordinator.HarnessAdapter, Protocol):
         ...
 
     # Contract: MUST return None when running, or role round result when terminated.
-    def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleRoundResult]:
+    def poll_role(
+        self, task_handle: str
+    ) -> Optional[subagent_coordinator.RoleRoundResult]:
         """Polls DeepSeek Harness subagent round execution without blocking."""
         ...
 
     # Contract: MUST terminate active DeepSeek Harness subagent process associated with task handle.
     def interrupt_role(self, task_handle: str) -> None:
         """Aborts active DeepSeek Harness subagent task execution upon timeout or limit."""
+        ...
+
+    # Contract: MUST persist authoritative orchestration state snapshot capturing active scopes, running workers with session IDs, and dead sessions to external coordination storage.
+    def update_orchestration_state(
+        self,
+        dir_scope: str,
+        wave_count: int,
+        active_workers: Mapping[str, str],
+        assigned_targets: Mapping[str, Sequence[str]],
+        all_scope_roles: Sequence[str],
+        converged: bool = False,
+        failed: bool = False,
+    ) -> None:
+        """Updates and publishes external orchestration state for the active scope."""
         ...
 
 
@@ -64,6 +80,7 @@ class DshHarnessManager(Singleton[AgentSessionTier], Protocol):
     def get_telemetry_parser(self) -> DshTelemetryParser:
         """Returns the DeepSeek Harness telemetry parser service."""
         ...
+
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z

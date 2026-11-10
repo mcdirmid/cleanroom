@@ -19,7 +19,7 @@ The workspace tool runner realization implements command-line argument parsing a
 
 The realization:
 
-- Builds argument parsers and dispatches command execution across the work, check files, submit, blame, feedback, fail, coverage, commission, refresh system, revert, and checkpoint subcommands, supporting repository root overrides for blame, fail, and coverage, and delegating execution to the workspace command handler.
+- Builds argument parsers and dispatches command execution across the work, check files, submit, blame, feedback, fail, coverage, commission, refresh system, revert, and checkpoint subcommands, supporting repository root overrides for blame, fail, and coverage, supporting structured blame options (--slug, --viol, --facet, --lines, --witness) on blame, and delegating execution to the workspace command handler.
 
 - Normalizes integer exit codes and error handling across dispatched commands, guaranteeing execution operates within the agent session lifecycle tier.
 

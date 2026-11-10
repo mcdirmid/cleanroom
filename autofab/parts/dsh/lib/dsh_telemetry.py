@@ -127,8 +127,31 @@ class DshTelemetryParser(Singleton[AgentSessionTier], Protocol):
         sessions_dir: Optional[str] = None,
     ) -> DshRpcTurnStatus: ...
 
+    # Contract: MUST rename a session on DeepSeek Harness Web bridge or Desktop RPC.
+    def rename_session(
+        self,
+        session_id: str,
+        title: str,
+        sessions_dir: Optional[str] = None,
+    ) -> bool: ...
+
+    # Contract: MUST delete a session from DeepSeek Harness Web bridge or Desktop RPC.
+    def delete_session(
+        self,
+        session_id: str,
+        sessions_dir: Optional[str] = None,
+    ) -> bool: ...
+
+    # Contract: MUST discover and delete all existing sessions whose title contains [<dir_scope>].
+    def cleanup_scope_sessions(
+        self,
+        dir_scope: str,
+        sessions_dir: Optional[str] = None,
+    ) -> int: ...
+
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T18:55:00Z
-# CHANGE: Author dsh_telemetry interface
+# LAST_CHANGED: 2026-11-09T23:32:00Z
+# CHANGE: Add session renaming, deletion, and scope conversation cleanup operations
 # --- END CLEANROOM METADATA ---

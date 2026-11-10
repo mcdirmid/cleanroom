@@ -15,6 +15,7 @@ from support.lib.lifecycle import (
 )
 from autofab.parts.agent.lib import session as agent_session
 from autofab.parts.core.lib import file_paths
+
 try:
     from support.lib import app_info
 except Exception:
@@ -44,7 +45,9 @@ def _create_workspace_path_under(parent_root: str, relative_name: str) -> str:
     manager = _file_path_manager()
     if manager is None:
         return os.path.abspath(os.path.join(parent_root, relative_name))
-    root = manager.create_absolute_path(file_paths.PathString(os.path.abspath(parent_root)))
+    root = manager.create_absolute_path(
+        file_paths.PathString(os.path.abspath(parent_root))
+    )
     relative = manager.create_workspace_path(file_paths.PathString(relative_name))
     return str(manager.resolve_path(root, relative).path)
 
@@ -81,7 +84,11 @@ def _match_sibling_workspace_conventions(workspace_dir: str) -> Optional[str]:
             os.path.exists(os.path.join(candidate, ".git"))
             or any(
                 os.path.exists(os.path.join(candidate, marker))
-                for marker in (*app_info.get_config_filenames(), *app_info.get_roles_filenames(), "pyproject.toml")
+                for marker in (
+                    *app_info.get_config_filenames(),
+                    *app_info.get_roles_filenames(),
+                    "pyproject.toml",
+                )
             )
         ):
             return os.path.realpath(candidate)
@@ -99,19 +106,16 @@ def _search_ancestor_markers(start_dir: str) -> Optional[str]:
     topmost: Optional[str] = None
     curr = start_dir
     while curr and curr != os.path.dirname(curr):
-        if (
-            any(
-                os.path.exists(os.path.join(curr, marker))
-                for marker in (
-                    *app_info.get_config_filenames(),
-                    *app_info.get_roles_filenames(),
-                    "pyproject.toml",
-                )
+        if any(
+            os.path.exists(os.path.join(curr, marker))
+            for marker in (
+                *app_info.get_config_filenames(),
+                *app_info.get_roles_filenames(),
+                "pyproject.toml",
             )
-            and not any(
-                os.path.exists(os.path.join(curr, d))
-                for d in app_info.get_role_descriptors()
-            )
+        ) and not any(
+            os.path.exists(os.path.join(curr, d))
+            for d in app_info.get_role_descriptors()
         ):
             topmost = curr
         curr = os.path.dirname(curr)
@@ -143,7 +147,10 @@ class WorkspaceRegistry(role_registry.WorkspaceRegistry):
         curr = os.path.abspath(start_dir or os.getcwd())
         check_role = curr
         while check_role and check_role != os.path.dirname(check_role):
-            if any(os.path.isfile(os.path.join(check_role, d)) for d in app_info.get_role_descriptors()):
+            if any(
+                os.path.isfile(os.path.join(check_role, d))
+                for d in app_info.get_role_descriptors()
+            ):
                 discovered = _match_sibling_workspace_conventions(check_role)
                 if discovered:
                     return _create_absolute_path(os.path.realpath(discovered))
@@ -204,7 +211,8 @@ class WorkspaceRegistry(role_registry.WorkspaceRegistry):
             f"{norm_role}_{dir_scope.strip('/')}"
         )
         return _create_workspace_path_under(
-            os.path.join(parent_dir, app_info.get_default_role_workspaces_container()), folder_name
+            os.path.join(parent_dir, app_info.get_default_role_workspaces_container()),
+            folder_name,
         )
 
     # Contract: Loads active workspace descriptors from session memory and scanned autofab_role_workspaces metadata.
@@ -244,11 +252,16 @@ class WorkspaceRegistry(role_registry.WorkspaceRegistry):
                                 role_cfg_path = os.path.join(item_path, desc_name)
                                 if os.path.isfile(role_cfg_path):
                                     try:
-                                        with open(role_cfg_path, "r", encoding="utf-8") as f:
+                                        with open(
+                                            role_cfg_path, "r", encoding="utf-8"
+                                        ) as f:
                                             rdata = json.load(f)
                                         repo = rdata.get("main_repository_root") or root
                                         item_repo = os.path.abspath(repo)
-                                        if target_repo is not None and item_repo != target_repo:
+                                        if (
+                                            target_repo is not None
+                                            and item_repo != target_repo
+                                        ):
                                             continue
                                         role_identifier = rdata.get("role_name", "")
                                         if not role_identifier:
@@ -268,7 +281,9 @@ class WorkspaceRegistry(role_registry.WorkspaceRegistry):
                                             main_repository_root=repo,
                                             directory_scope=dir_scope,
                                             role_definition=r_def,
-                                            last_sync_timestamp=rdata.get("last_sync_timestamp"),
+                                            last_sync_timestamp=rdata.get(
+                                                "last_sync_timestamp"
+                                            ),
                                         )
                                         self._workspaces[norm_ws] = descriptor
                                         seen_dirs.add(norm_ws)
@@ -302,6 +317,8 @@ class WorkspaceRegistry(role_registry.WorkspaceRegistry):
                 del self._workspaces[key]
                 removed = True
         return removed
+
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-14T18:45:00Z

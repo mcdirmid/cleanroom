@@ -72,16 +72,10 @@ $RUFF_CMD "${RUFF_ARGS[@]}"
 echo "==> Formatting Markdown documentation (mdformat)..."
 MD_FILES=()
 
-# AGENTS.md and READMEs
-[ -f "AGENTS.md" ] && MD_FILES+=("AGENTS.md")
+# READMEs
 [ -f "autofab/README.md" ] && MD_FILES+=("autofab/README.md")
 [ -f "autofab_py/README.md" ] && MD_FILES+=("autofab_py/README.md")
 [ -f "pretense/README.md" ] && MD_FILES+=("pretense/README.md")
-
-# High-level specs in parts
-while IFS= read -r f; do
-    [ -n "$f" ] && MD_FILES+=("$f")
-done < <(find autofab/parts -name "*.md" 2>/dev/null | sort)
 
 # Active guides
 while IFS= read -r f; do
@@ -90,7 +84,7 @@ done < <(find autofab_py/guides -maxdepth 1 -name "*.md" 2>/dev/null | sort)
 
 while IFS= read -r f; do
     [ -n "$f" ] && MD_FILES+=("$f")
-done < <(find autofab/guides -name "*.md" 2>/dev/null | sort)
+done < <(find autofab/guides -maxdepth 1 -name "*.md" 2>/dev/null | sort)
 
 if [ ${#MD_FILES[@]} -gt 0 ]; then
     if [ "$CHECK_MODE" -eq 1 ]; then

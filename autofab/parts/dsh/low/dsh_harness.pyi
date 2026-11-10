@@ -1,7 +1,7 @@
 """Low-level interface specification for dsh_harness."""
 
 from dataclasses import dataclass
-from typing import Any, Optional, Protocol
+from typing import Any, Mapping, Optional, Protocol, Sequence
 from support.lib.framework import data_type, operation, poly_type, singleton_type
 from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
@@ -23,6 +23,7 @@ class DshHarnessAdapter(subagent_coordinator.HarnessAdapter, Protocol):
 
         POSTCONDITIONS:
         - MUST initiate DeepSeek Harness subagent round via RPC bridge or headless process in the designated workspace and return a task handle.
+        - MUST rename previous conversation to put [<scope>] dead - <role> after replacement conversation is issued for the role.
         """
         ...
 
@@ -51,6 +52,24 @@ class DshHarnessAdapter(subagent_coordinator.HarnessAdapter, Protocol):
 
         POSTCONDITIONS:
         - MUST terminate active DeepSeek Harness subagent process associated with task handle.
+        """
+        ...
+
+    @operation
+    def update_orchestration_state(
+        self,
+        dir_scope: str,
+        wave_count: int,
+        active_workers: Mapping[str, str],
+        assigned_targets: Mapping[str, Sequence[str]],
+        all_scope_roles: Sequence[str],
+        converged: bool = False,
+        failed: bool = False,
+    ) -> None:
+        """Updates and publishes external orchestration state for the active scope.
+
+        POSTCONDITIONS:
+        - MUST persist an authoritative orchestration state snapshot capturing active scopes, current wave counts, active running workers with session identifiers and target files, idle completed workers, dead sessions, and convergence status to external coordination storage.
         """
         ...
 
@@ -97,7 +116,7 @@ class DshHarnessManager(Singleton[AgentSessionTier], Protocol):
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-13T20:00:00Z
-# CHANGE: author dsh_harness interface low-level specification
+# LAST_CHANGED: 2026-11-09T22:10:00Z
+# CHANGE: Authoritative orchestration state snapshot publishing to external coordination storage
 # SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---

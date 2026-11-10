@@ -1,13 +1,14 @@
 from __future__ import annotations
 from support.lib.lifecycle import ChildTierOf, LifecycleTier, SystemTier, system
 
+
 # Contract: Lifecycle tier bounding execution, conversation, and ephemeral state of an agent under the system lifecycle tier.
 class AgentSessionTier(ChildTierOf[SystemTier]):
     """Lifecycle tier bounding the execution, conversation, and ephemeral state of an agent under the system lifecycle tier."""
 
 
 # Contract: __orphan__ - MUST provide agent_session and session as LifecycleTier child tiers of the system lifecycle tier.
-agent_session: LifecycleTier = system.create_child('agent_session')
+agent_session: LifecycleTier = system.create_child("agent_session")
 session = agent_session
 
 # --- CLEANROOM METADATA ---

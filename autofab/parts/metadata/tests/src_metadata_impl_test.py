@@ -161,13 +161,21 @@ def hello():
             self.assertEqual(meta.change_summary, "init")
             self.assertFalse(self.coordinator.is_code_modified(fpath))
 
-            # append feedback
+            # append feedback with sender role attribution
             self.coordinator.append_feedback(fpath, "Critique text", sender="reviewer")
             meta = self.coordinator.extract_metadata(fpath)
             self.assertIsNotNone(meta)
             assert meta is not None
             self.assertEqual(len(meta.feedback), 1)
-            self.assertEqual(meta.feedback[0], "Critique text")
+            self.assertEqual(meta.feedback[0], "[from:reviewer] Critique text")
+
+            # append feedback with default user sender
+            self.coordinator.append_feedback(fpath, "User critique")
+            meta = self.coordinator.extract_metadata(fpath)
+            self.assertIsNotNone(meta)
+            assert meta is not None
+            self.assertEqual(len(meta.feedback), 2)
+            self.assertEqual(meta.feedback[1], "User critique")
 
             # stamp audit
             self.coordinator.stamp_audit(fpath, "qa")

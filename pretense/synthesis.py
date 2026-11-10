@@ -18,11 +18,13 @@ def synthesize_unit_test(
     ]
     if failure_critique:
         lines.append(f"    Failure: {failure_critique}")
-    lines.extend([
-        '    """',
-        f"    sm = {proto_class_name}.make_state_machine({state_class_name}())",
-        "",
-    ])
+    lines.extend(
+        [
+            '    """',
+            f"    sm = {proto_class_name}.make_state_machine({state_class_name}())",
+            "",
+        ]
+    )
 
     for i, step in enumerate(steps, 1):
         args_repr = ", ".join(repr(a) for a in step.args)
@@ -33,7 +35,9 @@ def synthesize_unit_test(
             lines.append(f"    # Step {i}: Method transition '{step.transition_name}'")
             if step.target_name:
                 lines.append(f"    # target: {step.target_name}")
-            lines.append(f"    sm.dispatch_transition({step.transition_name!r}, {args_repr})")
+            lines.append(
+                f"    sm.dispatch_transition({step.transition_name!r}, {args_repr})"
+            )
         lines.append("")
 
     lines.append("    # Verify invariants hold at conclusion")

@@ -17,6 +17,7 @@ from support.lib.lifecycle import (
     get_singleton,
     system,
 )
+
 try:
     from support.lib import app_info
 except Exception:
@@ -107,6 +108,7 @@ class UvManifestLoader(manifest_loader.UvManifestLoader):
             if not toml_path:
                 try:
                     import importlib.resources
+
                     files = importlib.resources.files(rel_pkg.replace("-", "_"))
                     for fname in roles_filenames:
                         cand = str(files.joinpath(fname))
@@ -125,6 +127,7 @@ class UvManifestLoader(manifest_loader.UvManifestLoader):
             for fname in roles_filenames:
                 try:
                     import importlib.resources
+
                     files = importlib.resources.files(pkg_name)
                     cand = str(files.joinpath(fname))
                     if os.path.isfile(cand):
@@ -150,9 +153,13 @@ class UvManifestLoader(manifest_loader.UvManifestLoader):
             r_dict = data.get("roles")
             roles = r_dict if isinstance(r_dict, dict) else {}
         except (OSError, tomllib.TOMLDecodeError) as e:
-            raise ValueError(f"Failed to parse role definitions from '{toml_path}': {e}") from e
+            raise ValueError(
+                f"Failed to parse role definitions from '{toml_path}': {e}"
+            ) from e
         if not roles:
-            raise ValueError(f"Methodology at '{toml_path}' declares no roles in '[roles]'")
+            raise ValueError(
+                f"Methodology at '{toml_path}' declares no roles in '[roles]'"
+            )
 
         result = (canon_meth, roles)
         self._methodology_roles[meth] = result
@@ -172,7 +179,12 @@ class UvManifestLoader(manifest_loader.UvManifestLoader):
         except OSError:
             entries = []
         for entry in entries:
-            if entry.startswith(".") or entry.startswith("bazel-") or entry.endswith(".failed") or ".failed" in entry:
+            if (
+                entry.startswith(".")
+                or entry.startswith("bazel-")
+                or entry.endswith(".failed")
+                or ".failed" in entry
+            ):
                 continue
             if os.path.isdir(os.path.join(root, entry, "parts")):
                 roots.append(f"{entry}/parts")
@@ -218,7 +230,9 @@ class UvManifestLoader(manifest_loader.UvManifestLoader):
             for r_cfg in roles_dict.values():
                 src_pat = r_cfg.get("src_pattern", "")
                 if "{unit_name}" in src_pat:
-                    clean_pat = src_pat.replace("{unit_dir}/", "").replace("{unit_dir}\\", "")
+                    clean_pat = src_pat.replace("{unit_dir}/", "").replace(
+                        "{unit_dir}\\", ""
+                    )
                     if "/" in clean_pat:
                         layout_d, file_pat = clean_pat.split("/", 1)
                         if "{unit_name}" in file_pat:
@@ -296,7 +310,9 @@ class UvManifestLoader(manifest_loader.UvManifestLoader):
                     info["imports"] = [x.strip() for x in raw.split(",") if x.strip()]
                 elif s.startswith("implements:"):
                     raw = s[len("implements:") :].strip()
-                    info["implements"] = [x.strip() for x in raw.split(",") if x.strip()]
+                    info["implements"] = [
+                        x.strip() for x in raw.split(",") if x.strip()
+                    ]
                 elif s.startswith("assembles:"):
                     raw = s[len("assembles:") :].strip()
                     info["assembles"] = [x.strip() for x in raw.split(",") if x.strip()]
@@ -415,10 +431,16 @@ class UvManifestLoader(manifest_loader.UvManifestLoader):
                 silent_deps_list.append(f"//{pkg_dir}:{unit_name}#{srd}")
 
             manifest = manifest_loader.TargetManifest(
-                label=manifest_loader.TargetLabel(f"//{pkg_dir}:{unit_name}#{role_name}"),
+                label=manifest_loader.TargetLabel(
+                    f"//{pkg_dir}:{unit_name}#{role_name}"
+                ),
                 dependencies=tuple(manifest_loader.TargetLabel(d) for d in deps_list),
-                silent_dependencies=tuple(manifest_loader.TargetLabel(d) for d in silent_deps_list),
-                star_dependencies=tuple(manifest_loader.TargetLabel(d) for d in deps_list),
+                silent_dependencies=tuple(
+                    manifest_loader.TargetLabel(d) for d in silent_deps_list
+                ),
+                star_dependencies=tuple(
+                    manifest_loader.TargetLabel(d) for d in deps_list
+                ),
                 feedback_dependencies=(),
                 allows_step_mode=False,
             )
@@ -504,7 +526,10 @@ class UvManifestLoader(manifest_loader.UvManifestLoader):
                     direct_deps.append(fd)
 
         v_success_msg = None
-        if "verification_success_message" in role_cfg and role_cfg["verification_success_message"]:
+        if (
+            "verification_success_message" in role_cfg
+            and role_cfg["verification_success_message"]
+        ):
             try:
                 v_success_msg = role_cfg["verification_success_message"].format(
                     unit_name=unit_name, unit_dir=pkg_dir
@@ -517,11 +542,20 @@ class UvManifestLoader(manifest_loader.UvManifestLoader):
             task_prompt=task_prompt,
             source_file=src_file,
             silent_source_files=(),
-            template=manifest_loader.file_alias.FileContent(role_cfg["template"]) if role_cfg.get("template") else None,
-            dependencies=tuple(manifest_loader.TargetLabel(d) for d in direct_deps + [sd for sd in star_deps if sd not in direct_deps]),
-            silent_dependencies=tuple(manifest_loader.TargetLabel(d) for d in silent_deps),
+            template=manifest_loader.file_alias.FileContent(role_cfg["template"])
+            if role_cfg.get("template")
+            else None,
+            dependencies=tuple(
+                manifest_loader.TargetLabel(d)
+                for d in direct_deps + [sd for sd in star_deps if sd not in direct_deps]
+            ),
+            silent_dependencies=tuple(
+                manifest_loader.TargetLabel(d) for d in silent_deps
+            ),
             star_dependencies=tuple(manifest_loader.TargetLabel(d) for d in star_deps),
-            feedback_dependencies=tuple(manifest_loader.TargetLabel(d) for d in feedback_deps),
+            feedback_dependencies=tuple(
+                manifest_loader.TargetLabel(d) for d in feedback_deps
+            ),
             guide_target=guide_target,
             verification_check=verification_check,
             allows_step_mode=role_cfg.get("allows_step_mode", True),
@@ -577,14 +611,18 @@ class UvManifestLoader(manifest_loader.UvManifestLoader):
 
         if storage is not None:
             storage_any: Any = storage
-            prompt_str = manifest.task_prompt if manifest.task_prompt is not None else ""
+            prompt_str = (
+                manifest.task_prompt if manifest.task_prompt is not None else ""
+            )
             node_def = node_storage.NodeDefinition(
                 task_prompt=node_storage.TaskPrompt(str(prompt_str)),
             )
             if hasattr(storage_any, "store_node_definition"):
                 storage_any.store_node_definition(node, node_def)
 
-            if manifest.source_file is not None and hasattr(storage_any, "record_source_file"):
+            if manifest.source_file is not None and hasattr(
+                storage_any, "record_source_file"
+            ):
                 storage_any.record_source_file(node, str(manifest.source_file))
 
             if manifest.silent_source_files and hasattr(
@@ -605,7 +643,9 @@ class UvManifestLoader(manifest_loader.UvManifestLoader):
                         if dep_manifest is None:
                             # A referenced target without a manifest still receives a fallback
                             # definition, but the declared direct dependency must propagate.
-                            self._synthesize_dependency_definition(storage_any, dep_node)
+                            self._synthesize_dependency_definition(
+                                storage_any, dep_node
+                            )
                         elif dep_manifest.task_prompt is None:
                             # Promptless pass-through synthesized because the unit component type
                             # is not active for its role: non-propagating per the contract.
@@ -634,6 +674,8 @@ class UvManifestLoader(manifest_loader.UvManifestLoader):
                     for fb_label in manifest.feedback_dependencies
                 }
                 storage_any.store_feedback_dependencies(node, fb_nodes)
+
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-11T05:42:33Z

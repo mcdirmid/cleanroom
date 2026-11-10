@@ -12,12 +12,12 @@ Command-line subagents in Cleanroom workspaces require a robust entrypoint that 
 
 ### Contracts
 
-- The realization constructs argument parsers for commission, refresh-sys, get_work, check_files, submit, blame, feedback, fail, coverage, revert, and checkpoint, supporting repository root overrides for blame, fail, and coverage. [construct_cli_parser]
+- The realization constructs argument parsers for commission, refresh-sys, get_work, check_files, submit, blame, feedback, reject, fail, coverage, revert, and checkpoint, supporting repository root overrides for blame, reject, fail, and coverage, and supporting structured blame options (--slug, --viol, --facet, --lines, --witness) on blame. [construct_cli_parser]
 - The realization parses command-line arguments and dispatches execution to the workspace command handler within the agent session lifecycle tier, normalizing exit codes. [dispatch_role_subcommand]
 
 ### Woven Contracts
 
-- When running a role subcommand, the runner parses CLI arguments and delegates execution to the workspace command handler within the agent session lifecycle tier. [dispatch_role_subcommand, construct_cli_parser, cli_tool: [dispatch_role_subcommand], commands: [execute_get_work_command, execute_check_files_command, execute_submit_command, execute_blame_command, execute_coverage_command, execute_commission_command, execute_refresh_sys_command]]
+- When running a role subcommand, the runner parses CLI arguments and delegates execution to the workspace command handler within the agent session lifecycle tier. [dispatch_role_subcommand, construct_cli_parser, cli_tool: [dispatch_role_subcommand], commands: [execute_get_work_command, execute_check_files_command, execute_submit_command, execute_blame_command, execute_reject_command, execute_coverage_command, execute_commission_command, execute_refresh_sys_command]]
 
 ## Grounding
 
@@ -39,7 +39,7 @@ Command-line subagents in Cleanroom workspaces require a robust entrypoint that 
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:47Z
-LAST_CHANGED: 2026-10-14T17:50:00Z
-CHANGE: Delegate substantive command workflows to commands
+LAST_CHANGED: 2026-11-07T10:20:00Z
+CHANGE: Construct parser and dispatch for reject command
 SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 -->

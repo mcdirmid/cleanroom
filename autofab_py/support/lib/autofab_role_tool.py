@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """autofab_role_tool.py — Role-workspace internal CLI tool for Cleanroom subagents."""
+
 from __future__ import annotations
 import argparse
 import importlib
@@ -12,8 +13,11 @@ import sys
 import time
 from typing import Any, Sequence
 
+
 def _find_main_repo_root() -> str | None:
-    main_root = os.environ.get("AUTOFAB_MAIN_ROOT") or os.environ.get("CLEANROOM_MAIN_ROOT")
+    main_root = os.environ.get("AUTOFAB_MAIN_ROOT") or os.environ.get(
+        "CLEANROOM_MAIN_ROOT"
+    )
     if main_root and os.path.isdir(main_root):
         return main_root
     curr = os.getcwd()
@@ -25,9 +29,21 @@ def _find_main_repo_root() -> str | None:
                 import app_info as _ai
             except Exception:
                 _ai = None
-        descriptors = _ai.get_role_descriptors() if _ai else (".autofab_role.json", ".cleanroom_role.json")
-        ws_containers = _ai.get_role_workspaces_containers() if _ai else ("autofab_role_workspaces", "role_workspaces")
-        config_filenames = (_ai.get_config_filenames() + ("pyproject.toml",)) if _ai else ("autofab.toml", "cleanroom.toml", "pyproject.toml")
+        descriptors = (
+            _ai.get_role_descriptors()
+            if _ai
+            else (".autofab_role.json", ".cleanroom_role.json")
+        )
+        ws_containers = (
+            _ai.get_role_workspaces_containers()
+            if _ai
+            else ("autofab_role_workspaces", "role_workspaces")
+        )
+        config_filenames = (
+            (_ai.get_config_filenames() + ("pyproject.toml",))
+            if _ai
+            else ("autofab.toml", "cleanroom.toml", "pyproject.toml")
+        )
 
         for desc in descriptors:
             cfg = os.path.join(curr, desc)
@@ -49,7 +65,10 @@ def _find_main_repo_root() -> str | None:
                                 cand = os.path.join(p_root, entry)
                                 if os.path.isdir(cand) and (
                                     os.path.exists(os.path.join(cand, ".git"))
-                                    or any(os.path.exists(os.path.join(cand, m)) for m in config_filenames)
+                                    or any(
+                                        os.path.exists(os.path.join(cand, m))
+                                        for m in config_filenames
+                                    )
                                 ):
                                     return cand
                     except OSError:
@@ -65,12 +84,14 @@ def _get_app_info() -> Any:
     """Safely resolves app_info module, preventing collisions with workspace support directories."""
     try:
         from support.lib import app_info
+
         if hasattr(app_info, "APP_NAME"):
             return app_info
     except Exception:
         pass
     try:
         import app_info
+
         if hasattr(app_info, "APP_NAME"):
             return app_info
     except Exception:
@@ -79,10 +100,14 @@ def _get_app_info() -> Any:
     if repo_root and os.path.isdir(repo_root):
         cand_roots = [""]
         try:
-            cand_roots.extend([
-                entry for entry in os.listdir(repo_root)
-                if os.path.isdir(os.path.join(repo_root, entry)) and not entry.startswith((".", "venv", "bazel-"))
-            ])
+            cand_roots.extend(
+                [
+                    entry
+                    for entry in os.listdir(repo_root)
+                    if os.path.isdir(os.path.join(repo_root, entry))
+                    and not entry.startswith((".", "venv", "bazel-"))
+                ]
+            )
         except OSError:
             pass
         for pkg in cand_roots:
@@ -90,7 +115,10 @@ def _get_app_info() -> Any:
             if os.path.isfile(cand):
                 try:
                     import importlib.util
-                    spec = importlib.util.spec_from_file_location("support_lib_app_info", cand)
+
+                    spec = importlib.util.spec_from_file_location(
+                        "support_lib_app_info", cand
+                    )
                     if spec and spec.loader:
                         mod = importlib.util.module_from_spec(spec)
                         spec.loader.exec_module(mod)
@@ -102,6 +130,7 @@ def _get_app_info() -> Any:
 
 try:
     import dotenv
+
     dotenv.load_dotenv()
     _app_info = _get_app_info()
     if _app_info and hasattr(_app_info, "get_user_config_dir"):
@@ -115,7 +144,11 @@ except Exception:
 def _get_dir_scope() -> str:
     curr = os.path.dirname(os.path.realpath(__file__))
     app_inf = _get_app_info()
-    descriptors = app_inf.get_role_descriptors() if hasattr(app_inf, "get_role_descriptors") else (".cleanroom_role.json",)
+    descriptors = (
+        app_inf.get_role_descriptors()
+        if hasattr(app_inf, "get_role_descriptors")
+        else (".cleanroom_role.json",)
+    )
     while curr and curr != os.path.dirname(curr):
         for desc in descriptors:
             cfg = os.path.join(curr, desc)
@@ -133,8 +166,16 @@ def _get_dir_scope() -> str:
 def _get_roots() -> list[str]:
     roots, curr = [], os.path.dirname(os.path.realpath(__file__))
     app_inf = _get_app_info()
-    descriptors = app_inf.get_role_descriptors() if hasattr(app_inf, "get_role_descriptors") else (".cleanroom_role.json",)
-    cfg_names = app_inf.get_config_filenames() + ("pyproject.toml",) if hasattr(app_inf, "get_config_filenames") else ("cleanroom.toml", "pyproject.toml")
+    descriptors = (
+        app_inf.get_role_descriptors()
+        if hasattr(app_inf, "get_role_descriptors")
+        else (".cleanroom_role.json",)
+    )
+    cfg_names = (
+        app_inf.get_config_filenames() + ("pyproject.toml",)
+        if hasattr(app_inf, "get_config_filenames")
+        else ("cleanroom.toml", "pyproject.toml")
+    )
     while curr and curr != os.path.dirname(curr):
         if any(os.path.isfile(os.path.join(curr, desc)) for desc in descriptors):
             # In an isolated role workspace, curr is the sole root. Main root is isolated from sys.path.
@@ -144,7 +185,11 @@ def _get_roots() -> list[str]:
             roots.append(curr)
             break
         curr = os.path.dirname(curr)
-    return roots or [os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(__file__)), "../../.."))]
+    return roots or [
+        os.path.abspath(
+            os.path.join(os.path.dirname(os.path.realpath(__file__)), "../../..")
+        )
+    ]
 
 
 _dir_scope = _get_dir_scope()
@@ -156,7 +201,9 @@ for _r in _get_roots():
             if _dir_scope and _entry == _dir_scope:
                 continue
             _pkg_dir = os.path.join(_r, _entry)
-            if os.path.isdir(_pkg_dir) and not _entry.startswith((".", "bazel-", "venv")):
+            if os.path.isdir(_pkg_dir) and not _entry.startswith(
+                (".", "bazel-", "venv")
+            ):
                 _sup_lib = os.path.join(_pkg_dir, "support", "lib")
                 if os.path.isdir(_sup_lib):
                     if _pkg_dir not in sys.path:
@@ -180,31 +227,57 @@ for _r in _get_roots():
             if not _entry.startswith((".", "bazel-", "venv")):
                 for _sub in ("workspace_cli", "tools", "workspace"):
                     if cli_tool_impl is None:
-                        _cand_tool = os.path.join(_r, _entry, "parts", _sub, "lib", "cli_tool_impl.py")
-                        if os.path.isfile(_cand_tool) and os.path.isdir(os.path.join(_r, _entry, "support", "lib")):
+                        _cand_tool = os.path.join(
+                            _r, _entry, "parts", _sub, "lib", "cli_tool_impl.py"
+                        )
+                        if os.path.isfile(_cand_tool) and os.path.isdir(
+                            os.path.join(_r, _entry, "support", "lib")
+                        ):
                             try:
-                                cli_tool_impl = importlib.import_module(f"{_entry}.parts.{_sub}.lib.cli_tool_impl")
+                                cli_tool_impl = importlib.import_module(
+                                    f"{_entry}.parts.{_sub}.lib.cli_tool_impl"
+                                )
                             except ImportError:
                                 pass
                     if commands_impl is None:
-                        _cand_cmds = os.path.join(_r, _entry, "parts", _sub, "lib", "commands_impl.py")
-                        if os.path.isfile(_cand_cmds) and os.path.isdir(os.path.join(_r, _entry, "support", "lib")):
+                        _cand_cmds = os.path.join(
+                            _r, _entry, "parts", _sub, "lib", "commands_impl.py"
+                        )
+                        if os.path.isfile(_cand_cmds) and os.path.isdir(
+                            os.path.join(_r, _entry, "support", "lib")
+                        ):
                             try:
-                                commands_impl = importlib.import_module(f"{_entry}.parts.{_sub}.lib.commands_impl")
+                                commands_impl = importlib.import_module(
+                                    f"{_entry}.parts.{_sub}.lib.commands_impl"
+                                )
                             except ImportError:
                                 pass
                     if pending_impl is None:
-                        _cand_pend = os.path.join(_r, _entry, "parts", _sub, "lib", "pending_impl.py")
-                        if os.path.isfile(_cand_pend) and os.path.isdir(os.path.join(_r, _entry, "support", "lib")):
+                        _cand_pend = os.path.join(
+                            _r, _entry, "parts", _sub, "lib", "pending_impl.py"
+                        )
+                        if os.path.isfile(_cand_pend) and os.path.isdir(
+                            os.path.join(_r, _entry, "support", "lib")
+                        ):
                             try:
-                                pending_impl = importlib.import_module(f"{_entry}.parts.{_sub}.lib.pending_impl")
+                                pending_impl = importlib.import_module(
+                                    f"{_entry}.parts.{_sub}.lib.pending_impl"
+                                )
                             except ImportError:
                                 pass
-                if cli_tool_impl is not None and commands_impl is not None and pending_impl is not None:
+                if (
+                    cli_tool_impl is not None
+                    and commands_impl is not None
+                    and pending_impl is not None
+                ):
                     break
     except OSError:
         pass
-    if cli_tool_impl is not None and commands_impl is not None and pending_impl is not None:
+    if (
+        cli_tool_impl is not None
+        and commands_impl is not None
+        and pending_impl is not None
+    ):
         break
 
 if cli_tool_impl is None:
@@ -212,7 +285,9 @@ if cli_tool_impl is None:
         from autofab.parts.workspace_cli.lib import cli_tool_impl
     except ImportError:
         try:
-            cli_tool_impl = importlib.import_module("autofab.parts.workspace.lib.cli_tool_impl")
+            cli_tool_impl = importlib.import_module(
+                "autofab.parts.workspace.lib.cli_tool_impl"
+            )
         except ImportError:
             pass
 
@@ -229,11 +304,19 @@ if pending_impl is None:
         pass
 
 if cli_tool_impl is None:
-    raise ImportError("Failed to locate cli_tool_impl module across discovered Cleanroom roots")
+    raise ImportError(
+        "Failed to locate cli_tool_impl module across discovered Cleanroom roots"
+    )
 
-AUDIT_BUFFER_FILE = getattr(commands_impl, "AUDIT_BUFFER_FILE", ".cleanroom_audit_buffer.json")
-BLAME_BUFFER_FILE = getattr(commands_impl, "BLAME_BUFFER_FILE", ".cleanroom_blame_buffer.json")
-PENDING_WORK_FILE = getattr(commands_impl, "PENDING_WORK_FILE", ".cleanroom_pending_work.json")
+AUDIT_BUFFER_FILE = getattr(
+    commands_impl, "AUDIT_BUFFER_FILE", ".cleanroom_audit_buffer.json"
+)
+BLAME_BUFFER_FILE = getattr(
+    commands_impl, "BLAME_BUFFER_FILE", ".cleanroom_blame_buffer.json"
+)
+PENDING_WORK_FILE = getattr(
+    commands_impl, "PENDING_WORK_FILE", ".cleanroom_pending_work.json"
+)
 
 
 def write_file_with_perms(
@@ -255,20 +338,28 @@ def write_file_with_perms(
         pass
 
 
-def copy_file_with_perms(src: str, dst: str, readonly: bool = False, executable: bool = False) -> None:
+def copy_file_with_perms(
+    src: str, dst: str, readonly: bool = False, executable: bool = False
+) -> None:
     from support.lib.lifecycle import get_singleton
     from autofab.parts.workspace.lib import provision
+
     get_singleton(provision.WorkspaceProvisioner).copy_file_with_permissions(
         src, dst, readonly=readonly, executable=executable
     )
 
 
-def compute_role_work_queue(role_name: str, dir_scope: str, repo_root: str | None = None) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+def compute_role_work_queue(
+    role_name: str, dir_scope: str, repo_root: str | None = None
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     root = repo_root or find_workspace_root()
     from support.lib.lifecycle import get_singleton
     from autofab.parts.workspace_cli.lib import work
+
     work = get_singleton(work.WorkspaceWorkManager)
-    ready, blocked = work.compute_role_work_queue(role_name, dir_scope=dir_scope, repo_root=root)
+    ready, blocked = work.compute_role_work_queue(
+        role_name, dir_scope=dir_scope, repo_root=root
+    )
 
     def _to_dict(it: Any) -> dict[str, Any]:
         if isinstance(it, dict):
@@ -301,21 +392,36 @@ def get_current_role_metadata(workspace_dir: str | None = None) -> dict[str, Any
     return commands_impl.get_current_role_metadata() or {}
 
 
-def is_auditor_role(role_name: str, repo_root: str | None = None, dir_scope: str | None = None) -> bool:
+def is_auditor_role(
+    role_name: str, repo_root: str | None = None, dir_scope: str | None = None
+) -> bool:
     clean_r = role_name.split(":")[-1].strip().lower()
     from support.lib.lifecycle import get_singleton
     from autofab.parts.workspace.lib import role_registry
+
     reg = get_singleton(role_registry.WorkspaceRegistry)
     r_def = reg.resolve_role_definition(clean_r, repo_root=repo_root)
-    return bool(r_def.audit_tag or not (r_def.src_pattern or (hasattr(r_def, "src_patterns") and r_def.src_patterns)))
+    return bool(
+        r_def.audit_tag
+        or not (
+            r_def.src_pattern or (hasattr(r_def, "src_patterns") and r_def.src_patterns)
+        )
+    )
 
 
-def resolve_autofab_log_path(role_name: str, repo_root: str | None = None, dir_scope: str | None = None) -> str:
+def resolve_autofab_log_path(
+    role_name: str, repo_root: str | None = None, dir_scope: str | None = None
+) -> str:
     assert commands_impl is not None
     return commands_impl.resolve_log_path(role_name, repo_root=repo_root)
 
 
-def append_autofab_log(role_name: str, line: str, repo_root: str | None = None, dir_scope: str | None = None) -> None:
+def append_autofab_log(
+    role_name: str,
+    line: str,
+    repo_root: str | None = None,
+    dir_scope: str | None = None,
+) -> None:
     assert commands_impl is not None
     commands_impl.append_log(role_name, line, repo_root=repo_root)
 
@@ -323,6 +429,7 @@ def append_autofab_log(role_name: str, line: str, repo_root: str | None = None, 
 def _get_pending_manager():
     from autofab.parts.workspace_cli.lib import pending
     from support.lib.lifecycle import get_singleton
+
     return get_singleton(pending.WorkspacePendingManager)
 
 
@@ -457,7 +564,7 @@ You are an autonomous Cleanroom role worker executing strictly inside your assig
 
 ## PERMITTED TOOLS & SHELL COMMANDS:
 You are fully permitted to run read-only shell utilities (`cat`, `grep`, `find`, `head`, `tail`, `sed`, etc.) or native tools strictly WITHIN your assigned role workspace directory (`.`) to inspect files and complete your tasks.
-Executing ad-hoc tests, runtime assertions, or inline Python scripts (including via `python3 -c`, `python -c`, or stdin heredocs) is strictly prohibited; target verification is exclusively performed via `bin/check_files` (or `bin/verify_*` for fused roles). You are not allowed to execute the test suite or run ad-hoc probes; submit work via `bin/submit` so a downstream QA auditor can execute the test suite on your behalf.
+Executing ad-hoc tests, runtime assertions, or inline Python scripts (including via `python3 -c`, `python -c`, or stdin heredocs) is strictly prohibited; target verification is exclusively performed via `bin/check_files` (or `bin/verify_*` for fused roles). For authoring roles, `bin/check_files` verifies static syntax and types (submit work via `bin/submit` so downstream QA auditors can execute tests on your behalf). For auditor roles (`qa`, `coverage`, `pretense_qa`, `pretense_coverage`), `bin/check_files` executes the runtime test suite and coverage runner to produce deterministic failure diagnostics and triage summaries. You are not allowed to execute raw test runners or run ad-hoc probes outside `bin/check_files`.
 Note: Shell working directory does not persist across tool calls. Always prefix shell commands with `cd <workspace_dir> && ` (e.g., `cd <workspace_dir> && bin/get_work`) and use absolute paths under `<workspace_dir>` for file operations.
 Git operations (`git checkout`, `git restore`, `git reset`, etc.) and accessing files outside your workspace remain strictly prohibited.
 
@@ -474,10 +581,9 @@ If you determine that success is not possible (e.g. unreachable code under test,
    `FAILED: <target_file> - <reason>`
 4. Cease work immediately.
 
-## RESOLVING BLAME & FEEDBACK:
-- `bin/check_files` ONLY checks static syntax and types. It does NOT run tests.
-- When an active node carries unacted feedback or blame from downstream roles (QA), passing `bin/check_files` does NOT mean the defect is resolved.
-- You MUST inspect `low/*.pyi` and `tests/*_test.py`, modify code logic to satisfy contracts and pass tests, ensure `bin/check_files` passes, and submit with a change summary describing how the feedback was fixed.
+## TARGET VERIFICATION & BLAME RESOLUTION:
+- For author roles: `bin/check_files` ONLY checks static syntax and types. It does NOT run tests. When an active node carries unacted feedback or blame from downstream roles (QA), passing `bin/check_files` does NOT mean the defect is resolved. You MUST inspect `low/*.pyi` and `tests/*_test.py`, modify code logic to satisfy contracts and pass tests, ensure `bin/check_files` passes, and submit with a change summary describing how the feedback was fixed.
+- For auditor roles (QA, Coverage, Pretense QA, Pretense Coverage): Running `bin/check_files <target>` executes the runtime test suite and coverage analysis, producing structured failure diagnostics and triage summaries. Code files in the workspace are strictly read-only. When verification checks pass, submit the target; when verification checks fail, stage blame via `bin/blame <culprit_file> "<critique>"` and commit blame via `bin/submit <target>`.
 
 ## METADATA PROJECTION & INVIOLABILITY:
 - NEVER manually edit `# --- CLEANROOM METADATA ---` or `<!-- CLEANROOM METADATA -->` headers. Use only tools (`bin/submit`, `bin/blame`, `bin/fail`).
@@ -570,7 +676,9 @@ def ensure_antigravity_plugin_installed() -> str:
     """Installs or refreshes Cleanroom agents in global Antigravity plugin directory."""
     app_info = _get_app_info()
     app_name = app_info.APP_NAME if app_info else "cleanroom"
-    config_root = os.environ.get("ANTIGRAVITY_CONFIG_DIR") or os.path.expanduser("~/.gemini/config")
+    config_root = os.environ.get("ANTIGRAVITY_CONFIG_DIR") or os.path.expanduser(
+        "~/.gemini/config"
+    )
     plugin_dir = os.path.join(config_root, "plugins", app_name)
     agents_dir = os.path.join(plugin_dir, "agents")
     coord_dir = os.path.join(agents_dir, f"{app_name}_coordinator")
@@ -600,7 +708,9 @@ def ensure_antigravity_plugin_installed() -> str:
     with open(os.path.join(worker_dir, "agent.md"), "w", encoding="utf-8") as f:
         f.write(WORKER_AGENT_MD.strip() + "\n")
 
-    with open(os.path.join(baseline_worker_dir, "agent.md"), "w", encoding="utf-8") as f:
+    with open(
+        os.path.join(baseline_worker_dir, "agent.md"), "w", encoding="utf-8"
+    ) as f:
         f.write(BASELINE_WORKER_AGENT_MD.strip() + "\n")
 
     return plugin_dir
@@ -644,8 +754,12 @@ def dispatch_antigravity_coordination(
             agentapi_cmd = [found]
         else:
             for cand_server in [
-                Path("/Applications/Antigravity.app/Contents/Resources/bin/language_server"),
-                Path("/Applications/Antigravity IDE.app/Contents/Resources/bin/language_server"),
+                Path(
+                    "/Applications/Antigravity.app/Contents/Resources/bin/language_server"
+                ),
+                Path(
+                    "/Applications/Antigravity IDE.app/Contents/Resources/bin/language_server"
+                ),
             ]:
                 if cand_server.is_file() and os.access(cand_server, os.X_OK):
                     agentapi_cmd = [str(cand_server), "agentapi"]
@@ -654,7 +768,17 @@ def dispatch_antigravity_coordination(
     if not agentapi_cmd:
         return False
 
-    prompt = f"Clean all dirty nodes in {target_display} using autofab_coordinator."
+    ag_coord_model = "inherit"
+    if model:
+        m_low = model.lower()
+        if "lite" in m_low:
+            ag_coord_model = "flash_lite"
+        elif "flash" in m_low:
+            ag_coord_model = "flash"
+        elif "pro" in m_low:
+            ag_coord_model = "pro"
+
+    prompt = f"Clean all dirty nodes in {target_display} using autofab_coordinator (Model: {ag_coord_model})."
 
     if mode == "message":
         if not conv_id:
@@ -686,7 +810,11 @@ def dispatch_antigravity_coordination(
 
     try:
         res = _execute_agentapi()
-        if res.returncode != 0 and mode == "new-conversation" and sys.platform == "darwin":
+        if (
+            res.returncode != 0
+            and mode == "new-conversation"
+            and sys.platform == "darwin"
+        ):
             # If agentapi failed and we are on macOS, Antigravity Desktop might not be running.
             # Attempt to launch Antigravity Desktop and retry once.
             app_path = None
@@ -698,7 +826,9 @@ def dispatch_antigravity_coordination(
                     app_path = cand_app
                     break
             if app_path:
-                print(f"[Antigravity Desktop IPC] Antigravity Desktop not responding. Launching {app_path.name}...")
+                print(
+                    f"[Antigravity Desktop IPC] Antigravity Desktop not responding. Launching {app_path.name}..."
+                )
                 subprocess.run(["open", "-a", str(app_path)], check=False)
                 time.sleep(3)
                 res = _execute_agentapi()
@@ -713,10 +843,16 @@ def dispatch_antigravity_coordination(
             return True
         else:
             err = res.stderr.strip() or res.stdout.strip()
-            print(f"[Antigravity Desktop IPC] Warning: agentapi failed (code {res.returncode}): {err}", file=sys.stderr)
+            print(
+                f"[Antigravity Desktop IPC] Warning: agentapi failed (code {res.returncode}): {err}",
+                file=sys.stderr,
+            )
             return False
     except Exception as e:
-        print(f"[Antigravity Desktop IPC] Warning: agentapi invocation failed: {e}", file=sys.stderr)
+        print(
+            f"[Antigravity Desktop IPC] Warning: agentapi invocation failed: {e}",
+            file=sys.stderr,
+        )
         return False
 
 
@@ -731,11 +867,20 @@ def ensure_dsh_skill_installed() -> str | None:
         candidates.append(os.path.join(dsh_home.strip(), "skills"))
 
     home = os.path.expanduser("~")
-    candidates.extend([
-        os.path.join(home, "Library", "Application Support", "dsh-desktop", "harness", "skills"),
-        os.path.join(home, ".config", "dsh-desktop", "harness", "skills"),
-        os.path.join(home, ".local", "share", "dsh-desktop", "harness", "skills"),
-    ])
+    candidates.extend(
+        [
+            os.path.join(
+                home,
+                "Library",
+                "Application Support",
+                "dsh-desktop",
+                "harness",
+                "skills",
+            ),
+            os.path.join(home, ".config", "dsh-desktop", "harness", "skills"),
+            os.path.join(home, ".local", "share", "dsh-desktop", "harness", "skills"),
+        ]
+    )
     appdata = os.environ.get("APPDATA")
     if appdata:
         candidates.append(os.path.join(appdata, "dsh-desktop", "harness", "skills"))
@@ -824,7 +969,11 @@ def _get_folder_to_role_map(ws_root: str | None = None) -> dict[str, str]:
     root = ws_root or find_workspace_root()
     cand_toml_paths: list[str] = []
     app_inf = _get_app_info()
-    role_files = app_inf.get_roles_filenames() if app_inf else ("autofab_roles.toml", "cleanroom_roles.toml")
+    role_files = (
+        app_inf.get_roles_filenames()
+        if app_inf
+        else ("autofab_roles.toml", "cleanroom_roles.toml")
+    )
     for rname in role_files:
         direct = os.path.join(root, rname)
         if os.path.isfile(direct):
@@ -839,12 +988,15 @@ def _get_folder_to_role_map(ws_root: str | None = None) -> dict[str, str]:
     for toml_path in cand_toml_paths:
         try:
             import tomllib
+
             with open(toml_path, "rb") as tf:
                 tdata = tomllib.load(tf)
             for rname, rdata in tdata.get("roles", {}).items():
                 mapping[rname] = rname
                 src_pattern = rdata.get("src_pattern", "")
-                pats = rdata.get("src_patterns") or ([src_pattern] if src_pattern else [])
+                pats = rdata.get("src_patterns") or (
+                    [src_pattern] if src_pattern else []
+                )
                 for pat in pats:
                     if "/" in pat:
                         parts = pat.split("/")
@@ -917,28 +1069,35 @@ def parse_cleanroom_target(target_str: str) -> tuple[str, str | None, bool]:
     return scope, role, False
 
 
-def resolve_default_model(repo_root: str | None = None, harness: str | None = None) -> str | None:
+def resolve_default_model(
+    repo_root: str | None = None, harness: str | None = None
+) -> str | None:
     """Resolves default model profile name from model_configs.toml if present.
     Returns the value of the top-level 'default' key.
     """
     root = repo_root or find_workspace_root()
     import tomllib
+
     app_info = _get_app_info()
     candidates = [
         os.path.join(root, "model_configs.toml"),
         os.path.join(os.path.dirname(root), "model_configs.toml"),
     ]
     if app_info:
-        candidates.extend([
-            os.path.join(root, app_info.DEFAULT_CONFIG_FILE),
-            app_info.get_user_model_config_file(),
-            app_info.get_template_model_config_file(),
-        ])
+        candidates.extend(
+            [
+                os.path.join(root, app_info.DEFAULT_CONFIG_FILE),
+                app_info.get_user_model_config_file(),
+                app_info.get_template_model_config_file(),
+            ]
+        )
     else:
-        candidates.extend([
-            os.path.join(root, "autofab.toml"),
-            os.path.expanduser("~/.config/autofab/model_configs.toml"),
-        ])
+        candidates.extend(
+            [
+                os.path.join(root, "autofab.toml"),
+                os.path.expanduser("~/.config/autofab/model_configs.toml"),
+            ]
+        )
     for cand in candidates:
         if os.path.isfile(cand):
             try:
@@ -952,13 +1111,16 @@ def resolve_default_model(repo_root: str | None = None, harness: str | None = No
     return None
 
 
-def resolve_model_harness(model_name: str | None = None, repo_root: str | None = None) -> str:
+def resolve_model_harness(
+    model_name: str | None = None, repo_root: str | None = None
+) -> str:
     """Resolves runtime harness name for a given model (or default model) from model_configs.toml.
     The harness is derived directly from the model profile entry in [models.<name>].
     Defaults to 'antigravity' for gemini models and 'dsh' for other models.
     """
     root = repo_root or find_workspace_root()
     import tomllib
+
     app_info = _get_app_info()
 
     effective_model = model_name
@@ -970,18 +1132,24 @@ def resolve_model_harness(model_name: str | None = None, repo_root: str | None =
         os.path.join(os.path.dirname(root), "model_configs.toml"),
     ]
     if app_info:
-        candidates.extend([
-            os.path.join(root, app_info.DEFAULT_CONFIG_FILE),
-            app_info.get_user_model_config_file(),
-            app_info.get_template_model_config_file(),
-        ])
+        candidates.extend(
+            [
+                os.path.join(root, app_info.DEFAULT_CONFIG_FILE),
+                app_info.get_user_model_config_file(),
+                app_info.get_template_model_config_file(),
+            ]
+        )
     else:
-        candidates.extend([
-            os.path.join(root, "autofab.toml"),
-            os.path.expanduser("~/.config/autofab/model_configs.toml"),
-        ])
+        candidates.extend(
+            [
+                os.path.join(root, "autofab.toml"),
+                os.path.expanduser("~/.config/autofab/model_configs.toml"),
+            ]
+        )
 
-    def _find_model_entry(models_dict: dict[str, Any], target: str) -> dict[str, Any] | None:
+    def _find_model_entry(
+        models_dict: dict[str, Any], target: str
+    ) -> dict[str, Any] | None:
         if target in models_dict and isinstance(models_dict[target], dict):
             return models_dict[target]
         for k, v in models_dict.items():
@@ -992,7 +1160,10 @@ def resolve_model_harness(model_name: str | None = None, repo_root: str | None =
                     if isinstance(sub_v, dict):
                         if f"{k}.{sub_k}" == target:
                             return sub_v
-                        if sub_v.get("model") == target or sub_v.get("model_name") == target:
+                        if (
+                            sub_v.get("model") == target
+                            or sub_v.get("model_name") == target
+                        ):
                             return sub_v
         return None
 
@@ -1009,7 +1180,11 @@ def resolve_model_harness(model_name: str | None = None, repo_root: str | None =
                     if isinstance(models, dict):
                         m_entry = _find_model_entry(models, effective_model)
 
-                    if m_entry is None and effective_model in data and isinstance(data[effective_model], dict):
+                    if (
+                        m_entry is None
+                        and effective_model in data
+                        and isinstance(data[effective_model], dict)
+                    ):
                         m_entry = data[effective_model]
 
                     if m_entry is not None:
@@ -1064,7 +1239,9 @@ def configure_user_environment() -> int:
     if dsh_p:
         print(f"[OK] DeepSeek Harness skill refreshed at: {dsh_p}")
 
-    print(f"\n[SUCCESS] Environment configured. You can edit credentials and model configurations in:\n  {cfg_dir}")
+    print(
+        f"\n[SUCCESS] Environment configured. You can edit credentials and model configurations in:\n  {cfg_dir}"
+    )
     return 0
 
 
@@ -1078,7 +1255,7 @@ def install_workspace(repo_root: str | None = None) -> int:
     cfg_path = os.path.join(root, cfg_name)
     if not os.path.isfile(cfg_path):
         with open(cfg_path, "w", encoding="utf-8") as f:
-            f.write(f'# {cfg_name}\n# Project-level configuration for {app_name}\n\n')
+            f.write(f"# {cfg_name}\n# Project-level configuration for {app_name}\n\n")
         print(f"[OK] Initialized project configuration at: {cfg_path}")
     else:
         print(f"[INFO] Project configuration already exists at: {cfg_path}")
@@ -1140,13 +1317,16 @@ def resolve_scope_pipeline(
                         return str(fdata.get("pipeline")).strip().lower()
                     if fdata.get("method"):
                         return str(fdata.get("method")).strip().lower()
-                    if fdata.get("pretense") or "pretense" in str(fdata.get("flight_id", "")):
+                    if fdata.get("pretense") or "pretense" in str(
+                        fdata.get("flight_id", "")
+                    ):
                         return "pretense"
             except Exception:
                 pass
 
     # 2. Check configuration files in scope or parts
     import tomllib
+
     scope_clean = scope.lstrip("/").rstrip("/")
     curr = os.path.join(root, scope_clean)
     cfg_files = _get_app_info().get_config_filenames()
@@ -1244,11 +1424,16 @@ def run_work_queue(argv: list[str]) -> int:
     parsed = parser.parse_args(argv)
     target_input = parsed.scope_opt or parsed.scope or _get_dir_scope()
     if not target_input:
-        print("Error: Directory scope must be specified (e.g. uv run autofab work-queue staging or staging#qa).", file=sys.stderr)
+        print(
+            "Error: Directory scope must be specified (e.g. uv run autofab work-queue staging or staging#qa).",
+            file=sys.stderr,
+        )
         return 1
 
     scope, parsed_role, is_unit = parse_cleanroom_target(target_input)
-    target_role = (parsed.role_opt or parsed.target_role or parsed_role or "").strip().lower()
+    target_role = (
+        (parsed.role_opt or parsed.target_role or parsed_role or "").strip().lower()
+    )
     if parsed.baseline and not target_role:
         if parsed.pipeline == "combined":
             target_role = "combined_baseline"
@@ -1279,18 +1464,21 @@ def run_work_queue(argv: list[str]) -> int:
 
         declared_roles = reg.list_roles(root, dir_scope=scope)
         if not declared_roles:
-            print(f"Error: No declared roles found for directory scope '{scope}'.", file=sys.stderr)
+            print(
+                f"Error: No declared roles found for directory scope '{scope}'.",
+                file=sys.stderr,
+            )
             return 1
 
         if active_pipeline == "combined":
             declared_roles = [
-                r for r in declared_roles
+                r
+                for r in declared_roles
                 if r.pipeline in (None, "", "standard", "pretense")
             ]
         elif active_pipeline:
             declared_roles = [
-                r for r in declared_roles
-                if r.pipeline in (None, "", active_pipeline)
+                r for r in declared_roles if r.pipeline in (None, "", active_pipeline)
             ]
 
         if target_role:
@@ -1302,25 +1490,37 @@ def run_work_queue(argv: list[str]) -> int:
                     break
             if matching_idx is None:
                 try:
-                    fused_r_def = reg.resolve_role_definition(target_role, repo_root=root, dir_scope=scope)
+                    fused_r_def = reg.resolve_role_definition(
+                        target_role, repo_root=root, dir_scope=scope
+                    )
                     if fused_r_def and fused_r_def.fused_roles:
-                        fused_names = {f.split(':')[-1].strip().lower() for f in fused_r_def.fused_roles}
+                        fused_names = {
+                            f.split(":")[-1].strip().lower()
+                            for f in fused_r_def.fused_roles
+                        }
                         upstream_roles = []
                         for r in declared_roles:
-                            r_c = r.role_name.split(':')[-1].strip().lower()
+                            r_c = r.role_name.split(":")[-1].strip().lower()
                             if r_c in fused_names:
                                 break
                             upstream_roles.append(r)
                         declared_roles = upstream_roles + [fused_r_def]
                     else:
                         valid_names = ", ".join(r.role_name for r in declared_roles)
-                        print(f"Error: Unknown role '{target_role}' for scope '{scope}'. Valid roles are: {valid_names}", file=sys.stderr)
+                        print(
+                            f"Error: Unknown role '{target_role}' for scope '{scope}'. Valid roles are: {valid_names}",
+                            file=sys.stderr,
+                        )
                         return 1
                 except Exception as e:
                     import traceback
+
                     traceback.print_exc()
                     valid_names = ", ".join(r.role_name for r in declared_roles)
-                    print(f"Error: Unknown role '{target_role}' for scope '{scope}'. Valid roles are: {valid_names}", file=sys.stderr)
+                    print(
+                        f"Error: Unknown role '{target_role}' for scope '{scope}'. Valid roles are: {valid_names}",
+                        file=sys.stderr,
+                    )
                     return 1
             else:
                 declared_roles = list(declared_roles[: matching_idx + 1])
@@ -1341,9 +1541,18 @@ def run_work_queue(argv: list[str]) -> int:
         role_models: dict[str, str] = {}
         antigravity_models: dict[str, str] = {}
         for r in declared_roles:
-            ws_dir = reg.compute_workspace_dir(r.role_name, dir_scope=scope, repo_root=root)
-            if not os.path.isdir(ws_dir) or not os.path.isdir(os.path.join(ws_dir, "bin")):
-                prov.commission(role_name=r.role_name, dir_scope=scope, repo_root=root, model=default_model)
+            ws_dir = reg.compute_workspace_dir(
+                r.role_name, dir_scope=scope, repo_root=root
+            )
+            if not os.path.isdir(ws_dir) or not os.path.isdir(
+                os.path.join(ws_dir, "bin")
+            ):
+                prov.commission(
+                    role_name=r.role_name,
+                    dir_scope=scope,
+                    repo_root=root,
+                    model=default_model,
+                )
             workspace_dirs[r.role_name] = ws_dir
             ws_model = default_model or ""
             for desc_name in app_inf.get_role_descriptors():
@@ -1409,7 +1618,9 @@ def run_work_queue(argv: list[str]) -> int:
             return 0
 
         if is_clean:
-            print(f"CLEAN: All nodes in scope '{scope}' evaluate clean across all {len(declared_roles)} roles.")
+            print(
+                f"CLEAN: All nodes in scope '{scope}' evaluate clean across all {len(declared_roles)} roles."
+            )
             return 0
 
         print(f"DAG Work Queue for Scope '{scope}':")
@@ -1439,12 +1650,22 @@ def _find_subagent_tool_mod(target_scope: str | None, args_list: list[str]) -> A
         for _entry in os.listdir(_r) if os.path.isdir(_r) else []:
             if _entry.startswith((".", "bazel-", "venv")):
                 continue
-            if (_dir_scope and _entry == _dir_scope) or (target_scope and _entry == target_scope) or (_entry in args_list):
+            if (
+                (_dir_scope and _entry == _dir_scope)
+                or (target_scope and _entry == target_scope)
+                or (_entry in args_list)
+            ):
                 continue
-            _cand = os.path.join(_r, _entry, "parts", "subagent", "lib", "subagent_tool_impl.py")
-            if os.path.isfile(_cand) and os.path.isdir(os.path.join(_r, _entry, "support", "lib")):
+            _cand = os.path.join(
+                _r, _entry, "parts", "subagent", "lib", "subagent_tool_impl.py"
+            )
+            if os.path.isfile(_cand) and os.path.isdir(
+                os.path.join(_r, _entry, "support", "lib")
+            ):
                 try:
-                    subagent_tool_mod = importlib.import_module(f"{_entry}.parts.subagent.lib.subagent_tool_impl")
+                    subagent_tool_mod = importlib.import_module(
+                        f"{_entry}.parts.subagent.lib.subagent_tool_impl"
+                    )
                     break
                 except ImportError:
                     pass
@@ -1452,7 +1673,9 @@ def _find_subagent_tool_mod(target_scope: str | None, args_list: list[str]) -> A
             break
     if subagent_tool_mod is None:
         try:
-            from autofab.parts.subagent.lib import subagent_tool_impl as subagent_tool_mod
+            from autofab.parts.subagent.lib import (
+                subagent_tool_impl as subagent_tool_mod,
+            )
         except ImportError:
             pass
     return subagent_tool_mod
@@ -1482,7 +1705,11 @@ def _compute_role_depths(roles_map: dict[str, dict[str, Any]]) -> dict[str, int]
         ):
             for d in rcfg.get(k) or []:
                 upstream.add(d.split(":")[-1].strip().lower())
-        val = 1 + max((_depth(u) for u in upstream if u in roles_map), default=-1) if upstream else 0
+        val = (
+            1 + max((_depth(u) for u in upstream if u in roles_map), default=-1)
+            if upstream
+            else 0
+        )
         resolving.discard(role)
         depths[role] = val
         return val
@@ -1557,7 +1784,9 @@ def resolve_scope_nodes(
         if not os.path.isdir(parts_base):
             for entry in os.listdir(root_dir):
                 cand = os.path.join(root_dir, entry, "parts")
-                if os.path.isdir(cand) and not entry.startswith((".", "bazel-", "venv")):
+                if os.path.isdir(cand) and not entry.startswith(
+                    (".", "bazel-", "venv")
+                ):
                     parts_base = cand
                     dir_scope = entry
                     break
@@ -1568,14 +1797,20 @@ def resolve_scope_nodes(
     scope_prefix = f"{dir_scope}/parts" if dir_scope else "parts"
     canon_meth, roles_dict = loader._get_methodology_roles(root_dir, scope_prefix)
     if not roles_dict:
-        raise ValueError(f"No roles declared in methodology '{canon_meth}' for scope '{target_str}'")
+        raise ValueError(
+            f"No roles declared in methodology '{canon_meth}' for scope '{target_str}'"
+        )
 
     dir_to_role: dict[str, str] = {}
     for rname, rcfg in roles_dict.items():
-        src_pats = rcfg.get("src_patterns") or ([rcfg.get("src_pattern")] if rcfg.get("src_pattern") else [])
+        src_pats = rcfg.get("src_patterns") or (
+            [rcfg.get("src_pattern")] if rcfg.get("src_pattern") else []
+        )
         for src_pat in src_pats:
             if src_pat:
-                clean_pat = src_pat.replace("{unit_dir}/", "").replace("{unit_dir}\\", "")
+                clean_pat = src_pat.replace("{unit_dir}/", "").replace(
+                    "{unit_dir}\\", ""
+                )
                 if "/" in clean_pat:
                     layout_d = clean_pat.split("/", 1)[0]
                     dir_to_role[layout_d] = rname
@@ -1606,8 +1841,7 @@ def resolve_scope_nodes(
             [
                 d
                 for d in os.listdir(parts_base)
-                if os.path.isdir(os.path.join(parts_base, d))
-                and not d.startswith(".")
+                if os.path.isdir(os.path.join(parts_base, d)) and not d.startswith(".")
             ]
         )
 
@@ -1620,7 +1854,10 @@ def resolve_scope_nodes(
         target_clean = up_to_role.strip().lower()
         matching_idx = None
         for idx, r in enumerate(ordered_roles):
-            if r.lower() == target_clean or r.split(":")[-1].strip().lower() == target_clean:
+            if (
+                r.lower() == target_clean
+                or r.split(":")[-1].strip().lower() == target_clean
+            ):
                 matching_idx = idx
                 break
         if matching_idx is not None:
@@ -1634,20 +1871,25 @@ def resolve_scope_nodes(
         pipe_clean = pipeline.strip().lower()
         if pipe_clean == "combined":
             roles_to_scan = [
-                r for r in roles_to_scan
-                if roles_dict.get(r, {}).get("pipeline") in (None, "", "standard", "pretense")
+                r
+                for r in roles_to_scan
+                if roles_dict.get(r, {}).get("pipeline")
+                in (None, "", "standard", "pretense")
             ]
         else:
             roles_to_scan = [
-                r for r in roles_to_scan
+                r
+                for r in roles_to_scan
                 if roles_dict.get(r, {}).get("pipeline") in (None, "", pipe_clean)
             ]
 
     if exclude_roles:
         exclude_set = {r.strip().lower() for r in exclude_roles}
         roles_to_scan = [
-            r for r in roles_to_scan
-            if r.strip().lower() not in exclude_set and r.split(":")[-1].strip().lower() not in exclude_set
+            r
+            for r in roles_to_scan
+            if r.strip().lower() not in exclude_set
+            and r.split(":")[-1].strip().lower() not in exclude_set
         ]
 
     nodes: list[Any] = []
@@ -1659,7 +1901,9 @@ def resolve_scope_nodes(
             if not os.path.isdir(high_dir):
                 continue
 
-            scope_prefix = f"{dir_scope}/parts/{p_name}" if dir_scope else f"parts/{p_name}"
+            scope_prefix = (
+                f"{dir_scope}/parts/{p_name}" if dir_scope else f"parts/{p_name}"
+            )
             try:
                 _, roles_dict = loader._get_methodology_roles(  # type: ignore[reportPrivateUsage]
                     root_dir, scope_prefix
@@ -1684,7 +1928,11 @@ def resolve_scope_nodes(
                 except Exception:
                     comp_type = "implementation"
 
-                unit_prefix = f"//{dir_scope}/parts/{p_name}:{uname}" if dir_scope else f"//parts/{p_name}:{uname}"
+                unit_prefix = (
+                    f"//{dir_scope}/parts/{p_name}:{uname}"
+                    if dir_scope
+                    else f"//parts/{p_name}:{uname}"
+                )
                 if comp_type in active_types:
                     nodes.append(
                         dag_storage.DagNode(
@@ -1712,7 +1960,10 @@ def run_target_action(
     repo_root = (
         os.path.abspath(workspace_dir)
         if workspace_dir and os.path.isdir(workspace_dir)
-        else (os.environ.get("BUILD_WORKSPACE_DIRECTORY") or os.path.abspath(os.path.join(curr, "../../..")))
+        else (
+            os.environ.get("BUILD_WORKSPACE_DIRECTORY")
+            or os.path.abspath(os.path.join(curr, "../../.."))
+        )
     )
 
     from autofab.parts.systems.lib import autofab_asm
@@ -1725,7 +1976,12 @@ def run_target_action(
     storage = get_singleton(dag_storage.DagStorage)
 
     scope_nodes = resolve_scope_nodes(
-        target_str, repo_root, loader, up_to_role=up_to_role, exclude_roles=exclude_roles, pipeline=pipeline
+        target_str,
+        repo_root,
+        loader,
+        up_to_role=up_to_role,
+        exclude_roles=exclude_roles,
+        pipeline=pipeline,
     )
 
     if scope_nodes is not None:
@@ -1752,9 +2008,13 @@ def run_target_action(
                 if hasattr(storage, "mark_node_dirty"):
                     storage.mark_node_dirty(n, reason=reason)
                 else:
-                    msg = dag_storage.ChangeMessage(content=dag_storage.MessageContent(reason))
+                    msg = dag_storage.ChangeMessage(
+                        content=dag_storage.MessageContent(reason)
+                    )
                     storage.add_message(msg, to=n)
-            print(f"✔ Marked {len(scope_nodes)} target(s) dirty across {target_str} ({reason})")
+            print(
+                f"✔ Marked {len(scope_nodes)} target(s) dirty across {target_str} ({reason})"
+            )
             return 0
 
         elif action == "change":
@@ -1762,7 +2022,9 @@ def run_target_action(
             for n in scope_nodes:
                 loader.load_manifest(n)
                 storage.mark_node_clean(n, dag_storage.ChangeDescription(desc))
-            print(f"✔ Recorded change for {len(scope_nodes)} target(s) across {target_str}: {desc}")
+            print(
+                f"✔ Recorded change for {len(scope_nodes)} target(s) across {target_str}: {desc}"
+            )
             return 0
 
         elif action == "prompt":
@@ -1827,13 +2089,19 @@ def run_target_action(
                     storage.mark_subgraph_clean(n)
                 count += 1
             if count == 0:
-                print(f"✔ Target is already clean: {node.unit_address}#{node.role_address}")
+                print(
+                    f"✔ Target is already clean: {node.unit_address}#{node.role_address}"
+                )
             else:
-                print(f"✔ Marked {count} target(s) clean: {node.unit_address}#{node.role_address}")
+                print(
+                    f"✔ Marked {count} target(s) clean: {node.unit_address}#{node.role_address}"
+                )
             return 0
         else:
             if hasattr(storage, "is_dirty") and not storage.is_dirty(node):
-                print(f"✔ Target is already clean: {node.unit_address}#{node.role_address}")
+                print(
+                    f"✔ Target is already clean: {node.unit_address}#{node.role_address}"
+                )
                 return 0
             if hasattr(storage, "materialize_template"):
                 storage.materialize_template(node)
@@ -1854,7 +2122,9 @@ def run_target_action(
         if not message:
             print("Error: feedback action requires a critique message", file=sys.stderr)
             return 2
-        fb_msg = dag_storage.FeedbackMessage(content=dag_storage.MessageContent(message))
+        fb_msg = dag_storage.FeedbackMessage(
+            content=dag_storage.MessageContent(message)
+        )
         if hasattr(storage, "add_feedback_message"):
             storage.add_feedback_message(node, fb_msg)
         else:
@@ -1869,7 +2139,9 @@ def run_target_action(
         else:
             msg = dag_storage.ChangeMessage(content=dag_storage.MessageContent(reason))
             storage.add_message(msg, to=node)
-        print(f"✔ Marked target dirty: {node.unit_address}#{node.role_address} ({reason})")
+        print(
+            f"✔ Marked target dirty: {node.unit_address}#{node.role_address} ({reason})"
+        )
         return 0
 
     elif action == "prompt":
@@ -1946,7 +2218,10 @@ def run_mark_clean_cli(argv: list[str]) -> int:
     parsed = parser.parse_args(argv)
     target = parsed.target or _get_dir_scope()
     if not target:
-        print("Error: Target node, file path, or scope directory must be specified (e.g. uv run autofab mark-clean staging).", file=sys.stderr)
+        print(
+            "Error: Target node, file path, or scope directory must be specified (e.g. uv run autofab mark-clean staging).",
+            file=sys.stderr,
+        )
         return 1
     return run_target_action(
         target_str=target,
@@ -1996,7 +2271,10 @@ def run_mark_dirty_cli(argv: list[str]) -> int:
     parsed = parser.parse_args(argv)
     target = parsed.target or _get_dir_scope()
     if not target:
-        print("Error: Target node, file path, or scope directory must be specified (e.g. uv run autofab mark-dirty staging).", file=sys.stderr)
+        print(
+            "Error: Target node, file path, or scope directory must be specified (e.g. uv run autofab mark-dirty staging).",
+            file=sys.stderr,
+        )
         return 1
     msg = parsed.msg_flag or parsed.message
     if not msg and parsed.extra_args:
@@ -2052,7 +2330,10 @@ def run_change_cli(argv: list[str]) -> int:
     parsed = parser.parse_args(argv)
     target = parsed.target or _get_dir_scope()
     if not target:
-        print("Error: Target must be specified (e.g. uv run autofab change <target> [message]).", file=sys.stderr)
+        print(
+            "Error: Target must be specified (e.g. uv run autofab change <target> [message]).",
+            file=sys.stderr,
+        )
         return 1
     desc = parsed.msg_flag or parsed.message
     if not desc and parsed.extra_args:
@@ -2086,7 +2367,10 @@ def run_prompt_cli(argv: list[str]) -> int:
     parsed = parser.parse_args(argv)
     target = parsed.target or _get_dir_scope()
     if not target:
-        print("Error: Target must be specified (e.g. uv run autofab prompt <target>).", file=sys.stderr)
+        print(
+            "Error: Target must be specified (e.g. uv run autofab prompt <target>).",
+            file=sys.stderr,
+        )
         return 1
     return run_target_action(
         target_str=target,
@@ -2120,6 +2404,32 @@ def run_blame_cli(argv: list[str], prog: str = "autofab blame") -> int:
         help="Actionable critique message.",
     )
     parser.add_argument(
+        "--slug",
+        "--spec-slug",
+        dest="slug",
+        default=None,
+        help="Specification contract slug declared in low/*.pyi",
+    )
+    parser.add_argument(
+        "--viol",
+        "--violation",
+        dest="viol",
+        default=None,
+        help="Taxonomy violation code (e.g. [viol:post.wrong_return])",
+    )
+    parser.add_argument(
+        "--facet",
+        dest="facet",
+        default=None,
+        help="Constrained noun phrase facet (max 8 words, max 60 chars)",
+    )
+    parser.add_argument(
+        "--witness",
+        dest="witness",
+        default=None,
+        help="Context-free input/output witness values",
+    )
+    parser.add_argument(
         "--repo-root",
         default=None,
         help="Path to canonical repository root.",
@@ -2133,17 +2443,38 @@ def run_blame_cli(argv: list[str], prog: str = "autofab blame") -> int:
     parsed = parser.parse_args(argv)
     target = parsed.target
     if not target:
-        print(f"Error: Target must be specified (e.g. uv run {prog} <target> '<critique>').", file=sys.stderr)
+        print(
+            f"Error: Target must be specified (e.g. uv run {prog} <target> '<critique>').",
+            file=sys.stderr,
+        )
         return 1
 
     critique = parsed.msg_flag or parsed.critique
+    if not critique and (parsed.slug or parsed.viol or parsed.facet):
+        slug_val = parsed.slug or ""
+        if slug_val and not slug_val.startswith("[slug:"):
+            slug_val = f"[slug:{slug_val.strip('[]')}]"
+        viol_val = parsed.viol or ""
+        if viol_val and not viol_val.startswith("[viol:"):
+            viol_val = f"[viol:{viol_val.strip('[]')}]"
+        facet_val = parsed.facet or ""
+        critique = f"{slug_val} {viol_val} Facet: {facet_val}"
+        if parsed.witness:
+            critique += f" Witness: {parsed.witness}"
     if not critique:
-        print(f"Error: blame command requires a critique message (e.g. uv run {prog} <target> '<critique>' or -m '<critique>').", file=sys.stderr)
+        print(
+            f"Error: blame command requires a critique message (e.g. uv run {prog} <target> '<critique>' or -m '<critique>').",
+            file=sys.stderr,
+        )
         return 2
 
     # Check if executing within an isolated role workspace or target looks like a file path
-    is_role_ws = any(os.path.isfile(desc) for desc in _get_app_info().get_role_descriptors())
-    is_target_label = target.startswith("//") or (":" in target and not os.path.exists(target))
+    is_role_ws = any(
+        os.path.isfile(desc) for desc in _get_app_info().get_role_descriptors()
+    )
+    is_target_label = target.startswith("//") or (
+        ":" in target and not os.path.exists(target)
+    )
 
     if (is_role_ws or not is_target_label) and cli_tool_impl is not None:
         cmd_args = ["blame", target, critique]
@@ -2167,6 +2498,62 @@ def run_blame_cli(argv: list[str], prog: str = "autofab blame") -> int:
 
 
 run_feedback_cli = run_blame_cli
+
+
+def run_reject_cli(argv: list[str], prog: str = "autofab reject") -> int:
+    parser = argparse.ArgumentParser(
+        prog=prog,
+        description="Reject active feedback on an unmodified target file and scrub feedback from header.",
+    )
+    parser.add_argument(
+        "target",
+        nargs="?",
+        default=None,
+        help="Target file path receiving feedback.",
+    )
+    parser.add_argument(
+        "reason",
+        nargs="?",
+        default=None,
+        help="Actionable contest reason explaining why existing code is already compliant.",
+    )
+    parser.add_argument(
+        "-m",
+        "--message",
+        dest="msg_flag",
+        default=None,
+        help="Actionable contest reason explaining why existing code is already compliant.",
+    )
+    parser.add_argument(
+        "--repo-root",
+        default=None,
+        help="Path to canonical repository root.",
+    )
+    parsed = parser.parse_args(argv)
+    target = parsed.target
+    if not target:
+        print(
+            f"Error: Target must be specified (e.g. uv run {prog} <target> '<reason>').",
+            file=sys.stderr,
+        )
+        return 1
+
+    reason = parsed.msg_flag or parsed.reason
+    if not reason:
+        print(
+            f"Error: reject command requires a reason message (e.g. uv run {prog} <target> '<reason>').",
+            file=sys.stderr,
+        )
+        return 2
+
+    if cli_tool_impl is not None:
+        cmd_args = ["reject", target, reason]
+        if parsed.repo_root:
+            cmd_args.extend(["--repo-root", parsed.repo_root])
+        return cli_tool_impl.main(cmd_args)
+
+    print("Error: cli_tool_impl not available for reject execution.", file=sys.stderr)
+    return 1
 
 
 def run_clean(
@@ -2302,19 +2689,39 @@ def run_clean(
         help="Antigravity Desktop IPC dispatch mode when harness is antigravity.",
     )
     parser.add_argument(
+        "--experiment",
+        type=str,
+        default=None,
+        help="Active experiment identifier (e.g. structured_blame).",
+    )
+    parser.add_argument(
         "extra_args",
         nargs="*",
         help="Additional arguments or trailing message",
     )
     parsed = parser.parse_args(argv)
 
+    if parsed.experiment:
+        os.environ["AUTOFAB_EXPERIMENT"] = parsed.experiment
+        try:
+            from support.lib import experiments
+
+            experiments.set_active_experiments(parsed.experiment)
+        except Exception:
+            pass
+
     target_input = parsed.scope_opt or parsed.dir_scope or _get_dir_scope()
     if not target_input:
-        print(f"Error: Directory scope or target must be specified (e.g. uv run {prog} staging or staging#qa).", file=sys.stderr)
+        print(
+            f"Error: Directory scope or target must be specified (e.g. uv run {prog} staging or staging#qa).",
+            file=sys.stderr,
+        )
         return 1
 
     scope, parsed_role, is_unit = parse_cleanroom_target(target_input)
-    target_role = (parsed.role_opt or parsed.target_role or parsed_role or "").strip().lower()
+    target_role = (
+        (parsed.role_opt or parsed.target_role or parsed_role or "").strip().lower()
+    )
     if parsed.baseline and not target_role:
         if parsed.pipeline == "combined":
             target_role = "combined_baseline"
@@ -2342,17 +2749,30 @@ def run_clean(
     else:
         active_harness = resolve_model_harness(bound_model, repo_root=parsed.repo_root)
 
-    # Headless / CI Mode (or dsh / simulation harnesses)
-    is_headless = parsed.headless or parsed.simulation or active_harness in ("dsh", "simulation", "deepseek", "deepseek-harness")
-    if is_headless:
+    if parsed.headless:
+        print(
+            "Error: Headless execution is banned. Crash immediately.", file=sys.stderr
+        )
+        return 1
+
+    # Autonomous DSH / Simulation execution
+    is_autonomous = parsed.simulation or active_harness in (
+        "dsh",
+        "simulation",
+        "deepseek",
+        "deepseek-harness",
+    )
+    if is_autonomous:
         subagent_tool_mod = _find_subagent_tool_mod(scope, argv)
         if subagent_tool_mod is not None:
             print("\n" + "=" * 72)
             print("AUTONOMOUS DSH COORDINATION INITIATED:")
-            print(f"Harness: {active_harness} (Local Engine / Headless Execution)")
+            print(f"Harness: {active_harness} (DSH Server Bridge)")
             print(f"Target Scope: {scope}")
-            print("Status: Running headlessly via local engine loop.")
-            print("Action: None required. Do NOT invoke coordinator or interfere with workspaces.")
+            print("Status: Dispatching to live DSH Web/Desktop server.")
+            print(
+                "Action: None required. Do NOT invoke coordinator or interfere with workspaces."
+            )
             print("=" * 72 + "\n", flush=True)
             forward_args = ["clean", "--scope", scope]
             if target_role:
@@ -2370,7 +2790,9 @@ def run_clean(
             if parsed.timeout is not None:
                 forward_args.extend(["--timeout", str(parsed.timeout)])
             if parsed.max_context_tokens is not None:
-                forward_args.extend(["--max-context-tokens", str(parsed.max_context_tokens)])
+                forward_args.extend(
+                    ["--max-context-tokens", str(parsed.max_context_tokens)]
+                )
             if parsed.repo_root:
                 forward_args.extend(["--repo-root", parsed.repo_root])
             if parsed.pipeline == "pretense":
@@ -2389,7 +2811,10 @@ def run_clean(
                     os.environ["AUTOFAB_DSH_WEB"] = "1"
                     forward_args.append("--dsh-web")
             return subagent_tool_mod.main(forward_args)
-        print("Error: Subagent tool runner module not found for headless execution.", file=sys.stderr)
+        print(
+            "Error: Subagent tool runner module not found for headless execution.",
+            file=sys.stderr,
+        )
         return 1
 
     # In-IDE Antigravity interactive mode:
@@ -2411,18 +2836,21 @@ def run_clean(
 
         declared_roles = reg.list_roles(root, dir_scope=scope)
         if not declared_roles:
-            print(f"Error: No declared roles found for directory scope '{scope}'.", file=sys.stderr)
+            print(
+                f"Error: No declared roles found for directory scope '{scope}'.",
+                file=sys.stderr,
+            )
             return 1
 
         if active_pipeline == "combined":
             declared_roles = [
-                r for r in declared_roles
+                r
+                for r in declared_roles
                 if r.pipeline in (None, "", "standard", "pretense")
             ]
         elif active_pipeline:
             declared_roles = [
-                r for r in declared_roles
-                if r.pipeline in (None, "", active_pipeline)
+                r for r in declared_roles if r.pipeline in (None, "", active_pipeline)
             ]
 
         if target_role:
@@ -2434,25 +2862,37 @@ def run_clean(
                     break
             if matching_idx is None:
                 try:
-                    fused_r_def = reg.resolve_role_definition(target_role, repo_root=root, dir_scope=scope)
+                    fused_r_def = reg.resolve_role_definition(
+                        target_role, repo_root=root, dir_scope=scope
+                    )
                     if fused_r_def and fused_r_def.fused_roles:
-                        fused_names = {f.split(':')[-1].strip().lower() for f in fused_r_def.fused_roles}
+                        fused_names = {
+                            f.split(":")[-1].strip().lower()
+                            for f in fused_r_def.fused_roles
+                        }
                         upstream_roles = []
                         for r in declared_roles:
-                            r_c = r.role_name.split(':')[-1].strip().lower()
+                            r_c = r.role_name.split(":")[-1].strip().lower()
                             if r_c in fused_names:
                                 break
                             upstream_roles.append(r)
                         declared_roles = upstream_roles + [fused_r_def]
                     else:
                         valid_names = ", ".join(r.role_name for r in declared_roles)
-                        print(f"Error: Unknown role '{target_role}' for scope '{scope}'. Valid roles are: {valid_names}", file=sys.stderr)
+                        print(
+                            f"Error: Unknown role '{target_role}' for scope '{scope}'. Valid roles are: {valid_names}",
+                            file=sys.stderr,
+                        )
                         return 1
                 except Exception as e:
                     import traceback
+
                     traceback.print_exc()
                     valid_names = ", ".join(r.role_name for r in declared_roles)
-                    print(f"Error: Unknown role '{target_role}' for scope '{scope}'. Valid roles are: {valid_names}", file=sys.stderr)
+                    print(
+                        f"Error: Unknown role '{target_role}' for scope '{scope}'. Valid roles are: {valid_names}",
+                        file=sys.stderr,
+                    )
                     return 1
             else:
                 declared_roles = list(declared_roles[: matching_idx + 1])
@@ -2468,24 +2908,38 @@ def run_clean(
                 target_unit=target_input if is_unit else None,
             )
             for it in q_ready:
-                ready_nodes.append((r.role_name, it.target_file, list(it.dirtiness_reasons)))
+                ready_nodes.append(
+                    (r.role_name, it.target_file, list(it.dirtiness_reasons))
+                )
             for it in q_blocked:
-                blocked_nodes.append((r.role_name, it.target_file, list(it.blocked_reasons)))
+                blocked_nodes.append(
+                    (r.role_name, it.target_file, list(it.blocked_reasons))
+                )
 
         role_suffix = f" (up to role: {target_role})" if target_role else ""
         if not ready_nodes and not blocked_nodes:
-            deleted = decommission_workspaces(scope, target_role=target_role, repo_root=root)
-            cleanup_msg = f" Decommissioned {deleted} role workspace(s)." if deleted else ""
-            print(f"✔ CLEAN: All nodes in scope '{scope}' evaluate CLEAN{role_suffix}.{cleanup_msg} No work pending.")
+            deleted = decommission_workspaces(
+                scope, target_role=target_role, repo_root=root
+            )
+            cleanup_msg = (
+                f" Decommissioned {deleted} role workspace(s)." if deleted else ""
+            )
+            print(
+                f"✔ CLEAN: All nodes in scope '{scope}' evaluate CLEAN{role_suffix}.{cleanup_msg} No work pending."
+            )
             return 0
 
-        in_antigravity = bool(os.environ.get("ANTIGRAVITY_AGENT")) or bool(os.environ.get("ANTIGRAVITY_CONVERSATION_ID"))
+        in_antigravity = bool(os.environ.get("ANTIGRAVITY_AGENT")) or bool(
+            os.environ.get("ANTIGRAVITY_CONVERSATION_ID")
+        )
 
         harness = active_harness
         model_to_bind = bound_model
         model_hint = f" (model: {model_to_bind})" if model_to_bind else ""
         print(f"=== Autofab Clean Pre-flight [Scope: {scope}{role_suffix}] ===")
-        print(f"Commissioning/verifying {len(declared_roles)} role workspaces{model_hint}...")
+        print(
+            f"Commissioning/verifying {len(declared_roles)} role workspaces{model_hint}..."
+        )
         commissioned_dirs = []
         for r in declared_roles:
             ws_info = prov.commission(
@@ -2496,8 +2950,12 @@ def run_clean(
                 reset=True,
             )
             commissioned_dirs.append((r.role_name, ws_info.workspace_dir))
-        parent_ws_dir = os.path.dirname(commissioned_dirs[0][1]) if commissioned_dirs else ""
-        print(f"[OK] All {len(commissioned_dirs)} role workspaces ready in {parent_ws_dir}.")
+        parent_ws_dir = (
+            os.path.dirname(commissioned_dirs[0][1]) if commissioned_dirs else ""
+        )
+        print(
+            f"[OK] All {len(commissioned_dirs)} role workspaces ready in {parent_ws_dir}."
+        )
 
         print(f"\nDirty Nodes Detected in Scope '{scope}'{role_suffix}:")
         print(f"  • {len(ready_nodes)} node(s) READY for dispatch:")
@@ -2511,8 +2969,20 @@ def run_clean(
                 print(f"      [{r_name}] {t_file} -> {b_msg}")
 
         role_hint = f" up to {target_role}" if target_role else ""
-        target_display = f"{target_input}#{target_role}" if (is_unit and target_role) else (target_input if is_unit else f"{scope}{role_hint}")
-        queue_hint = f" {target_input} {target_role}" if (is_unit and target_role) else (f" {target_input}" if is_unit else (f" {target_role}" if target_role else ""))
+        target_display = (
+            f"{target_input}#{target_role}"
+            if (is_unit and target_role)
+            else (target_input if is_unit else f"{scope}{role_hint}")
+        )
+        queue_hint = (
+            f" {target_input} {target_role}"
+            if (is_unit and target_role)
+            else (
+                f" {target_input}"
+                if is_unit
+                else (f" {target_role}" if target_role else "")
+            )
+        )
 
         # Determine Antigravity dispatch mode:
         # (a) When called in Antigravity: default to "message" (reactive wakeup to current conversation)
@@ -2545,8 +3015,12 @@ def run_clean(
                     return 1
                 print("\n" + "=" * 72)
                 print("ANTIGRAVITY DESKTOP COORDINATION DISPATCHED:")
-                print(f"✔ Dedicated conversation opened in Antigravity Desktop for {target_display}.")
-                print("The Antigravity coordinator subagent will execute DAG convergence in the desktop app.")
+                print(
+                    f"✔ Dedicated conversation opened in Antigravity Desktop for {target_display}."
+                )
+                print(
+                    "The Antigravity coordinator subagent will execute DAG convergence in the desktop app."
+                )
                 print("=" * 72)
                 return 0
 
@@ -2568,12 +3042,20 @@ def run_clean(
         print('    TypeName="autofab_coordinator",')
         print('    Role="Autofab Coordinator",')
         print(f'    Model="{ag_coord_model}",')
-        print(f'    Prompt="Clean all dirty nodes in {target_display} using autofab_coordinator."')
+        print(
+            f'    Prompt="Clean all dirty nodes in {target_display} using autofab_coordinator."'
+        )
         print("  )")
         print("\nCoordinator execution steps:")
-        print(f"  1. Evaluate DAG ready nodes via 'uv run autofab work-queue {scope}{queue_hint} --json'.")
-        print("  2. Wake/dispatch workspace-bound role subagents (TypeName: 'autofab_worker').")
-        print("  3. Direct role workers to drain ready nodes via submit, blame, or fail.")
+        print(
+            f"  1. Evaluate DAG ready nodes via 'uv run autofab work-queue {scope}{queue_hint} --json'."
+        )
+        print(
+            "  2. Wake/dispatch workspace-bound role subagents (TypeName: 'autofab_worker')."
+        )
+        print(
+            "  3. Direct role workers to drain ready nodes via submit, blame, or fail."
+        )
         print("  4. Converge the DAG across topological waves.")
         print("  5. Decommission role workspaces upon clean convergence.")
         print("=" * 72)
@@ -2593,7 +3075,9 @@ def main_clean(argv: list[str] | None = None) -> int:
         try:
             rr_idx = args_list.index("--repo-root")
             if rr_idx + 1 < len(args_list):
-                os.environ["BUILD_WORKSPACE_DIRECTORY"] = os.path.abspath(args_list[rr_idx + 1])
+                os.environ["BUILD_WORKSPACE_DIRECTORY"] = os.path.abspath(
+                    args_list[rr_idx + 1]
+                )
         except (ValueError, IndexError):
             pass
     return run_clean(args_list, prog="autofab clean")
@@ -2604,6 +3088,11 @@ def main_orchestrate(argv: list[str] | None = None) -> int:
 
 
 def run_benchmark_cli(argv: list[str]) -> int:
+    for idx, arg in enumerate(argv):
+        if arg.startswith("--experiment="):
+            os.environ["AUTOFAB_EXPERIMENT"] = arg.split("=", 1)[1]
+        elif arg == "--experiment" and idx + 1 < len(argv):
+            os.environ["AUTOFAB_EXPERIMENT"] = argv[idx + 1]
     if "--dsh-desktop" in argv:
         os.environ["AUTOFAB_DSH_WEB"] = "0"
     elif "--dsh-web" in argv:
@@ -2633,9 +3122,13 @@ def run_benchmark_cli(argv: list[str]) -> int:
             for entry in os.listdir(r):
                 if entry.startswith((".", "bazel-", "venv")):
                     continue
-                cand = os.path.join(r, entry, "parts", "benchmark", "lib", "benchmark_impl.py")
+                cand = os.path.join(
+                    r, entry, "parts", "benchmark", "lib", "benchmark_impl.py"
+                )
                 if os.path.isfile(cand):
-                    mod = importlib.import_module(f"{entry}.parts.benchmark.lib.benchmark_impl")
+                    mod = importlib.import_module(
+                        f"{entry}.parts.benchmark.lib.benchmark_impl"
+                    )
                     if hasattr(mod, "main"):
                         return int(mod.main(normalized_argv))
         except OSError:
@@ -2654,7 +3147,9 @@ def main_benchmark(argv: list[str] | None = None) -> int:
         try:
             rr_idx = args_list.index("--repo-root")
             if rr_idx + 1 < len(args_list):
-                os.environ["BUILD_WORKSPACE_DIRECTORY"] = os.path.abspath(args_list[rr_idx + 1])
+                os.environ["BUILD_WORKSPACE_DIRECTORY"] = os.path.abspath(
+                    args_list[rr_idx + 1]
+                )
         except (ValueError, IndexError):
             pass
     return run_benchmark_cli(args_list)
@@ -2742,7 +3237,8 @@ def run_commission_cli(argv: list[str]) -> int:
             role_name = s_role
         elif not role_name:
             is_dir_target = bool(
-                dir_scope and (
+                dir_scope
+                and (
                     os.path.isdir(os.path.join(root, dir_scope, "parts"))
                     or os.path.isdir(os.path.join(root, dir_scope))
                 )
@@ -2759,14 +3255,19 @@ def run_commission_cli(argv: list[str]) -> int:
     if not dir_scope:
         try:
             for entry in os.listdir(root):
-                if os.path.isdir(os.path.join(root, entry, "parts")) and not entry.startswith((".", "bazel-", "venv")):
+                if os.path.isdir(
+                    os.path.join(root, entry, "parts")
+                ) and not entry.startswith((".", "bazel-", "venv")):
                     dir_scope = entry
                     break
         except OSError:
             pass
 
     if not dir_scope:
-        print("Error: Directory scope must be specified (e.g. uv run autofab commission --all staging or staging#qa).", file=sys.stderr)
+        print(
+            "Error: Directory scope must be specified (e.g. uv run autofab commission --all staging or staging#qa).",
+            file=sys.stderr,
+        )
         return 1
 
     from support.lib.lifecycle import enter_phase, get_singleton
@@ -2780,12 +3281,18 @@ def run_commission_cli(argv: list[str]) -> int:
         if all_roles:
             declared = reg.list_roles(root, dir_scope=dir_scope)
             if not declared:
-                print(f"Error: No declared roles found for directory scope '{dir_scope}'.", file=sys.stderr)
+                print(
+                    f"Error: No declared roles found for directory scope '{dir_scope}'.",
+                    file=sys.stderr,
+                )
                 return 1
             roles_to_commission = [r.role_name for r in declared]
         else:
             if not role_name:
-                print(f"Error: Role must be specified using <scope>#<role> syntax (e.g. uv run autofab commission {dir_scope}#qa) or use --all.", file=sys.stderr)
+                print(
+                    f"Error: Role must be specified using <scope>#<role> syntax (e.g. uv run autofab commission {dir_scope}#qa) or use --all.",
+                    file=sys.stderr,
+                )
                 return 1
             roles_to_commission = [role_name]
 
@@ -2815,6 +3322,7 @@ def run_commission_cli(argv: list[str]) -> int:
                     from autofab.parts.dsh.lib import dsh_workspace
                     from autofab.parts.agent.lib import session as agent_session
                     from support.lib.lifecycle import enter_phase
+
                     with enter_phase(agent_session.agent_session):
                         ws_cfg = get_singleton(dsh_workspace.DshWorkspaceConfigurer)
                         ws_cfg.configure_role_workspace(
@@ -2843,7 +3351,9 @@ def run_commission_cli(argv: list[str]) -> int:
 
             harness_label = f" [harness: {harness}]" if harness != "antigravity" else ""
             model_label = f" [model: {bound_model}]" if bound_model else ""
-            print(f"✔ Commissioned workspace for role '{r}'{harness_label}{model_label} at: {desc.workspace_dir}")
+            print(
+                f"✔ Commissioned workspace for role '{r}'{harness_label}{model_label} at: {desc.workspace_dir}"
+            )
 
         return 0
 
@@ -2874,12 +3384,17 @@ def decommission_workspaces(
                 declared_roles = list(declared_roles[: matching_idx + 1])
             else:
                 try:
-                    fused_r_def = reg.resolve_role_definition(target_clean, repo_root=root, dir_scope=dir_scope)
+                    fused_r_def = reg.resolve_role_definition(
+                        target_clean, repo_root=root, dir_scope=dir_scope
+                    )
                     if fused_r_def and fused_r_def.fused_roles:
-                        fused_names = {f.split(':')[-1].strip().lower() for f in fused_r_def.fused_roles}
+                        fused_names = {
+                            f.split(":")[-1].strip().lower()
+                            for f in fused_r_def.fused_roles
+                        }
                         upstream_roles = []
                         for r in declared_roles:
-                            r_c = r.role_name.split(':')[-1].strip().lower()
+                            r_c = r.role_name.split(":")[-1].strip().lower()
                             if r_c in fused_names:
                                 break
                             upstream_roles.append(r)
@@ -2911,7 +3426,9 @@ def decommission_workspaces(
             shutil.rmtree(path, ignore_errors=True)
 
         for r in declared_roles:
-            ws_dir = reg.compute_workspace_dir(r.role_name, dir_scope=dir_scope, repo_root=root)
+            ws_dir = reg.compute_workspace_dir(
+                r.role_name, dir_scope=dir_scope, repo_root=root
+            )
             if os.path.isdir(ws_dir):
                 _delete_dir(ws_dir)
                 reg.unregister_workspace(ws_dir, repo_root=root)
@@ -2927,7 +3444,10 @@ def decommission_workspaces(
                 clean_scope = dir_scope.strip("/").split("/")[0]
                 for item in os.listdir(rw_dir):
                     item_path = os.path.join(rw_dir, item)
-                    if not os.path.isdir(item_path) or os.path.abspath(item_path) in deleted_paths:
+                    if (
+                        not os.path.isdir(item_path)
+                        or os.path.abspath(item_path) in deleted_paths
+                    ):
                         continue
                     should_delete = False
                     for desc_name in app_inf.get_role_descriptors():
@@ -2936,15 +3456,33 @@ def decommission_workspaces(
                             try:
                                 with open(role_cfg, "r", encoding="utf-8") as f:
                                     cdata = json.load(f)
-                                cfg_scope = str(cdata.get("dir_scope") or cdata.get("parts_dir") or "")
-                                if clean_scope in cfg_scope.split("/") or cfg_scope.startswith(clean_scope) or cfg_scope.startswith(f"//{clean_scope}"):
-                                    r_role = str(cdata.get("role_name") or cdata.get("role") or "").lower()
-                                    if not target_role or r_role in [r.role_name.lower() for r in declared_roles]:
+                                cfg_scope = str(
+                                    cdata.get("dir_scope")
+                                    or cdata.get("parts_dir")
+                                    or ""
+                                )
+                                if (
+                                    clean_scope in cfg_scope.split("/")
+                                    or cfg_scope.startswith(clean_scope)
+                                    or cfg_scope.startswith(f"//{clean_scope}")
+                                ):
+                                    r_role = str(
+                                        cdata.get("role_name")
+                                        or cdata.get("role")
+                                        or ""
+                                    ).lower()
+                                    if not target_role or r_role in [
+                                        r.role_name.lower() for r in declared_roles
+                                    ]:
                                         should_delete = True
                             except Exception:
                                 pass
                             break
-                    if not should_delete and (f"_{clean_scope}_" in item or item.endswith(f"_{clean_scope}") or item.startswith(f"{clean_scope}_")):
+                    if not should_delete and (
+                        f"_{clean_scope}_" in item
+                        or item.endswith(f"_{clean_scope}")
+                        or item.startswith(f"{clean_scope}_")
+                    ):
                         should_delete = True
 
                     if should_delete:
@@ -2993,11 +3531,18 @@ def run_decommission_cli(argv: list[str]) -> int:
     parsed = parser.parse_args(argv)
     target_input = parsed.scope_opt or parsed.scope or _get_dir_scope()
     if not target_input:
-        print("Error: Directory scope must be specified (e.g. uv run autofab decommission staging or staging#qa).", file=sys.stderr)
+        print(
+            "Error: Directory scope must be specified (e.g. uv run autofab decommission staging or staging#qa).",
+            file=sys.stderr,
+        )
         return 1
     scope, parsed_role, _ = parse_cleanroom_target(target_input)
-    target_role = (parsed.role_opt or parsed.target_role or parsed_role or "").strip().lower()
-    deleted = decommission_workspaces(scope, target_role=target_role or None, repo_root=parsed.repo_root)
+    target_role = (
+        (parsed.role_opt or parsed.target_role or parsed_role or "").strip().lower()
+    )
+    deleted = decommission_workspaces(
+        scope, target_role=target_role or None, repo_root=parsed.repo_root
+    )
     print(f"✔ Decommissioned {deleted} role workspace(s) for scope '{scope}'.")
     return 0
 
@@ -3067,7 +3612,9 @@ def _extract_unit_info(target_str: str, ws_root: str) -> tuple[str, str] | None:
     return (part_dir, unit_name)
 
 
-def _resolve_role_def_dynamically(role_name: str, ws_root: str, main_root: str | None) -> Any:
+def _resolve_role_def_dynamically(
+    role_name: str, ws_root: str, main_root: str | None
+) -> Any:
     # First attempt: WorkspaceRegistry via lifecycle
     for cand_mod in (
         "autofab.parts.workspace.lib.role_registry",
@@ -3078,9 +3625,12 @@ def _resolve_role_def_dynamically(role_name: str, ws_root: str, main_root: str |
             mod = importlib.import_module(cand_mod)
             from support.lib.lifecycle import enter_phase, get_singleton
             from autofab.parts.agent.lib import session as agent_session
+
             with enter_phase(agent_session.agent_session):
                 reg = get_singleton(mod.WorkspaceRegistry)
-                r_def = reg.resolve_role_definition(role_name, repo_root=main_root or ws_root)
+                r_def = reg.resolve_role_definition(
+                    role_name, repo_root=main_root or ws_root
+                )
                 if r_def and r_def.verify_template:
                     return r_def
         except Exception:
@@ -3092,7 +3642,11 @@ def _resolve_role_def_dynamically(role_name: str, ws_root: str, main_root: str |
             continue
         cand_toml_paths: list[str] = []
         app_inf = _get_app_info()
-        role_files = app_inf.get_roles_filenames() if app_inf else ("autofab_roles.toml", "cleanroom_roles.toml")
+        role_files = (
+            app_inf.get_roles_filenames()
+            if app_inf
+            else ("autofab_roles.toml", "cleanroom_roles.toml")
+        )
         for rname in role_files:
             direct = os.path.join(root_cand, rname)
             if os.path.isfile(direct):
@@ -3108,21 +3662,32 @@ def _resolve_role_def_dynamically(role_name: str, ws_root: str, main_root: str |
             if os.path.isfile(toml_path):
                 try:
                     import tomllib
+
                     with open(toml_path, "rb") as tf:
                         tdata = tomllib.load(tf)
                     r_sec = tdata.get("roles", {}).get(role_name)
                     if r_sec:
                         from types import SimpleNamespace
+
                         return SimpleNamespace(
                             name=r_sec.get("name", role_name),
                             verify_template=r_sec.get("verify_template", ""),
-                            active_component_types=r_sec.get("active_component_types", []),
-                            src_pattern=r_sec.get("src_pattern", "") or (r_sec.get("src_patterns", [""])[0] if r_sec.get("src_patterns") else ""),
+                            active_component_types=r_sec.get(
+                                "active_component_types", []
+                            ),
+                            src_pattern=r_sec.get("src_pattern", "")
+                            or (
+                                r_sec.get("src_patterns", [""])[0]
+                                if r_sec.get("src_patterns")
+                                else ""
+                            ),
                             src_patterns=r_sec.get("src_patterns", []),
                             fused_roles=r_sec.get("fused_roles", []),
                             common_spec_roles=r_sec.get("common_spec_roles", []),
                             star_role_deps=r_sec.get("star_role_deps", []),
-                            star_feedback_role_deps=r_sec.get("star_feedback_role_deps", []),
+                            star_feedback_role_deps=r_sec.get(
+                                "star_feedback_role_deps", []
+                            ),
                             feedback_role_deps=r_sec.get("feedback_role_deps", []),
                         )
                 except Exception:
@@ -3168,7 +3733,11 @@ def run_verify_micro_binary(role_name: str, argv: list[str]) -> int:
                 continue
             i += 1
             continue
-        elif arg.startswith("--impl=") or arg.startswith("--test=") or arg.startswith("--pretense="):
+        elif (
+            arg.startswith("--impl=")
+            or arg.startswith("--test=")
+            or arg.startswith("--pretense=")
+        ):
             raw_targets.append(arg.split("=", 1)[1])
             i += 1
             continue
@@ -3186,8 +3755,14 @@ def run_verify_micro_binary(role_name: str, argv: list[str]) -> int:
             if os.path.isdir(full_rt):
                 for root_d, _, files_d in os.walk(full_rt):
                     for fd in sorted(files_d):
-                        if fd.endswith((".py", ".pyi")) and not fd.startswith(".") and fd != "__init__.py":
-                            u_info = _extract_unit_info(os.path.join(root_d, fd), ws_root)
+                        if (
+                            fd.endswith((".py", ".pyi"))
+                            and not fd.startswith(".")
+                            and fd != "__init__.py"
+                        ):
+                            u_info = _extract_unit_info(
+                                os.path.join(root_d, fd), ws_root
+                            )
                             if u_info and u_info not in target_units:
                                 target_units.append(u_info)
             else:
@@ -3195,7 +3770,11 @@ def run_verify_micro_binary(role_name: str, argv: list[str]) -> int:
                 if u_info and u_info not in target_units:
                     target_units.append(u_info)
     else:
-        parts_p = os.path.join(ws_root, d_scope, "parts") if d_scope else os.path.join(ws_root, "parts")
+        parts_p = (
+            os.path.join(ws_root, d_scope, "parts")
+            if d_scope
+            else os.path.join(ws_root, "parts")
+        )
         if not os.path.isdir(parts_p) and os.path.isdir(os.path.join(ws_root, "parts")):
             parts_p = os.path.join(ws_root, "parts")
         if os.path.isdir(parts_p):
@@ -3205,11 +3784,24 @@ def run_verify_micro_binary(role_name: str, argv: list[str]) -> int:
                     continue
                 part_rel = os.path.relpath(p_full, ws_root).replace(os.sep, "/")
                 cand_files: set[str] = set()
-                for sub in ("low", "lib", "tests", "pretense", "lib_a", "tests_a", "lib_b", "tests_b"):
+                for sub in (
+                    "low",
+                    "lib",
+                    "tests",
+                    "pretense",
+                    "lib_a",
+                    "tests_a",
+                    "lib_b",
+                    "tests_b",
+                ):
                     sub_d = os.path.join(p_full, sub)
                     if os.path.isdir(sub_d):
                         for f in os.listdir(sub_d):
-                            if f.endswith((".py", ".pyi")) and not f.startswith(".") and f != "__init__.py":
+                            if (
+                                f.endswith((".py", ".pyi"))
+                                and not f.startswith(".")
+                                and f != "__init__.py"
+                            ):
                                 cand_files.add(f)
                 for f in sorted(cand_files):
                     base = os.path.splitext(f)[0]
@@ -3230,12 +3822,17 @@ def run_verify_micro_binary(role_name: str, argv: list[str]) -> int:
     # Resolve role definition dynamically
     r_def = _resolve_role_def_dynamically(role_name, ws_root, main_root)
     if not r_def and f"pretense_{role_name}" in fused_roles:
-        r_def = _resolve_role_def_dynamically(f"pretense_{role_name}", ws_root, main_root)
+        r_def = _resolve_role_def_dynamically(
+            f"pretense_{role_name}", ws_root, main_root
+        )
     if not r_def and any("test" in r for r in fused_roles) and role_name == "pretense":
         r_def = _resolve_role_def_dynamically("test", ws_root, main_root)
 
     if not r_def:
-        print(f"Error: Unknown role verification definition for '{role_name}'.", file=sys.stderr)
+        print(
+            f"Error: Unknown role verification definition for '{role_name}'.",
+            file=sys.stderr,
+        )
         return 1
 
     cmd_tmpl = getattr(r_def, "verify_template", "") or ""
@@ -3245,7 +3842,9 @@ def run_verify_micro_binary(role_name: str, argv: list[str]) -> int:
 
     active_types = getattr(r_def, "active_component_types", []) or []
     src_pattern = getattr(r_def, "src_pattern", "") or ""
-    src_patterns = getattr(r_def, "src_patterns", []) or ([src_pattern] if src_pattern else [])
+    src_patterns = getattr(r_def, "src_patterns", []) or (
+        [src_pattern] if src_pattern else []
+    )
 
     env = dict(os.environ)
     env["BUILD_WORKSPACE_DIRECTORY"] = ws_root
@@ -3268,7 +3867,9 @@ def run_verify_micro_binary(role_name: str, argv: list[str]) -> int:
         if main_root and os.path.isdir(main_root):
             pypaths.append(main_root)
         if "PYTHONPATH" in env:
-            pypaths.extend(p for p in env["PYTHONPATH"].split(os.pathsep) if p and p not in pypaths)
+            pypaths.extend(
+                p for p in env["PYTHONPATH"].split(os.pathsep) if p and p not in pypaths
+            )
         env["PYTHONPATH"] = os.pathsep.join(pypaths)
 
     verified_count = 0
@@ -3283,14 +3884,20 @@ def run_verify_micro_binary(role_name: str, argv: list[str]) -> int:
             all_exist = True
             missing_files: list[str] = []
             for sp in src_patterns:
-                expected_file = os.path.join(ws_root, sp.format(unit_dir=part_dir, unit_name=unit_name))
+                expected_file = os.path.join(
+                    ws_root, sp.format(unit_dir=part_dir, unit_name=unit_name)
+                )
                 if not os.path.isfile(expected_file):
                     all_exist = False
-                    missing_files.append(os.path.relpath(expected_file, ws_root).replace(os.sep, "/"))
+                    missing_files.append(
+                        os.path.relpath(expected_file, ws_root).replace(os.sep, "/")
+                    )
             if not all_exist:
                 if len(missing_files) < len(src_patterns):
                     print(f"=== Verifying {role_name} on {target_display} ===")
-                    print(f"[FAIL] Missing companion file(s) for {target_display}: {', '.join(missing_files)}")
+                    print(
+                        f"[FAIL] Missing companion file(s) for {target_display}: {', '.join(missing_files)}"
+                    )
                     return 1
                 continue
 
@@ -3300,29 +3907,58 @@ def run_verify_micro_binary(role_name: str, argv: list[str]) -> int:
             max_failures=1,
             maxfail_arg="--maxfail=1",
         )
-        if "run_cross_tests.py" in formatted_cmd and not os.path.isfile(os.path.join(ws_root, "bin", "run_cross_tests.py")):
-            cand_cross = os.path.join(main_root, "bin", "run_cross_tests.py") if main_root else ""
+        if "run_cross_tests.py" in formatted_cmd and not os.path.isfile(
+            os.path.join(ws_root, "bin", "run_cross_tests.py")
+        ):
+            cand_cross = (
+                os.path.join(main_root, "bin", "run_cross_tests.py")
+                if main_root
+                else ""
+            )
             if cand_cross and os.path.isfile(cand_cross):
                 os.makedirs(os.path.join(ws_root, "bin"), exist_ok=True)
-                shutil.copy2(cand_cross, os.path.join(ws_root, "bin", "run_cross_tests.py"))
+                shutil.copy2(
+                    cand_cross, os.path.join(ws_root, "bin", "run_cross_tests.py")
+                )
         print(f"=== Verifying {role_name} on {target_display} ===")
-        res = subprocess.run(formatted_cmd, shell=True, cwd=ws_root, env=env, capture_output=True, text=True)
+        res = subprocess.run(
+            formatted_cmd,
+            shell=True,
+            cwd=ws_root,
+            env=env,
+            capture_output=True,
+            text=True,
+        )
         if res.returncode != 0:
-            print(f"[FAIL] Verification failed for {target_display} ({role_name}):\n{res.stdout}\n{res.stderr}".strip())
-            spec_roles = list(getattr(r_def, "common_spec_roles", None) or getattr(r_def, "star_role_deps", None) or [])
+            print(
+                f"[FAIL] Verification failed for {target_display} ({role_name}):\n{res.stdout}\n{res.stderr}".strip()
+            )
+            spec_roles = list(
+                getattr(r_def, "common_spec_roles", None)
+                or getattr(r_def, "star_role_deps", None)
+                or []
+            )
             resolved_specs: list[str] = []
             base_unit = unit_name[:-5] if unit_name.endswith("_impl") else unit_name
             for s_role in spec_roles:
                 s_def = _resolve_role_def_dynamically(s_role, ws_root, main_root)
                 if not s_def or not getattr(s_def, "src_pattern", ""):
                     continue
-                cands = [s_def.src_pattern.format(unit_dir=part_dir, unit_name=unit_name)]
+                cands = [
+                    s_def.src_pattern.format(unit_dir=part_dir, unit_name=unit_name)
+                ]
                 if base_unit != unit_name:
-                    cands.append(s_def.src_pattern.format(unit_dir=part_dir, unit_name=base_unit))
+                    cands.append(
+                        s_def.src_pattern.format(unit_dir=part_dir, unit_name=base_unit)
+                    )
                 found_any = False
                 for c in cands:
                     full_ws = os.path.join(ws_root, c) if not os.path.isabs(c) else c
-                    full_repo = os.path.join(main_root, c) if (main_root and not os.path.isabs(c)) else None
+                    full_repo = (
+                        os.path.join(main_root, c)
+                        if (main_root and not os.path.isabs(c))
+                        else None
+                    )
                     if os.path.isfile(full_ws):
                         rel = os.path.relpath(full_ws, ws_root)
                         if rel not in resolved_specs:
@@ -3337,7 +3973,11 @@ def run_verify_micro_binary(role_name: str, argv: list[str]) -> int:
                     if cands[0] not in resolved_specs:
                         resolved_specs.append(cands[0])
 
-            spec_desc = ", ".join(resolved_specs) if resolved_specs else "the common specification"
+            spec_desc = (
+                ", ".join(resolved_specs)
+                if resolved_specs
+                else "the common specification"
+            )
 
             if "coverage" in role_name:
                 print(
@@ -3348,7 +3988,8 @@ def run_verify_micro_binary(role_name: str, argv: list[str]) -> int:
                     "• DO NOT expose details (line numbers, code snippets, or internal symbols) of other files.\n"
                     "• Translate uncovered statements and branches into missing specification requirements or scenario cases.\n"
                     "• If an uncovered branch is an unreachable defensive check or caller assumption guaranteed by the specification, instruct the implementation author to prune it or mark it as unreachable according to the methodology.\n"
-                    + "=" * 80
+                    + "="
+                    * 80
                 )
             elif "qa" in role_name:
                 print(
@@ -3360,7 +4001,8 @@ def run_verify_micro_binary(role_name: str, argv: list[str]) -> int:
                     "• Frame test failures strictly as contract discrepancies against the specification.\n"
                     "• Explain the expected postcondition outcome versus the observed behavior.\n"
                     "• Preconditions cannot be tested: *Error exceptions designate contract violations and must never be tested or expected with raises(). If an *Error occurs, blame the test/pretense module for failing to satisfy or gate preconditions (use require(...) in pretense), NEVER the library.\n"
-                    + "=" * 80
+                    + "="
+                    * 80
                 )
             return res.returncode
         else:
@@ -3377,7 +4019,9 @@ def run_verify_micro_binary(role_name: str, argv: list[str]) -> int:
 def run_verify_fused_cli(argv: list[str]) -> int:
     app_inf = _get_app_info()
     if argv and argv[0] in ("-h", "--help"):
-        print(f"usage: {app_inf.APP_NAME} verify-fused [workspace_dir]\n\nVerify all constituent roles in a fused role workspace.")
+        print(
+            f"usage: {app_inf.APP_NAME} verify-fused [workspace_dir]\n\nVerify all constituent roles in a fused role workspace."
+        )
         return 0
     ws_dir = os.path.abspath(argv[0] if argv else os.getcwd())
     meta_p = None
@@ -3395,7 +4039,10 @@ def run_verify_fused_cli(argv: list[str]) -> int:
 
     fused_roles = meta.get("fused_roles") or []
     if not fused_roles:
-        print(f"Error: Workspace at {ws_dir} is not a fused role workspace.", file=sys.stderr)
+        print(
+            f"Error: Workspace at {ws_dir} is not a fused role workspace.",
+            file=sys.stderr,
+        )
         return 1
 
     for r in fused_roles:
@@ -3405,7 +4052,10 @@ def run_verify_fused_cli(argv: list[str]) -> int:
             os.chdir(ws_dir)
             code = run_verify_micro_binary(r, [])
             if code != 0:
-                print(f"[FAIL] Fused verification failed for role '{r}' in {ws_dir}.", file=sys.stderr)
+                print(
+                    f"[FAIL] Fused verification failed for role '{r}' in {ws_dir}.",
+                    file=sys.stderr,
+                )
                 return code
         finally:
             os.chdir(orig_cwd)
@@ -3417,7 +4067,9 @@ def run_verify_fused_cli(argv: list[str]) -> int:
 def run_harvest_fused_cli(argv: list[str]) -> int:
     app_inf = _get_app_info()
     if argv and argv[0] in ("-h", "--help"):
-        print(f"usage: {app_inf.APP_NAME} harvest-fused [workspace_dir]\n\nHarvest verified implementation files from a fused role workspace into the main repository.")
+        print(
+            f"usage: {app_inf.APP_NAME} harvest-fused [workspace_dir]\n\nHarvest verified implementation files from a fused role workspace into the main repository."
+        )
         return 0
     ws_dir = os.path.abspath(argv[0] if argv else os.getcwd())
     meta_p = None
@@ -3443,7 +4095,11 @@ def run_harvest_fused_cli(argv: list[str]) -> int:
         else:
             main_root = os.getcwd()
 
-    parts_p = os.path.join(ws_dir, dir_scope, "parts") if dir_scope else os.path.join(ws_dir, "parts")
+    parts_p = (
+        os.path.join(ws_dir, dir_scope, "parts")
+        if dir_scope
+        else os.path.join(ws_dir, "parts")
+    )
     if not os.path.isdir(parts_p) and os.path.isdir(os.path.join(ws_dir, "parts")):
         parts_p = os.path.join(ws_dir, "parts")
 
@@ -3452,13 +4108,25 @@ def run_harvest_fused_cli(argv: list[str]) -> int:
         for root, dirs, files in os.walk(parts_p):
             for f in files:
                 if f.endswith((".py", ".pyi", ".md")) and not f.startswith("."):
-                    rel = os.path.relpath(os.path.join(root, f), ws_dir).replace(os.sep, "/")
+                    rel = os.path.relpath(os.path.join(root, f), ws_dir).replace(
+                        os.sep, "/"
+                    )
                     is_constituent = False
                     for r in fused_roles:
-                        if f"/{r}/" in f"/{rel}/" or (r == "test" and "/tests/" in f"/{rel}/"):
+                        if f"/{r}/" in f"/{rel}/" or (
+                            r == "test" and "/tests/" in f"/{rel}/"
+                        ):
                             is_constituent = True
                             break
-                    if not is_constituent and ("lib/" in rel or "tests/" in rel or "pretense/" in rel or "lib_a/" in rel or "tests_a/" in rel or "lib_b/" in rel or "tests_b/" in rel):
+                    if not is_constituent and (
+                        "lib/" in rel
+                        or "tests/" in rel
+                        or "pretense/" in rel
+                        or "lib_a/" in rel
+                        or "tests_a/" in rel
+                        or "lib_b/" in rel
+                        or "tests_b/" in rel
+                    ):
                         is_constituent = True
 
                     if is_constituent:
@@ -3482,9 +4150,15 @@ def run_harvest_fused_cli(argv: list[str]) -> int:
                                     pass
 
                             if src_metadata:
-                                src_metadata.record_change(dst_f, "Fused role implementation and verification")
+                                src_metadata.record_change(
+                                    dst_f, "Fused role implementation and verification"
+                                )
                                 for c_role in fused_roles:
-                                    if "qa" in c_role or "coverage" in c_role or "audit" in c_role:
+                                    if (
+                                        "qa" in c_role
+                                        or "coverage" in c_role
+                                        or "audit" in c_role
+                                    ):
                                         src_metadata.stamp_audit(dst_f, c_role)
                                 src_metadata.mark_clean(dst_f)
                                 src_metadata.update_metadata(dst_f, clear_dirty=True)
@@ -3539,20 +4213,26 @@ def main(argv: list[str] | None = None) -> int:
         try:
             rr_idx = args_list.index("--repo-root")
             if rr_idx + 1 < len(args_list):
-                os.environ["BUILD_WORKSPACE_DIRECTORY"] = os.path.abspath(args_list[rr_idx + 1])
+                os.environ["BUILD_WORKSPACE_DIRECTORY"] = os.path.abspath(
+                    args_list[rr_idx + 1]
+                )
         except (ValueError, IndexError):
             pass
     # Re-install agent files each time CLI is executed at repo level
     # Skip inside isolated role workspaces or when running worker verification tools
     app_inf = _get_app_info()
     is_role_ws = bool(
-        any(os.path.isfile(os.path.join(os.getcwd(), desc)) for desc in app_inf.get_role_descriptors())
+        any(
+            os.path.isfile(os.path.join(os.getcwd(), desc))
+            for desc in app_inf.get_role_descriptors()
+        )
         or os.environ.get(f"{app_inf.ENV_PREFIX}_ROLE_WORKSPACE")
         or os.environ.get("CLEANROOM_ROLE_WORKSPACE")
     )
     cmd_0 = args_list[0] if args_list else ""
     is_worker_cmd = bool(
-        cmd_0 in (
+        cmd_0
+        in (
             "coverage",
             "check_files",
             "check-files",
@@ -3590,7 +4270,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args_list[0] == "install-antigravity-plugin":
         p = ensure_antigravity_plugin_installed()
-        print(f"[OK] Autofab Antigravity plugin and agent definitions installed at: {p}")
+        print(
+            f"[OK] Autofab Antigravity plugin and agent definitions installed at: {p}"
+        )
         return 0
 
     if args_list[0] == "work-queue":
@@ -3610,6 +4292,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args_list[0] == "blame":
         return run_blame_cli(args_list[1:], prog="autofab blame")
+
+    if args_list[0] == "reject":
+        return run_reject_cli(args_list[1:], prog="autofab reject")
 
     if args_list[0] == "clean":
         return run_clean(args_list[1:])
@@ -3637,10 +4322,12 @@ def main(argv: list[str] | None = None) -> int:
     assert cli_tool_impl is not None
     try:
         from autofab.parts.workspace.lib import workspace_asm
+
         workspace_asm.__initialize__()
     except Exception:
         try:
             from parts.workspace.lib import workspace_asm
+
             workspace_asm.__initialize__()
         except Exception:
             pass

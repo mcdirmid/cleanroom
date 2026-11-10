@@ -27,7 +27,7 @@ The source metadata coordinator rewrites metadata in a text string by removing a
 
 The source metadata coordinator mutates a source file in place by reading its content, computing the updated comment block, creating parent directories when absent, and writing UTF-8 encoded text.
 
-The source metadata coordinator updates node lifecycle state by advancing the last cleaned timestamp to the current UTC timestamp on mutation, setting the last changed timestamp on change, appending feedback entries, stamping role audits, and clearing the dirty reason.
+The source metadata coordinator updates node lifecycle state by advancing the last cleaned timestamp to the current UTC timestamp on mutation, setting the last changed timestamp on change, appending feedback entries with sender role attribution prefixes when attributed to non-user callers, stamping role audits, and clearing the dirty reason.
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z

@@ -23,6 +23,7 @@ def _bound_file_path(bound_file: Any) -> str:
         return str(bound_file.relative_path)
     return str(bound_file)
 
+
 _NOISE_PATTERNS: Tuple[re.Pattern[str], ...] = (
     re.compile(r"^INFO: Analyzed target"),
     re.compile(r"^INFO: Found \d+ test target"),
@@ -62,9 +63,7 @@ class VerificationEvaluator(verification.VerificationEvaluator):
             dag_storage.DagNode, verification.VerificationResult
         ] = {}
         self._cached_global_hash: Optional[str] = None
-        self._cached_global_result: Optional[
-            verification.VerificationResult
-        ] = None
+        self._cached_global_result: Optional[verification.VerificationResult] = None
 
     # Contract: Strips build system noise lines from diagnostic text using compiled regex patterns.
     def clean_diagnostic_noise(self, text: str) -> str:
@@ -195,6 +194,8 @@ class VerificationEvaluator(verification.VerificationEvaluator):
             self._cached_global_result = result
 
         return result
+
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-11T05:04:01Z

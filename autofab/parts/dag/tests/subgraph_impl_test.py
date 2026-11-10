@@ -20,7 +20,9 @@ def _make_node(unit_address: str, role_address: str) -> dag_storage.DagNode:
     )
 
 
-def _make_dep(node: dag_storage.DagNode, is_silent: bool = False) -> dag_storage.DagDependency:
+def _make_dep(
+    node: dag_storage.DagNode, is_silent: bool = False
+) -> dag_storage.DagDependency:
     return dag_storage.DagDependency(node=node, is_silent=is_silent)
 
 
@@ -147,7 +149,11 @@ class DagSubgraphImplTest(unittest.TestCase):
             subgraph.set_target(target)
             batch = subgraph.next_ready_batch()
             self.assertEqual(len(batch), 2)
-            self.assertTrue(all(n.role_address == dag_storage.RoleAddress("role_lib") for n in batch))
+            self.assertTrue(
+                all(
+                    n.role_address == dag_storage.RoleAddress("role_lib") for n in batch
+                )
+            )
 
     def test_next_ready_batch_bounds_to_batch_size(self) -> None:
         """Postcondition: MUST bound batch size to limit from configuration."""
@@ -214,7 +220,10 @@ class DagSubgraphImplTest(unittest.TestCase):
         unbatched_dirty_dep = _make_node("unbatched_dep", "role_low")
 
         storage.set_dependencies(unready_candidate, {_make_dep(unbatched_dirty_dep)})
-        storage.set_dependencies(target, {_make_dep(ready_1), _make_dep(ready_2), _make_dep(unready_candidate)})
+        storage.set_dependencies(
+            target,
+            {_make_dep(ready_1), _make_dep(ready_2), _make_dep(unready_candidate)},
+        )
         storage.set_dirty(target, True)
         storage.set_dirty(ready_1, True)
         storage.set_dirty(ready_2, True)
@@ -230,7 +239,9 @@ class DagSubgraphImplTest(unittest.TestCase):
             self.assertNotIn(ready_2, batch)
             self.assertNotIn(unready_candidate, batch)
 
-    def test_next_ready_batch_expansion_terminates_on_intervening_clean_node(self) -> None:
+    def test_next_ready_batch_expansion_terminates_on_intervening_clean_node(
+        self,
+    ) -> None:
         """Postcondition: Ready batch expansion terminates upon encountering an intervening clean node in topological sequence."""
         registry = LifecycleRegistry()
         __initialize__(registry)
@@ -279,13 +290,17 @@ class DagSubgraphImplTest(unittest.TestCase):
             batch = subgraph.next_ready_batch()
             self.assertIn(in_subgraph_node, batch)
 
-    def test_next_ready_batch_evaluating_readiness_with_silent_external_dependency(self) -> None:
+    def test_next_ready_batch_evaluating_readiness_with_silent_external_dependency(
+        self,
+    ) -> None:
         """Postcondition: Silent dependency belonging outside the active target subgraph does not block readiness."""
         target = _make_node("target_unit_2", "role_test")
         in_subgraph_node = _make_node("in_subgraph_2", "role_lib")
         external_dep = _make_node("ext_dep_silent", "role_lib")
 
-        self.storage.set_dependencies(in_subgraph_node, {_make_dep(external_dep, is_silent=True)})
+        self.storage.set_dependencies(
+            in_subgraph_node, {_make_dep(external_dep, is_silent=True)}
+        )
         self.storage.set_dependencies(target, {_make_dep(in_subgraph_node)})
         self.storage.set_dirty(target, True)
         self.storage.set_dirty(in_subgraph_node, True)
@@ -297,7 +312,9 @@ class DagSubgraphImplTest(unittest.TestCase):
             batch = subgraph.next_ready_batch()
             self.assertIn(in_subgraph_node, batch)
 
-    def test_next_ready_batch_expansion_excludes_candidate_with_uncleaned_in_subgraph_dependencies(self) -> None:
+    def test_next_ready_batch_expansion_excludes_candidate_with_uncleaned_in_subgraph_dependencies(
+        self,
+    ) -> None:
         """Postcondition: Batch expansion excludes candidate nodes of the same role address whose in-subgraph dependencies remain uncleaned."""
         registry = LifecycleRegistry()
         __initialize__(registry)
@@ -314,7 +331,9 @@ class DagSubgraphImplTest(unittest.TestCase):
 
         storage.set_dependencies(dep_uncleaned, {_make_dep(start_node)})
         storage.set_dependencies(cand_unready, {_make_dep(dep_uncleaned)})
-        storage.set_dependencies(target, {_make_dep(start_node), _make_dep(cand_unready), _make_dep(ready_2)})
+        storage.set_dependencies(
+            target, {_make_dep(start_node), _make_dep(cand_unready), _make_dep(ready_2)}
+        )
 
         storage.set_dirty(target, True)
         storage.set_dirty(start_node, True)
@@ -330,12 +349,16 @@ class DagSubgraphImplTest(unittest.TestCase):
             self.assertNotIn(cand_unready, batch)
             self.assertIn(ready_2, batch)
 
-    def test_next_ready_batch_withholds_dirty_node_with_different_role_address(self) -> None:
+    def test_next_ready_batch_withholds_dirty_node_with_different_role_address(
+        self,
+    ) -> None:
         """Postcondition: MUST withhold dirty nodes with a different role address than the first selected node."""
         target = _make_node("target_unit", "role_test")
         node_role_a = _make_node("unit_a", "role_alpha")
         node_role_b = _make_node("unit_b", "role_beta")
-        self.storage.set_dependencies(target, {_make_dep(node_role_a), _make_dep(node_role_b)})
+        self.storage.set_dependencies(
+            target, {_make_dep(node_role_a), _make_dep(node_role_b)}
+        )
         self.storage.set_dirty(target, True)
         self.storage.set_dirty(node_role_a, True)
         self.storage.set_dirty(node_role_b, True)
@@ -357,7 +380,9 @@ class DagSubgraphImplTest(unittest.TestCase):
         target = _make_node("target_unit", "role_test")
         clean_dep = _make_node("clean_dep", "role_lib")
         dirty_dep = _make_node("dirty_dep", "role_lib")
-        self.storage.set_dependencies(target, {_make_dep(clean_dep), _make_dep(dirty_dep)})
+        self.storage.set_dependencies(
+            target, {_make_dep(clean_dep), _make_dep(dirty_dep)}
+        )
         self.storage.set_dirty(clean_dep, False)
         self.storage.set_dirty(dirty_dep, True)
         self.storage.set_dirty(target, True)
@@ -374,7 +399,9 @@ class DagSubgraphImplTest(unittest.TestCase):
         target = _make_node("target_unit", "//roles:root")
         node_alpha = _make_node("same_unit", "//my/scope:alpha")
         node_beta = _make_node("same_unit", "//different/scope:beta")
-        self.storage.set_dependencies(target, {_make_dep(node_beta), _make_dep(node_alpha)})
+        self.storage.set_dependencies(
+            target, {_make_dep(node_beta), _make_dep(node_alpha)}
+        )
         self.storage.set_dirty(target, True)
         self.storage.set_dirty(node_alpha, True)
         self.storage.set_dirty(node_beta, True)

@@ -10,7 +10,13 @@ import re
 import stat
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
-from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
+from support.lib.lifecycle import (
+    LifecycleRegistry,
+    Singleton,
+    get_default_registry,
+    get_singleton,
+)
+
 try:
     from support.lib import app_info
 except Exception:
@@ -29,6 +35,7 @@ def _find_methodology_for_scope(root: str, dir_scope: str) -> Optional[str]:
 
     cfg_filenames = app_info.get_config_filenames()
     import tomllib
+
     for fname in cfg_filenames:
         cand = os.path.join(scope_dir, fname)
         if os.path.isfile(cand):
@@ -95,14 +102,22 @@ def _resolve_active_methodology_pkg(
 
     if role_def and hasattr(role_def, "guide_path") and role_def.guide_path:
         for seg in role_def.guide_path.replace("\\", "/").split("/"):
-            if seg and seg != "guides" and os.path.isdir(os.path.join(resolved_root, seg)):
+            if (
+                seg
+                and seg != "guides"
+                and os.path.isdir(os.path.join(resolved_root, seg))
+            ):
                 return seg
             if seg == "guides":
                 break
 
     if role_def and hasattr(role_def, "template") and role_def.template:
         for seg in role_def.template.replace("\\", "/").split("/"):
-            if seg and seg != "templates" and os.path.isdir(os.path.join(resolved_root, seg)):
+            if (
+                seg
+                and seg != "templates"
+                and os.path.isdir(os.path.join(resolved_root, seg))
+            ):
                 return seg
             if seg == "templates":
                 break
@@ -121,9 +136,15 @@ def _resolve_active_methodology_pkg(
 
 
 # Buffer and descriptor filenames derived dynamically from app_info
-BLAME_BUFFER_FILE: str = getattr(app_info, "DEFAULT_BLAME_BUFFER_FILE", ".autofab_blame_buffer.json")
-AUDIT_BUFFER_FILE: str = getattr(app_info, "DEFAULT_AUDIT_BUFFER_FILE", ".autofab_audit_buffer.json")
-ROLE_CONFIG_FILE: str = getattr(app_info, "DEFAULT_ROLE_DESCRIPTOR", ".autofab_role.json")
+BLAME_BUFFER_FILE: str = getattr(
+    app_info, "DEFAULT_BLAME_BUFFER_FILE", ".autofab_blame_buffer.json"
+)
+AUDIT_BUFFER_FILE: str = getattr(
+    app_info, "DEFAULT_AUDIT_BUFFER_FILE", ".autofab_audit_buffer.json"
+)
+ROLE_CONFIG_FILE: str = getattr(
+    app_info, "DEFAULT_ROLE_DESCRIPTOR", ".autofab_role.json"
+)
 
 
 def _compute_file_sha256(path: str) -> Optional[str]:
@@ -164,7 +185,9 @@ def _load_pull_manifest(workspace_dir: str) -> Dict[str, Dict[str, str]]:
     return {}
 
 
-def _save_pull_manifest(workspace_dir: str, manifest: Dict[str, Dict[str, str]]) -> None:
+def _save_pull_manifest(
+    workspace_dir: str, manifest: Dict[str, Dict[str, str]]
+) -> None:
     """Saves recorded inbound pull manifest to workspace state directory."""
     manifest_path = _get_pull_manifest_path(workspace_dir)
     try:
@@ -208,7 +231,7 @@ def _project_for_role_workspace(content: str, filename: str, is_writable: bool) 
 def _is_runtime_support_library(fname: str) -> bool:
     """Returns True if file is a user-facing runtime API or type stub, excluding internal oracles."""
     base = fname.lower()
-    if "lint" in base or "tool" in base or "runner" in base or base.startswith("app_info"):
+    if "lint" in base or "tool" in base or "runner" in base:
         return False
     return fname.endswith((".py", ".pyi", ".bzl", ".toml"))
 
@@ -218,7 +241,9 @@ def _copy_projected_file(src: str, dst: str, is_writable: bool) -> None:
     try:
         with open(src, "r", encoding="utf-8") as f:
             content = f.read()
-        projected = _project_for_role_workspace(content, os.path.basename(src), is_writable=is_writable)
+        projected = _project_for_role_workspace(
+            content, os.path.basename(src), is_writable=is_writable
+        )
         write_file_with_perms(dst, projected, readonly=not is_writable)
     except (UnicodeDecodeError, OSError):
         copy_file_with_perms(src, dst, readonly=not is_writable)
@@ -268,7 +293,11 @@ def _is_stub_dep_file(
                     return True
         if stub_def.src_pattern:
             d, _, ext = _parse_pat_to_glob(stub_def.src_pattern)
-            if d and (parent == d or f"/{d}/" in rel_path.replace("\\", "/")) and (not ext or fname.endswith(ext)):
+            if (
+                d
+                and (parent == d or f"/{d}/" in rel_path.replace("\\", "/"))
+                and (not ext or fname.endswith(ext))
+            ):
                 return True
     return False
 
@@ -323,9 +352,7 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
         silent: bool = False,
         delete_missing: bool = True,
     ) -> int:
-        registry = get_singleton(
-            role_registry.WorkspaceRegistry
-        )
+        registry = get_singleton(role_registry.WorkspaceRegistry)
         role_def = registry.resolve_role_definition(role_name, main_root)
 
         main_scope_dir = os.path.join(main_root, dir_scope)
@@ -372,11 +399,16 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
             for rel in ws_files:
                 if rel not in main_files_set:
                     dst_f = os.path.join(ws_scope_dir, rel)
-                    rel_from_ws = os.path.relpath(dst_f, workspace_dir).replace("\\", "/")
+                    rel_from_ws = os.path.relpath(dst_f, workspace_dir).replace(
+                        "\\", "/"
+                    )
                     is_pending = (
                         rel in pending_targets
                         or rel_from_ws in pending_targets
-                        or any(pt.endswith(f"/{rel}") or rel.endswith(f"/{pt}") for pt in pending_targets)
+                        or any(
+                            pt.endswith(f"/{rel}") or rel.endswith(f"/{pt}")
+                            for pt in pending_targets
+                        )
                     )
                     if is_pending:
                         continue
@@ -426,9 +458,14 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
                 is_pending_target = (
                     rel in pending_targets
                     or rel_from_ws in pending_targets
-                    or any(pt.endswith(f"/{rel}") or rel.endswith(f"/{pt}") for pt in pending_targets)
+                    or any(
+                        pt.endswith(f"/{rel}") or rel.endswith(f"/{pt}")
+                        for pt in pending_targets
+                    )
                 )
-                can_regenerate = bool(role_def and role_def.src_pattern and role_def.role_deps)
+                can_regenerate = bool(
+                    role_def and role_def.src_pattern and role_def.role_deps
+                )
                 if is_writable and is_pending_target and can_regenerate:
                     needs_copy = False
                 else:
@@ -438,7 +475,7 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
 
                 if manifest_entry is not None:
                     prev_src_hash = manifest_entry.get("main_hash")
-                    src_changed_upstream = (prev_src_hash != current_src_hash)
+                    src_changed_upstream = prev_src_hash != current_src_hash
 
                     if not src_changed_upstream:
                         # Canonical file has not changed since last pull. Never pull or clobber workspace file!
@@ -456,7 +493,9 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
                             ws_base_code_h = meta.code_hash if meta else None
                             src_code_h = src_metadata.compute_file_code_hash(src_f)
                             upstream_code_changed = bool(
-                                ws_base_code_h and src_code_h and src_code_h != ws_base_code_h
+                                ws_base_code_h
+                                and src_code_h
+                                and src_code_h != ws_base_code_h
                             )
 
                             if local_code_mod and upstream_code_changed:
@@ -494,10 +533,17 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
                         needs_copy = False
                     else:
                         try:
-                            with open(src_f, "r", encoding="utf-8") as sf, open(dst_f, "r", encoding="utf-8") as df:
+                            with (
+                                open(src_f, "r", encoding="utf-8") as sf,
+                                open(dst_f, "r", encoding="utf-8") as df,
+                            ):
                                 src_content = sf.read()
                                 dst_content = df.read()
-                            src_projected = _project_for_role_workspace(src_content, os.path.basename(src_f), is_writable=is_writable)
+                            src_projected = _project_for_role_workspace(
+                                src_content,
+                                os.path.basename(src_f),
+                                is_writable=is_writable,
+                            )
                             if src_projected != dst_content:
                                 needs_copy = True
                         except (UnicodeDecodeError, OSError):
@@ -542,9 +588,7 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
         dir_scope: str,
         silent: bool = False,
     ) -> int:
-        registry = get_singleton(
-            role_registry.WorkspaceRegistry
-        )
+        registry = get_singleton(role_registry.WorkspaceRegistry)
         # Resolve the canonical repository root and the role context of the
         # synchronized workspace before recopying system files from that root.
         canonical_root = registry.discover_repository_root(main_root)
@@ -565,18 +609,31 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
         main_root = canonical_root
         refreshed_count = 0
 
-        active_pkg = _resolve_active_methodology_pkg(canonical_root, dir_scope, role_def)
+        active_pkg = _resolve_active_methodology_pkg(
+            canonical_root, dir_scope, role_def
+        )
 
         if role_def.guide_path:
             guide_candidates = [
                 os.path.join(main_root, role_def.guide_path),
             ]
             if active_pkg:
-                guide_candidates.append(os.path.join(main_root, active_pkg, role_def.guide_path))
-                guide_candidates.append(os.path.join(main_root, active_pkg, "guides", os.path.basename(role_def.guide_path)))
+                guide_candidates.append(
+                    os.path.join(main_root, active_pkg, role_def.guide_path)
+                )
+                guide_candidates.append(
+                    os.path.join(
+                        main_root,
+                        active_pkg,
+                        "guides",
+                        os.path.basename(role_def.guide_path),
+                    )
+                )
             guide_src = next((c for c in guide_candidates if os.path.isfile(c)), None)
             if guide_src:
-                root_guide_dst = os.path.join(workspace_dir, "guides", os.path.basename(role_def.guide_path))
+                root_guide_dst = os.path.join(
+                    workspace_dir, "guides", os.path.basename(role_def.guide_path)
+                )
                 copy_file_with_perms(guide_src, root_guide_dst, readonly=True)
                 refreshed_count += 1
 
@@ -598,17 +655,21 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
                 with open(ws_pyproject, "r", encoding="utf-8") as f:
                     ptext = f.read()
                 ptext = re.sub(
-                    r'\[tool\.pyright\][^\[]*include\s*=\s*\[[^\]]*\]',
+                    r"\[tool\.pyright\][^\[]*include\s*=\s*\[[^\]]*\]",
                     '[tool.pyright]\ninclude = ["."]',
                     ptext,
                     flags=re.DOTALL,
                 )
                 if dir_scope:
                     clean_scope = dir_scope.strip("/").split("/")[0]
-                    ptext = ptext.replace(f'"{clean_scope}",', '').replace(f'"{clean_scope}"', '')
-                    ptext = ptext.replace(f'"{dir_scope}",', '').replace(f'"{dir_scope}"', '')
+                    ptext = ptext.replace(f'"{clean_scope}",', "").replace(
+                        f'"{clean_scope}"', ""
+                    )
+                    ptext = ptext.replace(f'"{dir_scope}",', "").replace(
+                        f'"{dir_scope}"', ""
+                    )
                 ptext = re.sub(
-                    r'testpaths\s*=\s*\[[^\]]*\]',
+                    r"testpaths\s*=\s*\[[^\]]*\]",
                     'testpaths = ["."]',
                     ptext,
                 )
@@ -617,20 +678,20 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
                     clean_scope = dir_scope.strip("/").split("/")[0]
                     pypaths_cfg.append(f'"{clean_scope}"')
                     pypaths_cfg.append(f'"{clean_scope}/parts"')
-                pypaths_str = f'pythonpath = [{", ".join(pypaths_cfg)}]'
+                pypaths_str = f"pythonpath = [{', '.join(pypaths_cfg)}]"
                 if "pythonpath" in ptext:
                     ptext = re.sub(
-                        r'pythonpath\s*=\s*\[[^\]]*\]',
+                        r"pythonpath\s*=\s*\[[^\]]*\]",
                         pypaths_str,
                         ptext,
                     )
                 elif "[tool.pytest.ini_options]" in ptext:
                     ptext = ptext.replace(
                         "[tool.pytest.ini_options]",
-                        f'[tool.pytest.ini_options]\n{pypaths_str}',
+                        f"[tool.pytest.ini_options]\n{pypaths_str}",
                     )
                 # Contract: MUST strip readme declaration attributes from refreshed pyproject.toml to prevent build backend failures.
-                ptext = re.sub(r'(?m)^\s*readme\s*=.*$\n?', '', ptext)
+                ptext = re.sub(r"(?m)^\s*readme\s*=.*$\n?", "", ptext)
                 with open(ws_pyproject, "w", encoding="utf-8") as f:
                     f.write(ptext)
                 try:
@@ -653,10 +714,14 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
                 os.makedirs(d_lib, exist_ok=True)
                 s_init = os.path.join(pkg_dir, "support", "__init__.py")
                 if os.path.isfile(s_init):
-                    copy_file_with_perms(s_init, os.path.join(d_support, "__init__.py"), readonly=True)
+                    copy_file_with_perms(
+                        s_init, os.path.join(d_support, "__init__.py"), readonly=True
+                    )
                 lib_init = os.path.join(s_lib, "__init__.py")
                 if os.path.isfile(lib_init):
-                    copy_file_with_perms(lib_init, os.path.join(d_lib, "__init__.py"), readonly=True)
+                    copy_file_with_perms(
+                        lib_init, os.path.join(d_lib, "__init__.py"), readonly=True
+                    )
                 for fname in os.listdir(s_lib):
                     sf = os.path.join(s_lib, fname)
                     if not os.path.isfile(sf):
@@ -707,9 +772,7 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
         return refreshed_count
 
     # Contract: Flushes buffered blame feedback entries from workspace into main repository.
-    def flush_blame_buffer(
-        self, workspace_dir: str, main_root: str
-    ) -> Sequence[str]:
+    def flush_blame_buffer(self, workspace_dir: str, main_root: str) -> Sequence[str]:
         blame_candidates = app_info.get_blame_buffer_filenames()
         blame_path = None
         for cand_name in blame_candidates:
@@ -761,9 +824,7 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
         role_name: str,
         dir_scope: str,
     ) -> sync.SyncResult:
-        registry = get_singleton(
-            role_registry.WorkspaceRegistry
-        )
+        registry = get_singleton(role_registry.WorkspaceRegistry)
         role_def = registry.resolve_role_definition(role_name, main_root)
 
         flushed_blames = list(self.flush_blame_buffer(workspace_dir, main_root))
@@ -787,7 +848,11 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
                             t = entry.get("target", "").lstrip("/")
                             t_path = os.path.join(main_root, t)
                             if os.path.isfile(t_path):
-                                tag = entry.get("audit_tag") or role_def.audit_tag or role_name
+                                tag = (
+                                    entry.get("audit_tag")
+                                    or role_def.audit_tag
+                                    or role_name
+                                )
                                 src_metadata.stamp_audit(t_path, tag)
                                 stamped_audits.append(t)
                 with open(audit_path, "w", encoding="utf-8") as f:
@@ -856,6 +921,8 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
             stamped_audits=stamped_audits,
             flushed_blames=flushed_blames,
         )
+
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-11-06T20:48:04Z
 # LAST_CHANGED: 2026-11-06T20:48:04Z

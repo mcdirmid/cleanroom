@@ -33,15 +33,15 @@ Given: an active property-based draw function.
 2. The caller invokes `choose_weighted` with candidate values and weight pairs.
    Observed: the chosen element is selected according to the specified distribution.
 
-## Scenario 4 — 1:1 State transition definition and AST pivot
+## Scenario 4 — 1:1 State transition definition and inner transition
 
 Given: a state transition method decorated with `@transition(TargetClass.method)` matching the target method signature, with targets and collaborators accessible via `sut(TargetClass)`.
 
 1. The caller evaluates the transition with satisfying inputs and target singleton.
-   Observed: `requires` validates state preconditions, `require_arg` validates arguments against their domain, pre-state snapshots capture values before the pivot, the AST pivot executes the method on target, and single-argument `assert` statements verify postconditions and differentials.
+   Observed: `requires` validates state preconditions, `require_arg` validates arguments against their domain, pre-state snapshots capture values before calling the inner transition, the inner transition computes the return value, and single-argument `assert` statements verify postconditions and differentials.
 
 2. The caller evaluates the transition when the `requires` condition is not met.
-   Observed: the requirement check raises `PretenseSpecificationError` (or the contracted error when specified), failing verification; in fixed scenario tests with an optional error parameter, the requirement check throws the specified error upon contract violation.
+   Observed: the requirement check raises `PretenseSpecificationError` (or the contracted error when specified positionally or via keyword `error`), failing verification; in fixed scenario tests with an optional error parameter, the requirement check throws the specified error upon contract violation.
 
 3. The caller evaluates an exception transition using `with raises(ExpectedException): make_return_value(None)`.
    Observed: in verification mode, the context manager asserts that the target call raised `ExpectedException` and propagates the exception to callers and test runners; in Fake mode, it synthesizes and raises `ExpectedException` (including multi-argument or structured exception classes) to emulate interface failure semantics.
@@ -78,13 +78,23 @@ Given: a runner configuration with fuzz iterations 50, coverage threshold 100.0,
 2. The caller creates a run result reporting 10 passed tests, 0 failures, and 100.0% statement coverage.
    Observed: `is_passing` returns true.
 
-## Scenario 7 — Implementation pseudo state machine and property pivots
+## Scenario 7 — Implementation pseudo state machine and inner transition override
 
-Given: an implementation pseudo state machine subclassing an interface state machine with zero state dataclasses, overriding transitions without `require_arg`.
+Given: an implementation pseudo state machine subclassing an interface state machine with zero state dataclasses, overriding inner transitions without `require_arg`.
 
 1. The caller runs property fuzzing against the implementation pseudo state machine.
-   Observed: parameter domains and preconditions are inherited from the parent interface state machine transitions, base interface transitions execute model state updates, pre-state assertions execute before `call_target(target.method(*args))`, the target executes, and post-state assertions verify private internal invariants.
+   Observed: parameter domains and preconditions are inherited from the parent interface state machine transitions, base interface transitions execute model state updates, the overridden inner transition executes target pre-assertions, calls the target, executes target post-assertions, and returns the real return value to the outer transition.
 
-2. The caller executes a transition targeting a non-callable target property using `call_target(target.property)`.
-   Observed: `call_target(target.property)` returns the property attribute value directly without attempting function invocation.
+2. The caller executes a transition targeting a target property.
+   Observed: the inner transition accesses the target property attribute directly and returns it.
+
+## Scenario 8 — Checked adapter contract violation testing
+
+Given: a state machine bound to a concrete target instance via a checked adapter.
+
+1. The caller executes a contract-violating call using `checked.violating(ExpectedError).method(...)` or `with checked.violating(ExpectedError): checked.method(...)`.
+   Observed: `require` and `require_arg` preconditions are disabled for the transition, the real target implementation is invoked, the target raises `ExpectedError`, the adapter catches and verifies the exception, and the call succeeds.
+
+2. The caller executes an operation on the checked adapter after a contract violation occurred.
+   Observed: the checked adapter is terminal and raises `PretenseSpecificationError` for subsequent operational transitions, while lifecycle teardown methods remain accessible as no-ops.
 

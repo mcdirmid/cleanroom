@@ -22,6 +22,7 @@ class UvTarget(Singleton[SystemTier], Protocol):
     # Contract: extract workspace package directory of a node
     def extract_node_dir(self, node: dag_storage.DagNode) -> NodeDirectory: ...
 
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-07T00:00:00Z

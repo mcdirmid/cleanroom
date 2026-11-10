@@ -1,4 +1,5 @@
 """app_info.py — Application identity, naming, and configuration path constants."""
+
 from __future__ import annotations
 
 import os
@@ -319,7 +320,11 @@ def resolve_default_dsh_web(repo_root: str | Path | None = None) -> bool:
                 if isinstance(val, str) and val.strip().lower() in ("true", "1", "web"):
                     return True
                 val_dsh = data.get("default_dsh") or data.get("dsh_mode")
-                if isinstance(val_dsh, str) and val_dsh.strip().lower() in ("web", "dsh_web", "dsh-web"):
+                if isinstance(val_dsh, str) and val_dsh.strip().lower() in (
+                    "web",
+                    "dsh_web",
+                    "dsh-web",
+                ):
                     return True
         except Exception:
             pass
@@ -338,6 +343,7 @@ def load_credentials() -> dict[str, str]:
         return {}
     try:
         import tomllib
+
         with open(creds_file, "rb") as f:
             data = tomllib.load(f)
         if isinstance(data, dict):
@@ -357,10 +363,22 @@ def get_template_model_config_file() -> str:
     """Returns the canonical filesystem path for the model_configs.toml template."""
     curr = os.path.dirname(os.path.abspath(__file__))
     candidates = [
-        os.path.abspath(os.path.join(curr, "..", "..", "templates", "model_configs.toml")),
-        os.path.abspath(os.path.join(curr, "..", "..", "..", "autofab_py", "templates", "model_configs.toml")),
-        os.path.abspath(os.path.join(curr, "..", "..", "..", "autofab_py", "templates", "model_configs.toml")),
-        os.path.abspath(os.path.join(curr, "..", "..", "..", "templates", "model_configs.toml")),
+        os.path.abspath(
+            os.path.join(curr, "..", "..", "templates", "model_configs.toml")
+        ),
+        os.path.abspath(
+            os.path.join(
+                curr, "..", "..", "..", "autofab_py", "templates", "model_configs.toml"
+            )
+        ),
+        os.path.abspath(
+            os.path.join(
+                curr, "..", "..", "..", "autofab_py", "templates", "model_configs.toml"
+            )
+        ),
+        os.path.abspath(
+            os.path.join(curr, "..", "..", "..", "templates", "model_configs.toml")
+        ),
     ]
     for cand in candidates:
         if os.path.isfile(cand):
@@ -449,7 +467,19 @@ def assemble_pythonpath(
         try:
             for entry in os.listdir(ws_p):
                 if (
-                    entry.startswith((".", "bazel-", "venv", "__pycache__", "logs", "bin", "design-docs", "benchmark", "flight_"))
+                    entry.startswith(
+                        (
+                            ".",
+                            "bazel-",
+                            "venv",
+                            "__pycache__",
+                            "logs",
+                            "bin",
+                            "design-docs",
+                            "benchmark",
+                            "flight_",
+                        )
+                    )
                     or entry.endswith(".failed")
                     or entry in role_containers
                 ):
@@ -478,7 +508,19 @@ def assemble_pythonpath(
         try:
             for entry in os.listdir(rp):
                 if (
-                    entry.startswith((".", "bazel-", "venv", "__pycache__", "logs", "bin", "design-docs", "benchmark", "flight_"))
+                    entry.startswith(
+                        (
+                            ".",
+                            "bazel-",
+                            "venv",
+                            "__pycache__",
+                            "logs",
+                            "bin",
+                            "design-docs",
+                            "benchmark",
+                            "flight_",
+                        )
+                    )
                     or entry.endswith(".failed")
                     or entry in role_containers
                 ):
@@ -494,14 +536,20 @@ def assemble_pythonpath(
         except OSError:
             pass
 
-    raw_pypath = existing_pythonpath if existing_pythonpath is not None else os.environ.get("PYTHONPATH", "")
+    raw_pypath = (
+        existing_pythonpath
+        if existing_pythonpath is not None
+        else os.environ.get("PYTHONPATH", "")
+    )
     if raw_pypath:
         for p in raw_pypath.split(os.pathsep):
             if not p:
                 continue
             p_clean = os.path.abspath(p)
             if isolate_from_repo_root and clean_repo_root:
-                if p_clean == clean_repo_root or p_clean.startswith(clean_repo_root + os.sep):
+                if p_clean == clean_repo_root or p_clean.startswith(
+                    clean_repo_root + os.sep
+                ):
                     continue
             _add(p_clean)
 

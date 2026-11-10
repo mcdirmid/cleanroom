@@ -52,8 +52,8 @@ class RingBuffer(Protocol):
             The evicted oldest item if the buffer was full, or None if space was available.
 
         POSTCONDITIONS:
-        - WHEN size is less than capacity, MUST store item, increment size by 1, and return None.
-        - WHEN size equals capacity, MUST evict oldest item, store new item at most recent position, maintain size at capacity, and return the evicted item.
+        - [slug:ring_buffer.push.available_capacity]: WHEN size is less than capacity, MUST store item, increment size by 1, and return None.
+        - [slug:ring_buffer.push.overwrite_eviction]: WHEN size equals capacity, MUST evict oldest item, store new item at most recent position, maintain size at capacity, and return the evicted item.
         """
         ...
 
@@ -68,10 +68,10 @@ class RingBuffer(Protocol):
             BufferEmptyError: If the circular buffer contains zero items.
 
         PRECONDITIONS:
-        - WHEN size equals zero, MUST raise BufferEmptyError.
+        - [slug:ring_buffer.pop.empty_buffer]: WHEN size equals zero, MUST raise BufferEmptyError.
 
         POSTCONDITIONS:
-        - WHEN size is greater than zero, MUST remove oldest item, decrement size by 1, and return the removed item.
+        - [slug:ring_buffer.pop.non_empty]: WHEN size is greater than zero, MUST remove oldest item, decrement size by 1, and return the removed item.
         """
         ...
 
@@ -80,7 +80,7 @@ class RingBuffer(Protocol):
         """Removes all items from the circular buffer, resetting size to zero.
 
         POSTCONDITIONS:
-        - MUST remove all items from the buffer and reset size to zero.
+        - [slug:ring_buffer.clear.reset_size]: MUST remove all items from the buffer and reset size to zero.
         """
         ...
 
@@ -93,8 +93,8 @@ class RingBuffer(Protocol):
             List containing active items ordered from oldest to newest arrival.
 
         POSTCONDITIONS:
-        - MUST return a list containing all currently stored items in FIFO arrival order.
-        - MUST NOT modify the buffer contents, size, capacity, or operational state.
+        - [slug:ring_buffer.snapshot.fifo_order]: MUST return a list containing all currently stored items in FIFO arrival order.
+        - [slug:ring_buffer.snapshot.non_mutating]: MUST NOT modify the buffer contents, size, capacity, or operational state.
         """
         ...
 

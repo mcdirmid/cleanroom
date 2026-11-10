@@ -31,7 +31,7 @@ class WorkspaceScaffolder(scaffold.WorkspaceScaffolder):
           root on sys.path without injecting arbitrary workspace subdirectories onto sys.path,
           isolating runner execution from the canonical repository root in sys.path,
           configuring runner execution environments with UV_PROJECT bound to the discovered main repository root for subprocess execution,
-          packaging revert and checkpoint tools for authoring roles with writable targets (omitting revert and checkpoint for auditor roles with zero writable targets), packaging blame
+          packaging revert, checkpoint, and reject tools for authoring roles with writable targets (omitting revert, checkpoint, and reject for auditor roles with zero writable targets), packaging blame
           only when role_def declares feedback capability or auditor tags, and omitting blame for
           author roles without feedback capability (workspace_scaffold_mechanics).
         """
@@ -72,6 +72,7 @@ class WorkspaceScaffolder(scaffold.WorkspaceScaffolder):
         GROUNDING:
         - Formats AGENTS.md instructions carrying role constraints, boundary rules explaining projected
           in-band metadata and main repository lifecycle timestamp authority, contamination tripwires,
+          evaluating conditional markdown directives against active experiments,
           workspace undo and rollback instructions (bin/revert, git restore, git diff) for authoring roles with writable targets (omitting undo guidance and strictly prohibiting file edits and git commands for auditor roles with zero writable targets),
           companion guide references resolved from workspace root and repository root,
           permitted in-workspace read-only inspection shell utilities (cat, grep, find, head, tail, sed) and native harness tools while strictly prohibiting ad-hoc runtime tests, test runners, or inline Python scripts (including python3 -c and stdin heredocs) against targets or implementation code, mandating round resolution
@@ -132,7 +133,7 @@ def __orphan__() -> None:
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-30T11:00:00Z
-# LAST_CHANGED: 2026-11-03T20:40:00Z
-# CHANGE: Ground template command execution in repository environment with UV_PROJECT and bind UV_PROJECT in runner zipapps
+# LAST_CHANGED: 2026-11-07T10:20:00Z
+# CHANGE: Package reject tool for authoring roles with writable targets
 # SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

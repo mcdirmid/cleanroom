@@ -9,7 +9,7 @@ the pending work buffer is empty.
    Observed: a console report listing the alpha-role target for widget as ready with the reason
    that the target is missing, naming its companion specification contracts to read and its next
    steps, and an integer exit code of zero.
-2. The caller runs the work subcommand again without changing anything.
+1. The caller runs the work subcommand again without changing anything.
    Observed: the report is refused, naming the pending alpha-role target for widget and directing
    the caller to complete or blame it, and the exit code is non-zero.
 
@@ -22,7 +22,7 @@ summary.
 1. The caller runs the submit subcommand for the alpha-role target for widget without a summary.
    Observed: the submission is refused, naming the missing summary, the target keeps its
    modification, and the exit code is non-zero.
-2. The caller runs the submit subcommand for the target with the summary `clean widget`.
+1. The caller runs the submit subcommand for the target with the summary `clean widget`.
    Observed: the target's in-band metadata records the summary `clean widget`, a submission record
    is appended to the event log, the pending work buffer no longer lists the target, and the
    exit code is zero.
@@ -34,13 +34,13 @@ declares a refusal that names no target.
 
 1. The caller runs the blame subcommand against `beta/high/beta.md` with the single-paragraph
    critique `the refusal names no target`.
-   Observed: the critique is recorded as an unacted feedback entry on `beta/high/beta.md` in the
-   canonical main repository, a blame record is appended to the event log, the pending work
-   buffer no longer lists the alpha-role target for widget, and the exit code is zero.
-2. The caller runs the blame subcommand against `beta/high/beta.md` with a critique of two
+   Observed: the critique is staged into the workspace staged blame buffer, a directive instructing the caller to stage additional blame or commit via submit is emitted, and the exit code is zero.
+1. The caller runs the blame subcommand against `beta/high/beta.md` with a critique of two
    paragraphs.
    Observed: the attribution is refused, naming the single-paragraph constraint, no feedback entry
    is recorded, and the exit code is non-zero.
+1. The caller runs the blame subcommand with structured blame options (`--slug`, `--viol`, `--facet`, `--lines`, `--witness`) or a structured critique string while the structured blame experiment is active.
+   Observed: the runner parses and validates the structured blame critique, stages the blame into the workspace staged blame buffer, and returns exit code 0.
 
 ## Scenario 4 — Running the fail subcommand
 
@@ -59,7 +59,7 @@ the alpha-role target for gadget is missing.
 
 1. The caller runs the check files subcommand for the alpha-role target for widget.
    Observed: the verification reports a clean outcome and the exit code is zero.
-2. The caller runs the check files subcommand for the missing alpha-role target for gadget.
+1. The caller runs the check files subcommand for the missing alpha-role target for gadget.
    Observed: the target is regenerated from its starter template before verification runs, and the
    exit code reflects that verification's status.
 
@@ -80,7 +80,7 @@ workspace of role alpha in scope_a differ from their canonical content.
 
 1. The caller runs the commission subcommand for role beta in scope_b.
    Observed: the beta workspace for scope_b is created and registered, and the exit code is zero.
-2. The caller runs the refresh system subcommand across the active workspaces.
+1. The caller runs the refresh system subcommand across the active workspaces.
    Observed: the system files, bin utilities, and companion guides of the alpha workspace hold the
    canonical content, and the exit code is zero.
 
@@ -106,8 +106,18 @@ Given: scope_a declares multiple roles in its methodology configuration, and no 
 1. The caller runs the commission subcommand with the all flag for scope_a (`commission --all scope_a`).
    Observed: role workspaces for all declared roles within scope_a are created and registered, mapping the positional scope parameter as directory scope rather than a role name, and the exit code is zero.
 
+## Scenario 11 — Running the reject subcommand
+
+Given: role alpha is active in scope_a with an unmodified target carrying active feedback.
+
+1. The caller runs the reject subcommand on the unmodified target with the reason `code already compliant with contract`.
+   Observed: the feedback comment block is removed from the target file header, the rejection contest is recorded in the blame buffer and event log, the target is cleared from pending work, and the exit code is zero.
+
+1. The caller runs the reject subcommand on a target that has been modified.
+   Observed: rejection is refused with an error instructing that modified files must be submitted, and the exit code is non-zero.
+
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-12T21:15:14Z
-CHANGE: Update Scenario 10 for dynamic directory scope
+LAST_CHANGED: 2026-11-07T10:20:00Z
+CHANGE: Add Scenario 11 for reject subcommand and update Scenario 3 for staged blame
 -->

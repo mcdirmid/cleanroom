@@ -50,10 +50,16 @@ class MockNodeConfig:
     def __init__(self):
         self.role_definitions = {
             "high": MockRoleDef([], src_pattern="{unit_dir}/high/{unit_name}.md"),
-            "planning": MockRoleDef(["high"], src_pattern="{unit_dir}/planning/{unit_name}.md"),
-            "low": MockRoleDef(["planning"], src_pattern="{unit_dir}/low/{unit_name}.pyi"),
+            "planning": MockRoleDef(
+                ["high"], src_pattern="{unit_dir}/planning/{unit_name}.md"
+            ),
+            "low": MockRoleDef(
+                ["planning"], src_pattern="{unit_dir}/low/{unit_name}.pyi"
+            ),
             "lib": MockRoleDef(["low"], src_pattern="{unit_dir}/lib/{unit_name}.py"),
-            "test": MockRoleDef(["lib"], src_pattern="{unit_dir}/tests/{unit_name}_test.py"),
+            "test": MockRoleDef(
+                ["lib"], src_pattern="{unit_dir}/tests/{unit_name}_test.py"
+            ),
             "qa": MockRoleDef(["lib", "test"], src_pattern=""),
         }
         self.src_file_alias_by_node = {}
@@ -131,9 +137,13 @@ class ControlWorkSchedulerImplTest(unittest.TestCase):
             self.assertEqual(len(schedule2.tasks), 1)
             self.assertEqual(schedule2.tasks[0].node, node_low)
             # Verifies dependency paths are resolved to file aliases, not raw Bazel targets (parts/foo/bar:high)
-            self.assertEqual(schedule2.tasks[0].dependency_paths, ["parts/foo/high/bar.md"])
+            self.assertEqual(
+                schedule2.tasks[0].dependency_paths, ["parts/foo/high/bar.md"]
+            )
 
-    def test_format_task_prompt_auditor_avoids_bazel_targets_and_guides_blame(self) -> None:
+    def test_format_task_prompt_auditor_avoids_bazel_targets_and_guides_blame(
+        self,
+    ) -> None:
         node_qa = dag_storage.DagNode(
             unit_address=dag_storage.UnitAddress("parts/foo:my_widget"),
             role_address=dag_storage.RoleAddress("qa"),

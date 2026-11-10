@@ -39,6 +39,7 @@ class WorkspaceChecker(Singleton[AgentSessionTier], Protocol):
         passed: bool,
     ) -> None: ...
 
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-14T18:25:00Z

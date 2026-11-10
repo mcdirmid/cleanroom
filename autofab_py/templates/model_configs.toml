@@ -22,6 +22,10 @@ dsh_web = false
 # that fail to produce change or progress before aborting.
 max_unproductive_rounds = 3
 
+# run_timeout_seconds: Global benchmark flight execution timeout in seconds (default: 3600s = 1 hour).
+# Can be overridden per model profile below or via CLI flag --timeout.
+run_timeout_seconds = 3600.0
+
 # ==============================================================================
 # Model Table Schema: [models.<profile-name>]
 # ==============================================================================
@@ -60,6 +64,7 @@ rate_uncached_in = 0.0
 rate_cached_in = 0.0
 rate_out = 0.0
 timeout_seconds = 100.0
+run_timeout_seconds = 14400.0
 subagent_batch_size = 3
 
 # --- Tier 2: Budget Frontier APIs ---
@@ -75,6 +80,10 @@ rate_cached_in = 0.003
 rate_out = 0.60
 timeout_seconds = 120.0
 subagent_batch_size = 10
+budget_usd = 1.00
+
+[models.deepseek-flash.suite_budgets]
+dag_engine_lite = 1.00
 
 [models.gemini-flash]
 model = "gemini-flash"
@@ -86,7 +95,24 @@ rate_uncached_in = 0.10
 rate_cached_in = 0.025
 rate_out = 0.40
 timeout_seconds = 120.0
+run_timeout_seconds = 7200.0
 subagent_batch_size = 5
+budget_usd = 4.00
+
+[models.gemini-flash.suite_budgets]
+dag_engine_lite = 4.00
+
+[models.gemini-flash-lite]
+model = "gemini-flash-lite"
+provider = "google"
+harness = "antigravity"
+tier = 1
+tier_label = "Tier 1 Engine"
+rate_uncached_in = 0.075
+rate_cached_in = 0.01875
+rate_out = 0.30
+timeout_seconds = 120.0
+subagent_batch_size = 10
 
 
 # --- Tier 3: Mid-Tier Control ---

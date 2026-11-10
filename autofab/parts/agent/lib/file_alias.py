@@ -8,15 +8,16 @@ import autofab.parts.core.lib.file_paths as file_paths
 
 # Requirements specified in file_alias.pyi
 
-FileContent = NewType('FileContent', str)
+FileContent = NewType("FileContent", str)
 
-RegexPattern = NewType('RegexPattern', str)
+RegexPattern = NewType("RegexPattern", str)
 
-RelativePath = NewType('RelativePath', str)
+RelativePath = NewType("RelativePath", str)
 
-UnsanitizedText = NewType('UnsanitizedText', str)
+UnsanitizedText = NewType("UnsanitizedText", str)
 
-SanitizedText = NewType('SanitizedText', str)
+SanitizedText = NewType("SanitizedText", str)
+
 
 @dataclass(frozen=True)
 class FileAlias:
@@ -52,16 +53,14 @@ class UnboundFile(FileAlias):
 class AliasManager(Singleton[AgentSessionTier], Protocol):
     # Contract: The workspace root directory for the agent session.
     @property
-    def workspace_root(self) -> file_paths.WorkspaceRoot:
-        ...
+    def workspace_root(self) -> file_paths.WorkspaceRoot: ...
 
     # Contract: MUST convert path strings to file aliases (BoundFile if matched, UnboundFile otherwise).
-    def to_alias(self, path: str) -> FileAlias:
-        ...
+    def to_alias(self, path: str) -> FileAlias: ...
 
     # Contract: MUST sanitize text by masking occurrences of relative workspace paths with file alias relative paths.
-    def sanitize_text(self, text: UnsanitizedText) -> SanitizedText:
-        ...
+    def sanitize_text(self, text: UnsanitizedText) -> SanitizedText: ...
+
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z

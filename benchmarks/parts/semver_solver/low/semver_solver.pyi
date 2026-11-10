@@ -180,10 +180,10 @@ class VersionEngine(Protocol):
             InvalidVersionError: If text violates SemVer 2.0.0 grammar or contains leading zeroes.
 
         PRECONDITIONS:
-        - WHEN text contains leading zeroes in numeric identifiers or violates grammar, MUST raise InvalidVersionError.
+        - [slug:semver.parse_version.leading_zero_grammar]: WHEN text contains leading zeroes in numeric identifiers or violates grammar, MUST raise InvalidVersionError.
 
         POSTCONDITIONS:
-        - MUST parse valid SemVer 2.0.0 strings into Version records with major, minor, patch, prerelease, and build tuples.
+        - [slug:semver.parse_version.valid_syntax]: MUST parse valid SemVer 2.0.0 strings into Version records with major, minor, patch, prerelease, and build tuples.
         """
         ...
 
@@ -199,11 +199,11 @@ class VersionEngine(Protocol):
             Negative integer if v1 < v2, zero if v1 == v2, positive integer if v1 > v2.
 
         POSTCONDITIONS:
-        - MUST evaluate to a negative integer when v1 < v2, zero when v1 == v2, and a positive integer when v1 > v2 under SemVer 2.0.0 RFC rules.
-        - MUST compare major, minor, and patch numerically.
-        - MUST rank normal versions higher than prerelease versions sharing identical major, minor, and patch numbers.
-        - MUST compare prerelease segments numerically when both numeric, ASCII-lexicographically when string, and rank numeric below string.
-        - MUST ignore build metadata entirely when comparing precedence.
+        - [slug:semver.compare_precedence.tri_state]: MUST evaluate to a negative integer when v1 < v2, zero when v1 == v2, and a positive integer when v1 > v2 under SemVer 2.0.0 RFC rules.
+        - [slug:semver.compare_precedence.numerical_components]: MUST compare major, minor, and patch numerically.
+        - [slug:semver.compare_precedence.normal_vs_prerelease]: MUST rank normal versions higher than prerelease versions sharing identical major, minor, and patch numbers.
+        - [slug:semver.compare_precedence.prerelease_ordering]: MUST compare prerelease segments numerically when both numeric, ASCII-lexicographically when string, and rank numeric below string.
+        - [slug:semver.compare_precedence.build_metadata_ignored]: MUST ignore build metadata entirely when comparing precedence.
         """
         ...
 
@@ -221,16 +221,16 @@ class VersionEngine(Protocol):
             InvalidRangeError: If text contains malformed range syntax.
 
         PRECONDITIONS:
-        - WHEN text supplies bare partial versions lacking wildcard characters across any comparator or hyphen expression (such as '1', '1.2', '>1.2', '^0.0', or '1.2 - 2.3'), MUST raise InvalidRangeError.
-        - WHEN text is empty, contains only whitespace, contains empty union clauses, uses comma delimiters, or violates range syntax, MUST raise InvalidRangeError.
+        - [slug:semver.parse_range.bare_partials_prohibited]: WHEN text supplies bare partial versions lacking wildcard characters across any comparator or hyphen expression (such as '1', '1.2', '>1.2', '^0.0', or '1.2 - 2.3'), MUST raise InvalidRangeError.
+        - [slug:semver.parse_range.malformed_syntax]: WHEN text is empty, contains only whitespace, contains empty union clauses, uses comma delimiters, or violates range syntax, MUST raise InvalidRangeError.
 
         POSTCONDITIONS:
-        - MUST parse range expression text supporting basic comparators (==, =, !=, <, <=, >, >=), caret ranges (^), and tilde ranges (~) applied to either full semantic versions or wildcard expressions (e.g. '>=1.x', '!=1.x', '>1.*', '^1.x', '~1.2.x', '>=*').
-        - MUST parse hyphen ranges connecting two version bounds ('bound1 - bound2'), where each bound is either a full semantic version or a wildcard expression (e.g. '1.0.0 - 2.x', '1.x - 2.x').
-        - MUST parse union alternatives separated by '||'.
-        - MUST trim surrounding whitespace around range expressions and individual clauses, storing the trimmed range expression in raw_text.
-        - MUST accept optional whitespace between relational/prefix operators and target versions or wildcards (e.g. '>= 1.0.0' is equivalent to '>=1.0.0', '>= 1.x' is equivalent to '>=1.x').
-        - MUST delimit comparators within clauses strictly by whitespace; commas are not permitted.
+        - [slug:semver.parse_range.comparators_and_prefixes]: MUST parse range expression text supporting basic comparators (==, =, !=, <, <=, >, >=), caret ranges (^), and tilde ranges (~) applied to either full semantic versions or wildcard expressions (e.g. '>=1.x', '!=1.x', '>1.*', '^1.x', '~1.2.x', '>=*').
+        - [slug:semver.parse_range.hyphen_ranges]: MUST parse hyphen ranges connecting two version bounds ('bound1 - bound2'), where each bound is either a full semantic version or a wildcard expression (e.g. '1.0.0 - 2.x', '1.x - 2.x').
+        - [slug:semver.parse_range.union_alternatives]: MUST parse union alternatives separated by '||'.
+        - [slug:semver.parse_range.whitespace_trimming]: MUST trim surrounding whitespace around range expressions and individual clauses, storing the trimmed range expression in raw_text.
+        - [slug:semver.parse_range.operator_whitespace]: MUST accept optional whitespace between relational/prefix operators and target versions or wildcards (e.g. '>= 1.0.0' is equivalent to '>=1.0.0', '>= 1.x' is equivalent to '>=1.x').
+        - [slug:semver.parse_range.whitespace_delimited]: MUST delimit comparators within clauses strictly by whitespace; commas are not permitted.
         """
         ...
 
@@ -252,9 +252,9 @@ class VersionEngine(Protocol):
             True if the version satisfies the range, False otherwise.
 
         POSTCONDITIONS:
-        - MUST evaluate to True when version satisfies range_constraint, and False otherwise.
-        - WHEN version is a prerelease and include_prerelease is False, MUST evaluate to False unless range explicitly targets that prerelease by specifying a prerelease identifier sharing the same major, minor, and patch numbers.
-        - WHEN include_prerelease is True, MUST evaluate candidate prerelease version directly against comparator boundary inequalities using precedence ordering without shifting numerical boundaries (e.g. 1.0.0-alpha ranks strictly lower than 1.0.0 and does not satisfy >=1.0.0).
+        - [slug:semver.satisfies.boolean_match]: MUST evaluate to True when version satisfies range_constraint, and False otherwise.
+        - [slug:semver.satisfies.prerelease_filter]: WHEN version is a prerelease and include_prerelease is False, MUST evaluate to False unless range explicitly targets that prerelease by specifying a prerelease identifier sharing the same major, minor, and patch numbers.
+        - [slug:semver.satisfies.prerelease_inequality]: WHEN include_prerelease is True, MUST evaluate candidate prerelease version directly against comparator boundary inequalities using precedence ordering without shifting numerical boundaries (e.g. 1.0.0-alpha ranks strictly lower than 1.0.0 and does not satisfy >=1.0.0).
         """
         ...
 
@@ -271,7 +271,7 @@ class PackageRepository(Protocol):
             release: Package release publication to register.
 
         POSTCONDITIONS:
-        - MUST register the package release into the repository.
+        - [slug:semver.repo.register_release]: MUST register the package release into the repository.
         """
         ...
 
@@ -289,10 +289,10 @@ class PackageRepository(Protocol):
             PackageNotFoundError: If name is not registered in the repository.
 
         PRECONDITIONS:
-        - WHEN name is not registered, MUST raise PackageNotFoundError.
+        - [slug:semver.repo.missing_package]: WHEN name is not registered, MUST raise PackageNotFoundError.
 
         POSTCONDITIONS:
-        - MUST yield all registered releases for package name ordered by version precedence descending.
+        - [slug:semver.repo.descending_releases]: MUST yield all registered releases for package name ordered by version precedence descending.
         """
         ...
 
@@ -307,7 +307,7 @@ class PackageRepository(Protocol):
             True if the package exists, False otherwise.
 
         POSTCONDITIONS:
-        - MUST evaluate to True when package name exists in repository, and False otherwise.
+        - [slug:semver.repo.has_membership]: MUST evaluate to True when package name exists in repository, and False otherwise.
         """
         ...
 
@@ -319,7 +319,7 @@ class PackageRepository(Protocol):
             Set of registered package name strings.
 
         POSTCONDITIONS:
-        - MUST produce the set of all registered package names.
+        - [slug:semver.repo.all_names]: MUST produce the set of all registered package names.
         """
         ...
 
@@ -345,11 +345,11 @@ class DependencySolver(Protocol):
             ResolutionConflictError: If dependencies cannot be satisfied mutually.
 
         PRECONDITIONS:
-        - WHEN dependencies are unsatisfiable or reference unregistered packages absent from repository, MUST raise ResolutionConflictError detailing conflicting packages and derivation explanation without allowing PackageNotFoundError to escape.
+        - [slug:semver.solver.unsatisfiable_conflict]: WHEN dependencies are unsatisfiable or reference unregistered packages absent from repository, MUST raise ResolutionConflictError detailing conflicting packages and derivation explanation without allowing PackageNotFoundError to escape.
 
         POSTCONDITIONS:
-        - MUST compute a mutually compatible set of package releases satisfying root and transitive dependencies.
-        - MUST select the highest precedence compatible version for each package.
+        - [slug:semver.solver.compatible_assignment]: MUST compute a mutually compatible set of package releases satisfying root and transitive dependencies.
+        - [slug:semver.solver.highest_precedence]: MUST select the highest precedence compatible version for each package.
         """
         ...
 

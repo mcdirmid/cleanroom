@@ -92,6 +92,21 @@ class WorkspaceToolRunner(cli_tool.WorkspaceToolRunner):
 
     @operation
     @override
+    def run_reject(
+        self,
+        file_path: str,
+        reason: str,
+        repo_root: Optional[str] = None,
+    ) -> int:
+        """Rejects active feedback on an unmodified target file and scrubs feedback from header.
+
+        GROUNDING:
+        - Delegates execution to commands.WorkspaceCommandHandler.run_reject.
+        """
+        ...
+
+    @operation
+    @override
     def run_fail(
         self,
         file_path: str,
@@ -170,7 +185,7 @@ def __orphan__() -> None:
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T17:50:00Z
-# CHANGE: Delegate command workflows to commands
+# LAST_CHANGED: 2026-11-07T10:20:00Z
+# CHANGE: Delegate run_reject to commands
 # SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

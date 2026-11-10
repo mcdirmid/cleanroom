@@ -71,7 +71,7 @@ if [ -n "$TARGET" ] && [ -d "$REPO_ROOT/$TARGET" ]; then
         fi
     fi
     for sub in "$REPO_ROOT/$TARGET"/lib "$REPO_ROOT/$TARGET"/low "$REPO_ROOT/$TARGET"/tests "$REPO_ROOT/$TARGET"/pretense; do
-        if [ -d "$sub" ]; then
+        if [ -d "$sub" ] && [ ! -f "$sub/coverage.py" ]; then
             PYPATHS+=("$sub")
         fi
     done

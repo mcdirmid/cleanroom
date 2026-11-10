@@ -72,12 +72,17 @@ class WorkspaceToolRunner(Singleton[AgentSessionTier], Protocol):
         critique: str,
         repo_root: Optional[str] = None,
     ) -> int:
-        """Attributes defect critique to culprit target in main repository.
+        """Attributes defect critique to culprit target in main repository."""
+        ...
 
-        POSTCONDITIONS:
-        - WHEN critique is accepted, MUST append blame message to autofab_files_ext.AUTOFAB_LOG_FILE in directory containing parts.
-        - WHEN critique is accepted, MUST clear target from pending work.
-        """
+    @operation
+    def run_reject(
+        self,
+        file_path: str,
+        reason: str,
+        repo_root: Optional[str] = None,
+    ) -> int:
+        """Rejects active feedback on an unmodified target file and scrubs feedback from header."""
         ...
 
     @operation
@@ -131,7 +136,7 @@ class WorkspaceToolRunner(Singleton[AgentSessionTier], Protocol):
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-14T08:35:00Z
-# CHANGE: add feedback throttling postcondition to run_get_work
+# LAST_CHANGED: 2026-11-07T10:20:00Z
+# CHANGE: Add run_reject to WorkspaceToolRunner protocol
 # SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---

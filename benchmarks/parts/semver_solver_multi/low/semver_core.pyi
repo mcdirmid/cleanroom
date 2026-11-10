@@ -89,10 +89,10 @@ class VersionEngine(Protocol):
             InvalidVersionError: If text violates SemVer 2.0.0 grammar or contains leading zeroes.
 
         PRECONDITIONS:
-        - WHEN text contains leading zeroes in numeric identifiers or violates grammar, MUST raise InvalidVersionError.
+        - [slug:semver_core.parse_version.leading_zero_grammar]: WHEN text contains leading zeroes in numeric identifiers or violates grammar, MUST raise InvalidVersionError.
 
         POSTCONDITIONS:
-        - MUST parse valid SemVer 2.0.0 strings into Version records with major, minor, patch, prerelease, and build tuples.
+        - [slug:semver_core.parse_version.valid_syntax]: MUST parse valid SemVer 2.0.0 strings into Version records with major, minor, patch, prerelease, and build tuples.
         """
         ...
 
@@ -108,11 +108,11 @@ class VersionEngine(Protocol):
             Negative integer if v1 < v2, zero if v1 == v2, positive integer if v1 > v2.
 
         POSTCONDITIONS:
-        - MUST evaluate to a negative integer when v1 < v2, zero when v1 == v2, and a positive integer when v1 > v2 under SemVer 2.0.0 RFC rules.
-        - MUST compare major, minor, and patch numerically.
-        - MUST rank normal versions higher than prerelease versions sharing identical major, minor, and patch numbers.
-        - MUST compare prerelease segments numerically when both numeric, ASCII-lexicographically when string, and rank numeric below string.
-        - MUST ignore build metadata entirely when comparing precedence.
+        - [slug:semver_core.compare_precedence.tri_state]: MUST evaluate to a negative integer when v1 < v2, zero when v1 == v2, and a positive integer when v1 > v2 under SemVer 2.0.0 RFC rules.
+        - [slug:semver_core.compare_precedence.numerical_components]: MUST compare major, minor, and patch numerically.
+        - [slug:semver_core.compare_precedence.normal_vs_prerelease]: MUST rank normal versions higher than prerelease versions sharing identical major, minor, and patch numbers.
+        - [slug:semver_core.compare_precedence.prerelease_ordering]: MUST compare prerelease segments numerically when both numeric, ASCII-lexicographically when string, and rank numeric below string.
+        - [slug:semver_core.compare_precedence.build_metadata_ignored]: MUST ignore build metadata entirely when comparing precedence.
         """
         ...
 

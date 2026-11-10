@@ -52,7 +52,9 @@ class FakeWorkspaceRegistry:
         if custom_dest:
             return custom_dest
         folder = f"{role_name}_{str(dir_scope).replace('/', '_').replace(':', '_')}"
-        return os.path.join(repo_root or os.getcwd(), app_info.DEFAULT_ROLE_WORKSPACES_CONTAINER, folder)
+        return os.path.join(
+            repo_root or os.getcwd(), app_info.DEFAULT_ROLE_WORKSPACES_CONTAINER, folder
+        )
 
     def record_workspace(self, descriptor, repo_root=None) -> None:
         self.recorded.append(descriptor)
@@ -76,7 +78,9 @@ class FakeWorkspaceStubSynthesizer:
     ) -> None:
         os.makedirs(os.path.dirname(out_path), exist_ok=True)
         with open(out_path, "w", encoding="utf-8") as f:
-            f.write(f"# {app_info.get_stub_marker()} (READ-ONLY)\nraise NotImplementedError()\n")
+            f.write(
+                f"# {app_info.get_stub_marker()} (READ-ONLY)\nraise NotImplementedError()\n"
+            )
         try:
             os.chmod(out_path, 0o444)
         except OSError:
@@ -175,7 +179,11 @@ class FakeWorkspaceScaffolder:
     ) -> None:
         os.makedirs(bin_dir, exist_ok=True)
         if role_def is not None:
-            can_blame = bool(role_def.feedback_role_deps or role_def.audit_tag or not role_def.writable_file_patterns)
+            can_blame = bool(
+                role_def.feedback_role_deps
+                or role_def.audit_tag
+                or not role_def.writable_file_patterns
+            )
         tools = ["get_work", "check_files", "submit", "fail"]
         if role_def is None or bool(role_def.writable_file_patterns):
             tools.extend(["revert", "checkpoint"])
@@ -185,7 +193,10 @@ class FakeWorkspaceScaffolder:
             p = os.path.join(bin_dir, tool)
             with zipfile.ZipFile(p, "w") as zf:
                 zf.writestr("__main__.py", "#!/usr/bin/env python3\n")
-                zf.writestr(app_info.DEFAULT_ROLES_FILE, "[roles.qa]\nname = 'qa'\naudit_tag = 'QA_AUDIT'\n")
+                zf.writestr(
+                    app_info.DEFAULT_ROLES_FILE,
+                    "[roles.qa]\nname = 'qa'\naudit_tag = 'QA_AUDIT'\n",
+                )
             os.chmod(p, 0o755)
 
     def write_role_metadata(
@@ -339,11 +350,19 @@ class WorkspaceProvisionImplTest(unittest.TestCase):
 
             support_lib_dir = os.path.join(repo_root, "test_scope", "support", "lib")
             os.makedirs(support_lib_dir, exist_ok=True)
-            with open(os.path.join(support_lib_dir, "lifecycle.py"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(support_lib_dir, "lifecycle.py"), "w", encoding="utf-8"
+            ) as f:
                 f.write("class LifecycleRegistry:\n    pass\n")
-            with open(os.path.join(support_lib_dir, "build_lint_common.py"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(support_lib_dir, "build_lint_common.py"),
+                "w",
+                encoding="utf-8",
+            ) as f:
                 f.write("# oracle AST parser\n")
-            with open(os.path.join(support_lib_dir, "test_lint.py"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(support_lib_dir, "test_lint.py"), "w", encoding="utf-8"
+            ) as f:
                 f.write("# oracle test linter\n")
 
             guides_d = os.path.join(repo_root, "test_scope", "guides")
@@ -357,15 +376,27 @@ class WorkspaceProvisionImplTest(unittest.TestCase):
 
             parts_d = os.path.join(repo_root, "test_scope", "parts")
             os.makedirs(parts_d, exist_ok=True)
-            with open(os.path.join(parts_d, app_info.DEFAULT_CONFIG_FILE), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(parts_d, app_info.DEFAULT_CONFIG_FILE),
+                "w",
+                encoding="utf-8",
+            ) as f:
                 f.write(f'methodology = "{app_info.DEFAULT_ROLES_FILE}"\n')
 
             # Project configurations and legacy Bazel files in repo root
-            with open(os.path.join(repo_root, ".python-version"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(repo_root, ".python-version"), "w", encoding="utf-8"
+            ) as f:
                 f.write("3.12.0\n")
-            with open(os.path.join(repo_root, "pyproject.toml"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(repo_root, "pyproject.toml"), "w", encoding="utf-8"
+            ) as f:
                 f.write("[project]\nname = 'test'\nreadme = 'README.md'\n")
-            with open(os.path.join(repo_root, app_info.DEFAULT_ROLES_FILE), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(repo_root, app_info.DEFAULT_ROLES_FILE),
+                "w",
+                encoding="utf-8",
+            ) as f:
                 f.write(
                     "[methodology]\nname = 'python'\n\n"
                     "[roles.low]\nname = 'low'\nsrc_pattern = '{unit_dir}/low/{unit_name}.pyi'\n\n"
@@ -375,15 +406,25 @@ class WorkspaceProvisionImplTest(unittest.TestCase):
                 )
             with open(os.path.join(repo_root, "notes.txt"), "w", encoding="utf-8") as f:
                 f.write("# notes\n")
-            with open(os.path.join(repo_root, "pyrightconfig.json"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(repo_root, "pyrightconfig.json"), "w", encoding="utf-8"
+            ) as f:
                 f.write("{}\n")
 
             # Unbound consumer directory at repo root must NOT be copied into role workspace
             unbound_dir = os.path.join(repo_root, "unbound_consumer", "parts")
             os.makedirs(unbound_dir, exist_ok=True)
-            with open(os.path.join(repo_root, "unbound_consumer", "pyproject.toml"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(repo_root, "unbound_consumer", "pyproject.toml"),
+                "w",
+                encoding="utf-8",
+            ) as f:
                 f.write("[project]\nname = 'unbound'\n")
-            with open(os.path.join(unbound_dir, app_info.DEFAULT_CONFIG_FILE), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(unbound_dir, app_info.DEFAULT_CONFIG_FILE),
+                "w",
+                encoding="utf-8",
+            ) as f:
                 f.write(f'methodology = "{app_info.DEFAULT_ROLES_FILE}"\n')
 
             desc = self.provisioner.commission(
@@ -424,10 +465,15 @@ class WorkspaceProvisionImplTest(unittest.TestCase):
                 agents_text = f.read()
             self.assertNotIn("main_workspace_root", agents_text)
             self.assertIn("## Contamination Tripwire (Poison Pill)", agents_text)
-            self.assertIn("CRITICAL CONTAMINATION: I read a file outside my assigned role workspace", agents_text)
+            self.assertIn(
+                "CRITICAL CONTAMINATION: I read a file outside my assigned role workspace",
+                agents_text,
+            )
             self.assertIn("## In-Workspace Execution & Permitted Commands", agents_text)
             self.assertIn("## Workspace Undo & Checkpoint Architecture", agents_text)
-            self.assertIn(f"## Mandatory {app_info.APP_TITLE} Workflow Binaries", agents_text)
+            self.assertIn(
+                f"## Mandatory {app_info.APP_TITLE} Workflow Binaries", agents_text
+            )
             self.assertIn("bin/fail", agents_text)
             self.assertIn("bin/revert", agents_text)
             self.assertIn("bin/checkpoint", agents_text)
@@ -443,7 +489,10 @@ class WorkspaceProvisionImplTest(unittest.TestCase):
             self.assertTrue(os.path.isfile(qa_agents_md))
             with open(qa_agents_md, "r", encoding="utf-8") as f:
                 qa_agents_text = f.read()
-            self.assertIn("## Delivering Blame & Feedback (Auditor Role Requirements)", qa_agents_text)
+            self.assertIn(
+                "## Delivering Blame & Feedback (Auditor Role Requirements)",
+                qa_agents_text,
+            )
             self.assertIn("# CHANGE:", qa_agents_text)
             self.assertIn("NEVER recycle identical blame critiques", qa_agents_text)
 
@@ -457,27 +506,38 @@ class WorkspaceProvisionImplTest(unittest.TestCase):
                 self.assertNotIn("readme =", f.read())
             ws_roles = os.path.join(ws_dir, app_info.DEFAULT_ROLES_FILE)
             self.assertFalse(os.path.exists(ws_roles))
-            ws_parts_cfg = os.path.join(ws_dir, "test_scope", "parts", app_info.DEFAULT_CONFIG_FILE)
+            ws_parts_cfg = os.path.join(
+                ws_dir, "test_scope", "parts", app_info.DEFAULT_CONFIG_FILE
+            )
             self.assertTrue(os.path.isfile(ws_parts_cfg))
             self.assertEqual(stat.S_IMODE(os.stat(ws_parts_cfg).st_mode) & 0o444, 0o444)
 
             # Support libraries: promoted to workspace root, runtime files copied, linters/runners excluded
             ws_support = os.path.join(ws_dir, "support", "lib")
             self.assertTrue(os.path.isfile(os.path.join(ws_support, "lifecycle.py")))
-            self.assertFalse(os.path.exists(os.path.join(ws_support, "build_lint_common.py")))
+            self.assertFalse(
+                os.path.exists(os.path.join(ws_support, "build_lint_common.py"))
+            )
             self.assertFalse(os.path.exists(os.path.join(ws_support, "test_lint.py")))
 
             # Minimal hermetic workspace: templates are NEVER copied to workspace root
             self.assertFalse(os.path.exists(os.path.join(ws_dir, "templates")))
 
             # Selective single-guide provisioning: qa workspace has qa.md, lib workspace does not
-            self.assertTrue(os.path.isfile(os.path.join(qa_desc.workspace_dir, "guides", "qa.md")))
+            self.assertTrue(
+                os.path.isfile(os.path.join(qa_desc.workspace_dir, "guides", "qa.md"))
+            )
             self.assertFalse(os.path.exists(os.path.join(ws_dir, "guides", "qa.md")))
 
             # Verify standard python import without PYTHONPATH
             import subprocess
+
             res = subprocess.run(
-                [sys.executable, "-c", "from support.lib.lifecycle import LifecycleRegistry; print('OK')"],
+                [
+                    sys.executable,
+                    "-c",
+                    "from support.lib.lifecycle import LifecycleRegistry; print('OK')",
+                ],
                 cwd=ws_dir,
                 capture_output=True,
                 text=True,
@@ -489,10 +549,20 @@ class WorkspaceProvisionImplTest(unittest.TestCase):
             # Local git repository initialized with committer and initial snapshot
             self.assertTrue(os.path.isdir(os.path.join(ws_dir, ".git")))
             self.assertTrue(os.path.isfile(os.path.join(ws_dir, ".gitignore")))
-            git_status = subprocess.run(["git", "status", "--porcelain"], cwd=ws_dir, capture_output=True, text=True)
+            git_status = subprocess.run(
+                ["git", "status", "--porcelain"],
+                cwd=ws_dir,
+                capture_output=True,
+                text=True,
+            )
             self.assertEqual(git_status.returncode, 0)
             self.assertEqual(git_status.stdout.strip(), "")
-            git_log = subprocess.run(["git", "log", "-1", "--format=%s"], cwd=ws_dir, capture_output=True, text=True)
+            git_log = subprocess.run(
+                ["git", "log", "-1", "--format=%s"],
+                cwd=ws_dir,
+                capture_output=True,
+                text=True,
+            )
             self.assertEqual(git_log.returncode, 0)
             self.assertEqual(git_log.stdout.strip(), "Initial workspace snapshot")
 
@@ -518,11 +588,19 @@ class WorkspaceProvisionImplTest(unittest.TestCase):
 
             real_f = os.path.join(part_dir, "lib", "config.py")
             with open(real_f, "w", encoding="utf-8") as f:
-                f.write("def get_config() -> str:\n    return 'secret_implementation'\n")
+                f.write(
+                    "def get_config() -> str:\n    return 'secret_implementation'\n"
+                )
 
-            with open(os.path.join(repo_root, "pyproject.toml"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(repo_root, "pyproject.toml"), "w", encoding="utf-8"
+            ) as f:
                 f.write("[project]\nname = 'test'\nreadme = 'README.md'\n")
-            with open(os.path.join(repo_root, app_info.DEFAULT_ROLES_FILE), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(repo_root, app_info.DEFAULT_ROLES_FILE),
+                "w",
+                encoding="utf-8",
+            ) as f:
                 f.write(
                     "[roles.low]\nname = 'low'\nsrc_pattern = '{unit_dir}/low/{unit_name}.pyi'\n\n"
                     "[roles.lib]\nname = 'lib'\nsrc_pattern = '{unit_dir}/lib/{unit_name}.py'\n"
@@ -537,7 +615,9 @@ class WorkspaceProvisionImplTest(unittest.TestCase):
                 repo_root=repo_root,
             )
 
-            ws_stub = os.path.join(desc.workspace_dir, "scope", "parts", "sample", "lib", "config.py")
+            ws_stub = os.path.join(
+                desc.workspace_dir, "scope", "parts", "sample", "lib", "config.py"
+            )
             self.assertTrue(os.path.isfile(ws_stub))
             with open(ws_stub, "r", encoding="utf-8") as f:
                 stub_content = f.read()
@@ -554,17 +634,23 @@ class WorkspaceProvisionImplTest(unittest.TestCase):
             with open(os.path.join(scope_dir, "sample.py"), "w", encoding="utf-8") as f:
                 f.write("# sample target\n")
 
-            with open(os.path.join(repo_root, app_info.DEFAULT_ROLES_FILE), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(repo_root, app_info.DEFAULT_ROLES_FILE),
+                "w",
+                encoding="utf-8",
+            ) as f:
                 f.write(
                     "[roles.lib]\nname = 'lib'\nsrc_pattern = '{unit_dir}/lib/{unit_name}.py'\n"
                 )
-            with open(os.path.join(repo_root, "model_configs.toml"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(repo_root, "model_configs.toml"), "w", encoding="utf-8"
+            ) as f:
                 f.write(
                     'default = "deepseek-v41-flash"\n\n'
-                    '[models.deepseek-v41-flash]\n'
+                    "[models.deepseek-v41-flash]\n"
                     'model = "deepseek-v41-flash"\n'
-                    'batch_size = 3\n'
-                    'max_feedback_chars = 300\n'
+                    "batch_size = 3\n"
+                    "max_feedback_chars = 300\n"
                 )
 
             desc = self.provisioner.commission(
@@ -645,8 +731,12 @@ class WorkspaceProvisionImplTest(unittest.TestCase):
                 repo_root=repo_root,
             )
             ws_dir = desc.workspace_dir
-            ws_writable = os.path.join(ws_dir, "test_scope", "parts", "alpha", "lib", "alpha.py")
-            ws_readonly = os.path.join(ws_dir, "test_scope", "parts", "alpha", "low", "alpha.pyi")
+            ws_writable = os.path.join(
+                ws_dir, "test_scope", "parts", "alpha", "lib", "alpha.py"
+            )
+            ws_readonly = os.path.join(
+                ws_dir, "test_scope", "parts", "alpha", "low", "alpha.pyi"
+            )
 
             self.assertTrue(os.path.isfile(ws_writable))
             self.assertTrue(os.path.isfile(ws_readonly))
@@ -669,12 +759,18 @@ class WorkspaceProvisionImplTest(unittest.TestCase):
             self.assertNotIn("LAST_CHANGED:", readonly_content)
             self.assertNotIn("SPEC_QA_AUDIT:", readonly_content)
 
-    def test_minimal_hermetic_workspace_provisioning_and_clutter_eradication(self) -> None:
+    def test_minimal_hermetic_workspace_provisioning_and_clutter_eradication(
+        self,
+    ) -> None:
         """Verifies Task 2: minimal hermetic workspace contains strictly required files without clutter."""
         with tempfile.TemporaryDirectory() as repo_root:
             parts_d = os.path.join(repo_root, "test_scope", "parts")
             os.makedirs(parts_d, exist_ok=True)
-            with open(os.path.join(parts_d, app_info.DEFAULT_CONFIG_FILE), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(parts_d, app_info.DEFAULT_CONFIG_FILE),
+                "w",
+                encoding="utf-8",
+            ) as f:
                 f.write('methodology = "autofab_py"\n')
 
             meth_d = os.path.join(repo_root, "autofab_py")
@@ -682,29 +778,53 @@ class WorkspaceProvisionImplTest(unittest.TestCase):
             os.makedirs(os.path.join(meth_d, "templates"), exist_ok=True)
             os.makedirs(os.path.join(meth_d, "support", "lib"), exist_ok=True)
 
-            with open(os.path.join(meth_d, app_info.DEFAULT_ROLES_FILE), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(meth_d, app_info.DEFAULT_ROLES_FILE), "w", encoding="utf-8"
+            ) as f:
                 f.write(
                     "[methodology]\nname = 'autofab_py'\n\n"
                     "[roles.lib]\nname = 'lib'\nsrc_pattern = '{unit_dir}/lib/{unit_name}.py'\n"
                     "guide = 'guides/low_to_lib.md'\n\n"
                     "[roles.qa]\nname = 'qa'\naudit_tag = 'QA_AUDIT'\nguide = 'guides/qa.md'\n"
                 )
-            with open(os.path.join(meth_d, "pyright_spec.json"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(meth_d, "pyright_spec.json"), "w", encoding="utf-8"
+            ) as f:
                 f.write("{}\n")
-            with open(os.path.join(meth_d, "guides", "low_to_lib.md"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(meth_d, "guides", "low_to_lib.md"), "w", encoding="utf-8"
+            ) as f:
                 f.write("# low to lib guide\n")
-            with open(os.path.join(meth_d, "guides", "qa.md"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(meth_d, "guides", "qa.md"), "w", encoding="utf-8"
+            ) as f:
                 f.write("# qa guide\n")
-            with open(os.path.join(meth_d, "templates", "lib.template.py"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(meth_d, "templates", "lib.template.py"),
+                "w",
+                encoding="utf-8",
+            ) as f:
                 f.write("# lib template\n")
-            with open(os.path.join(meth_d, "support", "lib", "lifecycle.py"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(meth_d, "support", "lib", "lifecycle.py"),
+                "w",
+                encoding="utf-8",
+            ) as f:
                 f.write("class LifecycleRegistry:\n    pass\n")
-            with open(os.path.join(meth_d, "support", "lib", "build_lint_common.py"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(meth_d, "support", "lib", "build_lint_common.py"),
+                "w",
+                encoding="utf-8",
+            ) as f:
                 f.write("# internal oracle\n")
 
-            with open(os.path.join(repo_root, ".python-version"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(repo_root, ".python-version"), "w", encoding="utf-8"
+            ) as f:
                 f.write("3.12.0\n")
-            with open(os.path.join(repo_root, "pyproject.toml"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(repo_root, "pyproject.toml"), "w", encoding="utf-8"
+            ) as f:
                 f.write("[project]\nname = 'test'\nreadme = 'README.md'\n")
 
             desc = self.provisioner.commission(
@@ -715,8 +835,14 @@ class WorkspaceProvisionImplTest(unittest.TestCase):
             ws_dir = desc.workspace_dir
 
             # 1. No manifest dumps or pyright_spec.json in workspace root
-            self.assertFalse(os.path.exists(os.path.join(ws_dir, app_info.DEFAULT_ROLES_FILE)))
-            self.assertFalse(os.path.exists(os.path.join(ws_dir, f"{app_info.APP_NAME}_python_roles.toml")))
+            self.assertFalse(
+                os.path.exists(os.path.join(ws_dir, app_info.DEFAULT_ROLES_FILE))
+            )
+            self.assertFalse(
+                os.path.exists(
+                    os.path.join(ws_dir, f"{app_info.APP_NAME}_python_roles.toml")
+                )
+            )
             self.assertFalse(os.path.exists(os.path.join(ws_dir, "pyright_spec.json")))
 
             # 2. No templates/ directory in workspace root
@@ -727,14 +853,23 @@ class WorkspaceProvisionImplTest(unittest.TestCase):
 
             # 4. Selective single-guide provisioning: only qa.md, not low_to_lib.md
             self.assertTrue(os.path.isfile(os.path.join(ws_dir, "guides", "qa.md")))
-            self.assertFalse(os.path.exists(os.path.join(ws_dir, "guides", "low_to_lib.md")))
+            self.assertFalse(
+                os.path.exists(os.path.join(ws_dir, "guides", "low_to_lib.md"))
+            )
 
             # 5. Minimal runtime support: lifecycle.py present, internal oracles excluded
-            self.assertTrue(os.path.isfile(os.path.join(ws_dir, "support", "lib", "lifecycle.py")))
-            self.assertFalse(os.path.exists(os.path.join(ws_dir, "support", "lib", "build_lint_common.py")))
+            self.assertTrue(
+                os.path.isfile(os.path.join(ws_dir, "support", "lib", "lifecycle.py"))
+            )
+            self.assertFalse(
+                os.path.exists(
+                    os.path.join(ws_dir, "support", "lib", "build_lint_common.py")
+                )
+            )
 
             # 6. Runner tools in bin/ are valid zipapps with roles.toml bundled
             import zipfile
+
             check_tool = os.path.join(ws_dir, "bin", "check_files")
             self.assertTrue(os.path.isfile(check_tool))
             with zipfile.ZipFile(check_tool, "r") as zf:
@@ -748,7 +883,9 @@ class WorkspaceProvisionImplTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             repo_root = os.path.join(td, "repo")
             os.makedirs(repo_root, exist_ok=True)
-            with open(os.path.join(repo_root, "pyproject.toml"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(repo_root, "pyproject.toml"), "w", encoding="utf-8"
+            ) as f:
                 f.write("[project]\nname = 'test'\n")
             desc = self.provisioner.commission(
                 role_name="qa",
@@ -769,7 +906,9 @@ class WorkspaceProvisionImplTest(unittest.TestCase):
             ws_author = desc_author.workspace_dir
             self.assertTrue(os.path.isdir(os.path.join(ws_author, ".git")))
             self.assertTrue(os.path.isfile(os.path.join(ws_author, "bin", "revert")))
-            self.assertTrue(os.path.isfile(os.path.join(ws_author, "bin", "checkpoint")))
+            self.assertTrue(
+                os.path.isfile(os.path.join(ws_author, "bin", "checkpoint"))
+            )
 
 
 if __name__ == "__main__":

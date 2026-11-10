@@ -96,6 +96,7 @@ class AntigravityCoordinatorGenerator(Singleton[AgentSessionTier], Protocol):
         """Parses completion message text into a structured wake notification."""
         ...
 
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-12T21:45:00Z

@@ -161,7 +161,9 @@ class WorkspacePendingImplTest(unittest.TestCase):
 
         # Projected in role workspace (no LAST_CLEANED)
         with open(ws_target, "w", encoding="utf-8") as f:
-            f.write("# --- CLEANROOM METADATA ---\n# CODE_HASH: 123456\n# --- END CLEANROOM METADATA ---\n")
+            f.write(
+                "# --- CLEANROOM METADATA ---\n# CODE_HASH: 123456\n# --- END CLEANROOM METADATA ---\n"
+            )
 
         # When evaluated with main_root pointing to canonical_repo:
         self.assertFalse(
@@ -189,7 +191,9 @@ class WorkspacePendingImplTest(unittest.TestCase):
         ws_dir = os.path.join(self.test_dir, "ws_reasons")
         os.makedirs(ws_dir, exist_ok=True)
         missing_target = "missing.py"
-        reasons_missing = self.pending_mgr.get_pending_target_reasons(missing_target, ws_dir)
+        reasons_missing = self.pending_mgr.get_pending_target_reasons(
+            missing_target, ws_dir
+        )
         self.assertTrue(any("does not exist" in r for r in reasons_missing))
 
         target = os.path.join(ws_dir, "test.py")
@@ -198,6 +202,7 @@ class WorkspacePendingImplTest(unittest.TestCase):
         reasons = self.pending_mgr.get_pending_target_reasons("test.py", ws_dir)
         self.assertTrue(any("Broken logic" in r for r in reasons))
         self.assertTrue(any("Fix index out of range" in r for r in reasons))
+
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z

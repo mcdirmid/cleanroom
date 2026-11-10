@@ -35,6 +35,7 @@ class SubagentToolRunner(Singleton[AgentSessionTier], Protocol):
         """Orchestrates multi-agent execution across topological waves until convergence."""
         ...
 
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-12T21:00:00Z

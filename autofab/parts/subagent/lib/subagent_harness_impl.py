@@ -19,6 +19,7 @@ from support.lib.lifecycle import (
 from autofab.parts.agent.lib import session as agent_session
 from autofab.parts.workspace.lib import role_registry
 from autofab.parts.workspace_cli.lib import work
+
 try:
     from support.lib import app_info
 except ImportError:
@@ -28,9 +29,7 @@ from . import subagent_coordinator, subagent_harness
 
 def _read_blame_buffer(workspace_dir: str) -> List[str]:
     """Reads blamed culprit files from the workspace blame buffer."""
-    candidate_names = (
-        app_info.DEFAULT_BLAME_BUFFER_FILE,
-    )
+    candidate_names = (app_info.DEFAULT_BLAME_BUFFER_FILE,)
     for cand in candidate_names:
         p = os.path.join(workspace_dir, cand)
         if not os.path.isfile(p):
@@ -44,7 +43,11 @@ def _read_blame_buffer(workspace_dir: str) -> List[str]:
                     if isinstance(item, str):
                         res.append(item)
                     elif isinstance(item, dict):
-                        t = item.get("culprit_target") or item.get("target") or item.get("file")
+                        t = (
+                            item.get("culprit_target")
+                            or item.get("target")
+                            or item.get("file")
+                        )
                         if t:
                             res.append(str(t))
                 if res:
@@ -72,14 +75,24 @@ def _parse_token_usage_from_log(log_path: str) -> subagent_coordinator.TokenUsag
     cached_tokens = 0
     output_tokens = 0
 
-    for m in re.finditer(r"(?:input_tokens|Input tokens)[:=]\s*(\d+)", content, re.IGNORECASE):
+    for m in re.finditer(
+        r"(?:input_tokens|Input tokens)[:=]\s*(\d+)", content, re.IGNORECASE
+    ):
         input_tokens += int(m.group(1))
-    for m in re.finditer(r"(?:cached_tokens|Cached tokens)[:=]\s*(\d+)", content, re.IGNORECASE):
+    for m in re.finditer(
+        r"(?:cached_tokens|Cached tokens)[:=]\s*(\d+)", content, re.IGNORECASE
+    ):
         cached_tokens += int(m.group(1))
-    for m in re.finditer(r"(?:output_tokens|Output tokens)[:=]\s*(\d+)", content, re.IGNORECASE):
+    for m in re.finditer(
+        r"(?:output_tokens|Output tokens)[:=]\s*(\d+)", content, re.IGNORECASE
+    ):
         output_tokens += int(m.group(1))
 
-    for m in re.finditer(r"Model request:\s*(\d+)(K)?\s*tokens,\s*(\d+)%\s*cached", content, re.IGNORECASE):
+    for m in re.finditer(
+        r"Model request:\s*(\d+)(K)?\s*tokens,\s*(\d+)%\s*cached",
+        content,
+        re.IGNORECASE,
+    ):
         val = int(m.group(1))
         if m.group(2):
             val *= 1000
@@ -90,7 +103,11 @@ def _parse_token_usage_from_log(log_path: str) -> subagent_coordinator.TokenUsag
         input_tokens += uncached
 
     total_tokens = input_tokens + cached_tokens + output_tokens
-    cost = (input_tokens * 0.0000025) + (cached_tokens * 0.000000625) + (output_tokens * 0.000010)
+    cost = (
+        (input_tokens * 0.0000025)
+        + (cached_tokens * 0.000000625)
+        + (output_tokens * 0.000010)
+    )
 
     return subagent_coordinator.TokenUsage(
         input_tokens=input_tokens,
@@ -178,10 +195,10 @@ class CommandHarnessAdapter(
                 f"1. Run `bin/get_work` immediately to evaluate assigned targets.\n"
                 f"2. For auditor roles, `bin/get_work` automatically executes verification checks on each dirty target. If all targets pass verification, `bin/get_work` automatically submits them with audit attestation and marks your round complete — in that case, you MUST conclude your round immediately with summary text and ZERO further tool calls.\n"
                 f"3. If any target fails verification, inspect the triage summary provided by `bin/get_work` and deliver blame attribution using:\n"
-                f"   `bin/blame <culprit_file> \"<critique>\"`\n"
+                f'   `bin/blame <culprit_file> "<critique>"`\n'
                 f"4. After blaming, run `bin/get_work` to inspect remaining units and conclude.\n"
                 f"5. If an unresolvable blocker:\n"
-                f"   `bin/fail <target_file> --reason \"...\"`\n"
+                f'   `bin/fail <target_file> --reason "..."`\n'
             )
         return (
             f"# {app_info.APP_TITLE} Autonomous Role Execution\n\n"
@@ -200,11 +217,11 @@ class CommandHarnessAdapter(
             f"2. Run verification commands to check consistency:\n"
             f"   `bin/check_files`\n"
             f"3. When targets are verified clean, submit them:\n"
-            f"   `bin/submit <target_file> --summary \"...\"`\n"
+            f'   `bin/submit <target_file> --summary "..."`\n'
             f"4. If you discover a defect in an upstream contract or specification:\n"
-            f"   `bin/blame <culprit_file> --critique \"...\"`\n"
+            f'   `bin/blame <culprit_file> --critique "..."`\n'
             f"5. If unresolvable blocker:\n"
-            f"   `bin/fail <target_file> --reason \"...\"`\n"
+            f'   `bin/fail <target_file> --reason "..."`\n'
         )
 
     # Contract: record initial pending targets from workspace pending work buffer
@@ -223,7 +240,9 @@ class CommandHarnessAdapter(
 
         log_dir = subagent_coordinator.resolve_log_dir(dispatch.workspace_dir)
         prompt_text = self.format_task_prompt(dispatch)
-        prompt_file = os.path.join(log_dir, f".{app_info.APP_NAME}_task_prompt_{handle}.md")
+        prompt_file = os.path.join(
+            log_dir, f".{app_info.APP_NAME}_task_prompt_{handle}.md"
+        )
         try:
             with open(prompt_file, "w", encoding="utf-8") as f:
                 f.write(prompt_text)
@@ -308,7 +327,9 @@ class CommandHarnessAdapter(
                 tail_msg = ""
                 if os.path.isfile(task.log_file):
                     try:
-                        with open(task.log_file, "r", encoding="utf-8", errors="replace") as lf:
+                        with open(
+                            task.log_file, "r", encoding="utf-8", errors="replace"
+                        ) as lf:
                             lines = lf.readlines()
                             tail_msg = "".join(lines[-10:])
                     except OSError:
@@ -347,7 +368,9 @@ class CommandHarnessAdapter(
 
     # Contract: when subagent process has terminated, return role round result
     # Contract: when subagent process is still running, return None without blocking or termination
-    def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleRoundResult]:
+    def poll_role(
+        self, task_handle: str
+    ) -> Optional[subagent_coordinator.RoleRoundResult]:
         """Polls subagent round execution without blocking."""
         task = self._active_tasks.get(task_handle)
         if task is None:
@@ -381,6 +404,19 @@ class CommandHarnessAdapter(
             except OSError:
                 pass
 
+    def update_orchestration_state(
+        self,
+        dir_scope: str,
+        wave_count: int,
+        active_workers: Mapping[str, str],
+        assigned_targets: Mapping[str, Sequence[str]],
+        all_scope_roles: Sequence[str],
+        converged: bool = False,
+        failed: bool = False,
+    ) -> None:
+        """No-op default for command harness adapter."""
+        pass
+
 
 class HarnessRegistry(subagent_harness.HarnessRegistry):
     """Realizes harness registry and resolution for external agent platforms."""
@@ -388,11 +424,15 @@ class HarnessRegistry(subagent_harness.HarnessRegistry):
     tier = agent_session.agent_session
 
     def __init__(self) -> None:
-        self._installed_harnesses: Dict[str, subagent_harness.HarnessAdapterFactory] = {}
+        self._installed_harnesses: Dict[
+            str, subagent_harness.HarnessAdapterFactory
+        ] = {}
 
     # Contract: return mapping of installed platform names to harness adapter factories
     @property
-    def installed_harnesses(self) -> Mapping[str, subagent_harness.HarnessAdapterFactory]:
+    def installed_harnesses(
+        self,
+    ) -> Mapping[str, subagent_harness.HarnessAdapterFactory]:
         return dict(self._installed_harnesses)
 
     # Contract: register adapter factory under platform name in installed harnesses mapping
@@ -473,7 +513,11 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     )
     reg.register_singleton(
         HarnessRegistry,
-        keys=[subagent_harness.HarnessRegistry, subagent_harness.HarnessResolver, HarnessRegistry],
+        keys=[
+            subagent_harness.HarnessRegistry,
+            subagent_harness.HarnessResolver,
+            HarnessRegistry,
+        ],
         tier=agent_session.agent_session,
     )
 

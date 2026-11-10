@@ -27,10 +27,12 @@ from autofab.parts.workspace.lib import (
     role_registry,
     sync,
 )
+
 try:
-    from support.lib import app_info
+    from support.lib import app_info, structured_blame
 except ImportError:
     import app_info  # type: ignore
+    import structured_blame  # type: ignore
 from . import (
     coverage,
     check,
@@ -39,7 +41,41 @@ from . import (
 )
 from autofab.parts.metadata.lib import src_metadata
 
-BLAME_BUFFER_FILE = getattr(app_info, "DEFAULT_BLAME_BUFFER_FILE", ".autofab_blame_buffer.json")
+BLAME_BUFFER_FILE = getattr(
+    app_info, "DEFAULT_BLAME_BUFFER_FILE", ".autofab_blame_buffer.json"
+)
+STAGED_BLAME_FILE = ".autofab_staged_blame.json"
+
+
+def _load_staged_blames(ws_root: str) -> List[Dict[str, Any]]:
+    buf_path = os.path.join(ws_root, STAGED_BLAME_FILE)
+    if os.path.isfile(buf_path):
+        try:
+            with open(buf_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    return [e for e in data if isinstance(e, dict)]
+        except (OSError, json.JSONDecodeError):
+            pass
+    return []
+
+
+def _save_staged_blames(ws_root: str, entries: List[Dict[str, Any]]) -> None:
+    buf_path = os.path.join(ws_root, STAGED_BLAME_FILE)
+    try:
+        with open(buf_path, "w", encoding="utf-8") as f:
+            json.dump(entries, f, indent=2)
+    except OSError:
+        pass
+
+
+def _clear_staged_blames(ws_root: str) -> None:
+    buf_path = os.path.join(ws_root, STAGED_BLAME_FILE)
+    if os.path.isfile(buf_path):
+        try:
+            os.remove(buf_path)
+        except OSError:
+            pass
 
 
 def _record_blame_buffer(
@@ -70,7 +106,10 @@ def _record_blame_buffer(
                         entries = [e for e in data if isinstance(e, dict)]
             except (OSError, json.JSONDecodeError):
                 entries = []
-        if not any(e.get("target") == culprit_rel and e.get("missing_spans") == missing_spans for e in entries):
+        if not any(
+            e.get("target") == culprit_rel and e.get("missing_spans") == missing_spans
+            for e in entries
+        ):
             entries.append(entry)
         try:
             with open(buf_path, "w", encoding="utf-8") as f:
@@ -84,22 +123,36 @@ def _is_auditor_role(role_name: str, repo_root: Optional[str] = None) -> bool:
     try:
         reg = get_singleton(role_registry.WorkspaceRegistry)
         r_def = reg.resolve_role_definition(clean_r, repo_root=repo_root)
-        return bool(r_def.audit_tag or not r_def.src_pattern or not r_def.writable_file_patterns)
+        return bool(
+            r_def.audit_tag or not r_def.src_pattern or not r_def.writable_file_patterns
+        )
     except Exception:
-        return clean_r.endswith(("_qa", "_coverage", "_audit", "auditor", "audit")) or "qa" in clean_r or "audit" in clean_r
+        return (
+            clean_r.endswith(("_qa", "_coverage", "_audit", "auditor", "audit"))
+            or "qa" in clean_r
+            or "audit" in clean_r
+        )
+
 
 def _is_role_writable_file(role_def: Any, file_path: str) -> bool:
     if not role_def:
         return True
-    patterns = (role_def.writable_file_patterns if hasattr(role_def, "writable_file_patterns") else None) or ()
+    patterns = (
+        role_def.writable_file_patterns
+        if hasattr(role_def, "writable_file_patterns")
+        else None
+    ) or ()
     if not patterns:
         return False
     import fnmatch
+
     norm_path = file_path.replace("\\", "/")
     fname = os.path.basename(norm_path)
     for pat in patterns:
         pat_norm = pat.replace("\\", "/")
-        if fnmatch.fnmatch(norm_path, f"*{pat_norm}") or fnmatch.fnmatch(fname, pat_norm):
+        if fnmatch.fnmatch(norm_path, f"*{pat_norm}") or fnmatch.fnmatch(
+            fname, pat_norm
+        ):
             return True
         if pat_norm.endswith("/*") and pat_norm[:-2] in norm_path:
             return True
@@ -115,7 +168,10 @@ def find_workspace_root() -> str:
     """Discovers root of commissioned role workspace or repo root."""
     curr = os.getcwd()
     while curr and curr != os.path.dirname(curr):
-        if any(os.path.isfile(os.path.join(curr, d)) for d in app_info.get_role_descriptors()):
+        if any(
+            os.path.isfile(os.path.join(curr, d))
+            for d in app_info.get_role_descriptors()
+        ):
             return curr
         curr = os.path.dirname(curr)
     return os.getcwd()
@@ -153,9 +209,15 @@ def _resolve_main_root(
         curr = os.path.abspath(ws_root or os.getcwd())
         check_role = curr
         while check_role and check_role != os.path.dirname(check_role):
-            if any(os.path.isfile(os.path.join(check_role, d)) for d in app_info.get_role_descriptors()):
+            if any(
+                os.path.isfile(os.path.join(check_role, d))
+                for d in app_info.get_role_descriptors()
+            ):
                 parent_dir = os.path.dirname(check_role)
-                if os.path.basename(parent_dir) in app_info.get_role_workspaces_containers():
+                if (
+                    os.path.basename(parent_dir)
+                    in app_info.get_role_workspaces_containers()
+                ):
                     return os.path.realpath(os.path.dirname(parent_dir))
                 return os.path.realpath(parent_dir)
             check_role = os.path.dirname(check_role)
@@ -163,11 +225,11 @@ def _resolve_main_root(
 
 
 # Contract: __orphan__ - resolves path to log file in the directory containing parts
-def resolve_log_path(
-    target_or_path: str, repo_root: Optional[str] = None
-) -> str:
+def resolve_log_path(target_or_path: str, repo_root: Optional[str] = None) -> str:
     """Resolves path to log file in the directory containing parts."""
-    return app_info.resolve_log_path(target_or_path, repo_root=repo_root or find_workspace_root())
+    return app_info.resolve_log_path(
+        target_or_path, repo_root=repo_root or find_workspace_root()
+    )
 
 
 # Contract: __orphan__ - appends action record message to log file in directory containing parts
@@ -177,16 +239,23 @@ def append_log(
     repo_root: Optional[str] = None,
 ) -> str:
     """Appends action record message to log file in directory containing parts."""
-    return app_info.append_log(target_or_path, message, repo_root=repo_root or find_workspace_root())
+    return app_info.append_log(
+        target_or_path, message, repo_root=repo_root or find_workspace_root()
+    )
 
 
 def _find_agent_node_config_module() -> Any:
     for k, m in list(sys.modules.items()):
-        if k in ("node_config", "agent_node_config") or k.endswith(".node_config") or k.endswith(".agent_node_config"):
+        if (
+            k in ("node_config", "agent_node_config")
+            or k.endswith(".node_config")
+            or k.endswith(".agent_node_config")
+        ):
             if hasattr(m, "NodeConfig"):
                 return m
     try:
         import importlib
+
         try:
             return importlib.import_module("autofab.parts.agent.lib.node_config")
         except ImportError:
@@ -206,7 +275,16 @@ def _ensure_cli_node_config(main_root: Optional[str] = None) -> None:
             cfg = None
 
     reg = get_default_registry()
-    ws_reg = get_singleton(role_registry.WorkspaceRegistry)
+    try:
+        ws_reg = get_singleton(role_registry.WorkspaceRegistry)
+    except (KeyError, LifecycleResolutionError):
+        try:
+            from autofab.parts.workspace.lib import workspace_asm
+
+            workspace_asm.__initialize__()
+            ws_reg = get_singleton(role_registry.WorkspaceRegistry)
+        except Exception:
+            return
     ws_root = find_workspace_root()
     meta = get_current_role_metadata()
     resolved_main = _resolve_main_root(ws_root, meta, repo_root=main_root)
@@ -214,8 +292,10 @@ def _ensure_cli_node_config(main_root: Optional[str] = None) -> None:
     role_defs = {r.role_name: r for r in roles}
 
     if cfg is None:
+
         class CliNodeConfig:
             tier = agent_session.agent_session
+
             def __init__(self, r_defs: Dict[str, Any]) -> None:
                 self.role_definitions = r_defs
                 self.read_only_files = set()
@@ -245,7 +325,6 @@ def _ensure_cli_node_config(main_root: Optional[str] = None) -> None:
         cfg_any: Any = cfg
         if not hasattr(cfg_any, "role_definitions") or not cfg_any.role_definitions:
             setattr(cfg_any, "role_definitions", role_defs)
-
 
 
 # Contract: Realizes substantive domain operations for Autofab role workspaces in agent_session tier.
@@ -302,14 +381,77 @@ class WorkspaceCommandHandler(commands.WorkspaceCommandHandler):
         main_root = _resolve_main_root(ws_root, meta, repo_root)
         _ensure_cli_node_config(main_root)
 
-        is_auditor = _is_auditor_role(clean_role, repo_root=main_root) if clean_role else False
+        # Check for staged blame
+        staged_blames = _load_staged_blames(ws_root)
+        if staged_blames:
+            attr_coord = get_singleton(attribution.AttributionCoordinator)
+            committed_count = 0
+            for item in staged_blames:
+                c_file = item["culprit_file"]
+                c_critique = item["critique"]
+                c_caller = item.get("caller") or role_name
+                outcome = attr_coord.blame_culprit_file(
+                    culprit_file=c_file,
+                    critique=c_critique,
+                    repo_root=main_root,
+                    workspace_root=ws_root,
+                    caller_role=c_caller,
+                )
+                if outcome.message:
+                    print(outcome.message)
+                if outcome.accepted:
+                    blame_msg = outcome.message or f"✔ Blamed {c_file}"
+                    if c_critique and c_critique not in blame_msg:
+                        blame_msg = f"{blame_msg}: {c_critique}"
+                    append_log(c_file, blame_msg, repo_root=main_root)
+                    if ws_root != main_root:
+                        try:
+                            append_log(c_file, blame_msg, repo_root=ws_root)
+                        except OSError:
+                            pass
+                    _record_blame_buffer(
+                        ws_root,
+                        c_file,
+                        critique=c_critique,
+                        caller=c_caller,
+                        missing_spans=item.get("missing_spans"),
+                    )
+                    committed_count += 1
+            _clear_staged_blames(ws_root)
+            if meta:
+                pending_mgr = get_singleton(pending.WorkspacePendingManager)
+                pending_targets = list(pending_mgr.get_pending_work(ws_root))
+                pending_mgr.remove_pending_target(ws_root, target)
+                if (
+                    len(pending_targets) == 1
+                    and list(pending_mgr.get_pending_work(ws_root)) == pending_targets
+                ):
+                    pending_mgr.remove_pending_target(ws_root, pending_targets[0])
+            print(
+                f"[BLAME DELIVERED] Committed {committed_count} blame item(s) for '{target}' and returned to upstream author(s).\n"
+                "Your work on this target is 100% COMPLETE.\n"
+                "MANDATORY: Run 'bin/get_work' now to inspect remaining units.\n"
+                "If all ready targets are resolved, conclude your round immediately with summary text and ZERO further tool calls.\n"
+                "DO NOT re-run 'bin/check_files' or attempt to debug the author's code."
+            )
+            return 0 if committed_count > 0 else 1
+
+        is_auditor = (
+            _is_auditor_role(clean_role, repo_root=main_root) if clean_role else False
+        )
         if not no_verify and not is_auditor:
             sub_coord = get_singleton(submit.SubmissionCoordinator)
-            d_scope = (meta.get("dir_scope") or meta.get("parts_dir", "")) if meta else ""
+            d_scope = (
+                (meta.get("dir_scope") or meta.get("parts_dir", "")) if meta else ""
+            )
             target_path, _ = sub_coord.resolve_submit_target(
                 target, ws_root, clean_role, d_scope
             )
-            if target_path and os.path.isfile(target_path) and src_metadata.is_code_modified(target_path):
+            if (
+                target_path
+                and os.path.isfile(target_path)
+                and src_metadata.is_code_modified(target_path)
+            ):
                 checker = get_singleton(check.WorkspaceChecker)
                 if not checker.is_checked_since_modification(ws_root, target_path):
                     print(
@@ -321,7 +463,20 @@ class WorkspaceCommandHandler(commands.WorkspaceCommandHandler):
         if not no_verify:
             check_exit = self.run_check_files(target=target, repo_root=main_root)
             if check_exit != 0:
-                print(f"[FAIL] Verification checks failed for '{target}'. Submission rejected.")
+                is_auditor = (
+                    _is_auditor_role(clean_role, repo_root=main_root)
+                    if clean_role
+                    else False
+                )
+                if is_auditor:
+                    print(
+                        f"Error: Cannot submit target '{target}' without preceding blame.\n"
+                        f"In auditor roles, manual submission is only permitted to commit staged blame feedback after running 'bin/blame <culprit> \"<critique>\"', or run 'bin/fail {target} \"<reason>\"'."
+                    )
+                else:
+                    print(
+                        f"[FAIL] Verification checks failed for '{target}'. Submission rejected."
+                    )
                 return 1
 
         sub_coord = get_singleton(submit.SubmissionCoordinator)
@@ -370,12 +525,41 @@ class WorkspaceCommandHandler(commands.WorkspaceCommandHandler):
         clean_caller = caller.split(":")[-1].strip().lower() if caller else ""
 
         if "\n" in critique or "\r" in critique:
-            critique = " ".join(line.strip() for line in critique.splitlines() if line.strip())
+            critique = " ".join(
+                line.strip() for line in critique.splitlines() if line.strip()
+            )
         if not critique.strip():
             print("Error: Critique cannot be empty.")
             return 1
 
-        is_auditor = _is_auditor_role(clean_caller, repo_root=main_root) if clean_caller else False
+        if structured_blame.is_structured_blame_active():
+            parsed_blame, parse_errs = structured_blame.parse_structured_blame(critique)
+            if parse_errs or parsed_blame is None:
+                print(f"[STRUCTURED BLAME REJECTED]", file=sys.stderr)
+                for err in parse_errs:
+                    print(f"Error: {err}", file=sys.stderr)
+                return 1
+
+            val_errs = structured_blame.validate_structured_blame(
+                parsed_blame,
+                culprit_file=culprit_file,
+                repo_root=main_root,
+                workspace_root=ws_root,
+                caller_role=caller,
+            )
+            if val_errs:
+                print(f"[STRUCTURED BLAME REJECTED]", file=sys.stderr)
+                for err in val_errs:
+                    print(f"Error: {err}", file=sys.stderr)
+                return 1
+
+            critique = parsed_blame.to_critique_string()
+
+        is_auditor = (
+            _is_auditor_role(clean_caller, repo_root=main_root)
+            if clean_caller
+            else False
+        )
         if not is_auditor:
             reg = get_singleton(role_registry.WorkspaceRegistry)
             r_def = None
@@ -386,10 +570,18 @@ class WorkspaceCommandHandler(commands.WorkspaceCommandHandler):
             pending_mgr = get_singleton(pending.WorkspacePendingManager)
             pending_targets = pending_mgr.get_pending_work(ws_root)
             sub_coord = get_singleton(submit.SubmissionCoordinator)
-            d_scope = (meta.get("dir_scope") or meta.get("parts_dir", "")) if meta else ""
+            d_scope = (
+                (meta.get("dir_scope") or meta.get("parts_dir", "")) if meta else ""
+            )
             for pt in pending_targets:
-                pt_path, _ = sub_coord.resolve_submit_target(pt, ws_root, clean_caller, d_scope)
-                if pt_path and os.path.isfile(pt_path) and _is_role_writable_file(r_def, pt_path):
+                pt_path, _ = sub_coord.resolve_submit_target(
+                    pt, ws_root, clean_caller, d_scope
+                )
+                if (
+                    pt_path
+                    and os.path.isfile(pt_path)
+                    and _is_role_writable_file(r_def, pt_path)
+                ):
                     if src_metadata.is_code_modified(pt_path):
                         checker = get_singleton(check.WorkspaceChecker)
                         if not checker.is_checked_since_modification(ws_root, pt_path):
@@ -445,7 +637,10 @@ class WorkspaceCommandHandler(commands.WorkspaceCommandHandler):
                         if isinstance(prev_entries, list):
                             culprit_rel = culprit_file.lstrip("/")
                             for pe in prev_entries:
-                                if isinstance(pe, dict) and pe.get("target") == culprit_rel:
+                                if (
+                                    isinstance(pe, dict)
+                                    and pe.get("target") == culprit_rel
+                                ):
                                     if pe.get("missing_spans") == current_spans:
                                         print(
                                             "Error: repeating identical blame against the same uncovered span set is prohibited. "
@@ -456,50 +651,246 @@ class WorkspaceCommandHandler(commands.WorkspaceCommandHandler):
                     except Exception:
                         pass
 
-        attr_coord = get_singleton(attribution.AttributionCoordinator)
-        outcome = attr_coord.blame_culprit_file(
-            culprit_file=culprit_file,
-            critique=critique,
-            repo_root=main_root,
-            workspace_root=ws_root,
-            caller_role=caller,
-        )
-        if outcome.message:
-            print(outcome.message)
+        # Validate that culprit file can be located
+        c_path = None
+        if clean_caller:
+            try:
+                sub_coord = get_singleton(submit.SubmissionCoordinator)
+                d_scope = (
+                    (meta.get("dir_scope") or meta.get("parts_dir", "")) if meta else ""
+                )
+                c_path, _ = sub_coord.resolve_submit_target(
+                    culprit_file, ws_root, clean_caller, d_scope
+                )
+                if not c_path or not os.path.exists(c_path):
+                    c_path, _ = sub_coord.resolve_submit_target(
+                        culprit_file, main_root, clean_caller, d_scope
+                    )
+            except Exception:
+                c_path = None
+        if not c_path or not os.path.exists(c_path):
+            cand_ws = os.path.join(ws_root, culprit_file.lstrip("/"))
+            cand_main = os.path.join(main_root, culprit_file.lstrip("/"))
+            if os.path.exists(cand_ws):
+                c_path = cand_ws
+            elif os.path.exists(cand_main):
+                c_path = cand_main
+            elif os.path.exists(culprit_file):
+                c_path = culprit_file
 
-        if outcome.accepted:
-            blame_msg = outcome.message or f"✔ Blamed {culprit_file}"
-            if critique and critique not in blame_msg:
-                blame_msg = f"{blame_msg}: {critique}"
-            append_log(culprit_file, blame_msg, repo_root=main_root)
-            if ws_root != main_root:
-                try:
-                    append_log(culprit_file, blame_msg, repo_root=ws_root)
-                except OSError:
-                    pass
-            current_spans = cov_status.get("missing_spans") if cov_status else None
-            _record_blame_buffer(
-                ws_root,
-                culprit_file,
-                critique=critique,
-                caller=caller,
-                missing_spans=current_spans,
-            )
-            if meta:
-                pending_mgr = get_singleton(pending.WorkspacePendingManager)
-                pending_targets = list(pending_mgr.get_pending_work(ws_root))
-                pending_mgr.remove_pending_target(ws_root, culprit_file)
-                if len(pending_targets) == 1 and list(pending_mgr.get_pending_work(ws_root)) == pending_targets:
-                    pending_mgr.remove_pending_target(ws_root, pending_targets[0])
+        if not c_path or not os.path.exists(c_path):
             print(
-                "[BLAME DELIVERED] Target blamed and returned to upstream author.\n"
-                "Your work on this target is 100% COMPLETE.\n"
-                "MANDATORY: Run 'bin/get_work' now to inspect remaining units.\n"
-                "If all ready targets are resolved, conclude your round immediately with summary text and ZERO further tool calls.\n"
-                "DO NOT re-run 'bin/check_files' or attempt to debug the author's code."
+                f"Error: Could not locate blame target '{culprit_file}'.",
+                file=sys.stderr,
             )
-            return 0
-        return 1
+            return 1
+
+        if not meta:
+            attr_coord = get_singleton(attribution.AttributionCoordinator)
+            outcome = attr_coord.blame_culprit_file(
+                culprit_file=culprit_file,
+                critique=critique,
+                repo_root=main_root,
+                workspace_root=ws_root,
+                caller_role=caller,
+            )
+            if outcome.message:
+                print(outcome.message)
+            if outcome.accepted:
+                blame_msg = outcome.message or f"✔ Blamed {culprit_file}"
+                if critique and critique not in blame_msg:
+                    blame_msg = f"{blame_msg}: {critique}"
+                append_log(culprit_file, blame_msg, repo_root=main_root)
+                _record_blame_buffer(
+                    ws_root,
+                    culprit_file,
+                    critique=critique,
+                    caller=caller,
+                    missing_spans=cov_status.get("missing_spans")
+                    if cov_status
+                    else None,
+                )
+                return 0
+            return 1
+
+        # In role workspaces, validate that caller is configured to deliver feedback to culprit's role
+        culprit_role = None
+        try:
+            reg = get_singleton(role_registry.WorkspaceRegistry)
+            norm_c = (c_path or culprit_file).replace("\\", "/")
+            c_fname = os.path.basename(norm_c)
+            c_parent = os.path.basename(os.path.dirname(norm_c))
+            for role in reg.list_roles(repo_root=main_root):
+                pats = (
+                    role.src_patterns
+                    if hasattr(role, "src_patterns") and role.src_patterns
+                    else ([role.src_pattern] if role.src_pattern else [])
+                )
+                for pat in pats:
+                    clean = pat.replace("{unit_dir}/", "").replace("{unit_dir}\\", "")
+                    if "/" in clean:
+                        d_name, file_pattern = clean.split("/", 1)
+                    else:
+                        d_name, file_pattern = "", clean
+                    if "{unit_name}" in file_pattern:
+                        pfx, sfx = file_pattern.split("{unit_name}", 1)
+                    elif "*" in file_pattern:
+                        pfx, sfx = file_pattern.split("*", 1)
+                    else:
+                        pfx, sfx = "", file_pattern
+                    if (
+                        c_parent == d_name
+                        and c_fname.startswith(pfx)
+                        and c_fname.endswith(sfx)
+                    ):
+                        culprit_role = role.role_name
+                        break
+                if culprit_role:
+                    break
+        except Exception:
+            pass
+
+        if clean_caller and culprit_role:
+            try:
+                reg = get_singleton(role_registry.WorkspaceRegistry)
+                r_def = reg.resolve_role_definition(clean_caller, repo_root=main_root)
+                if r_def:
+                    raw_fb = list(
+                        getattr(r_def, "feedback_role_deps", ()) or ()
+                    ) + list(getattr(r_def, "star_feedback_role_deps", ()) or ())
+                    fb_deps = [d.split(":")[-1].strip().lower() for d in raw_fb]
+                    blamed_clean = str(culprit_role).split(":")[-1].strip().lower()
+                    if blamed_clean not in fb_deps:
+                        print(
+                            f"Error: Role '{caller}' is not configured to deliver feedback to role '{culprit_role}'.",
+                            file=sys.stderr,
+                        )
+                        return 1
+            except Exception:
+                pass
+
+        staged_entries = _load_staged_blames(ws_root)
+        current_spans = cov_status.get("missing_spans") if cov_status else None
+        staged_entries.append(
+            {
+                "culprit_file": culprit_file,
+                "critique": critique,
+                "caller": caller,
+                "missing_spans": current_spans,
+            }
+        )
+        _save_staged_blames(ws_root, staged_entries)
+        print(
+            f"[BLAME STAGED] Blame staged for '{culprit_file}'.\n"
+            f"Critique: {critique}\n"
+            f"Total staged blame item(s): {len(staged_entries)}.\n"
+            "Run 'bin/blame <culprit_file> \"<critique>\"' to stage additional blame, or run 'bin/submit <target>' to commit blame and conclude."
+        )
+        return 0
+
+    # Contract: Rejects active feedback on an unmodified target file and scrubs feedback from header.
+    def run_reject(
+        self,
+        file_path: str,
+        reason: str,
+        repo_root: Optional[str] = None,
+    ) -> int:
+        """Rejects active feedback on an unmodified target file and scrubs feedback from header."""
+        ws_root = os.path.realpath(find_workspace_root())
+        meta = get_current_role_metadata()
+        main_root = _resolve_main_root(ws_root, meta, repo_root)
+        _ensure_cli_node_config(main_root)
+        caller = (meta.get("role_name") or meta.get("role", "")) if meta else ""
+        clean_caller = caller.split(":")[-1].strip().lower() if caller else ""
+
+        if not reason or not reason.strip():
+            print("Error: Rejection reason cannot be empty.")
+            return 1
+
+        sub_coord = get_singleton(submit.SubmissionCoordinator)
+        d_scope = (meta.get("dir_scope") or meta.get("parts_dir", "")) if meta else ""
+        target_path, _ = sub_coord.resolve_submit_target(
+            file_path, ws_root, clean_caller, d_scope
+        )
+        if not target_path or not os.path.isfile(target_path):
+            target_path, _ = sub_coord.resolve_submit_target(
+                file_path, main_root, clean_caller, d_scope
+            )
+        if not target_path or not os.path.isfile(target_path):
+            cand_ws = os.path.join(ws_root, file_path.lstrip("/"))
+            cand_main = os.path.join(main_root, file_path.lstrip("/"))
+            if os.path.isfile(cand_ws):
+                target_path = cand_ws
+            elif os.path.isfile(cand_main):
+                target_path = cand_main
+            elif os.path.isfile(file_path):
+                target_path = file_path
+
+        if not target_path or not os.path.isfile(target_path):
+            print(f"Error: Could not locate target '{file_path}'.")
+            return 1
+
+        # Strict Unchanged File Invariant
+        if src_metadata.is_code_modified(target_path):
+            print(
+                f"Error: Cannot reject feedback on a modified file.\n"
+                f"If you made code changes to '{file_path}', use 'bin/submit'. "
+                f"Rejecting feedback asserts that your existing code is already compliant with the specification."
+            )
+            return 1
+
+        # Must have active feedback to reject
+        target_meta = src_metadata.extract_metadata(target_path)
+        if not target_meta or not target_meta.feedback:
+            print(
+                f"Error: Target '{file_path}' does not have any active feedback to reject."
+            )
+            return 1
+
+        # Scrub feedback from file header
+        src_metadata.update_metadata(target_path, clear_feedback=True, clear_dirty=True)
+        if ws_root != main_root and target_path.startswith(ws_root):
+            rel = os.path.relpath(target_path, ws_root)
+            main_p = os.path.join(main_root, rel)
+            if os.path.isfile(main_p):
+                src_metadata.update_metadata(
+                    main_p, clear_feedback=True, clear_dirty=True
+                )
+
+        # Record rejection contest rationale out-of-band
+        rejection_critique = f"[REJECTED] {reason.strip()}"
+        _record_blame_buffer(
+            ws_root,
+            file_path,
+            critique=rejection_critique,
+            caller=caller,
+        )
+        append_log(file_path, rejection_critique, repo_root=main_root)
+        if ws_root != main_root:
+            try:
+                append_log(file_path, rejection_critique, repo_root=ws_root)
+            except OSError:
+                pass
+
+        # Clear from pending work
+        if meta:
+            pending_mgr = get_singleton(pending.WorkspacePendingManager)
+            pending_targets = list(pending_mgr.get_pending_work(ws_root))
+            pending_mgr.remove_pending_target(ws_root, file_path)
+            if (
+                len(pending_targets) == 1
+                and list(pending_mgr.get_pending_work(ws_root)) == pending_targets
+            ):
+                pending_mgr.remove_pending_target(ws_root, pending_targets[0])
+
+        print(
+            f"[REJECT DELIVERED] Feedback rejected for '{file_path}'.\n"
+            f"Reason: {reason.strip()}\n"
+            "The active feedback block has been scrubbed from the file header.\n"
+            "Run 'bin/get_work' now to inspect remaining units.\n"
+            "If all ready targets are resolved, conclude your round immediately with summary text and ZERO further tool calls."
+        )
+        return 0
 
     # Contract: Delegates failure marking to AttributionCoordinator and removes from pending work.
     def run_fail(
@@ -516,14 +907,24 @@ class WorkspaceCommandHandler(commands.WorkspaceCommandHandler):
         caller = (meta.get("role_name") or meta.get("role", "")) if meta else ""
         clean_caller = caller.split(":")[-1].strip().lower() if caller else ""
 
-        is_auditor = _is_auditor_role(clean_caller, repo_root=main_root) if clean_caller else False
+        is_auditor = (
+            _is_auditor_role(clean_caller, repo_root=main_root)
+            if clean_caller
+            else False
+        )
         if not is_auditor:
             sub_coord = get_singleton(submit.SubmissionCoordinator)
-            d_scope = (meta.get("dir_scope") or meta.get("parts_dir", "")) if meta else ""
+            d_scope = (
+                (meta.get("dir_scope") or meta.get("parts_dir", "")) if meta else ""
+            )
             target_path, _ = sub_coord.resolve_submit_target(
                 file_path, ws_root, clean_caller, d_scope
             )
-            if target_path and os.path.isfile(target_path) and src_metadata.is_code_modified(target_path):
+            if (
+                target_path
+                and os.path.isfile(target_path)
+                and src_metadata.is_code_modified(target_path)
+            ):
                 checker = get_singleton(check.WorkspaceChecker)
                 if not checker.is_checked_since_modification(ws_root, target_path):
                     print(
@@ -547,7 +948,10 @@ class WorkspaceCommandHandler(commands.WorkspaceCommandHandler):
                 pending_mgr = get_singleton(pending.WorkspacePendingManager)
                 pending_targets = list(pending_mgr.get_pending_work(ws_root))
                 pending_mgr.remove_pending_target(ws_root, file_path)
-                if len(pending_targets) == 1 and list(pending_mgr.get_pending_work(ws_root)) == pending_targets:
+                if (
+                    len(pending_targets) == 1
+                    and list(pending_mgr.get_pending_work(ws_root)) == pending_targets
+                ):
                     pending_mgr.remove_pending_target(ws_root, pending_targets[0])
             print(
                 "[FAIL RECORDED] Target marked failed due to unresolvable impasse.\n"
@@ -583,9 +987,9 @@ class WorkspaceCommandHandler(commands.WorkspaceCommandHandler):
 
         target_root = ws_root
         if target_or_impl and not os.path.isabs(target_or_impl):
-            if not os.path.exists(os.path.join(ws_root, target_or_impl)) and os.path.exists(
-                os.path.join(main_root, target_or_impl)
-            ):
+            if not os.path.exists(
+                os.path.join(ws_root, target_or_impl)
+            ) and os.path.exists(os.path.join(main_root, target_or_impl)):
                 target_root = main_root
 
         try:
@@ -603,6 +1007,7 @@ class WorkspaceCommandHandler(commands.WorkspaceCommandHandler):
 
         if json_output:
             import dataclasses
+
             print(json.dumps(dataclasses.asdict(cov), indent=2))
             return 0 if (cov.test_passed and cov.coverage_pct >= threshold) else 1
 
@@ -632,14 +1037,18 @@ class WorkspaceCommandHandler(commands.WorkspaceCommandHandler):
             root_cand = repo_root or find_workspace_root() or os.getcwd()
             try:
                 for entry in os.listdir(root_cand):
-                    if os.path.isdir(os.path.join(root_cand, entry, "parts")) and not entry.startswith((".", "bazel-", "venv")):
+                    if os.path.isdir(
+                        os.path.join(root_cand, entry, "parts")
+                    ) and not entry.startswith((".", "bazel-", "venv")):
                         dir_scope = entry
                         break
             except OSError:
                 pass
 
         if not dir_scope:
-            print("Error: directory scope must be specified or detected from the active workspace.")
+            print(
+                "Error: directory scope must be specified or detected from the active workspace."
+            )
             return 1
 
         prov = get_singleton(provision.WorkspaceProvisioner)
@@ -656,7 +1065,9 @@ class WorkspaceCommandHandler(commands.WorkspaceCommandHandler):
                     reset=reset,
                     model=model,
                 )
-                print(f"✔ Commissioned workspace for role '{r_def.role_name}' at: {desc.workspace_dir}")
+                print(
+                    f"✔ Commissioned workspace for role '{r_def.role_name}' at: {desc.workspace_dir}"
+                )
             return 0
 
         if not role_name:
@@ -671,7 +1082,9 @@ class WorkspaceCommandHandler(commands.WorkspaceCommandHandler):
             reset=reset,
             model=model,
         )
-        print(f"✔ Commissioned workspace for role '{role_name}' at: {desc.workspace_dir}")
+        print(
+            f"✔ Commissioned workspace for role '{role_name}' at: {desc.workspace_dir}"
+        )
         return 0
 
     # Contract: Refreshes system files, bin tools, configs, and guides across role workspaces via WorkspaceSynchronizer.
@@ -711,6 +1124,8 @@ class WorkspaceCommandHandler(commands.WorkspaceCommandHandler):
                     )
         print(f"Refreshed system files across {count} role workspace(s).")
         return 0
+
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-30T11:00:00Z
 # LAST_CHANGED: 2026-11-03T20:40:00Z

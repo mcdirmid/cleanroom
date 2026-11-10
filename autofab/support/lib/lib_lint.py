@@ -51,7 +51,6 @@ from build_lint_common import (
     check_no_relative_parent_imports,
     check_syntax,
     extract_asm_constituents,
-
     check_type_ignore,
     check_undeclared_imports,
     ensure_load,
@@ -123,9 +122,21 @@ def generate_asm_content(
                     Path(parts_dir).glob(f"*/low/{dep}.pyi")
                 ):
                     domain = p.parent.parent.name
-                    resolved_scope = scope_name or (Path(parts_dir).parent.name if Path(parts_dir).name == "parts" else Path(parts_dir).name)
-                    import_pfx = f"{resolved_scope}.parts.{domain}.lib" if resolved_scope else f".{dep}"
-                    lines.append(f"from {import_pfx} import {dep}" if resolved_scope else f"from . import {dep}")
+                    resolved_scope = scope_name or (
+                        Path(parts_dir).parent.name
+                        if Path(parts_dir).name == "parts"
+                        else Path(parts_dir).name
+                    )
+                    import_pfx = (
+                        f"{resolved_scope}.parts.{domain}.lib"
+                        if resolved_scope
+                        else f".{dep}"
+                    )
+                    lines.append(
+                        f"from {import_pfx} import {dep}"
+                        if resolved_scope
+                        else f"from . import {dep}"
+                    )
                     found = True
                     break
             if not found:
@@ -172,7 +183,10 @@ def is_uninitialized_module(content: str) -> bool:
             if isinstance(n, ast.Assign):
                 for t in n.targets:
                     if isinstance(t, ast.Name) and t.id == "CONSTITUENTS":
-                        if isinstance(n.value, (ast.Tuple, ast.List)) and not n.value.elts:
+                        if (
+                            isinstance(n.value, (ast.Tuple, ast.List))
+                            and not n.value.elts
+                        ):
                             return True
         if not classes and not funcs and not variables:
             return True
@@ -243,8 +257,15 @@ def generate_lib_skeleton(
         for node in tree.body:
             if isinstance(node, ast.ClassDef):
                 for d in node.decorator_list:
-                    if isinstance(d, ast.Call) and getattr(d.func, "id", None) == "singleton_type":
-                        if d.args and isinstance(d.args[0], ast.Constant) and isinstance(d.args[0].value, str):
+                    if (
+                        isinstance(d, ast.Call)
+                        and getattr(d.func, "id", None) == "singleton_type"
+                    ):
+                        if (
+                            d.args
+                            and isinstance(d.args[0], ast.Constant)
+                            and isinstance(d.args[0].value, str)
+                        ):
                             t_val = d.args[0].value
                             if t_val != "system":
                                 tier_names.add(t_val)
@@ -268,7 +289,9 @@ def generate_lib_skeleton(
         if "system" in pyi_content:
             lifecycle_imports.add("system")
         if lifecycle_imports:
-            lines.append(f"from support.lib.lifecycle import {', '.join(sorted(lifecycle_imports))}")
+            lines.append(
+                f"from support.lib.lifecycle import {', '.join(sorted(lifecycle_imports))}"
+            )
 
     abs_pyi = os.path.abspath(pyi_path)
     parts_split = abs_pyi.split(os.sep)
@@ -310,11 +333,27 @@ def generate_lib_skeleton(
         for t_name in sorted(tier_names):
             resolved_domain = part_mod_map.get(t_name, "")
             if resolved_domain:
-                import_pfx = f"{base_pkg}.parts.{resolved_domain}.lib.{t_name}" if base_pkg else f".{t_name}"
-                lines.append(f"from {import_pfx} import {t_name}" if base_pkg else f"from . import {t_name}")
+                import_pfx = (
+                    f"{base_pkg}.parts.{resolved_domain}.lib.{t_name}"
+                    if base_pkg
+                    else f".{t_name}"
+                )
+                lines.append(
+                    f"from {import_pfx} import {t_name}"
+                    if base_pkg
+                    else f"from . import {t_name}"
+                )
             else:
-                import_pfx = f"{base_pkg}.parts.{t_name}.lib.{t_name}" if base_pkg else f".{t_name}"
-                lines.append(f"from {import_pfx} import {t_name}" if base_pkg else f"from . import {t_name}")
+                import_pfx = (
+                    f"{base_pkg}.parts.{t_name}.lib.{t_name}"
+                    if base_pkg
+                    else f".{t_name}"
+                )
+                lines.append(
+                    f"from {import_pfx} import {t_name}"
+                    if base_pkg
+                    else f"from . import {t_name}"
+                )
 
     dep_imports: list[str] = []
     for node in tree.body:
@@ -333,7 +372,10 @@ def generate_lib_skeleton(
                     mod = mod.replace(".grounding.", ".lib.")
                 elif mod.endswith(".grounding"):
                     mod = mod[:-10] + ".lib"
-                elif mod not in ("pretense", "hypothesis", "unittest") and mod in part_mod_map:
+                elif (
+                    mod not in ("pretense", "hypothesis", "unittest")
+                    and mod in part_mod_map
+                ):
                     target_p = part_mod_map[mod]
                     if target_p == current_part:
                         dep_imports.append(f"from . import {mod}")
@@ -388,7 +430,10 @@ def generate_lib_skeleton(
                     for a in filtered_names
                 )
                 dep_imports.append(f"from {lib_pkg} import {names_str}")
-            elif mod not in ("pretense", "hypothesis", "unittest") and mod in part_mod_map:
+            elif (
+                mod not in ("pretense", "hypothesis", "unittest")
+                and mod in part_mod_map
+            ):
                 target_p = part_mod_map[mod]
                 names_str = ", ".join(
                     f"{a.name} as {a.asname}" if a.asname else a.name
@@ -397,7 +442,11 @@ def generate_lib_skeleton(
                 if target_p == current_part:
                     dep_imports.append(f"from .{mod} import {names_str}")
                 else:
-                    prefix = f"from {base_pkg}.parts.{target_p}.lib.{mod}" if base_pkg else f"from .{target_p}.lib.{mod}"
+                    prefix = (
+                        f"from {base_pkg}.parts.{target_p}.lib.{mod}"
+                        if base_pkg
+                        else f"from .{target_p}.lib.{mod}"
+                    )
                     dep_imports.append(f"{prefix} import {names_str}")
             else:
                 names_str = ", ".join(
@@ -448,7 +497,11 @@ def generate_lib_skeleton(
                     if fn_name == "dataclass":
                         has_explicit_dataclass = True
                         for kw in dec.keywords:
-                            if kw.arg == "init" and isinstance(kw.value, ast.Constant) and kw.value.value is False:
+                            if (
+                                kw.arg == "init"
+                                and isinstance(kw.value, ast.Constant)
+                                and kw.value.value is False
+                            ):
                                 has_init_false = True
                     elif fn_name == "singleton_type" and dec.args:
                         arg0 = dec.args[0]
@@ -475,7 +528,14 @@ def generate_lib_skeleton(
                 reg_bases = [
                     b
                     for b in base_strs
-                    if not b.startswith(("Singleton", "lifecycle.Singleton", "InTier", "lifecycle.InTier"))
+                    if not b.startswith(
+                        (
+                            "Singleton",
+                            "lifecycle.Singleton",
+                            "InTier",
+                            "lifecycle.InTier",
+                        )
+                    )
                     and b not in ("object", "Protocol")
                 ]
                 singleton_classes.append(
@@ -516,7 +576,9 @@ def generate_lib_skeleton(
                                         else "Any"
                                     )
                                     if i >= defaults_offset:
-                                        def_node = item.args.defaults[i - defaults_offset]
+                                        def_node = item.args.defaults[
+                                            i - defaults_offset
+                                        ]
                                         def_str = ast.unparse(def_node)
                                         fields.append(f"{arg.arg}: {ann} = {def_str}")
                                     else:
@@ -565,14 +627,18 @@ def generate_lib_skeleton(
                             if item.name in ("actual_type", "wire_type"):
                                 lines.append("        return list")
                             elif item.name == "convert":
-                                lines.append("        return [self.item_type.convert(v) for v in wire_value]")
+                                lines.append(
+                                    "        return [self.item_type.convert(v) for v in wire_value]"
+                                )
                             else:
                                 lines.append("        raise NotImplementedError")
                         elif cls_name == "MappingParameterType":
                             if item.name in ("actual_type", "wire_type"):
                                 lines.append("        return dict")
                             elif item.name == "convert":
-                                lines.append("        return {self.key_type.convert(k): self.value_type.convert(v) for k, v in wire_value.items()}")
+                                lines.append(
+                                    "        return {self.key_type.convert(k): self.value_type.convert(v) for k, v in wire_value.items()}"
+                                )
                             else:
                                 lines.append("        raise NotImplementedError")
                         elif item.name == "__init__":
@@ -835,7 +901,6 @@ def main() -> int:
             return 1
 
     if args.build_path is None:
-
         sibling_stems = (
             {
                 f[:-3]
@@ -1113,7 +1178,9 @@ def main() -> int:
                         curr_b = os.path.abspath(build_dir)
                         while curr_b and curr_b != os.path.dirname(curr_b):
                             if os.path.basename(curr_b) == "parts":
-                                for cand in Path(curr_b).glob(f"*/grounding/{ext_spec_name}"):
+                                for cand in Path(curr_b).glob(
+                                    f"*/grounding/{ext_spec_name}"
+                                ):
                                     pyi_paths.append(str(cand))
                                     break
                                 for cand in Path(curr_b).glob(f"*/low/{ext_spec_name}"):
@@ -1183,9 +1250,7 @@ def main() -> int:
                     return 1
 
     structure_errors = check_lib_structure(args.module_path)
-    asm_errors = check_asm_structure(
-        args.module_path, spec_file=args.pyi or spec_file
-    )
+    asm_errors = check_asm_structure(args.module_path, spec_file=args.pyi or spec_file)
     import_errors = check_sibling_imports(package, args.module_path)
     cross_part_errors = check_cross_part_imports(package, args.module_path)
     impl_errors = check_impl_imports(args.module_path)

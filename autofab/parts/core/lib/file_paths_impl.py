@@ -1,7 +1,12 @@
 from __future__ import annotations
 import os
 from typing import Optional
-from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, system
+from support.lib.lifecycle import (
+    LifecycleRegistry,
+    Singleton,
+    get_default_registry,
+    system,
+)
 from . import file_paths
 
 # Requirements specified in file_paths_impl.pyi
@@ -22,7 +27,9 @@ class FilePathManager(file_paths.FilePathManager):
         # Contract: MUST encapsulate the supplied path string in the produced host path.
         return file_paths.HostPath(path=file_paths.PathString(path))
 
-    def create_absolute_path(self, path: file_paths.PathString) -> file_paths.AbsolutePath:
+    def create_absolute_path(
+        self, path: file_paths.PathString
+    ) -> file_paths.AbsolutePath:
         # Contract: WHEN the supplied path string is not absolute, MUST raise PathValidationError("Path is not absolute: {path}").
         if not os.path.isabs(path):
             raise file_paths.PathValidationError(
@@ -65,6 +72,8 @@ class FilePathManager(file_paths.FilePathManager):
         return file_paths.AbsolutePath(
             path=file_paths.PathString(os.path.normpath(combined))
         )
+
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-11T04:58:26Z

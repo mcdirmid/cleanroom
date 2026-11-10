@@ -162,9 +162,7 @@ class TestUvNodeConfigImpl(unittest.TestCase):
         self.registry.register_instance(
             self.agent_config, keys=[AgentConfig], tier="system"
         )
-        self.registry.register_instance(
-            self.storage, keys=[DagStorage], tier="system"
-        )
+        self.registry.register_instance(self.storage, keys=[DagStorage], tier="system")
         self.registry.register_instance(
             self.manifest_loader, keys=[UvManifestLoader], tier="system"
         )
@@ -319,8 +317,9 @@ class TestUvNodeConfigImpl(unittest.TestCase):
     def test_command_verification_check_pythonpath(self) -> None:
         """CUJ: Verification check subprocess includes dynamic PYTHONPATH."""
         from autofab.parts.uv.lib.node_config_impl import CommandVerificationCheck
+
         check = CommandVerificationCheck(
-            command='python3 -c "import os; print(os.environ.get(\'PYTHONPATH\', \'\'))"',
+            command="python3 -c \"import os; print(os.environ.get('PYTHONPATH', ''))\"",
             cwd=tempfile.gettempdir(),
         )
         passed, diag = check.verify()

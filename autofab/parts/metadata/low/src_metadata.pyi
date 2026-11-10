@@ -249,10 +249,10 @@ class SourceMetadataCoordinator(Singleton[SystemTier], Protocol):
         explanation: str,
         sender: str = "user",
     ) -> None:
-        """Appends unacted feedback item to file metadata block and advances LAST_CLEANED.
+        """Appends unacted feedback item with sender role attribution to file metadata block and advances LAST_CLEANED.
 
         POSTCONDITIONS:
-        - MUST append formatted feedback entry and advance last cleaned timestamp to now.
+        - MUST append formatted feedback entry (attributed with [from:<sender>] when sender is non-user) and advance last cleaned timestamp to now.
         """
         ...
 

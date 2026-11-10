@@ -9,6 +9,7 @@ import sys
 import tempfile
 import unittest
 
+
 def find_repo_root() -> str:
     ws = os.environ.get("BUILD_WORKSPACE_DIRECTORY")
     if ws and os.path.isdir(os.path.join(ws, "autofab_py")):
@@ -36,8 +37,11 @@ from autofab_py.support.lib.pretense_lint import (
     check_lifted_expr_usage,
     check_multi_interface_inheritance,
     check_multi_transition_disambiguation,
+    check_no_assert_raises,
     check_no_call_target_in_interface,
+    check_no_direct_real_access,
     check_no_pre_seeding,
+    check_no_raises_for_errors,
     check_no_raises_in_test_cases,
     check_no_relative_parent_imports,
     check_no_scaffold_placeholders,
@@ -139,7 +143,10 @@ class PretenseLintTest(unittest.TestCase):
             self.assertEqual(len(check_pretense_imports(scaffold)), 0)
 
             # Both services must be imported, error class excluded from transitions
-            self.assertIn("from pipeline_pkg.pipeline_engine_impl import ServiceAlpha, ServiceBeta, __initialize__", scaffold)
+            self.assertIn(
+                "from pipeline_pkg.pipeline_engine_impl import ServiceAlpha, ServiceBeta, __initialize__",
+                scaffold,
+            )
             self.assertNotIn("@proto.transition(ServiceError", scaffold)
 
             # Transitions for both services
@@ -161,7 +168,11 @@ class PretenseLintTest(unittest.TestCase):
     def test_uninitialized_module_detection(self) -> None:
         self.assertTrue(is_uninitialized_pretense_module(""))
         self.assertTrue(is_uninitialized_pretense_module("# empty comment\n"))
-        self.assertTrue(is_uninitialized_pretense_module("from __future__ import annotations\n<TargetClass>"))
+        self.assertTrue(
+            is_uninitialized_pretense_module(
+                "from __future__ import annotations\n<TargetClass>"
+            )
+        )
         # Valid module
         valid_code = (
             "from dataclasses import dataclass\n"
@@ -173,7 +184,6 @@ class PretenseLintTest(unittest.TestCase):
             "    pass\n"
         )
         self.assertFalse(is_uninitialized_pretense_module(valid_code))
-
 
     def test_residual_notbound_sentinel_detected(self) -> None:
         import io
@@ -196,12 +206,17 @@ class PretenseLintTest(unittest.TestCase):
             "    def test_stub(self) -> None:\n"
             "        self.assertNotEqual('dummy', NotBound)\n"
         )
-        with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=".py", delete=False, encoding="utf-8"
+        ) as f:
             f.write(code)
             bad_path = f.name
         try:
             stderr_capture = io.StringIO()
-            with patch("sys.argv", ["pretense_lint", bad_path]), patch("sys.stderr", stderr_capture):
+            with (
+                patch("sys.argv", ["pretense_lint", bad_path]),
+                patch("sys.stderr", stderr_capture),
+            ):
                 exit_code = main()
                 self.assertEqual(exit_code, 1)
                 output = stderr_capture.getvalue()
@@ -240,17 +255,24 @@ class PretenseLintTest(unittest.TestCase):
             "class TestSvcUnit(unittest.TestCase):\n"
             "    pass\n"
         )
-        with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=".py", delete=False, encoding="utf-8"
+        ) as f:
             f.write(code)
             bad_path = f.name
         try:
             stderr_capture = io.StringIO()
-            with patch("sys.argv", ["pretense_lint", bad_path]), patch("sys.stderr", stderr_capture):
+            with (
+                patch("sys.argv", ["pretense_lint", bad_path]),
+                patch("sys.stderr", stderr_capture),
+            ):
                 exit_code = main()
                 self.assertEqual(exit_code, 1)
                 output = stderr_capture.getvalue()
                 self.assertIn("Multiple transitions for 'SvcProto.compute'", output)
-                self.assertIn("undifferentiated preconditions and argument recognizers", output)
+                self.assertIn(
+                    "undifferentiated preconditions and argument recognizers", output
+                )
         finally:
             if os.path.exists(bad_path):
                 os.remove(bad_path)
@@ -282,12 +304,17 @@ class PretenseLintTest(unittest.TestCase):
             "class TestSvcUnit(unittest.TestCase):\n"
             "    pass\n"
         )
-        with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=".py", delete=False, encoding="utf-8"
+        ) as f:
             f.write(code)
             good_path = f.name
         try:
             stderr_capture = io.StringIO()
-            with patch("sys.argv", ["pretense_lint", good_path]), patch("sys.stderr", stderr_capture):
+            with (
+                patch("sys.argv", ["pretense_lint", good_path]),
+                patch("sys.stderr", stderr_capture),
+            ):
                 exit_code = main()
                 self.assertEqual(exit_code, 1)
                 output = stderr_capture.getvalue()
@@ -322,12 +349,17 @@ class PretenseLintTest(unittest.TestCase):
             "class TestMyUnit(unittest.TestCase):\n"
             "    pass\n"
         )
-        with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=".py", delete=False, encoding="utf-8"
+        ) as f:
             f.write(code)
             bad_path = f.name
         try:
             stderr_capture = io.StringIO()
-            with patch("sys.argv", ["pretense_lint", bad_path]), patch("sys.stderr", stderr_capture):
+            with (
+                patch("sys.argv", ["pretense_lint", bad_path]),
+                patch("sys.stderr", stderr_capture),
+            ):
                 exit_code = main()
                 self.assertEqual(exit_code, 1)
                 output = stderr_capture.getvalue()
@@ -363,12 +395,17 @@ class PretenseLintTest(unittest.TestCase):
             "class TestMyUnit(unittest.TestCase):\n"
             "    pass\n"
         )
-        with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=".py", delete=False, encoding="utf-8"
+        ) as f:
             f.write(code)
             bad_path = f.name
         try:
             stderr_capture = io.StringIO()
-            with patch("sys.argv", ["pretense_lint", bad_path]), patch("sys.stderr", stderr_capture):
+            with (
+                patch("sys.argv", ["pretense_lint", bad_path]),
+                patch("sys.stderr", stderr_capture),
+            ):
                 exit_code = main()
                 self.assertEqual(exit_code, 1)
                 output = stderr_capture.getvalue()
@@ -400,12 +437,17 @@ class PretenseLintTest(unittest.TestCase):
             "class TestMyUnit(unittest.TestCase):\n"
             "    pass\n"
         )
-        with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=".py", delete=False, encoding="utf-8"
+        ) as f:
             f.write(code)
             bad_path = f.name
         try:
             stderr_capture = io.StringIO()
-            with patch("sys.argv", ["pretense_lint", bad_path]), patch("sys.stderr", stderr_capture):
+            with (
+                patch("sys.argv", ["pretense_lint", bad_path]),
+                patch("sys.stderr", stderr_capture),
+            ):
                 exit_code = main()
                 self.assertEqual(exit_code, 1)
                 output = stderr_capture.getvalue()
@@ -500,8 +542,15 @@ class PretenseLintTest(unittest.TestCase):
         bad_tree = ast.parse(bad_code)
         errs = check_lifted_expr_usage(bad_tree, "reg_pretense.py")
         self.assertEqual(len(errs), 2)
-        self.assertTrue(any("calls 'k.value()' outside 'if ctx.updates:', 'if ctx.target:'" in e for e in errs))
-        self.assertTrue(any("mutates 'self.state' outside 'if ctx.updates:'" in e for e in errs))
+        self.assertTrue(
+            any(
+                "calls 'k.value()' outside 'if ctx.updates:', 'if ctx.target:'" in e
+                for e in errs
+            )
+        )
+        self.assertTrue(
+            any("mutates 'self.state' outside 'if ctx.updates:'" in e for e in errs)
+        )
 
         good_code = (
             "from dataclasses import dataclass\n"
@@ -524,7 +573,9 @@ class PretenseLintTest(unittest.TestCase):
         good_tree = ast.parse(good_code)
         self.assertEqual(check_lifted_expr_usage(good_tree, "reg_pretense.py"), [])
 
-    def test_lifted_multi_transition_disambiguation_and_interface_impl_structure(self) -> None:
+    def test_lifted_multi_transition_disambiguation_and_interface_impl_structure(
+        self,
+    ) -> None:
         iface_code = (
             "from dataclasses import dataclass\n"
             "from pretense import Domain, StateMachine, transition, make_return_value\n"
@@ -541,8 +592,16 @@ class PretenseLintTest(unittest.TestCase):
         )
         iface_tree = ast.parse(iface_code)
         self.assertFalse(is_uninitialized_pretense_module(iface_code))
-        self.assertEqual(check_pretense_structure(iface_tree, "parts/reg/pretense/reg_pretense.py"), [])
-        self.assertEqual(check_multi_transition_disambiguation(iface_tree, "parts/reg/pretense/reg_pretense.py"), [])
+        self.assertEqual(
+            check_pretense_structure(iface_tree, "parts/reg/pretense/reg_pretense.py"),
+            [],
+        )
+        self.assertEqual(
+            check_multi_transition_disambiguation(
+                iface_tree, "parts/reg/pretense/reg_pretense.py"
+            ),
+            [],
+        )
 
         impl_code = (
             "import unittest\n"
@@ -554,7 +613,12 @@ class PretenseLintTest(unittest.TestCase):
         )
         impl_tree = ast.parse(impl_code)
         self.assertFalse(is_uninitialized_pretense_module(impl_code))
-        self.assertEqual(check_pretense_structure(impl_tree, "parts/reg_impl/pretense/reg_impl_pretense.py"), [])
+        self.assertEqual(
+            check_pretense_structure(
+                impl_tree, "parts/reg_impl/pretense/reg_impl_pretense.py"
+            ),
+            [],
+        )
 
     def test_disallowed_relative_parent_imports(self) -> None:
         bad_code = (
@@ -562,7 +626,9 @@ class PretenseLintTest(unittest.TestCase):
             "from ..lib.ring_buffer import RingBuffer, BufferEmptyError\n"
         )
         bad_tree = ast.parse(bad_code)
-        errs = check_no_relative_parent_imports("parts/ring_buffer/pretense/ring_buffer_pretense.py", bad_tree)
+        errs = check_no_relative_parent_imports(
+            "parts/ring_buffer/pretense/ring_buffer_pretense.py", bad_tree
+        )
         self.assertEqual(len(errs), 1)
         self.assertIn("prohibited relative parent import '..lib.ring_buffer'", errs[0])
 
@@ -572,11 +638,14 @@ class PretenseLintTest(unittest.TestCase):
             "from my_pkg.parts.ring_buffer.lib.ring_buffer import RingBuffer, BufferEmptyError\n"
         )
         good_tree = ast.parse(good_code)
-        good_errs = check_no_relative_parent_imports("parts/ring_buffer/pretense/ring_buffer_pretense.py", good_tree)
+        good_errs = check_no_relative_parent_imports(
+            "parts/ring_buffer/pretense/ring_buffer_pretense.py", good_tree
+        )
         self.assertEqual(good_errs, [])
 
     def test_type_ignore_rejected_in_pretense_lint(self) -> None:
         import subprocess
+
         with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False) as f:
             f.write(
                 "import unittest\n"
@@ -588,8 +657,12 @@ class PretenseLintTest(unittest.TestCase):
             )
             f_path = f.name
         try:
-            lint_mod = os.path.join(REPO_ROOT, "autofab_py", "support", "lib", "pretense_lint.py")
-            res = subprocess.run([sys.executable, lint_mod, f_path], capture_output=True, text=True)
+            lint_mod = os.path.join(
+                REPO_ROOT, "autofab_py", "support", "lib", "pretense_lint.py"
+            )
+            res = subprocess.run(
+                [sys.executable, lint_mod, f_path], capture_output=True, text=True
+            )
             self.assertNotEqual(res.returncode, 0)
             self.assertIn("'# type: ignore' is prohibited", res.stderr)
         finally:
@@ -598,6 +671,7 @@ class PretenseLintTest(unittest.TestCase):
 
     def test_bare_lib_import_rejected(self) -> None:
         import subprocess
+
         with tempfile.TemporaryDirectory() as td:
             parts_dir = os.path.join(td, "parts", "foo")
             lib_dir = os.path.join(parts_dir, "lib")
@@ -620,9 +694,17 @@ class PretenseLintTest(unittest.TestCase):
                     "        self.assertIsNotNone(Foo)\n"
                     "FooFuzzTest = compile_hypothesis_test_case(proto=None, sut_factory=lambda: None, initial_state_factory=lambda: None)\n"
                 )
-            lint_mod = os.path.join(REPO_ROOT, "autofab_py", "support", "lib", "pretense_lint.py")
+            lint_mod = os.path.join(
+                REPO_ROOT, "autofab_py", "support", "lib", "pretense_lint.py"
+            )
             res = subprocess.run(
-                [sys.executable, lint_mod, pret_path, "--lib-pkg", os.path.join(parts_dir, "lib")],
+                [
+                    sys.executable,
+                    lint_mod,
+                    pret_path,
+                    "--lib-pkg",
+                    os.path.join(parts_dir, "lib"),
+                ],
                 capture_output=True,
                 text=True,
                 cwd=td,
@@ -642,7 +724,9 @@ class PretenseLintTest(unittest.TestCase):
         tree = ast.parse(code)
         errs = check_lifted_expr_usage(tree, "dummy.py")
         self.assertTrue(len(errs) > 0)
-        self.assertTrue(any("references 'capacity.value' as an attribute" in e for e in errs))
+        self.assertTrue(
+            any("references 'capacity.value' as an attribute" in e for e in errs)
+        )
 
     def test_protocol_property_transition_rejected(self) -> None:
         code = (
@@ -655,12 +739,19 @@ class PretenseLintTest(unittest.TestCase):
         tree = ast.parse(code)
         pyi_elem = {
             "classes": [
-                {"name": "MyProto", "is_protocol": True, "properties": ["capacity"], "methods": []}
+                {
+                    "name": "MyProto",
+                    "is_protocol": True,
+                    "properties": ["capacity"],
+                    "methods": [],
+                }
             ]
         }
         errs = check_transition_protocol_properties(tree, "dummy.py", pyi_elem)
         self.assertEqual(len(errs), 1)
-        self.assertIn("accesses property 'capacity' on Protocol class 'MyProto'", errs[0])
+        self.assertIn(
+            "accesses property 'capacity' on Protocol class 'MyProto'", errs[0]
+        )
         self.assertIn("Use '@transition(name=\"capacity\")' instead", errs[0])
 
     def test_self_target_in_transition_rejected(self) -> None:
@@ -684,7 +775,9 @@ class PretenseLintTest(unittest.TestCase):
             "        ret.constrain(lambda: self.state.items.popitem(last=False))\n"
         )
         errors = check_lifted_expr_usage(tree, "dummy_pretense.py")
-        self.assertTrue(any("mutates 'self.state' outside 'if ctx.updates:'" in e for e in errors))
+        self.assertTrue(
+            any("mutates 'self.state' outside 'if ctx.updates:'" in e for e in errors)
+        )
 
     def test_pretense_next_linear_transition_lint(self) -> None:
         valid_code = (
@@ -760,7 +853,9 @@ class PretenseLintTest(unittest.TestCase):
         tree = ast.parse(bad_impl_req_arg)
         fn_node_bad_impl = tree.body[0]
         assert isinstance(fn_node_bad_impl, (ast.FunctionDef, ast.AsyncFunctionDef))
-        errs = check_pretense_next_transition(fn_node_bad_impl, "test_impl_pretense.py", is_impl=True)
+        errs = check_pretense_next_transition(
+            fn_node_bad_impl, "test_impl_pretense.py", is_impl=True
+        )
         self.assertTrue(any("PN_IMPL_NO_REQUIRE_ARG" in e for e in errs))
 
         # PN_IMPL_CALL_TARGET_ARG_REQUIRED: zero-argument call_target() rejected
@@ -772,7 +867,9 @@ class PretenseLintTest(unittest.TestCase):
         tree = ast.parse(bad_impl_zero_arg)
         fn_node_zero_arg = tree.body[0]
         assert isinstance(fn_node_zero_arg, (ast.FunctionDef, ast.AsyncFunctionDef))
-        errs = check_pretense_next_transition(fn_node_zero_arg, "test_impl_pretense.py", is_impl=True)
+        errs = check_pretense_next_transition(
+            fn_node_zero_arg, "test_impl_pretense.py", is_impl=True
+        )
         self.assertTrue(any("PN_IMPL_CALL_TARGET_ARG_REQUIRED" in e for e in errs))
 
         # PN_SUT_ARG_REQUIRED: zero-argument sut() rejected
@@ -785,17 +882,27 @@ class PretenseLintTest(unittest.TestCase):
         tree = ast.parse(bad_sut_zero_arg)
         fn_node_sut_zero_arg = tree.body[0]
         assert isinstance(fn_node_sut_zero_arg, (ast.FunctionDef, ast.AsyncFunctionDef))
-        errs = check_pretense_next_transition(fn_node_sut_zero_arg, "test_impl_pretense.py", is_impl=True)
+        errs = check_pretense_next_transition(
+            fn_node_sut_zero_arg, "test_impl_pretense.py", is_impl=True
+        )
         self.assertTrue(any("PN_SUT_ARG_REQUIRED" in e for e in errs))
 
         # PN_IMPL_NO_REQUIRE_ARG_IMPORT: importing require_arg in impl pretense rejected
-        bad_impl_import = "from pretense import StateMachine, call_target, require_arg\n"
-        errs = check_pretense_imports(bad_impl_import, is_impl=True, file_path="test_impl_pretense.py")
+        bad_impl_import = (
+            "from pretense import StateMachine, call_target, require_arg\n"
+        )
+        errs = check_pretense_imports(
+            bad_impl_import, is_impl=True, file_path="test_impl_pretense.py"
+        )
         self.assertTrue(any("PN_IMPL_NO_REQUIRE_ARG_IMPORT" in e for e in errs))
 
         # Interface SM imports and require_arg are valid
-        valid_iface_import = "from pretense import StateMachine, make_return_value, require_arg\n"
-        self.assertEqual(len(check_pretense_imports(valid_iface_import, is_impl=False)), 0)
+        valid_iface_import = (
+            "from pretense import StateMachine, make_return_value, require_arg\n"
+        )
+        self.assertEqual(
+            len(check_pretense_imports(valid_iface_import, is_impl=False)), 0
+        )
 
     def test_banned_skips_rejected(self) -> None:
         from autofab_py.support.lib.build_lint_common import check_banned_skips
@@ -807,34 +914,38 @@ class PretenseLintTest(unittest.TestCase):
             "    def test_foo(self) -> None:\n"
             "        pass\n"
         )
-        errs = check_banned_skips("dummy_test.py", tree=ast.parse(code_skip_unless), error_code="PRE_LINT_NO_SKIP")
+        errs = check_banned_skips(
+            "dummy_test.py",
+            tree=ast.parse(code_skip_unless),
+            error_code="PRE_LINT_NO_SKIP",
+        )
         self.assertEqual(len(errs), 1)
         self.assertIn("PRE_LINT_NO_SKIP", errs[0])
         self.assertIn("unittest.skipUnless", errs[0])
 
-        code_setattr = (
-            "setattr(MyTest, '__unittest_skip__', True)\n"
+        code_setattr = "setattr(MyTest, '__unittest_skip__', True)\n"
+        errs = check_banned_skips(
+            "dummy_test.py", tree=ast.parse(code_setattr), error_code="PRE_LINT_NO_SKIP"
         )
-        errs = check_banned_skips("dummy_test.py", tree=ast.parse(code_setattr), error_code="PRE_LINT_NO_SKIP")
         self.assertEqual(len(errs), 1)
         self.assertIn("PRE_LINT_NO_SKIP", errs[0])
         self.assertIn("__unittest_skip__", errs[0])
 
-        code_skip_call = (
-            "def test_bar():\n"
-            "    pytest.skip('not implemented')\n"
+        code_skip_call = "def test_bar():\n    pytest.skip('not implemented')\n"
+        errs = check_banned_skips(
+            "dummy_test.py",
+            tree=ast.parse(code_skip_call),
+            error_code="PRE_LINT_NO_SKIP",
         )
-        errs = check_banned_skips("dummy_test.py", tree=ast.parse(code_skip_call), error_code="PRE_LINT_NO_SKIP")
         self.assertEqual(len(errs), 1)
         self.assertIn("PRE_LINT_NO_SKIP", errs[0])
         self.assertIn("pytest.skip", errs[0])
 
     def test_impl_pseudo_state_machine_no_state_mutation(self) -> None:
         code_mutating = (
-            "from pretense import transition, call_target, sut\n"
+            "from pretense import call_target, sut\n"
             "class DummyImpl(DummyStateMachine):\n"
-            "    @transition(Target.push)\n"
-            "    def push(self, item: str) -> None:\n"
+            "    def inner_push(self, item: str) -> None:\n"
             "        target = sut(Target)\n"
             "        ret = call_target(target.push(item))\n"
             "        self.state.items.append(item)\n"
@@ -845,18 +956,86 @@ class PretenseLintTest(unittest.TestCase):
         self.assertTrue(any("PN_IMPL_NO_STATE_MUTATION" in e for e in errs))
 
         code_non_mutating = (
-            "from pretense import transition, call_target, sut\n"
+            "from pretense import call_target, sut\n"
             "class DummyImpl(DummyStateMachine):\n"
-            "    @transition(Target.push)\n"
-            "    def push(self, item: str) -> None:\n"
+            "    def inner_push(self, item: str) -> None:\n"
             "        target = sut(Target)\n"
             "        ret = call_target(target.push(item))\n"
             "        assert ret is None\n"
             "        return ret\n"
         )
         tree_clean = ast.parse(code_non_mutating)
-        errs_clean = check_lifted_expr_usage(tree_clean, "dummy_impl_pretense.py", is_impl=True)
+        errs_clean = check_lifted_expr_usage(
+            tree_clean, "dummy_impl_pretense.py", is_impl=True
+        )
         self.assertFalse(any("PN_IMPL_NO_STATE_MUTATION" in e for e in errs_clean))
+        self.assertEqual(len(errs_clean), 0)
+
+    def test_impl_pseudo_state_machine_no_outer_transition(self) -> None:
+        # 1. Prohibit @transition decorator in impl pseudo-SM
+        code_with_trans = (
+            "from pretense import transition, call_target, sut\n"
+            "class DummyImpl(DummyStateMachine):\n"
+            "    @transition(Target.push)\n"
+            "    def push(self, item: str) -> None:\n"
+            "        target = sut(Target)\n"
+            "        ret = call_target(target.push(item))\n"
+            "        return ret\n"
+        )
+        errs_trans = check_lifted_expr_usage(
+            ast.parse(code_with_trans), "dummy_impl_pretense.py", is_impl=True
+        )
+        self.assertTrue(any("PN_IMPL_NO_OUTER_TRANSITION" in e for e in errs_trans))
+
+        # 2. Prohibit overriding outer transitions directly without @transition
+        code_override = (
+            "from pretense import call_target, sut\n"
+            "class DummyImpl(DummyStateMachine):\n"
+            "    def push(self, item: str) -> None:\n"
+            "        target = sut(Target)\n"
+            "        ret = call_target(target.push(item))\n"
+            "        return ret\n"
+        )
+        errs_override = check_lifted_expr_usage(
+            ast.parse(code_override), "dummy_impl_pretense.py", is_impl=True
+        )
+        self.assertTrue(any("PN_IMPL_NO_OUTER_TRANSITION" in e for e in errs_override))
+
+        # 3. Prohibit importing 'transition' in impl pretense module
+        code_import_trans = "from pretense import call_target, sut, transition\n"
+        import_errs = check_pretense_imports(
+            code_import_trans, is_impl=True, file_path="dummy_impl_pretense.py"
+        )
+        self.assertTrue(any("PN_IMPL_NO_TRANSITION_IMPORT" in e for e in import_errs))
+
+        # 4. Prohibit require() in inner transition
+        code_require = (
+            "from pretense import call_target, require, sut\n"
+            "class DummyImpl(DummyStateMachine):\n"
+            "    def inner_push(self, item: str) -> None:\n"
+            "        require(True)\n"
+            "        target = sut(Target)\n"
+            "        return call_target(target.push(item))\n"
+        )
+        errs_require = check_lifted_expr_usage(
+            ast.parse(code_require), "dummy_impl_pretense.py", is_impl=True
+        )
+        self.assertTrue(any("PN_IMPL_NO_REQUIRE" in e for e in errs_require))
+
+        # 5. Clean implementation pseudo-SM with inner_* passes cleanly
+        code_valid = (
+            "from pretense import call_target, sut\n"
+            "class DummyImpl(DummyStateMachine):\n"
+            "    def inner_push(self, item: str) -> None:\n"
+            "        target = sut(Target)\n"
+            "        ret = call_target(target.push(item))\n"
+            "        assert ret is None\n"
+            "        return ret\n"
+        )
+        errs_valid = check_lifted_expr_usage(
+            ast.parse(code_valid), "dummy_impl_pretense.py", is_impl=True
+        )
+        self.assertEqual(len(errs_valid), 0)
 
     def test_pre_seeding_with_state_args_rejected(self) -> None:
         code_bad = (
@@ -865,7 +1044,12 @@ class PretenseLintTest(unittest.TestCase):
             "    return get_singleton(Allocator)\n"
         )
         errs = check_no_pre_seeding(ast.parse(code_bad), "test.py")
-        self.assertTrue(any("PRE_LINT_NO_PRE_SEEDING" in e and "passing state arguments" in e for e in errs))
+        self.assertTrue(
+            any(
+                "PRE_LINT_NO_PRE_SEEDING" in e and "passing state arguments" in e
+                for e in errs
+            )
+        )
 
         code_good = (
             "def make_sut() -> Allocator:\n"
@@ -913,10 +1097,14 @@ class PretenseLintTest(unittest.TestCase):
             "        target = sut(StreamReader)\n"
             "        return call_target(target.read())\n"
         )
-        errs = check_no_call_target_in_interface(ast.parse(code_bad), "stream_reader_pretense.py", is_interface=True)
+        errs = check_no_call_target_in_interface(
+            ast.parse(code_bad), "stream_reader_pretense.py", is_interface=True
+        )
         self.assertTrue(any("PRE_LINT_NO_CALL_TARGET_IN_INTERFACE" in e for e in errs))
 
-        errs_impl = check_no_call_target_in_interface(ast.parse(code_bad), "stream_reader_impl_pretense.py", is_interface=False)
+        errs_impl = check_no_call_target_in_interface(
+            ast.parse(code_bad), "stream_reader_impl_pretense.py", is_interface=False
+        )
         self.assertEqual(len(errs_impl), 0)
 
     def test_interface_transition_coverage_missing_or_incomplete(self) -> None:
@@ -927,8 +1115,16 @@ class PretenseLintTest(unittest.TestCase):
             "    def deposit(self, amount: int) -> None:\n"
             "        pass\n"
         )
-        errs = check_interface_transition_coverage(ast.parse(code_missing_suite), "vault_pretense.py", is_interface=True)
-        self.assertTrue(any("PRE_LINT_INTERFACE_TRANSITION_COVERAGE" in e and "missing a fixed test suite" in e for e in errs))
+        errs = check_interface_transition_coverage(
+            ast.parse(code_missing_suite), "vault_pretense.py", is_interface=True
+        )
+        self.assertTrue(
+            any(
+                "PRE_LINT_INTERFACE_TRANSITION_COVERAGE" in e
+                and "missing a fixed test suite" in e
+                for e in errs
+            )
+        )
 
         code_incomplete = (
             "import unittest\n"
@@ -947,10 +1143,17 @@ class PretenseLintTest(unittest.TestCase):
             "    def test_only_deposit(self) -> None:\n"
             "        self.fake.deposit(10)\n"
         )
-        errs_inc = check_interface_transition_coverage(ast.parse(code_incomplete), "vault_pretense.py", is_interface=True)
+        errs_inc = check_interface_transition_coverage(
+            ast.parse(code_incomplete), "vault_pretense.py", is_interface=True
+        )
         self.assertTrue(any("transition 'withdraw'" in e for e in errs_inc))
         self.assertTrue(any("transition 'seed_active'" in e for e in errs_inc))
-        self.assertTrue(all("Advice: Ensure its required conditions can be properly reached" in e for e in errs_inc))
+        self.assertTrue(
+            all(
+                "Advice: Ensure its required conditions can be properly reached" in e
+                for e in errs_inc
+            )
+        )
 
     def test_interface_transition_coverage_passing(self) -> None:
         code_complete = (
@@ -973,7 +1176,9 @@ class PretenseLintTest(unittest.TestCase):
             "        self.fake.withdraw(5)\n"
             "        _ = self.fake.total\n"
         )
-        errs = check_interface_transition_coverage(ast.parse(code_complete), "vault_pretense.py", is_interface=True)
+        errs = check_interface_transition_coverage(
+            ast.parse(code_complete), "vault_pretense.py", is_interface=True
+        )
         self.assertEqual(len(errs), 0)
 
     def test_interface_scaffold_generation(self) -> None:
@@ -1004,7 +1209,9 @@ class PretenseLintTest(unittest.TestCase):
             self.assertIn("self.fake.key_count", scaffold)
 
             # Interface transition coverage check must pass cleanly on scaffold
-            cov_errs = check_interface_transition_coverage(tree, "key_vault_pretense.py", is_interface=True)
+            cov_errs = check_interface_transition_coverage(
+                tree, "key_vault_pretense.py", is_interface=True
+            )
             self.assertEqual(cov_errs, [])
 
             # State poking check must not flag seed_initial in StateMachine
@@ -1024,10 +1231,18 @@ class PretenseLintTest(unittest.TestCase):
             "    pass\n"
         )
         tree = ast.parse(source)
-        errors = check_no_top_level_probes("test_pretense.py", tree=tree, error_code="PRE_LINT_NO_TOP_LEVEL_PROBE")
+        errors = check_no_top_level_probes(
+            "test_pretense.py", tree=tree, error_code="PRE_LINT_NO_TOP_LEVEL_PROBE"
+        )
         self.assertTrue(len(errors) >= 2)
         self.assertTrue(any("PRE_LINT_NO_TOP_LEVEL_PROBE" in e for e in errors))
-        self.assertTrue(any("You are not allowed to execute the test suite or run ad-hoc probes" in e for e in errors))
+        self.assertTrue(
+            any(
+                "You are not allowed to execute the test suite or run ad-hoc probes"
+                in e
+                for e in errors
+            )
+        )
 
     def test_multi_module_singleton_auto_registration(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -1057,15 +1272,23 @@ class PretenseLintTest(unittest.TestCase):
                 lib_pkg="my_pkg",
                 is_interface=False,
             )
-            self.assertIn("from my_pkg.task_queue_impl import __initialize__ as _tq_initialize", scaffold)
-            self.assertIn("from my_pkg.task_worker_impl import __initialize__ as _tw_initialize", scaffold)
+            self.assertIn(
+                "from my_pkg.task_queue_impl import __initialize__ as _tq_initialize",
+                scaffold,
+            )
+            self.assertIn(
+                "from my_pkg.task_worker_impl import __initialize__ as _tw_initialize",
+                scaffold,
+            )
             self.assertIn("_tq_initialize(self.registry)", scaffold)
             self.assertIn("_tw_initialize(self.registry)", scaffold)
             self.assertIn("_tq_initialize(registry)", scaffold)
             self.assertIn("_tw_initialize(registry)", scaffold)
             tree = ast.parse(scaffold)
             self.assertEqual(len(check_pretense_structure(tree)), 0)
-            self.assertEqual(len(check_pretense_imports(scaffold, pyi_path=tw_pyi, is_impl=True)), 0)
+            self.assertEqual(
+                len(check_pretense_imports(scaffold, pyi_path=tw_pyi, is_impl=True)), 0
+            )
 
     def test_try_except_in_scenario_rejected(self) -> None:
         import io
@@ -1093,12 +1316,17 @@ class PretenseLintTest(unittest.TestCase):
             "        except Exception:\n"
             "            pass\n"
         )
-        with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=".py", delete=False, encoding="utf-8"
+        ) as f:
             f.write(code)
             bad_path = f.name
         try:
             stderr_capture = io.StringIO()
-            with patch("sys.argv", ["pretense_lint", bad_path]), patch("sys.stderr", stderr_capture):
+            with (
+                patch("sys.argv", ["pretense_lint", bad_path]),
+                patch("sys.stderr", stderr_capture),
+            ):
                 exit_code = main()
                 self.assertEqual(exit_code, 1)
                 output = stderr_capture.getvalue()
@@ -1125,16 +1353,16 @@ class PretenseLintTest(unittest.TestCase):
         errs = check_no_raises_in_test_cases(bad_tree, "test_file.py")
         self.assertEqual(len(errs), 2)
         self.assertTrue(all("PRE_LINT_NO_RAISES_IN_TEST_CASE" in e for e in errs))
-        self.assertTrue(all("self.assertRaises" in e for e in errs))
+        self.assertTrue(all("strictly prohibited" in e for e in errs))
 
-        # self.assertRaises is allowed
+        # self.checked.violating is allowed
         good_code = (
             "import unittest\n\n"
             "class TestTargetImplReal(unittest.TestCase):\n"
-            "    def test_precondition_assert_raises(self) -> None:\n"
-            "        self.assertRaises(ValueError, self.checked.do_work)\n"
-            "    def test_precondition_with_assert_raises(self) -> None:\n"
-            "        with self.assertRaises(ValueError):\n"
+            "    def test_precondition_violating(self) -> None:\n"
+            "        self.checked.violating(ValueError).do_work()\n"
+            "    def test_precondition_with_violating(self) -> None:\n"
+            "        with self.checked.violating(ValueError):\n"
             "            self.checked.do_work()\n"
         )
         good_tree = ast.parse(good_code)
@@ -1147,12 +1375,110 @@ class PretenseLintTest(unittest.TestCase):
             "class TargetImplPseudoStateMachine(TargetStateMachine):\n"
             "    @transition(Target.method)\n"
             "    def method(self) -> None:\n"
-            "        with raises(RuntimeError):\n"
+            "        with raises(OperationalException):\n"
             "            ret = call_target(target.method())\n"
         )
         sm_tree = ast.parse(sm_code)
         sm_errs = check_no_raises_in_test_cases(sm_tree, "sm_file.py")
         self.assertEqual(len(sm_errs), 0)
+
+    def test_check_no_raises_for_errors(self) -> None:
+        """Verify check_no_raises_for_errors rejects raises(*Error) while permitting raises(*Exception)."""
+        bad_code = (
+            "from pretense import StateMachine, transition, raises, make_return_value\n\n"
+            "class MyStateMachine(StateMachine):\n"
+            "    @transition(Target.method1)\n"
+            "    def method1(self) -> None:\n"
+            "        with raises(NodeNotFoundError):\n"
+            "            make_return_value(None)\n"
+            "    @transition(Target.method2)\n"
+            "    def method2(self) -> None:\n"
+            "        with raises((KeyError, CycleError)):\n"
+            "            make_return_value(None)\n"
+        )
+        bad_tree = ast.parse(bad_code)
+        errs = check_no_raises_for_errors(bad_tree, "bad_sm.py")
+        self.assertEqual(len(errs), 3)
+        self.assertTrue(all("PRE_LINT_NO_RAISES_ERROR" in e for e in errs))
+        self.assertTrue(all("require_arg" in e and "require(" in e for e in errs))
+        self.assertTrue(all("DO NOT rename or redefine" in e for e in errs))
+
+        good_code = (
+            "from pretense import StateMachine, transition, raises, make_return_value\n\n"
+            "class MyStateMachine(StateMachine):\n"
+            "    @transition(Target.method1)\n"
+            "    def method1(self) -> None:\n"
+            "        with raises(VaultInactiveException):\n"
+            "            make_return_value(None)\n"
+        )
+        good_tree = ast.parse(good_code)
+        good_errs = check_no_raises_for_errors(good_tree, "good_sm.py")
+        self.assertEqual(len(good_errs), 0)
+
+    def test_no_assert_raises(self) -> None:
+        """Verifies check_no_assert_raises rejects assertRaises and assertRaisesRegex (PN_NO_ASSERT_RAISES)."""
+        bad_code = (
+            "import unittest\n\n"
+            "class TestTargetImplReal(unittest.TestCase):\n"
+            "    def test_precondition_assert_raises(self) -> None:\n"
+            "        self.assertRaises(ValueError, self.checked.do_work)\n"
+            "    def test_precondition_with_assert_raises(self) -> None:\n"
+            "        with self.assertRaises(ValueError):\n"
+            "            self.checked.do_work()\n"
+            "    def test_regex(self) -> None:\n"
+            "        with self.assertRaisesRegex(ValueError, 'msg'):\n"
+            "            self.checked.do_work()\n"
+        )
+        bad_tree = ast.parse(bad_code)
+        errs = check_no_assert_raises(bad_tree, "test_file.py")
+        self.assertEqual(len(errs), 3)
+        self.assertTrue(all("PN_NO_ASSERT_RAISES" in e for e in errs))
+
+        good_code = (
+            "import unittest\n\n"
+            "class TestTargetImplReal(unittest.TestCase):\n"
+            "    def test_precondition_violating(self) -> None:\n"
+            "        self.checked.violating(ValueError).do_work()\n"
+            "    def test_precondition_with_violating(self) -> None:\n"
+            "        with self.checked.violating(ValueError):\n"
+            "            self.checked.do_work()\n"
+        )
+        good_tree = ast.parse(good_code)
+        good_errs = check_no_assert_raises(good_tree, "good_file.py")
+        self.assertEqual(len(good_errs), 0)
+
+    def test_no_direct_real_access(self) -> None:
+        """Verifies check_no_direct_real_access rejects self.real in test methods (PN_NO_DIRECT_REAL_ACCESS)."""
+        bad_code = (
+            "import unittest\n\n"
+            "class TestTargetImplReal(unittest.TestCase):\n"
+            "    def setUp(self) -> None:\n"
+            "        self.real = MyTarget()\n"
+            "        self.checked = self.sm.as_checked(MyTarget, self.real)\n"
+            "    def test_direct_real_call(self) -> None:\n"
+            "        self.real.configure(0)\n"
+            "    def test_direct_real_attr(self) -> None:\n"
+            "        assert self.real.capacity == 100\n"
+        )
+        bad_tree = ast.parse(bad_code)
+        errs = check_no_direct_real_access(bad_tree, "test_file.py")
+        self.assertEqual(len(errs), 2)
+        self.assertTrue(all("PN_NO_DIRECT_REAL_ACCESS" in e for e in errs))
+
+        good_code = (
+            "import unittest\n\n"
+            "class TestTargetImplReal(unittest.TestCase):\n"
+            "    def setUp(self) -> None:\n"
+            "        self.real = MyTarget()\n"
+            "        self.checked = self.sm.as_checked(MyTarget, self.real)\n"
+            "    def test_via_checked(self) -> None:\n"
+            "        self.checked.configure(10)\n"
+            "        assert self.checked.capacity == 10\n"
+            "        self.checked.violating(ValueError).configure(0)\n"
+        )
+        good_tree = ast.parse(good_code)
+        good_errs = check_no_direct_real_access(good_tree, "good_file.py")
+        self.assertEqual(len(good_errs), 0)
 
 
 if __name__ == "__main__":

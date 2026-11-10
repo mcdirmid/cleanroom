@@ -37,10 +37,10 @@ class StreamWriter(Protocol):
             PayloadEmptyError: If payload is empty.
 
         PRECONDITIONS:
-        - WHEN len(payload) == 0, MUST raise PayloadEmptyError.
+        - [slug:stream_writer.write.empty_payload]: WHEN len(payload) == 0, MUST raise PayloadEmptyError.
 
         POSTCONDITIONS:
-        - WHEN len(payload) > 0, MUST buffer payload and increment written_count by 1.
+        - [slug:stream_writer.write.buffer_payload]: WHEN len(payload) > 0, MUST buffer payload and increment written_count by 1.
         """
         ...
 
@@ -49,8 +49,8 @@ class StreamWriter(Protocol):
         """Purges all buffered payloads and resets written count to zero.
 
         POSTCONDITIONS:
-        - MUST purge all buffered payloads.
-        - MUST reset written_count to 0.
+        - [slug:stream_writer.clear.purge_payloads]: MUST purge all buffered payloads.
+        - [slug:stream_writer.clear.reset_written_count]: MUST reset written_count to 0.
         """
         ...
 

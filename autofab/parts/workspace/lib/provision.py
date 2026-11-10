@@ -61,6 +61,7 @@ class WorkspaceProvisioner(Singleton[AgentSessionTier], Protocol):
         repo_root: Optional[str] = None,
     ) -> int: ...
 
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-06T22:55:00Z

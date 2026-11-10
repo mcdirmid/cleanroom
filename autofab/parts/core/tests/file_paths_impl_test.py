@@ -38,7 +38,9 @@ class FilePathsImplTest(unittest.TestCase):
         """Postcondition: MUST validate that the path is absolute and return an absolute path."""
         with enter_phase(system, registry=self.registry) as scope:
             manager = scope.get_singleton(FilePathManager)
-            abs_path = manager.create_absolute_path(_make_path_string("/var/log/app.log"))
+            abs_path = manager.create_absolute_path(
+                _make_path_string("/var/log/app.log")
+            )
             self.assertEqual(abs_path.path, "/var/log/app.log")
 
     def test_create_absolute_path_not_absolute_raises(self) -> None:
@@ -48,13 +50,17 @@ class FilePathsImplTest(unittest.TestCase):
             path_str = _make_path_string("relative/path")
             with self.assertRaises(file_paths.PathValidationError) as ctx:
                 manager.create_absolute_path(path_str)
-            self.assertEqual(ctx.exception.message, "Path is not absolute: relative/path")
+            self.assertEqual(
+                ctx.exception.message, "Path is not absolute: relative/path"
+            )
 
     def test_create_workspace_path_valid(self) -> None:
         """Postcondition: MUST validate that the path is relative and return a workspace path."""
         with enter_phase(system, registry=self.registry) as scope:
             manager = scope.get_singleton(FilePathManager)
-            ws_path = manager.create_workspace_path(_make_path_string("parts/core/file.py"))
+            ws_path = manager.create_workspace_path(
+                _make_path_string("parts/core/file.py")
+            )
             self.assertEqual(ws_path.path, "parts/core/file.py")
 
     def test_create_workspace_path_absolute_raises(self) -> None:

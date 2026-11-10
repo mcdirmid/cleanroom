@@ -59,9 +59,15 @@ from pretense.parts.pretense.lib.pretense import (
     unreachable,
 )
 
-from pretense.collection_utils import PretenseDict, PretenseSet, choose_weighted, make_tup
+from pretense.collection_utils import (
+    PretenseDict,
+    PretenseSet,
+    choose_weighted,
+    make_tup,
+)
 from pretense import collection_utils
 import sys
+
 sys.modules.setdefault("pretense.collections", collection_utils)
 from pretense.context import get_current_draw, with_draw
 from pretense.compiler import compile_hypothesis_test_case

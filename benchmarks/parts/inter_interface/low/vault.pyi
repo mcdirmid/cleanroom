@@ -48,11 +48,11 @@ class Vault(Protocol):
             VaultInactiveException: If the vault is inactive.
 
         PRECONDITIONS:
-        - WHEN amount is less than or equal to zero, MUST raise InsufficientFundsError.
+        - [slug:vault.deposit.invalid_amount]: WHEN amount is less than or equal to zero, MUST raise InsufficientFundsError.
 
         POSTCONDITIONS:
-        - WHEN is_active is False, MUST raise VaultInactiveException.
-        - WHEN is_active is True and amount is positive, MUST increment balance by amount.
+        - [slug:vault.deposit.inactive_vault]: WHEN is_active is False, MUST raise VaultInactiveException.
+        - [slug:vault.deposit.increment_balance]: WHEN is_active is True and amount is positive, MUST increment balance by amount.
         """
         ...
 
@@ -68,11 +68,11 @@ class Vault(Protocol):
             VaultInactiveException: If the vault is inactive.
 
         PRECONDITIONS:
-        - WHEN amount is less than or equal to zero or exceeds balance, MUST raise InsufficientFundsError.
+        - [slug:vault.withdraw.invalid_amount]: WHEN amount is less than or equal to zero or exceeds balance, MUST raise InsufficientFundsError.
 
         POSTCONDITIONS:
-        - WHEN is_active is False, MUST raise VaultInactiveException.
-        - WHEN is_active is True and amount is valid, MUST decrement balance by amount.
+        - [slug:vault.withdraw.inactive_vault]: WHEN is_active is False, MUST raise VaultInactiveException.
+        - [slug:vault.withdraw.decrement_balance]: WHEN is_active is True and amount is valid, MUST decrement balance by amount.
         """
         ...
 
@@ -85,7 +85,7 @@ class Vault(Protocol):
             active: Availability state to set.
 
         POSTCONDITIONS:
-        - MUST update is_active to active.
+        - [slug:vault.set_active.update_active_state]: MUST update is_active to active.
         """
         ...
 

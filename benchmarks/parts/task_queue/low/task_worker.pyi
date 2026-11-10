@@ -36,8 +36,8 @@ class TaskWorker(Protocol):
             WorkerExecutionException: If the task queue is unavailable or task fails.
 
         POSTCONDITIONS:
-        - WHEN execution fails or task queue is unavailable, MUST raise WorkerExecutionException.
-        - WHEN execution succeeds, MUST notify task queue of completion and return outcome string.
+        - [slug:task_worker.execute.failure_or_unavailable]: WHEN execution fails or task queue is unavailable, MUST raise WorkerExecutionException.
+        - [slug:task_worker.execute.success_notification]: WHEN execution succeeds, MUST notify task queue of completion and return outcome string.
         """
         ...
 
@@ -53,11 +53,11 @@ class TaskWorker(Protocol):
             WorkerExecutionException: If the collaborator task queue is unavailable.
 
         PRECONDITIONS:
-        - WHEN collaborator task queue has zero pending tasks, MUST raise WorkerError.
+        - [slug:task_worker.fetch_and_execute.empty_queue]: WHEN collaborator task queue has zero pending tasks, MUST raise WorkerError.
 
         POSTCONDITIONS:
-        - WHEN collaborator task queue is unavailable, MUST raise WorkerExecutionException.
-        - WHEN collaborator dispatch succeeds, MUST execute dispatched task and return task identifier.
+        - [slug:task_worker.fetch_and_execute.unavailable_queue]: WHEN collaborator task queue is unavailable, MUST raise WorkerExecutionException.
+        - [slug:task_worker.fetch_and_execute.success]: WHEN collaborator dispatch succeeds, MUST execute dispatched task and return task identifier.
         """
         ...
 

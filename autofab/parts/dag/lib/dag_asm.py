@@ -4,9 +4,7 @@ from support.lib.lifecycle import LifecycleRegistry, get_default_registry
 from . import subgraph_impl
 
 # Contract: Declared constituents forming the dag subsystem assembly.
-CONSTITUENTS = (
-    subgraph_impl,
-)
+CONSTITUENTS = (subgraph_impl,)
 
 
 # Contract: Aggregates topological subgraph queries and bounded visit tracking into the dag subsystem assembly.
@@ -15,6 +13,7 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry
     for constituent in CONSTITUENTS:
         constituent.__initialize__(reg)
+
 
 _initialize_ = __initialize__
 

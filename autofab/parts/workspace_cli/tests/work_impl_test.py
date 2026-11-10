@@ -293,6 +293,7 @@ class WorkspaceWorkImplTest(unittest.TestCase):
     def setUp(self) -> None:
         self.registry = LifecycleRegistry()
         from autofab.parts.workspace_cli.lib import workspace_cli_asm
+
         workspace_cli_asm.__initialize__(self.registry)
         self.mock_storage = MockDagStorage()
         self.registry.register_instance(
@@ -409,9 +410,13 @@ class WorkspaceWorkImplTest(unittest.TestCase):
             part_a = os.path.join(repo_root, "parts/alpha")
             high_a = os.path.join(part_a, "high")
             os.makedirs(high_a, exist_ok=True)
-            with open(os.path.join(high_a, "alpha_iface.md"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(high_a, "alpha_iface.md"), "w", encoding="utf-8"
+            ) as f:
                 f.write("# alpha_iface interface component\n\n## Purpose\n...")
-            with open(os.path.join(high_a, "alpha_impl.md"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(high_a, "alpha_impl.md"), "w", encoding="utf-8"
+            ) as f:
                 f.write(
                     "# alpha_impl implementation component\n\n"
                     "imports: alpha_iface, other_dep\n"
@@ -440,7 +445,9 @@ class WorkspaceWorkImplTest(unittest.TestCase):
             part_dir = os.path.join(repo_root, "parts/sample")
             os.makedirs(os.path.join(part_dir, "high"), exist_ok=True)
             os.makedirs(os.path.join(part_dir, "low"), exist_ok=True)
-            with open(os.path.join(part_dir, "low/sample_iface.pyi"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(part_dir, "low/sample_iface.pyi"), "w", encoding="utf-8"
+            ) as f:
                 f.write("# sample_iface\n")
 
             ready, blocked = self.work_mgr.compute_role_work_queue(
@@ -460,7 +467,9 @@ class WorkspaceWorkImplTest(unittest.TestCase):
                 "high",
             )
 
-    def test_compute_role_work_queue_disambiguates_unit_name_across_packages(self) -> None:
+    def test_compute_role_work_queue_disambiguates_unit_name_across_packages(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as repo_root:
             clean_md = (
                 "<!-- CLEANROOM METADATA\n"
@@ -491,35 +500,59 @@ class WorkspaceWorkImplTest(unittest.TestCase):
             part_a = os.path.join(repo_root, "staging/parts/pkg_a")
             for d in ["high", "planning", "low", "lib"]:
                 os.makedirs(os.path.join(part_a, d), exist_ok=True)
-            with open(os.path.join(part_a, "high/common_stem.md"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(part_a, "high/common_stem.md"), "w", encoding="utf-8"
+            ) as f:
                 f.write(clean_md + "# common_stem\n")
-            with open(os.path.join(part_a, "planning/common_stem.md"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(part_a, "planning/common_stem.md"), "w", encoding="utf-8"
+            ) as f:
                 f.write("# common_stem\nUncleaned file\n")
-            with open(os.path.join(part_a, "low/common_stem.pyi"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(part_a, "low/common_stem.pyi"), "w", encoding="utf-8"
+            ) as f:
                 f.write(clean_py)
-            with open(os.path.join(part_a, "lib/common_stem.py"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(part_a, "lib/common_stem.py"), "w", encoding="utf-8"
+            ) as f:
                 f.write(clean_py)
 
             # Package B has common_stem clean, and consumer depending on common_stem
             part_b = os.path.join(repo_root, "staging/parts/pkg_b")
             for d in ["high", "planning", "low", "lib"]:
                 os.makedirs(os.path.join(part_b, d), exist_ok=True)
-            with open(os.path.join(part_b, "high/common_stem.md"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(part_b, "high/common_stem.md"), "w", encoding="utf-8"
+            ) as f:
                 f.write(clean_md + "# common_stem\n")
-            with open(os.path.join(part_b, "planning/common_stem.md"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(part_b, "planning/common_stem.md"), "w", encoding="utf-8"
+            ) as f:
                 f.write(clean_md + "# common_stem\n")
-            with open(os.path.join(part_b, "low/common_stem.pyi"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(part_b, "low/common_stem.pyi"), "w", encoding="utf-8"
+            ) as f:
                 f.write(clean_py)
-            with open(os.path.join(part_b, "lib/common_stem.py"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(part_b, "lib/common_stem.py"), "w", encoding="utf-8"
+            ) as f:
                 f.write(clean_py)
 
-            with open(os.path.join(part_b, "high/consumer.md"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(part_b, "high/consumer.md"), "w", encoding="utf-8"
+            ) as f:
                 f.write(clean_md + "imports: common_stem\n\n# consumer\n")
-            with open(os.path.join(part_b, "planning/consumer.md"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(part_b, "planning/consumer.md"), "w", encoding="utf-8"
+            ) as f:
                 f.write(clean_md + "# consumer\n")
-            with open(os.path.join(part_b, "low/consumer.pyi"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(part_b, "low/consumer.pyi"), "w", encoding="utf-8"
+            ) as f:
                 f.write(newer_py)
-            with open(os.path.join(part_b, "lib/consumer.py"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(part_b, "lib/consumer.py"), "w", encoding="utf-8"
+            ) as f:
                 f.write(older_py)
 
             # In role 'lib', consumer in pkg_b should be ready and NOT blocked by pkg_a's common_stem
@@ -534,7 +567,9 @@ class WorkspaceWorkImplTest(unittest.TestCase):
             self.assertIn("staging/parts/pkg_b/lib/consumer.py", ready_files)
             self.assertNotIn("staging/parts/pkg_b/lib/consumer.py", blocked_files)
 
-    def test_is_pending_target_dirty_regenerates_on_delete_for_regenerable_roles(self) -> None:
+    def test_is_pending_target_dirty_regenerates_on_delete_for_regenerable_roles(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as ws_dir:
             part_dir = os.path.join(ws_dir, "staging/parts/sample")
             os.makedirs(os.path.join(part_dir, "lib"), exist_ok=True)
@@ -547,7 +582,9 @@ class WorkspaceWorkImplTest(unittest.TestCase):
             self.assertEqual(len(self.mock_storage.materialized), 1)
             self.assertEqual(self.mock_storage.materialized[0].unit_address, target_lib)
 
-    def test_is_pending_target_dirty_does_not_regenerate_on_delete_for_high(self) -> None:
+    def test_is_pending_target_dirty_does_not_regenerate_on_delete_for_high(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as ws_dir:
             part_dir = os.path.join(ws_dir, "staging/parts/sample")
             os.makedirs(os.path.join(part_dir, "high"), exist_ok=True)
@@ -563,12 +600,19 @@ class WorkspaceWorkImplTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as ws_dir:
             self.work_mgr.set_pending_work(ws_dir, ["staging/parts/sample/lib/foo.py"])
             # Remove a non-matching target
-            self.work_mgr.remove_pending_target(ws_dir, "staging/parts/sample/lib/bar.py")
+            self.work_mgr.remove_pending_target(
+                ws_dir, "staging/parts/sample/lib/bar.py"
+            )
             # Foo must strictly remain in pending work
-            self.assertEqual(list(self.work_mgr.get_pending_work(ws_dir)), ["staging/parts/sample/lib/foo.py"])
+            self.assertEqual(
+                list(self.work_mgr.get_pending_work(ws_dir)),
+                ["staging/parts/sample/lib/foo.py"],
+            )
 
             # Remove matching target
-            self.work_mgr.remove_pending_target(ws_dir, "staging/parts/sample/lib/foo.py")
+            self.work_mgr.remove_pending_target(
+                ws_dir, "staging/parts/sample/lib/foo.py"
+            )
             self.assertEqual(list(self.work_mgr.get_pending_work(ws_dir)), [])
 
     def test_get_pending_target_reasons_delegates_to_pending_mgr(self) -> None:
@@ -595,11 +639,17 @@ class WorkspaceWorkImplTest(unittest.TestCase):
             part_dir = os.path.join(repo_root, "staging/parts/sample")
             for d in ["high", "planning", "low", "lib", "tests"]:
                 os.makedirs(os.path.join(part_dir, d), exist_ok=True)
-            with open(os.path.join(part_dir, "high/sample_impl.md"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(part_dir, "high/sample_impl.md"), "w", encoding="utf-8"
+            ) as f:
                 f.write(clean_md + "# sample_impl\n")
-            with open(os.path.join(part_dir, "planning/sample_impl.md"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(part_dir, "planning/sample_impl.md"), "w", encoding="utf-8"
+            ) as f:
                 f.write(clean_md + "# sample_impl\n")
-            with open(os.path.join(part_dir, "low/sample_impl.pyi"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(part_dir, "low/sample_impl.pyi"), "w", encoding="utf-8"
+            ) as f:
                 f.write(
                     "# --- CLEANROOM METADATA ---\n"
                     "# LAST_CLEANED: 2026-10-08T00:00:00Z\n"
@@ -614,7 +664,9 @@ class WorkspaceWorkImplTest(unittest.TestCase):
                 "# QA_AUDIT: 2026-10-08T01:00:00Z\n"
                 "# --- END CLEANROOM METADATA ---\n"
             )
-            with open(os.path.join(part_dir, "lib/sample_impl.py"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(part_dir, "lib/sample_impl.py"), "w", encoding="utf-8"
+            ) as f:
                 f.write(lib_content)
             # test was modified at 02:00:00Z without QA_AUDIT
             test_content = (
@@ -623,7 +675,11 @@ class WorkspaceWorkImplTest(unittest.TestCase):
                 "# LAST_CHANGED: 2026-10-08T02:00:00Z\n"
                 "# --- END CLEANROOM METADATA ---\n"
             )
-            with open(os.path.join(part_dir, "tests/sample_impl_test.py"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(part_dir, "tests/sample_impl_test.py"),
+                "w",
+                encoding="utf-8",
+            ) as f:
                 f.write(test_content)
 
             # Role qa must be dirty and ready because tests were modified without QA_AUDIT
@@ -653,7 +709,11 @@ class WorkspaceWorkImplTest(unittest.TestCase):
                 "# QA_AUDIT: 2026-10-08T02:30:00Z\n"
                 "# --- END CLEANROOM METADATA ---\n"
             )
-            with open(os.path.join(part_dir, "tests/sample_impl_test.py"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(part_dir, "tests/sample_impl_test.py"),
+                "w",
+                encoding="utf-8",
+            ) as f:
                 f.write(audited_test_content)
 
             # Now qa should evaluate clean
@@ -674,7 +734,9 @@ class WorkspaceWorkImplTest(unittest.TestCase):
                 "# QA_AUDIT: 2026-10-08T01:00:00Z\n"
                 "# --- END CLEANROOM METADATA ---\n"
             )
-            with open(os.path.join(part_dir, "lib/sample_impl.py"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(part_dir, "lib/sample_impl.py"), "w", encoding="utf-8"
+            ) as f:
                 f.write(dirty_tagged_lib)
             self.assertFalse(
                 self.work_mgr.is_pending_target_dirty(
@@ -684,7 +746,9 @@ class WorkspaceWorkImplTest(unittest.TestCase):
                 )
             )
 
-    def test_eval_auditor_unit_dirtiness_when_contract_dependency_modified(self) -> None:
+    def test_eval_auditor_unit_dirtiness_when_contract_dependency_modified(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as repo_root:
             clean_md = (
                 "<!-- CLEANROOM METADATA\n"
@@ -695,12 +759,18 @@ class WorkspaceWorkImplTest(unittest.TestCase):
             part_dir = os.path.join(repo_root, "staging/parts/sample")
             for d in ["high", "planning", "low", "lib", "tests"]:
                 os.makedirs(os.path.join(part_dir, d), exist_ok=True)
-            with open(os.path.join(part_dir, "high/sample_impl.md"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(part_dir, "high/sample_impl.md"), "w", encoding="utf-8"
+            ) as f:
                 f.write(clean_md + "# sample_impl\n")
-            with open(os.path.join(part_dir, "planning/sample_impl.md"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(part_dir, "planning/sample_impl.md"), "w", encoding="utf-8"
+            ) as f:
                 f.write(clean_md + "# sample_impl\n")
             # low contract modified at 03:00:00Z
-            with open(os.path.join(part_dir, "low/sample_impl.pyi"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(part_dir, "low/sample_impl.pyi"), "w", encoding="utf-8"
+            ) as f:
                 f.write(
                     "# --- CLEANROOM METADATA ---\n"
                     "# LAST_CLEANED: 2026-10-08T03:00:00Z\n"
@@ -708,7 +778,9 @@ class WorkspaceWorkImplTest(unittest.TestCase):
                     "# --- END CLEANROOM METADATA ---\n"
                 )
             # lib has QA_AUDIT at 01:00:00Z
-            with open(os.path.join(part_dir, "lib/sample_impl.py"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(part_dir, "lib/sample_impl.py"), "w", encoding="utf-8"
+            ) as f:
                 f.write(
                     "# --- CLEANROOM METADATA ---\n"
                     "# LAST_CLEANED: 2026-10-08T00:00:00Z\n"
@@ -717,7 +789,11 @@ class WorkspaceWorkImplTest(unittest.TestCase):
                     "# --- END CLEANROOM METADATA ---\n"
                 )
             # test has QA_AUDIT at 01:00:00Z
-            with open(os.path.join(part_dir, "tests/sample_impl_test.py"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(part_dir, "tests/sample_impl_test.py"),
+                "w",
+                encoding="utf-8",
+            ) as f:
                 f.write(
                     "# --- CLEANROOM METADATA ---\n"
                     "# LAST_CLEANED: 2026-10-08T00:00:00Z\n"
@@ -735,12 +811,16 @@ class WorkspaceWorkImplTest(unittest.TestCase):
                 )
             )
 
-    def test_producer_dirty_when_star_role_dependency_modified_on_interface(self) -> None:
+    def test_producer_dirty_when_star_role_dependency_modified_on_interface(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as repo_root:
             part_dir = os.path.join(repo_root, "staging/parts/sample")
             os.makedirs(os.path.join(part_dir, "scenarios"), exist_ok=True)
             # Interface scenario modified at 02:00:00Z
-            with open(os.path.join(part_dir, "scenarios/sample.md"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(part_dir, "scenarios/sample.md"), "w", encoding="utf-8"
+            ) as f:
                 f.write(
                     "<!-- CLEANROOM METADATA\n"
                     "LAST_CLEANED: 2026-10-08T02:00:00Z\n"
@@ -749,7 +829,11 @@ class WorkspaceWorkImplTest(unittest.TestCase):
                     "# sample scenario\n"
                 )
             # Implementation scenario cleaned at 01:00:00Z (before interface change)
-            with open(os.path.join(part_dir, "scenarios/sample_impl.md"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(part_dir, "scenarios/sample_impl.md"),
+                "w",
+                encoding="utf-8",
+            ) as f:
                 f.write(
                     "<!-- CLEANROOM METADATA\n"
                     "LAST_CLEANED: 2026-10-08T01:00:00Z\n"
@@ -767,13 +851,21 @@ class WorkspaceWorkImplTest(unittest.TestCase):
                 )
             )
 
-    def test_resolve_contract_files_includes_interface_stem_for_star_roles(self) -> None:
+    def test_resolve_contract_files_includes_interface_stem_for_star_roles(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as repo_root:
             part_dir = os.path.join(repo_root, "staging/parts/sample")
             os.makedirs(os.path.join(part_dir, "scenarios"), exist_ok=True)
-            with open(os.path.join(part_dir, "scenarios/sample.md"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(part_dir, "scenarios/sample.md"), "w", encoding="utf-8"
+            ) as f:
                 f.write("# sample scenario\n")
-            with open(os.path.join(part_dir, "scenarios/sample_impl.md"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(part_dir, "scenarios/sample_impl.md"),
+                "w",
+                encoding="utf-8",
+            ) as f:
                 f.write("# sample_impl scenario\n")
 
             contracts = self.work_mgr.resolve_contract_files(
@@ -787,7 +879,9 @@ class WorkspaceWorkImplTest(unittest.TestCase):
         tasks = [
             work_scheduler.ScheduledTask(
                 node=dag_storage.DagNode(
-                    unit_address=dag_storage.UnitAddress(f"staging/parts/sample/lib/unit_{i}.py"),
+                    unit_address=dag_storage.UnitAddress(
+                        f"staging/parts/sample/lib/unit_{i}.py"
+                    ),
                     role_address=dag_storage.RoleAddress("//autofab_py:lib"),
                 ),
                 task_prompt=f"Implement unit_{i}.py",
@@ -833,7 +927,9 @@ class WorkspaceWorkImplTest(unittest.TestCase):
             os.makedirs(os.path.join(part_b, "lib"), exist_ok=True)
             os.makedirs(os.path.join(part_b, "low"), exist_ok=True)
 
-            with open(os.path.join(part_a, "low/alpha.pyi"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(part_a, "low/alpha.pyi"), "w", encoding="utf-8"
+            ) as f:
                 f.write(clean_py)
             with open(os.path.join(part_a, "lib/alpha.py"), "w", encoding="utf-8") as f:
                 f.write("# alpha\n")
@@ -857,7 +953,9 @@ class WorkspaceWorkImplTest(unittest.TestCase):
                 target_unit="//staging/parts/alpha:alpha#lib",
             )
             self.assertEqual(len(ready_bounded), 1)
-            self.assertEqual(ready_bounded[0].target_file, "staging/parts/alpha/lib/alpha.py")
+            self.assertEqual(
+                ready_bounded[0].target_file, "staging/parts/alpha/lib/alpha.py"
+            )
 
     def test_compute_role_work_queue_blocks_on_dirty_silent_role_deps(self) -> None:
         """Verifies that silent_role_deps (e.g. qa for coverage) blocks role from being ready while silent dep is dirty."""
@@ -881,11 +979,15 @@ class WorkspaceWorkImplTest(unittest.TestCase):
             os.makedirs(os.path.join(part_a, "tests"), exist_ok=True)
             os.makedirs(os.path.join(part_a, "low"), exist_ok=True)
 
-            with open(os.path.join(part_a, "low/alpha.pyi"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(part_a, "low/alpha.pyi"), "w", encoding="utf-8"
+            ) as f:
                 f.write(clean_py)
             with open(os.path.join(part_a, "lib/alpha.py"), "w", encoding="utf-8") as f:
                 f.write(clean_py + "def run(): pass\n")
-            with open(os.path.join(part_a, "tests/alpha_test.py"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(part_a, "tests/alpha_test.py"), "w", encoding="utf-8"
+            ) as f:
                 f.write(clean_py + "def test_run(): pass\n")
 
             # QA is dirty because lib/alpha.py and tests/alpha_test.py do not have QA_AUDIT yet.
@@ -897,12 +999,16 @@ class WorkspaceWorkImplTest(unittest.TestCase):
             )
             self.assertEqual(len(ready_cov), 0)
             self.assertEqual(len(blocked_cov), 1)
-            self.assertIn("Upstream role 'qa' is dirty", blocked_cov[0].blocked_reasons[0])
+            self.assertIn(
+                "Upstream role 'qa' is dirty", blocked_cov[0].blocked_reasons[0]
+            )
 
             # Now stamp QA_AUDIT on both lib and test targets.
             with open(os.path.join(part_a, "lib/alpha.py"), "w", encoding="utf-8") as f:
                 f.write(clean_with_audit + "def run(): pass\n")
-            with open(os.path.join(part_a, "tests/alpha_test.py"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(part_a, "tests/alpha_test.py"), "w", encoding="utf-8"
+            ) as f:
                 f.write(clean_with_audit + "def test_run(): pass\n")
 
             ready_cov, blocked_cov = self.work_mgr.compute_role_work_queue(
@@ -913,7 +1019,9 @@ class WorkspaceWorkImplTest(unittest.TestCase):
             )
             self.assertEqual(len(ready_cov), 1)
             self.assertEqual(len(blocked_cov), 0)
-            self.assertEqual(ready_cov[0].target_file, "staging/parts/alpha/lib/alpha.py")
+            self.assertEqual(
+                ready_cov[0].target_file, "staging/parts/alpha/lib/alpha.py"
+            )
 
     def test_compute_role_work_queue_fused_roles(self) -> None:
         with tempfile.TemporaryDirectory() as repo_root:
@@ -926,7 +1034,11 @@ class WorkspaceWorkImplTest(unittest.TestCase):
                 "[roles.coverage]\nname = 'coverage'\naudit_tag = 'COVERAGE_AUDIT'\nrole_deps = ['lib', 'test', 'qa']\nfeedback_role_deps = ['lib', 'test']\n\n"
                 "[fused_roles.baseline]\nroles = ['lib', 'test', 'qa', 'coverage']\n"
             )
-            with open(os.path.join(repo_root, app_info.DEFAULT_ROLES_FILE), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(repo_root, app_info.DEFAULT_ROLES_FILE),
+                "w",
+                encoding="utf-8",
+            ) as f:
                 f.write(roles_toml)
 
             part_a = os.path.join(repo_root, "staging/parts/alpha")
@@ -934,7 +1046,11 @@ class WorkspaceWorkImplTest(unittest.TestCase):
             os.makedirs(os.path.join(part_a, "lib"), exist_ok=True)
             os.makedirs(os.path.join(part_a, "tests"), exist_ok=True)
 
-            with open(os.path.join(part_a, app_info.DEFAULT_CONFIG_FILE), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(part_a, app_info.DEFAULT_CONFIG_FILE),
+                "w",
+                encoding="utf-8",
+            ) as f:
                 f.write("[part]\nunits = ['alpha']\n")
 
             clean_spec = (
@@ -944,7 +1060,9 @@ class WorkspaceWorkImplTest(unittest.TestCase):
                 "# CHANGE: Spec\n"
                 "# --- END CLEANROOM METADATA ---\n"
             )
-            with open(os.path.join(part_a, "low/alpha.pyi"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(part_a, "low/alpha.pyi"), "w", encoding="utf-8"
+            ) as f:
                 f.write(clean_spec)
 
             # lib and test are missing (dirty), so qa and coverage would normally be blocked

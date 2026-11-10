@@ -78,7 +78,9 @@ class AntigravityHarnessImplTest(unittest.TestCase):
         # Flash: input $0.10/M, cached $0.025/M, output $0.40/M
         # Cost: (200k * 0.10 / 1M) + (1000k * 0.025 / 1M) + (100k * 0.40 / 1M)
         # Cost: 0.02 + 0.025 + 0.04 = $0.085
-        metrics = parser.parse_transcript_file(transcript_file, model_name="gemini-3.8-flash")
+        metrics = parser.parse_transcript_file(
+            transcript_file, model_name="gemini-3.8-flash"
+        )
         self.assertEqual(metrics.input_tokens, 200_000)
         self.assertEqual(metrics.cached_tokens, 1_000_000)
         self.assertEqual(metrics.output_tokens, 100_000)
@@ -104,7 +106,9 @@ class AntigravityHarnessImplTest(unittest.TestCase):
 
         # Pro: input $1.25/M, cached $0.3125/M, output $5.00/M
         # Cost: 1.25 + 0.3125 + 0.50 = 2.0625
-        metrics = parser.parse_transcript_file(transcript_file, model_name="gemini-3.8-pro")
+        metrics = parser.parse_transcript_file(
+            transcript_file, model_name="gemini-3.8-pro"
+        )
         self.assertEqual(metrics.input_tokens, 1_000_000)
         self.assertEqual(metrics.cached_tokens, 1_000_000)
         self.assertEqual(metrics.output_tokens, 100_000)
@@ -196,7 +200,9 @@ class AntigravityHarnessImplTest(unittest.TestCase):
             self.assertIn("antigravity", self.mock_harness_registry.installed)
             factory = self.mock_harness_registry.installed["antigravity"]
             adapter = factory(model_name="gemini-flash")
-            self.assertIsInstance(adapter, antigravity_harness_impl.AntigravityHarnessAdapter)
+            self.assertIsInstance(
+                adapter, antigravity_harness_impl.AntigravityHarnessAdapter
+            )
 
 
 if __name__ == "__main__":

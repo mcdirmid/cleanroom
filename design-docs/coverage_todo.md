@@ -8,7 +8,7 @@
 
 ## Progress Checklist
 
-- [x] **Phase 1: Guides Alignment (`autofab_py/guides/` & `autofab/guides/`)**
+- [x] **Phase 1: Guides Alignment (`autofab_py/guides/`)**
   - [x] Update `coverage.md` & `pretense_coverage.md` to mandate Contract Postcondition Audits and differentiate contracted operational errors from uncontracted caller preconditions.
   - [x] Update `low_to_lib.md` to require specification grounding comments and clarify error-throwing authority.
   - [x] Update `low_to_test.md` to clarify that contracted operational errors must be tested with malformed/invalid inputs.
@@ -68,7 +68,7 @@
    - [Audit Checklist & Traceability Matrix](#audit-checklist--traceability-matrix)
    - [Grammar & Combinatorial Domain Coverage in Pretense](#grammar--combinatorial-domain-coverage-in-pretense)
 6. [Actionable Implementation Roadmap](#6-actionable-implementation-roadmap)
-   - [Phase 1: Guides Alignment (`autofab_py/guides/` & `autofab/guides/`)](#phase-1-guides-alignment-autofab_pyguides--autofabguides)
+   - [Phase 1: Guides Alignment (`autofab_py/guides/`)](#phase-1-guides-alignment-autofab_pyguides)
    - [Phase 2: Configuration & Harness Hardening (`pyproject.toml`)](#phase-2-configuration--harness-hardening-pyprojecttoml)
    - [Phase 3: Tooling & Static Linters (`test_lint.py` & `bin/check_files`)](#phase-3-tooling--static-linters-test_lintpy--bincheck_files)
    - [Phase 4: Empirical Benchmark Re-Evaluation](#phase-4-empirical-benchmark-re-evaluation)
@@ -330,7 +330,7 @@ The behavior splits cleanly between execution modes:
 
 ## 6. Actionable Implementation Roadmap
 
-### Phase 1: Guides Alignment (`autofab_py/guides/` & `autofab/guides/`)
+### Phase 1: Guides Alignment (`autofab_py/guides/`)
 
 Guide edits must be concise, declarative, and adhere strictly to `autofab/guides/meta_guide.md`:
 - Environmental communication is declarative and impersonal: second-person pronouns ("you", "your") and directive verbs ("ensure", "produce", "apply", "verify") are strictly prohibited.

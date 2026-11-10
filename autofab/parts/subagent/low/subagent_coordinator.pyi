@@ -1,7 +1,7 @@
 """Low-level interface specification for subagent_coordinator."""
 
 from dataclasses import dataclass
-from typing import Optional, Protocol, Sequence
+from typing import Mapping, Optional, Protocol, Sequence
 from support.lib.framework import data_type, operation, poly_type, singleton_type
 from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
@@ -255,7 +255,7 @@ def __orphan__() -> None:
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-26T20:38:00Z
-# LAST_CHANGED: 2026-10-28T20:20:00Z
-# CHANGE: Asynchronous unblocked role dispatch and idle worker reaping
+# LAST_CHANGED: 2026-11-09T22:10:00Z
+# CHANGE: Add update_orchestration_state operation to HarnessAdapter protocol
 # SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---

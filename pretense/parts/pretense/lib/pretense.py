@@ -64,7 +64,9 @@ class NotBoundType:
 
 NotBound: NotBoundType = NotBoundType()
 _last_ensured_ret: ContextVar[Any] = ContextVar("_last_ensured_ret", default=NotBound)
-_last_raised_exc: ContextVar[Optional[BaseException]] = ContextVar("_last_raised_exc", default=None)
+_last_raised_exc: ContextVar[Optional[BaseException]] = ContextVar(
+    "_last_raised_exc", default=None
+)
 
 
 @dataclass(frozen=True)
@@ -75,6 +77,7 @@ class Outcome(Generic[T]):
 @dataclass(frozen=True)
 class Value(Outcome[T], Generic[T]):
     """Wraps a successful return value."""
+
     val: T
 
     def unwrap(self) -> T:
@@ -92,6 +95,7 @@ class Value(Outcome[T], Generic[T]):
 @dataclass(frozen=True)
 class Raised(Outcome[Any]):
     """Wraps an expected or intercepted exception."""
+
     exc: BaseException
     message: str = ""
 
@@ -130,21 +134,26 @@ class AmbiguousTransitionError(PretenseError):
 _CURRENT_DRAW: ContextVar[Optional[Callable[..., Any]]] = ContextVar(
     "_CURRENT_DRAW", default=None
 )
-_ACTIVE_SUTS: ContextVar[Dict[Type[Any], Any]] = ContextVar(
-    "_ACTIVE_SUTS", default={}
-)
+_ACTIVE_SUTS: ContextVar[Dict[Type[Any], Any]] = ContextVar("_ACTIVE_SUTS", default={})
 _current_sut: ContextVar[Any] = ContextVar("_current_sut", default=None)
 _is_verification: ContextVar[bool] = ContextVar("_is_verification", default=False)
 _current_target: ContextVar[Any] = ContextVar("_current_target", default=None)
 _current_method: ContextVar[Optional[str]] = ContextVar("_current_method", default=None)
 _current_args: ContextVar[Tuple[Any, ...]] = ContextVar("_current_args", default=())
 _current_kwargs: ContextVar[Dict[str, Any]] = ContextVar("_current_kwargs", default={})
-_expected_raises: ContextVar[Optional[Any]] = ContextVar("_expected_raises", default=None)
+_expected_raises: ContextVar[Optional[Any]] = ContextVar(
+    "_expected_raises", default=None
+)
 _current_sm: ContextVar[Optional[Any]] = ContextVar("_current_sm", default=None)
 _last_contracted_exception_type: ContextVar[Optional[Type[BaseException]]] = ContextVar(
     "_last_contracted_exception_type", default=None
 )
-_in_make_return_value: ContextVar[bool] = ContextVar("_in_make_return_value", default=False)
+_disable_preconditions: ContextVar[bool] = ContextVar(
+    "_disable_preconditions", default=False
+)
+_in_make_return_value: ContextVar[bool] = ContextVar(
+    "_in_make_return_value", default=False
+)
 
 
 class raises:
@@ -168,39 +177,50 @@ class raises:
             if issubclass(exc_type, self.exc_type):
                 exc_str = str(exc_val)
                 if self.match and self.match not in exc_str:
-                    raise AssertionError(f"Exception message '{exc_str}' does not match pattern '{self.match}'")
+                    raise AssertionError(
+                        f"Exception message '{exc_str}' does not match pattern '{self.match}'"
+                    )
                 self.caught = exc_val
                 return False
             return False
         if _is_verification.get():
-            raise AssertionError(f"Expected exception {self.exc_type.__name__} was not raised")
+            raise AssertionError(
+                f"Expected exception {self.exc_type.__name__} was not raised"
+            )
         else:
             inst = _safe_instantiate_exception(
                 cast(Type[Exception], self.exc_type),
-                self.match or f"Contracted {self.exc_type.__name__} raised by synthesized fake",
+                self.match
+                or f"Contracted {self.exc_type.__name__} raised by synthesized fake",
             )
             _ = str(inst)
             raise inst
 
 
 def make_return_value(fake_val: Any = None) -> Any:
-    """Pivot in an interface state machine transition."""
+    """Pivot in an interface state machine transition (legacy helper)."""
     if _is_verification.get():
         target = _current_target.get()
         method_name = _current_method.get()
         args = _current_args.get()
         kwargs = _current_kwargs.get()
         sm = _current_sm.get()
-        if target is None or method_name is None:
-            _last_ensured_ret.set(fake_val)
-            return fake_val
 
-        # Check if implementation pseudo state machine overrides this method
-        if sm is not None and type(sm) is not StateMachine and not _in_make_return_value.get():
+        # Check if implementation pseudo state machine overrides this method (legacy pattern)
+        if (
+            sm is not None
+            and method_name is not None
+            and type(sm) is not StateMachine
+            and not _in_make_return_value.get()
+        ):
             sm_cls = type(sm)
             base_cls = None
             for c in sm_cls.__mro__:
-                if c is not sm_cls and issubclass(c, StateMachine) and hasattr(c, method_name):
+                if (
+                    c is not sm_cls
+                    and issubclass(c, StateMachine)
+                    and hasattr(c, method_name)
+                ):
                     base_cls = c
                     break
             if base_cls is not None:
@@ -216,13 +236,17 @@ def make_return_value(fake_val: Any = None) -> Any:
                     finally:
                         _in_make_return_value.reset(tok)
 
-        method = getattr(target, method_name)
-        res = method(*args, **kwargs) if callable(method) else method
-        _last_ensured_ret.set(res)
-        return res
-    else:
-        _last_ensured_ret.set(fake_val)
-        return fake_val
+        if (
+            target is not None
+            and method_name is not None
+            and hasattr(target, method_name)
+        ):
+            method = getattr(target, method_name)
+            res = method(*args, **kwargs) if callable(method) else method
+            _last_ensured_ret.set(res)
+            return res
+    _last_ensured_ret.set(fake_val)
+    return fake_val
 
 
 @overload
@@ -257,7 +281,8 @@ def sut(singleton_type: Type[T]) -> T:
             pass
         if (
             getattr(active, "__class__", None) == singleton_type
-            or getattr(type(active), "__name__", "") == getattr(singleton_type, "__name__", "")
+            or getattr(type(active), "__name__", "")
+            == getattr(singleton_type, "__name__", "")
             or getattr(active, "target_protocol", None) == singleton_type
         ):
             return cast(T, active)
@@ -271,7 +296,9 @@ def sut(singleton_type: Type[T]) -> T:
                     return cast(T, s_inst)
             except TypeError:
                 pass
-            if getattr(s_type, "__name__", "") == getattr(singleton_type, "__name__", ""):
+            if getattr(s_type, "__name__", "") == getattr(
+                singleton_type, "__name__", ""
+            ):
                 return cast(T, s_inst)
         try:
             if isinstance(s_inst, singleton_type):
@@ -286,10 +313,13 @@ def sut(singleton_type: Type[T]) -> T:
                         return cast(T, s_inst)
                 except TypeError:
                     pass
-                if getattr(type(sm), "__name__", "") == getattr(singleton_type, "__name__", ""):
+                if getattr(type(sm), "__name__", "") == getattr(
+                    singleton_type, "__name__", ""
+                ):
                     return cast(T, s_inst)
     try:
         from support.lib.lifecycle import get_singleton
+
         return cast(T, get_singleton(singleton_type))
     except Exception:
         pass
@@ -299,28 +329,42 @@ def sut(singleton_type: Type[T]) -> T:
         type_methods = [m for m in dir(singleton_type) if not m.startswith("_")]
         if type_methods and all(hasattr(active, m) for m in type_methods):
             return cast(T, active)
-    raise KeyError(f"No singleton registered for type '{singleton_type.__name__}' in active context")
+    raise KeyError(
+        f"No singleton registered for type '{singleton_type.__name__}' in active context"
+    )
 
 
 def sut_state(state_cls: Type[StateT]) -> StateT:
     """Resolves active state model for a collaborator or target."""
     active = _current_sut.get()
-    if hasattr(active, "state") and (isinstance(active.state, state_cls) or getattr(type(active.state), "__name__", "") == state_cls.__name__):
+    if hasattr(active, "state") and (
+        isinstance(active.state, state_cls)
+        or getattr(type(active.state), "__name__", "") == state_cls.__name__
+    ):
         return cast(StateT, active.state)
     for c in _ACTIVE_SUTS.get().values():
-        if hasattr(c, "state") and (isinstance(c.state, state_cls) or getattr(type(c.state), "__name__", "") == state_cls.__name__):
+        if hasattr(c, "state") and (
+            isinstance(c.state, state_cls)
+            or getattr(type(c.state), "__name__", "") == state_cls.__name__
+        ):
             return cast(StateT, c.state)
     try:
         from support.lib.lifecycle import get_active_scope
+
         scope = get_active_scope()
         instances_by_desc = getattr(scope, "_instances_by_desc", None)
         if instances_by_desc is not None and isinstance(instances_by_desc, dict):
             for inst in instances_by_desc.values():
-                if hasattr(inst, "state") and (isinstance(inst.state, state_cls) or getattr(type(inst.state), "__name__", "") == state_cls.__name__):
+                if hasattr(inst, "state") and (
+                    isinstance(inst.state, state_cls)
+                    or getattr(type(inst.state), "__name__", "") == state_cls.__name__
+                ):
                     return cast(StateT, inst.state)
     except Exception:
         pass
-    raise PretenseError(f"No active state model of type {state_cls.__name__} found in context")
+    raise PretenseError(
+        f"No active state model of type {state_cls.__name__} found in context"
+    )
 
 
 def test_only(fn: T) -> T:
@@ -365,6 +409,7 @@ def _is_strategy(val: Any) -> bool:
     """Checks whether a value is a Hypothesis SearchStrategy."""
     try:
         from hypothesis.strategies import SearchStrategy
+
         if isinstance(val, SearchStrategy):
             return True
     except ImportError:
@@ -383,11 +428,11 @@ def _resolve_argument_value(val: Any, draw_fn: Optional[Callable[..., Any]]) -> 
         if draw_fn is not None:
             return draw_fn(val)
         import warnings
+
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             return val.example()
     return val
-
 
 
 class PretenseSpecificationError(PretenseError):
@@ -397,6 +442,7 @@ class PretenseSpecificationError(PretenseError):
 @dataclass(frozen=True)
 class TraceStep:
     """Records an executed state transition step within a run trace."""
+
     transition_name: str
     target_name: Optional[str] = None
     is_seeding: bool = False
@@ -408,6 +454,7 @@ class TraceStep:
 @dataclass
 class PretenseRunnerConfig:
     """Configuration governing test discovery, fuzzing, coverage, and watchdogs."""
+
     target_paths: List[str]
     fuzz: bool = True
     cov: bool = False
@@ -419,6 +466,7 @@ class PretenseRunnerConfig:
 @dataclass
 class PretenseRunResult:
     """Summary metrics of test execution."""
+
     passed: int = 0
     failed: int = 0
     coverage_pct: float = 0.0
@@ -434,6 +482,7 @@ def _safe_instantiate_exception(exc_cls: Type[Exception], match: str = "") -> Ex
     except TypeError:
         pass
     import inspect
+
     try:
         sig = inspect.signature(exc_cls)
         args: list[Any] = []
@@ -441,20 +490,33 @@ def _safe_instantiate_exception(exc_cls: Type[Exception], match: str = "") -> Ex
         for i, (name, param) in enumerate(sig.parameters.items()):
             if param.default is not inspect.Parameter.empty:
                 continue
-            if param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
+            if param.kind in (
+                inspect.Parameter.VAR_POSITIONAL,
+                inspect.Parameter.VAR_KEYWORD,
+            ):
                 continue
-            ann_str = str(param.annotation) if param.annotation is not inspect.Parameter.empty else ""
+            ann_str = (
+                str(param.annotation)
+                if param.annotation is not inspect.Parameter.empty
+                else ""
+            )
             if param.annotation is int or ann_str == "int":
                 args.append(0)
             elif param.annotation is float or ann_str == "float":
                 args.append(0.0)
             elif param.annotation is bool or ann_str == "bool":
                 args.append(False)
-            elif param.annotation is list or param.annotation is Sequence or ann_str.startswith(("list", "List", "Sequence")):
+            elif (
+                param.annotation is list
+                or param.annotation is Sequence
+                or ann_str.startswith(("list", "List", "Sequence"))
+            ):
                 args.append([])
             elif param.annotation is tuple or ann_str.startswith(("tuple", "Tuple")):
                 args.append(())
-            elif param.annotation is dict or ann_str.startswith(("dict", "Dict", "Mapping")):
+            elif param.annotation is dict or ann_str.startswith(
+                ("dict", "Dict", "Mapping")
+            ):
                 args.append({})
             elif i == 0 or "message" in name.lower() or "msg" in name.lower():
                 args.append(msg)
@@ -506,7 +568,11 @@ class EnsuresCheck:
         if singleton_type in self.singletons:
             return self.singletons[singleton_type]
         for s_type, s_inst in self.singletons.items():
-            if isinstance(s_type, type) and (issubclass(s_type, singleton_type) or getattr(s_type, "__name__", "") == getattr(singleton_type, "__name__", "")):
+            if isinstance(s_type, type) and (
+                issubclass(s_type, singleton_type)
+                or getattr(s_type, "__name__", "")
+                == getattr(singleton_type, "__name__", "")
+            ):
                 return s_inst
             if isinstance(s_inst, singleton_type):
                 return s_inst
@@ -520,8 +586,12 @@ def require(
     error: Optional[Union[Type[BaseException], BaseException]] = None,
 ) -> None:
     """Precondition requirement assertion enforcing state machine antecedents."""
+    if _disable_preconditions.get():
+        return
     if not condition:
-        target_exc: Optional[Union[Type[BaseException], BaseException]] = error or exc_class
+        target_exc: Optional[Union[Type[BaseException], BaseException]] = (
+            error or exc_class
+        )
         reason = ""
         if isinstance(reason_or_exc, type) and issubclass(reason_or_exc, BaseException):
             target_exc = target_exc or reason_or_exc
@@ -536,7 +606,9 @@ def require(
             try:
                 raise target_exc()
             except TypeError:
-                msg = f"Requirement failed: {reason}" if reason else "Requirement failed"
+                msg = (
+                    f"Requirement failed: {reason}" if reason else "Requirement failed"
+                )
                 raise target_exc(msg)
         msg = f"Requirement failed: {reason}" if reason else "Requirement failed"
         raise PretenseSpecificationError(msg)
@@ -555,7 +627,11 @@ def require_arg(
 @overload
 def require_arg(
     val: Optional[Sequence[E]],
-    domain: Union[Domain[Optional[Sequence[E]]], Domain[Optional[List[E]]], Domain[Optional[Tuple[E, ...]]]],
+    domain: Union[
+        Domain[Optional[Sequence[E]]],
+        Domain[Optional[List[E]]],
+        Domain[Optional[Tuple[E, ...]]],
+    ],
     preferred: Optional[Sequence[Optional[Sequence[E]]]] = None,
     error: Optional[Union[Type[BaseException], BaseException]] = None,
 ) -> None: ...
@@ -566,13 +642,29 @@ def require_arg(
     preferred: Optional[Sequence[T]] = None,
     error: Optional[Union[Type[BaseException], BaseException]] = None,
 ) -> None: ...
+@overload
+def require_arg(
+    val: T,
+    domain: Domain[T],
+    preferred: Union[Type[BaseException], BaseException],
+) -> None: ...
 def require_arg(
     val: Any,
     domain: Any,
-    preferred: Optional[Sequence[Any]] = None,
+    preferred: Optional[
+        Union[Sequence[Any], Type[BaseException], BaseException]
+    ] = None,
     error: Optional[Union[Type[BaseException], BaseException]] = None,
 ) -> None:
     """Argument domain validation and preferred candidate binding."""
+    if _disable_preconditions.get():
+        return
+    if preferred is not None and (
+        isinstance(preferred, BaseException)
+        or (isinstance(preferred, type) and issubclass(preferred, BaseException))
+    ):
+        error = cast(Any, preferred)
+        preferred = None
     dom: Domain[Any] = domain if isinstance(domain, Domain) else Domain.of(domain)
     if not dom.validate(val):
         if error is not None:
@@ -581,7 +673,9 @@ def require_arg(
             try:
                 raise error()
             except TypeError:
-                raise error(f"Argument value {val!r} failed domain validation for {domain}")
+                raise error(
+                    f"Argument value {val!r} failed domain validation for {domain}"
+                )
         raise PretenseSpecificationError(
             f"Argument value {val!r} failed domain validation for {domain}. "
             "If this argument is valid per the specification contract (e.g. testing error paths or edge cases), "
@@ -652,11 +746,14 @@ class ensure_raises:
         return False
 
 
-def _draw_from_domain(concrete_domain: Domain[Any], draw: Optional[Callable[..., Any]]) -> Any:
+def _draw_from_domain(
+    concrete_domain: Domain[Any], draw: Optional[Callable[..., Any]]
+) -> Any:
     """Draws a value from a Domain using the active draw function or fallback example."""
     strat = concrete_domain.to_strategy()
     if callable(strat) and not _is_strategy(strat):
         import inspect
+
         try:
             sig = inspect.signature(strat)
             params = list(sig.parameters.values())
@@ -668,7 +765,11 @@ def _draw_from_domain(concrete_domain: Domain[Any], draw: Optional[Callable[...,
             takes_draw = False
 
         if takes_draw:
-            effective_draw = draw if draw is not None else (lambda s: _resolve_argument_value(s, None))
+            effective_draw = (
+                draw
+                if draw is not None
+                else (lambda s: _resolve_argument_value(s, None))
+            )
             val = strat(effective_draw)
         else:
             val = strat()
@@ -715,6 +816,7 @@ class Domain(Generic[T]):
             )
         seq = tuple(items)
         from hypothesis import strategies as st
+
         return Domain[T](
             strategy=st.sampled_from(seq) if seq else st.nothing(),
             validator=lambda val: val in seq,
@@ -737,6 +839,7 @@ class Domain(Generic[T]):
         prefix: str = "item_",
     ) -> Domain[T]:
         from hypothesis import strategies as st
+
         forbidden = set(items)
         if base is not None:
             base_dom = cls.of(base)
@@ -744,13 +847,16 @@ class Domain(Generic[T]):
             if _is_strategy(b_strat):
                 strat: Any = b_strat.filter(lambda x: x not in forbidden)
             else:
+
                 @st.composite
                 def _not_in_base_strat(draw_fn: Any) -> Any:
                     for _ in range(50):
                         cand = _draw_from_domain(base_dom, draw_fn)
                         if cand not in forbidden:
                             return cand
-                    raise PretenseSpecificationError(f"Failed to sample value not in {forbidden!r}")
+                    raise PretenseSpecificationError(
+                        f"Failed to sample value not in {forbidden!r}"
+                    )
 
                 strat = _not_in_base_strat()
 
@@ -759,20 +865,45 @@ class Domain(Generic[T]):
                 validator=lambda val: base_dom.validate(val) and val not in forbidden,
             )
 
-        if base_type is str or (base_type is None and not (forbidden and all(isinstance(x, int) and not isinstance(x, bool) for x in forbidden))):
-            strat: Any = st.integers(min_value=0, max_value=10000).map(lambda i: f"{prefix}{i}").filter(lambda s: s not in forbidden)
+        if base_type is str or (
+            base_type is None
+            and not (
+                forbidden
+                and all(
+                    isinstance(x, int) and not isinstance(x, bool) for x in forbidden
+                )
+            )
+        ):
+            strat: Any = (
+                st.integers(min_value=0, max_value=10000)
+                .map(lambda i: f"{prefix}{i}")
+                .filter(lambda s: s not in forbidden)
+            )
             return Domain[T](
                 strategy=strat,
                 validator=lambda val: isinstance(val, str) and val not in forbidden,
             )
-        elif base_type is int or (forbidden and all(isinstance(x, int) and not isinstance(x, bool) for x in forbidden)):
-            strat = st.integers(min_value=0, max_value=10000).filter(lambda x: x not in forbidden)
+        elif base_type is int or (
+            forbidden
+            and all(isinstance(x, int) and not isinstance(x, bool) for x in forbidden)
+        ):
+            strat = st.integers(min_value=0, max_value=10000).filter(
+                lambda x: x not in forbidden
+            )
             return Domain[T](
                 strategy=strat,
-                validator=lambda val: isinstance(val, int) and not isinstance(val, bool) and val not in forbidden,
+                validator=lambda val: (
+                    isinstance(val, int)
+                    and not isinstance(val, bool)
+                    and val not in forbidden
+                ),
             )
         else:
-            strat = st.integers(min_value=0, max_value=10000).map(lambda i: f"{prefix}{i}").filter(lambda s: s not in forbidden)
+            strat = (
+                st.integers(min_value=0, max_value=10000)
+                .map(lambda i: f"{prefix}{i}")
+                .filter(lambda s: s not in forbidden)
+            )
             return Domain[T](
                 strategy=strat,
                 validator=lambda val: val not in forbidden,
@@ -781,6 +912,7 @@ class Domain(Generic[T]):
     @classmethod
     def any(cls) -> Domain[Any]:
         from hypothesis import strategies as st
+
         return Domain[Any](
             strategy=st.one_of(
                 st.integers(min_value=-1000, max_value=1000),
@@ -794,6 +926,7 @@ class Domain(Generic[T]):
     @classmethod
     def subset_of(cls, items: Collection[T]) -> Domain[Set[T]]:
         from hypothesis import strategies as st
+
         seq = tuple(items)
         allowed = set(seq)
         strat = st.sets(st.sampled_from(seq)) if seq else st.builds(set)
@@ -814,6 +947,7 @@ class Domain(Generic[T]):
                 validator=lambda v: v == val.value(),
             )
         from hypothesis import strategies as st
+
         return Domain[T](
             strategy=st.just(val),
             validator=lambda v: v == val,
@@ -822,16 +956,28 @@ class Domain(Generic[T]):
     @classmethod
     def range(cls, start: Any, stop: Any, step: int = 1) -> Domain[int]:
         from hypothesis import strategies as st
+
         if isinstance(start, Expr) or isinstance(stop, Expr):
+
             def _dyn_range_strat(draw: Any) -> int:
                 s = int(start.value()) if isinstance(start, Expr) else int(start)
                 e = int(stop.value()) if isinstance(stop, Expr) else int(stop)
-                return int(draw(st.integers(min_value=s, max_value=e - 1) if s < e else st.nothing()))
+                return int(
+                    draw(
+                        st.integers(min_value=s, max_value=e - 1)
+                        if s < e
+                        else st.nothing()
+                    )
+                )
 
             def _dyn_range_val(val: Any) -> bool:
                 s = int(start.value()) if isinstance(start, Expr) else int(start)
                 e = int(stop.value()) if isinstance(stop, Expr) else int(stop)
-                return isinstance(val, int) and not isinstance(val, bool) and val in range(s, e, step)
+                return (
+                    isinstance(val, int)
+                    and not isinstance(val, bool)
+                    and val in range(s, e, step)
+                )
 
             return Domain[int](
                 strategy=_dyn_range_strat,
@@ -839,8 +985,12 @@ class Domain(Generic[T]):
             )
         r = range(start, stop, step)
         return Domain[int](
-            strategy=st.integers(min_value=start, max_value=stop - 1) if start < stop else st.nothing(),
-            validator=lambda val: isinstance(val, int) and not isinstance(val, bool) and val in r,
+            strategy=st.integers(min_value=start, max_value=stop - 1)
+            if start < stop
+            else st.nothing(),
+            validator=lambda val: (
+                isinstance(val, int) and not isinstance(val, bool) and val in r
+            ),
         )
 
     @classmethod
@@ -850,6 +1000,7 @@ class Domain(Generic[T]):
         max_value: Optional[int] = None,
     ) -> Domain[int]:
         from hypothesis import strategies as st
+
         strat = st.integers(min_value=min_value, max_value=max_value)
 
         def _int_val(val: Any) -> bool:
@@ -867,6 +1018,7 @@ class Domain(Generic[T]):
     def regex(cls, pattern: Union[str, Any]) -> Domain[str]:
         from hypothesis import strategies as st
         import re
+
         pat = re.compile(pattern) if isinstance(pattern, str) else pattern
         return Domain[str](
             strategy=st.from_regex(pat, fullmatch=True),
@@ -917,7 +1069,10 @@ class Domain(Generic[T]):
                 comb_strat = st.one_of(st.none(), comb_strat)
             return Domain[Any](
                 strategy=comb_strat,
-                validator=lambda val: (val is None if has_none else False) or any(d.validate(val) for d in sub_doms),
+                validator=lambda val: (
+                    (val is None if has_none else False)
+                    or any(d.validate(val) for d in sub_doms)
+                ),
             )
 
         if target_cls is None or target_cls is type(None):
@@ -928,7 +1083,11 @@ class Domain(Generic[T]):
 
         actual_cls: Any = target_cls
         origin = typing.get_origin(target_cls)
-        check_cls = origin if (origin is not None and origin is not typing.Union) else actual_cls
+        check_cls = (
+            origin
+            if (origin is not None and origin is not typing.Union)
+            else actual_cls
+        )
         while hasattr(check_cls, "__supertype__"):
             check_cls = getattr(check_cls, "__supertype__")
         while hasattr(actual_cls, "__supertype__"):
@@ -962,12 +1121,16 @@ class Domain(Generic[T]):
             return Domain[Any](strategy=strat, validator=_type_and_pred_val)
         return Domain[Any](
             strategy=strat,
-            validator=lambda val: (not isinstance(val, bool) if check_cls is int else True) and isinstance(val, check_cls),
+            validator=lambda val: (
+                (not isinstance(val, bool) if check_cls is int else True)
+                and isinstance(val, check_cls)
+            ),
         )
 
     @classmethod
     def tuple_of(cls, *elem_domains: Any) -> Domain[Tuple[Any, ...]]:
         from hypothesis import strategies as st
+
         strats = [d.to_strategy() if isinstance(d, Domain) else d for d in elem_domains]
         tuple_strat = st.tuples(*strats)
 
@@ -1016,8 +1179,15 @@ class Domain(Generic[T]):
         )
 
     @classmethod
-    def list_of(cls, elem_domain: Union[Domain[E], Type[E]], min_size: int = 0, max_size: int = 5, unique: bool = False) -> Domain[List[E]]:
+    def list_of(
+        cls,
+        elem_domain: Union[Domain[E], Type[E]],
+        min_size: int = 0,
+        max_size: int = 5,
+        unique: bool = False,
+    ) -> Domain[List[E]]:
         from hypothesis import strategies as st
+
         elem = cls.of(elem_domain)
         elem_strat = elem.to_strategy()
         if _is_strategy(elem_strat):
@@ -1027,8 +1197,11 @@ class Domain(Generic[T]):
                 else:
                     strat = st.nothing()
             else:
-                strat = st.lists(elem_strat, min_size=min_size, max_size=max_size, unique=unique)
+                strat = st.lists(
+                    elem_strat, min_size=min_size, max_size=max_size, unique=unique
+                )
         else:
+
             def _list_strat(draw: Any) -> List[Any]:
                 sz = draw(st.integers(min_value=min_size, max_value=max_size))
                 res: list[Any] = []
@@ -1055,8 +1228,14 @@ class Domain(Generic[T]):
         return Domain[List[E]](strategy=strat, validator=_list_val)
 
     @classmethod
-    def set_of(cls, elem_domain: Union[Domain[E], Type[E]], min_size: int = 0, max_size: int = 5) -> Domain[Set[E]]:
+    def set_of(
+        cls,
+        elem_domain: Union[Domain[E], Type[E]],
+        min_size: int = 0,
+        max_size: int = 5,
+    ) -> Domain[Set[E]]:
         from hypothesis import strategies as st
+
         elem = cls.of(elem_domain)
         elem_strat = elem.to_strategy()
         if _is_strategy(elem_strat):
@@ -1068,6 +1247,7 @@ class Domain(Generic[T]):
             else:
                 strat = st.sets(elem_strat, min_size=min_size, max_size=max_size)
         else:
+
             def _set_strat(draw: Any) -> Set[Any]:
                 sz = draw(st.integers(min_value=min_size, max_value=max_size))
                 res: set[Any] = set()
@@ -1089,21 +1269,33 @@ class Domain(Generic[T]):
         return Domain[Set[E]](strategy=strat, validator=_set_val)
 
     @classmethod
-    def mapping_of(cls, key_domain: Union[Domain[K], Type[K]], val_domain: Union[Domain[V], Type[V]], min_size: int = 0, max_size: int = 5) -> Domain[Dict[K, V]]:
+    def mapping_of(
+        cls,
+        key_domain: Union[Domain[K], Type[K]],
+        val_domain: Union[Domain[V], Type[V]],
+        min_size: int = 0,
+        max_size: int = 5,
+    ) -> Domain[Dict[K, V]]:
         from hypothesis import strategies as st
+
         k_dom = cls.of(key_domain)
         v_dom = cls.of(val_domain)
         k_strat = k_dom.to_strategy()
         v_strat = v_dom.to_strategy()
         if _is_strategy(k_strat) and _is_strategy(v_strat):
-            if getattr(k_strat, "is_empty", False) or getattr(v_strat, "is_empty", False):
+            if getattr(k_strat, "is_empty", False) or getattr(
+                v_strat, "is_empty", False
+            ):
                 if min_size == 0:
                     strat: Any = st.just({})
                 else:
                     strat = st.nothing()
             else:
-                strat = st.dictionaries(k_strat, v_strat, min_size=min_size, max_size=max_size)
+                strat = st.dictionaries(
+                    k_strat, v_strat, min_size=min_size, max_size=max_size
+                )
         else:
+
             def _map_strat(draw: Any) -> Dict[Any, Any]:
                 sz = draw(st.integers(min_value=min_size, max_value=max_size))
                 res: dict[Any, Any] = {}
@@ -1129,6 +1321,7 @@ class Domain(Generic[T]):
     @classmethod
     def optional(cls, inner_domain: Union[Domain[E], Type[E]]) -> Domain[Optional[E]]:
         from hypothesis import strategies as st
+
         inner = cls.of(inner_domain)
         inner_strat = inner.to_strategy()
         if _is_strategy(inner_strat):
@@ -1137,7 +1330,9 @@ class Domain(Generic[T]):
             else:
                 strat = st.one_of(st.none(), inner_strat)
         else:
-            strat = lambda draw: None if draw(st.booleans()) else _draw_from_domain(inner, draw)
+            strat = lambda draw: (
+                None if draw(st.booleans()) else _draw_from_domain(inner, draw)
+            )
         return Domain[Optional[E]](
             strategy=strat,
             validator=lambda val: val is None or inner.validate(val),
@@ -1146,6 +1341,7 @@ class Domain(Generic[T]):
     @classmethod
     def none(cls) -> Domain[None]:
         from hypothesis import strategies as st
+
         return Domain[None](
             strategy=st.none(),
             validator=lambda val: val is None,
@@ -1154,14 +1350,18 @@ class Domain(Generic[T]):
     @classmethod
     def boolean(cls) -> Domain[bool]:
         from hypothesis import strategies as st
+
         return Domain[bool](
             strategy=st.booleans(),
             validator=lambda val: isinstance(val, bool),
         )
 
     @classmethod
-    def text(cls, min_size: int = 0, max_size: Optional[int] = None, alphabet: Any = None) -> Domain[str]:
+    def text(
+        cls, min_size: int = 0, max_size: Optional[int] = None, alphabet: Any = None
+    ) -> Domain[str]:
         from hypothesis import strategies as st
+
         kwargs: dict[str, Any] = {"min_size": min_size}
         if max_size is not None:
             kwargs["max_size"] = max_size
@@ -1169,7 +1369,11 @@ class Domain(Generic[T]):
             kwargs["alphabet"] = alphabet
         return Domain[str](
             strategy=st.text(**kwargs),
-            validator=lambda val: isinstance(val, str) and len(val) >= min_size and (max_size is None or len(val) <= max_size),
+            validator=lambda val: (
+                isinstance(val, str)
+                and len(val) >= min_size
+                and (max_size is None or len(val) <= max_size)
+            ),
         )
 
     @classmethod
@@ -1188,6 +1392,7 @@ class Domain(Generic[T]):
             mut_fn = draw_fn(st.sampled_from(tuple(mutations)))
             if callable(mut_fn) and not _is_strategy(mut_fn):
                 import inspect
+
                 try:
                     sig = inspect.signature(mut_fn)
                     takes_draw = len(sig.parameters) >= 2
@@ -1226,6 +1431,7 @@ class Domain(Generic[T]):
     def of(cls, val: Any) -> Domain[Any]:
         """Promotes native Python objects, strategies, or callables to a Domain."""
         import typing
+
         if val is typing.Any:
             return cls.any()
         if isinstance(val, Domain):
@@ -1237,6 +1443,7 @@ class Domain(Generic[T]):
         if isinstance(val, range):
             return cls.range(val.start, val.stop, val.step)
         import re
+
         if isinstance(val, re.Pattern):
             return cls.regex(val)
         if typing.get_origin(val) is not None:
@@ -1252,7 +1459,9 @@ class Domain(Generic[T]):
         return cls.just(val)
 
 
-def _derive_expr(name: str, deps: Sequence[Any], eval_fn: Callable[[], Any]) -> Expr[Any]:
+def _derive_expr(
+    name: str, deps: Sequence[Any], eval_fn: Callable[[], Any]
+) -> Expr[Any]:
     expr: Expr[Any] = Expr(name=name, is_return=False)
     expr._eval_fn = eval_fn
     expr._deps = tuple(d for d in deps if isinstance(d, Expr))
@@ -1309,42 +1518,54 @@ class Expr(Generic[T]):
         return _derive_expr(
             f"({self.name} + {other!r})",
             (self, other),
-            lambda: self.value() + (other.value() if isinstance(other, Expr) else other),
+            lambda: (
+                self.value() + (other.value() if isinstance(other, Expr) else other)
+            ),
         )
 
     def __radd__(self, other: Any) -> Expr[Any]:
         return _derive_expr(
             f"({other!r} + {self.name})",
             (other, self),
-            lambda: (other.value() if isinstance(other, Expr) else other) + self.value(),
+            lambda: (
+                (other.value() if isinstance(other, Expr) else other) + self.value()
+            ),
         )
 
     def __sub__(self, other: Any) -> Expr[Any]:
         return _derive_expr(
             f"({self.name} - {other!r})",
             (self, other),
-            lambda: self.value() - (other.value() if isinstance(other, Expr) else other),
+            lambda: (
+                self.value() - (other.value() if isinstance(other, Expr) else other)
+            ),
         )
 
     def __rsub__(self, other: Any) -> Expr[Any]:
         return _derive_expr(
             f"({other!r} - {self.name})",
             (other, self),
-            lambda: (other.value() if isinstance(other, Expr) else other) - self.value(),
+            lambda: (
+                (other.value() if isinstance(other, Expr) else other) - self.value()
+            ),
         )
 
     def __mul__(self, other: Any) -> Expr[Any]:
         return _derive_expr(
             f"({self.name} * {other!r})",
             (self, other),
-            lambda: self.value() * (other.value() if isinstance(other, Expr) else other),
+            lambda: (
+                self.value() * (other.value() if isinstance(other, Expr) else other)
+            ),
         )
 
     def __rmul__(self, other: Any) -> Expr[Any]:
         return _derive_expr(
             f"({other!r} * {self.name})",
             (other, self),
-            lambda: (other.value() if isinstance(other, Expr) else other) * self.value(),
+            lambda: (
+                (other.value() if isinstance(other, Expr) else other) * self.value()
+            ),
         )
 
     def __getattr__(self, attr: str) -> Expr[Any]:
@@ -1360,7 +1581,9 @@ class Expr(Generic[T]):
         return _derive_expr(
             f"{self.name}[{key!r}]",
             (self, key),
-            lambda: cast(Any, self.value())[key.value() if isinstance(key, Expr) else key],
+            lambda: cast(Any, self.value())[
+                key.value() if isinstance(key, Expr) else key
+            ],
         )
 
 
@@ -1371,7 +1594,9 @@ class _RequirementFailed(Exception):
 class TransitionContext(Generic[Target, P, R]):
     """Context for specifying requires, argument, return, ensures, and update handlers for a transition."""
 
-    def __init__(self, target: Any = None, name: Optional[str] = None, is_seeding: bool = False) -> None:
+    def __init__(
+        self, target: Any = None, name: Optional[str] = None, is_seeding: bool = False
+    ) -> None:
         self.updates: bool = False
         self.target: Optional[Target] = target
         self.check: EnsuresCheck = EnsuresCheck()
@@ -1386,11 +1611,16 @@ class TransitionContext(Generic[Target, P, R]):
         self._req_check: RequiresCheck = RequiresCheck()
         self._in_pass1: bool = False
 
-    def requires(self, fn: Union[bool, Callable[[RequiresCheck], Any], Callable[[], bool]], reason: str = "") -> None:
+    def requires(
+        self,
+        fn: Union[bool, Callable[[RequiresCheck], Any], Callable[[], bool]],
+        reason: str = "",
+    ) -> None:
         if callable(fn):
             self.predicate = fn
             if self._in_pass1:
                 import inspect
+
                 try:
                     sig = inspect.signature(fn)
                     param_count = len(sig.parameters)
@@ -1415,7 +1645,9 @@ class TransitionContext(Generic[Target, P, R]):
                 val = bool(fn)
                 self.predicate = lambda: val
 
-    def antecedent(self, predicate: Union[bool, Callable[[], bool]], reason: str = "") -> None:
+    def antecedent(
+        self, predicate: Union[bool, Callable[[], bool]], reason: str = ""
+    ) -> None:
         self.requires(predicate, reason=reason)
 
     def check_equal(self, actual: Any, expected: Any, msg: str = "") -> None:
@@ -1433,13 +1665,19 @@ class TransitionContext(Generic[Target, P, R]):
         self.domains = dom_list
 
     @overload
-    def returns(self, fn: Callable[P, Union[R, Outcome[R], Outcome[Any], None]]) -> None: ...
+    def returns(
+        self, fn: Callable[P, Union[R, Outcome[R], Outcome[Any], None]]
+    ) -> None: ...
 
     @overload
-    def returns(self, fn: Callable[[], Union[R, Outcome[R], Outcome[Any], None]]) -> None: ...
+    def returns(
+        self, fn: Callable[[], Union[R, Outcome[R], Outcome[Any], None]]
+    ) -> None: ...
 
     @overload
-    def returns(self, fn: Callable[..., Union[R, Outcome[R], Outcome[Any], None]]) -> None: ...
+    def returns(
+        self, fn: Callable[..., Union[R, Outcome[R], Outcome[Any], None]]
+    ) -> None: ...
 
     @overload
     def returns(self, fn: Union[R, Outcome[R], Outcome[Any]]) -> None: ...
@@ -1515,7 +1753,9 @@ class transition:
         self.fn: Optional[Callable[..., Any]] = None
 
     @classmethod
-    def seeding(cls, fn: Optional[Callable[..., Any]] = None, *, name: Optional[str] = None) -> Any:
+    def seeding(
+        cls, fn: Optional[Callable[..., Any]] = None, *, name: Optional[str] = None
+    ) -> Any:
         inst = cls(name=name, is_seeding=True)
         if fn is not None and callable(fn):
             return inst(fn)
@@ -1537,8 +1777,12 @@ class transition:
                         if isinstance(node.value, ast.Call):
                             call = node.value
                             func = call.func
-                            if (isinstance(func, ast.Name) and func.id == "ensure_raises") or (
-                                isinstance(func, ast.Attribute) and func.attr == "ensure_raises"
+                            if (
+                                isinstance(func, ast.Name)
+                                and func.id == "ensure_raises"
+                            ) or (
+                                isinstance(func, ast.Attribute)
+                                and func.attr == "ensure_raises"
                             ):
                                 if len(call.args) >= 2:
                                     call_expr = call.args[0]
@@ -1553,11 +1797,19 @@ class transition:
                                                     ast.Expr(
                                                         value=ast.Call(
                                                             func=ast.Attribute(
-                                                                value=ast.Name(id="_last_raised_exc", ctx=ast.Load()),
+                                                                value=ast.Name(
+                                                                    id="_last_raised_exc",
+                                                                    ctx=ast.Load(),
+                                                                ),
                                                                 attr="set",
                                                                 ctx=ast.Load(),
                                                             ),
-                                                            args=[ast.Name(id="_exc", ctx=ast.Load())],
+                                                            args=[
+                                                                ast.Name(
+                                                                    id="_exc",
+                                                                    ctx=ast.Load(),
+                                                                )
+                                                            ],
                                                             keywords=[],
                                                         )
                                                     ),
@@ -1568,8 +1820,15 @@ class transition:
                                         orelse=[
                                             ast.Raise(
                                                 exc=ast.Call(
-                                                    func=ast.Name(id="AssertionError", ctx=ast.Load()),
-                                                    args=[ast.Constant(value="Expected exception was not raised")],
+                                                    func=ast.Name(
+                                                        id="AssertionError",
+                                                        ctx=ast.Load(),
+                                                    ),
+                                                    args=[
+                                                        ast.Constant(
+                                                            value="Expected exception was not raised"
+                                                        )
+                                                    ],
                                                     keywords=[],
                                                 )
                                             )
@@ -1588,7 +1847,11 @@ class transition:
                 ast.fix_missing_locations(new_tree)
                 code_obj = compile(new_tree, inspect.getfile(fn), "exec")
                 caller_frame = inspect.currentframe()
-                caller_locals = caller_frame.f_back.f_locals if caller_frame and caller_frame.f_back else {}
+                caller_locals = (
+                    caller_frame.f_back.f_locals
+                    if caller_frame and caller_frame.f_back
+                    else {}
+                )
                 temp_ns = dict(fn.__globals__)
                 temp_ns.setdefault("require", require)
                 temp_ns.setdefault("require_arg", require_arg)
@@ -1597,16 +1860,15 @@ class transition:
                 temp_ns.setdefault("ensure_raises", ensure_raises)
                 temp_ns.setdefault("_last_raised_exc", _last_raised_exc)
                 temp_ns.setdefault("Domain", Domain)
-                temp_ns.setdefault("PretenseSpecificationError", PretenseSpecificationError)
+                temp_ns.setdefault(
+                    "PretenseSpecificationError", PretenseSpecificationError
+                )
                 temp_ns.update(caller_locals)
                 exec(code_obj, temp_ns)
                 target_fn = temp_ns.get(fn.__name__, fn)
 
-
         except Exception:
             target_fn = fn
-
-
 
         try:
             sig = inspect.signature(fn)
@@ -1632,7 +1894,11 @@ class transition:
 
 
 def _build_transition_from_context(ctx: TransitionContext[Any, Any, Any]) -> Transition:
-    tr_name = ctx.name or getattr(ctx.target, "__name__", None) or getattr(getattr(ctx.target, "fget", None), "__name__", "transition")
+    tr_name = (
+        ctx.name
+        or getattr(ctx.target, "__name__", None)
+        or getattr(getattr(ctx.target, "fget", None), "__name__", "transition")
+    )
     t = Transition(
         name=tr_name,
         target=ctx.target,
@@ -1641,6 +1907,7 @@ def _build_transition_from_context(ctx: TransitionContext[Any, Any, Any]) -> Tra
     if ctx.predicate is not None:
         pred = ctx.predicate
         import inspect
+
         try:
             sig = inspect.signature(pred)
             param_count = len(sig.parameters)
@@ -1648,6 +1915,7 @@ def _build_transition_from_context(ctx: TransitionContext[Any, Any, Any]) -> Tra
             param_count = 0
 
         if param_count >= 1:
+
             def req_wrapper(state: Any, this: Any) -> bool:
                 chk = RequiresCheck()
                 setattr(req_wrapper, "last_check", chk)
@@ -1655,9 +1923,11 @@ def _build_transition_from_context(ctx: TransitionContext[Any, Any, Any]) -> Tra
                 if res is False:
                     chk.ok = False
                 return chk.ok
+
             setattr(req_wrapper, "last_check", None)
             t.requirements.append(req_wrapper)
         else:
+
             def req_wrapper_noarg(state: Any, this: Any) -> bool:
                 chk = RequiresCheck()
                 setattr(req_wrapper_noarg, "last_check", chk)
@@ -1665,13 +1935,16 @@ def _build_transition_from_context(ctx: TransitionContext[Any, Any, Any]) -> Tra
                 if not ok:
                     chk(False, "Precondition returned False")
                 return ok
+
             setattr(req_wrapper_noarg, "last_check", None)
             t.requirements.append(req_wrapper_noarg)
 
     domains = ctx.domains
 
     def args_fn(state: Any, this: Any, *args: Any, **kwargs: Any) -> Any:
-        is_generation = (not args and not kwargs) or (args and all(isinstance(a, NotBoundType) for a in args))
+        is_generation = (not args and not kwargs) or (
+            args and all(isinstance(a, NotBoundType) for a in args)
+        )
 
         if domains is None or len(domains) == 0:
             if is_generation:
@@ -1684,13 +1957,18 @@ def _build_transition_from_context(ctx: TransitionContext[Any, Any, Any]) -> Tra
             draw = get_current_draw()
             resolved_args: list[Any] = []
             for name, item in domains:
-                if callable(item) and not isinstance(item, Domain) and not _is_strategy(item):
+                if (
+                    callable(item)
+                    and not isinstance(item, Domain)
+                    and not _is_strategy(item)
+                ):
                     concrete_domain = Domain.of(item(*resolved_args))
                 else:
                     concrete_domain = Domain.of(item)
                 strat = concrete_domain.to_strategy()
                 if callable(strat) and not _is_strategy(strat):
                     import inspect
+
                     try:
                         sig = inspect.signature(strat)
                         params = list(sig.parameters.values())
@@ -1702,7 +1980,11 @@ def _build_transition_from_context(ctx: TransitionContext[Any, Any, Any]) -> Tra
                         takes_draw = False
 
                     if takes_draw:
-                        effective_draw = draw if draw is not None else (lambda s: _resolve_argument_value(s, None))
+                        effective_draw = (
+                            draw
+                            if draw is not None
+                            else (lambda s: _resolve_argument_value(s, None))
+                        )
                         val = strat(effective_draw)
                     else:
                         val = strat()
@@ -1714,16 +1996,27 @@ def _build_transition_from_context(ctx: TransitionContext[Any, Any, Any]) -> Tra
         else:
             bound_vals: list[Any] = []
             target = ctx.target
-            target_callable = target if (target is not None and callable(target)) else (
-                ctx.returns_fn if (ctx.returns_fn is not None and callable(ctx.returns_fn)) else None
+            target_callable = (
+                target
+                if (target is not None and callable(target))
+                else (
+                    ctx.returns_fn
+                    if (ctx.returns_fn is not None and callable(ctx.returns_fn))
+                    else None
+                )
             )
             has_leading_res = False
-            if target_callable is None and ctx.consequent_fn is not None and callable(ctx.consequent_fn):
+            if (
+                target_callable is None
+                and ctx.consequent_fn is not None
+                and callable(ctx.consequent_fn)
+            ):
                 target_callable = ctx.consequent_fn
                 has_leading_res = True
 
             if target_callable is not None:
                 import inspect
+
                 try:
                     sig = inspect.signature(target_callable)
                     params = list(sig.parameters.values())
@@ -1740,7 +2033,9 @@ def _build_transition_from_context(ctx: TransitionContext[Any, Any, Any]) -> Tra
                     else:
                         bound = sig.bind_partial(*args, **kwargs)
                     bound.apply_defaults()
-                    param_names = [p.name for p in params if p.name not in ("self", "cls", "res")]
+                    param_names = [
+                        p.name for p in params if p.name not in ("self", "cls", "res")
+                    ]
                     for i, (name, _) in enumerate(domains):
                         if name in bound.arguments:
                             bound_vals.append(bound.arguments[name])
@@ -1774,7 +2069,11 @@ def _build_transition_from_context(ctx: TransitionContext[Any, Any, Any]) -> Tra
             collected_domain_vals = list(bound_vals)
             for i, (name, item) in enumerate(domains):
                 val = bound_vals[i]
-                if callable(item) and not isinstance(item, Domain) and not _is_strategy(item):
+                if (
+                    callable(item)
+                    and not isinstance(item, Domain)
+                    and not _is_strategy(item)
+                ):
                     concrete_domain = Domain.of(item(*collected_domain_vals[:i]))
                 else:
                     concrete_domain = Domain.of(item)
@@ -1800,24 +2099,35 @@ def _build_transition_from_context(ctx: TransitionContext[Any, Any, Any]) -> Tra
 
         if ret_fn is not None:
             import inspect
+
             try:
                 sig = inspect.signature(ret_fn)
                 params = list(sig.parameters.values())
-                takes_state_this = len(params) >= 2 and params[0].name in ("state", "st") and params[1].name in ("this", "sm", "self")
+                takes_state_this = (
+                    len(params) >= 2
+                    and params[0].name in ("state", "st")
+                    and params[1].name in ("this", "sm", "self")
+                )
                 has_outcome_param = "outcome" in sig.parameters
             except (ValueError, TypeError):
                 takes_state_this = False
                 has_outcome_param = False
 
             if takes_state_this:
-                kw = {"outcome": outcome} if has_outcome_param and outcome is not NotBound else {}
+                kw = (
+                    {"outcome": outcome}
+                    if has_outcome_param and outcome is not NotBound
+                    else {}
+                )
                 raw_val = ret_fn(state, this, *args, **kw)
             else:
                 raw_val = ret_fn(*args) if callable(ret_fn) else ret_fn
 
             if isinstance(raw_val, Raised):
                 if outcome is not NotBound:
-                    if isinstance(outcome, Raised) and type(outcome.exc) is type(raw_val.exc):
+                    if isinstance(outcome, Raised) and type(outcome.exc) is type(
+                        raw_val.exc
+                    ):
                         return outcome
                     return None
                 return raw_val
@@ -1842,12 +2152,17 @@ def _build_transition_from_context(ctx: TransitionContext[Any, Any, Any]) -> Tra
     def provider(state: Any, this: Any, *args: Any, result: Any = None) -> None:
         if cons is not None:
             import inspect
+
             params: list[Any] = []
             takes_state_this = False
             try:
                 sig = inspect.signature(cons)
                 params = list(sig.parameters.values())
-                takes_state_this = len(params) >= 2 and params[0].name in ("state", "st") and params[1].name in ("this", "sm", "self")
+                takes_state_this = (
+                    len(params) >= 2
+                    and params[0].name in ("state", "st")
+                    and params[1].name in ("this", "sm", "self")
+                )
             except (ValueError, TypeError):
                 takes_state_this = False
 
@@ -1866,8 +2181,12 @@ def _build_transition_from_context(ctx: TransitionContext[Any, Any, Any]) -> Tra
 
     raw_ensure = ctx.ensures_fn
     if raw_ensure is not None:
-        def ensure_wrapper(res: Any, target: Any, check: EnsuresCheck, *args: Any, **kwargs: Any) -> None:
+
+        def ensure_wrapper(
+            res: Any, target: Any, check: EnsuresCheck, *args: Any, **kwargs: Any
+        ) -> None:
             import inspect
+
             try:
                 sig = inspect.signature(raw_ensure)
                 params = list(sig.parameters.values())
@@ -1875,7 +2194,9 @@ def _build_transition_from_context(ctx: TransitionContext[Any, Any, Any]) -> Tra
                 params = []
 
             param_count = len(params)
-            has_varargs = any(p.kind == inspect.Parameter.VAR_POSITIONAL for p in params)
+            has_varargs = any(
+                p.kind == inspect.Parameter.VAR_POSITIONAL for p in params
+            )
 
             if param_count == 0:
                 raw_ensure()
@@ -1909,6 +2230,7 @@ def _build_transition_from_context(ctx: TransitionContext[Any, Any, Any]) -> Tra
 
 def _is_lifted_transition_fn(raw_fn: Callable[..., Any]) -> bool:
     import inspect
+
     try:
         sig = inspect.signature(raw_fn)
         params = [p for p in sig.parameters.values() if p.name != "self"]
@@ -1947,6 +2269,7 @@ def _build_lifted_transition(
     tr_name: str,
 ) -> Transition:
     import inspect
+
     sig = inspect.signature(raw_fn)
     params = [p for p in sig.parameters.values() if p.name != "self"]
     expr_params = params[:-1] if params else []
@@ -1966,7 +2289,11 @@ def _build_lifted_transition(
         elif callable(spec.target):
             try:
                 t_sig = inspect.signature(spec.target)
-                t_params = [p for p in t_sig.parameters.values() if p.name not in ("self", "cls")]
+                t_params = [
+                    p
+                    for p in t_sig.parameters.values()
+                    if p.name not in ("self", "cls")
+                ]
                 target_arity = len(t_params)
             except (ValueError, TypeError):
                 target_arity = len(expr_params) - 1
@@ -1990,7 +2317,9 @@ def _build_lifted_transition(
         is_seeding=spec.is_seeding,
     )
     t._is_lifted = True
-    last_ctx = TransitionContext(target=spec.target, name=tr_name, is_seeding=spec.is_seeding)
+    last_ctx = TransitionContext(
+        target=spec.target, name=tr_name, is_seeding=spec.is_seeding
+    )
     t.ctx = last_ctx
 
     def _resolve_active_sm(state: Any, this: Any) -> Any:
@@ -1999,9 +2328,13 @@ def _build_lifted_transition(
             active.state = state
         return active
 
-    def _run_pass1(state: Any, this: Any) -> Tuple[TransitionContext[Any, Any, Any], List[Expr[Any]], Expr[Any]]:
+    def _run_pass1(
+        state: Any, this: Any
+    ) -> Tuple[TransitionContext[Any, Any, Any], List[Expr[Any]], Expr[Any]]:
         active_sm = _resolve_active_sm(state, this)
-        arg_exprs: List[Expr[Any]] = [Expr(name=p.name, is_return=False) for p in arg_params]
+        arg_exprs: List[Expr[Any]] = [
+            Expr(name=p.name, is_return=False) for p in arg_params
+        ]
         ret_expr: Expr[Any] = Expr(name=ret_param_name, is_return=True)
         ctx = TransitionContext(target=None, name=tr_name, is_seeding=spec.is_seeding)
         ctx.updates = False
@@ -2039,7 +2372,9 @@ def _build_lifted_transition(
     t.requirements.append(req_wrapper)
 
     def args_fn(state: Any, this: Any, *args: Any, **kwargs: Any) -> Any:
-        is_generation = (not args and not kwargs) or (args and all(isinstance(a, NotBoundType) for a in args))
+        is_generation = (not args and not kwargs) or (
+            args and all(isinstance(a, NotBoundType) for a in args)
+        )
         ctx, arg_exprs, _ = _run_pass1(state, this)
         if not ctx._req_check.ok:
             return None
@@ -2077,11 +2412,16 @@ def _build_lifted_transition(
                     else:
                         bound = t_sig.bind_partial(*args, **kwargs)
                     bound.apply_defaults()
-                    t_param_names = [p.name for p in t_params if p.name not in ("self", "cls")]
+                    t_param_names = [
+                        p.name for p in t_params if p.name not in ("self", "cls")
+                    ]
                     for i, p in enumerate(arg_params):
                         if p.name in bound.arguments:
                             bound_vals.append(bound.arguments[p.name])
-                        elif i < len(t_param_names) and t_param_names[i] in bound.arguments:
+                        elif (
+                            i < len(t_param_names)
+                            and t_param_names[i] in bound.arguments
+                        ):
                             bound_vals.append(bound.arguments[t_param_names[i]])
                         elif i < len(args):
                             bound_vals.append(args[i])
@@ -2125,7 +2465,9 @@ def _build_lifted_transition(
             if i < len(arg_exprs):
                 arg_exprs[i]._val = val
 
-        raised_spec = ret_expr._raised if ret_expr._raised is not None else ctx.expected_exception
+        raised_spec = (
+            ret_expr._raised if ret_expr._raised is not None else ctx.expected_exception
+        )
         if raised_spec is not None:
             exc_cls, match = raised_spec
             m_val: Any = match.value() if isinstance(match, Expr) else match
@@ -2138,14 +2480,19 @@ def _build_lifted_transition(
                                 return None
                         else:
                             import re
+
                             m_str = str(m_val)
-                            if m_str not in str(outcome.exc) and not re.search(m_str, str(outcome.exc)):
+                            if m_str not in str(outcome.exc) and not re.search(
+                                m_str, str(outcome.exc)
+                            ):
                                 return None
                     return outcome
                 return None
             pat_attr = getattr(m_val, "pattern", None)
             m_str = str(pat_attr) if pat_attr is not None else str(m_val or "")
-            return Raised(_safe_instantiate_exception(cast(Type[Exception], exc_cls), m_str))
+            return Raised(
+                _safe_instantiate_exception(cast(Type[Exception], exc_cls), m_str)
+            )
 
         if not isinstance(ret_expr._constraint, NotBoundType):
             c = ret_expr._constraint
@@ -2159,14 +2506,30 @@ def _build_lifted_transition(
                     if c_arity == 0:
                         expected_c = c()
                         if isinstance(expected_c, Raised):
-                            if isinstance(outcome, Raised) and isinstance(outcome.exc, type(expected_c.exc)):
+                            if isinstance(outcome, Raised) and isinstance(
+                                outcome.exc, type(expected_c.exc)
+                            ):
                                 return outcome
                             return None
                         if isinstance(outcome, Raised):
                             return None
-                        actual_val = outcome.val if isinstance(outcome, Value) else outcome
-                        expected_val = expected_c.val if isinstance(expected_c, Value) else expected_c
-                        return (outcome if isinstance(outcome, Outcome) else Value(outcome)) if actual_val == expected_val else None
+                        actual_val = (
+                            outcome.val if isinstance(outcome, Value) else outcome
+                        )
+                        expected_val = (
+                            expected_c.val
+                            if isinstance(expected_c, Value)
+                            else expected_c
+                        )
+                        return (
+                            (
+                                outcome
+                                if isinstance(outcome, Outcome)
+                                else Value(outcome)
+                            )
+                            if actual_val == expected_val
+                            else None
+                        )
                 if isinstance(outcome, Raised):
                     return None
                 actual_val = outcome.val if isinstance(outcome, Value) else outcome
@@ -2180,7 +2543,11 @@ def _build_lifted_transition(
                     is_valid = bool(c(actual_val))
                 else:
                     is_valid = bool(actual_val == c)
-                return (outcome if isinstance(outcome, Outcome) else Value(outcome)) if is_valid else None
+                return (
+                    (outcome if isinstance(outcome, Outcome) else Value(outcome))
+                    if is_valid
+                    else None
+                )
             else:
                 if isinstance(c, Domain):
                     synth_val = _draw_from_domain(c, get_current_draw())
@@ -2212,7 +2579,9 @@ def _build_lifted_transition(
         check_obj: Optional[EnsuresCheck],
     ) -> None:
         active_sm = _resolve_active_sm(state, this)
-        arg_exprs: List[Expr[Any]] = [Expr(name=p.name, is_return=False) for p in arg_params]
+        arg_exprs: List[Expr[Any]] = [
+            Expr(name=p.name, is_return=False) for p in arg_params
+        ]
         for i, expr in enumerate(arg_exprs):
             if i < len(resolved_args):
                 expr._val = resolved_args[i]
@@ -2224,10 +2593,16 @@ def _build_lifted_transition(
         else:
             ret_expr._val = result_val
 
-        ctx = TransitionContext(target=target_obj, name=tr_name, is_seeding=spec.is_seeding)
+        ctx = TransitionContext(
+            target=target_obj, name=tr_name, is_seeding=spec.is_seeding
+        )
         ctx.updates = do_updates
         ctx.target = target_obj
-        ctx.check = check_obj if check_obj is not None else EnsuresCheck(getattr(active_sm, "singletons", None))
+        ctx.check = (
+            check_obj
+            if check_obj is not None
+            else EnsuresCheck(getattr(active_sm, "singletons", None))
+        )
         ctx._in_pass1 = False
 
         if not params:
@@ -2272,13 +2647,30 @@ def _build_lifted_transition(
             elif e_arity == 2:
                 ens(target_obj, ctx.check)
             else:
-                ens(ret_expr._val, target_obj, ctx.check, *resolved_args[: max(0, e_arity - 3)])
+                ens(
+                    ret_expr._val,
+                    target_obj,
+                    ctx.check,
+                    *resolved_args[: max(0, e_arity - 3)],
+                )
 
     def provider(state: Any, this: Any, *args: Any, result: Any = None) -> None:
-        _exec_pass2(state, this, args, result, do_updates=True, target_obj=None, check_obj=None)
+        _exec_pass2(
+            state, this, args, result, do_updates=True, target_obj=None, check_obj=None
+        )
 
-    def ensure_wrapper(res: Any, target: Any, check: EnsuresCheck, *args: Any, **_kwargs: Any) -> None:
-        _exec_pass2(sm_instance.state, sm_instance, args, res, do_updates=False, target_obj=target, check_obj=check)
+    def ensure_wrapper(
+        res: Any, target: Any, check: EnsuresCheck, *args: Any, **_kwargs: Any
+    ) -> None:
+        _exec_pass2(
+            sm_instance.state,
+            sm_instance,
+            args,
+            res,
+            do_updates=False,
+            target_obj=target,
+            check_obj=check,
+        )
 
     def _run_consequent(
         state: Any,
@@ -2288,7 +2680,9 @@ def _build_lifted_transition(
         check: Optional[EnsuresCheck],
         *args: Any,
     ) -> None:
-        _exec_pass2(state, this, args, res, do_updates=True, target_obj=target, check_obj=check)
+        _exec_pass2(
+            state, this, args, res, do_updates=True, target_obj=target, check_obj=check
+        )
 
     t.provider = provider
     t.ensure_fn = ensure_wrapper
@@ -2304,7 +2698,9 @@ def _resolve_suts_and_target(
     fn_globals: Optional[Dict[str, Any]] = None,
 ) -> Tuple[Any, Any]:
     globs = fn_globals or {}
-    actual_t_type = globs.get(target_type) if isinstance(target_type, str) else target_type
+    actual_t_type = (
+        globs.get(target_type) if isinstance(target_type, str) else target_type
+    )
     actual_s_type = globs.get(suts_type) if isinstance(suts_type, str) else suts_type
 
     target_obj: Any = None
@@ -2339,7 +2735,9 @@ def _resolve_suts_and_target(
 _LINEAR_PARSE_CACHE: Dict[Tuple[Callable[..., Any], str], Dict[str, Any]] = {}
 
 
-def _parse_linear_transition(orig_fn: Callable[..., Any], spec: transition, attr_name: str) -> Dict[str, Any]:
+def _parse_linear_transition(
+    orig_fn: Callable[..., Any], spec: transition, attr_name: str
+) -> Dict[str, Any]:
     cache_key = (orig_fn, attr_name)
     cached = _LINEAR_PARSE_CACHE.get(cache_key)
     if cached is not None:
@@ -2364,44 +2762,92 @@ def _parse_linear_transition(orig_fn: Callable[..., Any], spec: transition, attr
         local_aliases: Dict[str, ast.AST] = {}
         if isinstance(fn_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             for stmt in fn_node.body:
-                if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name):
+                if (
+                    isinstance(stmt, ast.Assign)
+                    and len(stmt.targets) == 1
+                    and isinstance(stmt.targets[0], ast.Name)
+                ):
                     local_aliases[stmt.targets[0].id] = stmt.value
                 elif isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
                     call = stmt.value
-                    func_name = call.func.id if isinstance(call.func, ast.Name) else getattr(call.func, "attr", "")
+                    func_name = (
+                        call.func.id
+                        if isinstance(call.func, ast.Name)
+                        else getattr(call.func, "attr", "")
+                    )
                     if func_name in ("require", "requires") and call.args:
                         arg_expr = call.args[0]
+
                         class _AliasReplacer(ast.NodeTransformer):
                             def visit_Name(self, node: ast.Name) -> ast.AST:
                                 if node.id in local_aliases:
                                     import copy
-                                    return ast.copy_location(copy.deepcopy(local_aliases[node.id]), node)
+
+                                    return ast.copy_location(
+                                        copy.deepcopy(local_aliases[node.id]), node
+                                    )
                                 return node
+
                         subbed_expr = _AliasReplacer().visit(copy.deepcopy(arg_expr))
                         ast.fix_missing_locations(subbed_expr)
 
                         class _NameChecker(ast.NodeVisitor):
                             def __init__(self) -> None:
                                 self.names: set[str] = set()
+
                             def visit_Name(self, node: ast.Name) -> None:
                                 self.names.add(node.id)
+
                         checker = _NameChecker()
                         checker.visit(subbed_expr)
                         if not any(name in param_names for name in checker.names):
                             cond_expr = ast.Expression(body=subbed_expr)
-                            code = compile(cond_expr, f"<{attr_name}_require_{len(req_codes)}>", "eval")
+                            code = compile(
+                                cond_expr,
+                                f"<{attr_name}_require_{len(req_codes)}>",
+                                "eval",
+                            )
                             req_codes.append(code)
                     elif func_name == "require_arg" and len(call.args) >= 2:
                         arg_name_node = call.args[0]
-                        arg_name = arg_name_node.id if isinstance(arg_name_node, ast.Name) else ""
-                        domain_code = compile(ast.Expression(body=call.args[1]), f"<{attr_name}_dom_{arg_name}>", "eval")
+                        arg_name = (
+                            arg_name_node.id
+                            if isinstance(arg_name_node, ast.Name)
+                            else ""
+                        )
+                        domain_code = compile(
+                            ast.Expression(body=call.args[1]),
+                            f"<{attr_name}_dom_{arg_name}>",
+                            "eval",
+                        )
                         pref_code = None
                         if len(call.args) >= 3:
-                            pref_code = compile(ast.Expression(body=call.args[2]), f"<{attr_name}_pref_{arg_name}>", "eval")
-                        else:
+                            arg3 = call.args[2]
+                            is_err = False
+                            if isinstance(arg3, ast.Name) and (
+                                arg3.id.endswith("Error")
+                                or arg3.id.endswith("Exception")
+                            ):
+                                is_err = True
+                            elif isinstance(arg3, ast.Attribute) and (
+                                arg3.attr.endswith("Error")
+                                or arg3.attr.endswith("Exception")
+                            ):
+                                is_err = True
+                            if not is_err:
+                                pref_code = compile(
+                                    ast.Expression(body=arg3),
+                                    f"<{attr_name}_pref_{arg_name}>",
+                                    "eval",
+                                )
+                        if pref_code is None:
                             for kw in call.keywords:
                                 if kw.arg == "preferred":
-                                    pref_code = compile(ast.Expression(body=kw.value), f"<{attr_name}_pref_{arg_name}>", "eval")
+                                    pref_code = compile(
+                                        ast.Expression(body=kw.value),
+                                        f"<{attr_name}_pref_{arg_name}>",
+                                        "eval",
+                                    )
                                     break
                         if arg_name:
                             param_domains[arg_name] = (domain_code, pref_code)
@@ -2435,7 +2881,11 @@ def _build_linear_transition(
 
     desc = _parse_linear_transition(raw_fn, spec, attr_name)
     desc["target_fn"] = target_fn
-    t = Transition(name=attr_name, target=spec.target, is_seeding=getattr(spec, "is_seeding", False))
+    t = Transition(
+        name=attr_name,
+        target=spec.target,
+        is_seeding=getattr(spec, "is_seeding", False),
+    )
     t._is_linear = True
     t._linear_desc = desc
     t._target_fn = target_fn
@@ -2463,8 +2913,12 @@ def _build_linear_transition(
                 base_spec = getattr(base_attr, "__transition_spec__", None)
                 if base_spec is not None:
                     base_raw_fn = getattr(base_spec, "fn", None) or base_attr
-                    base_desc = _parse_linear_transition(base_raw_fn, base_spec, attr_name)
-                    for p_name, (d_code, pr_code) in base_desc.get("param_domains", {}).items():
+                    base_desc = _parse_linear_transition(
+                        base_raw_fn, base_spec, attr_name
+                    )
+                    for p_name, (d_code, pr_code) in base_desc.get(
+                        "param_domains", {}
+                    ).items():
                         if p_name not in param_domains:
                             param_domains[p_name] = (d_code, pr_code)
                             for k, v in base_desc.get("globals", {}).items():
@@ -2506,7 +2960,7 @@ def _build_linear_transition(
                     eval_ns.setdefault(st_cls.__name__, st_cls)
         for code in req_codes:
             try:
-                val = eval(code, eval_globs, eval_ns)
+                val = eval(code, {**eval_globs, **eval_ns})
                 if not val:
                     return False
             except Exception:
@@ -2516,7 +2970,9 @@ def _build_linear_transition(
     t.requirements.append(linear_req)
 
     def linear_args(state: Any, this: Any, *args: Any, **kwargs: Any) -> Any:
-        is_generation = (not args and not kwargs) or (args and all(isinstance(a, NotBoundType) for a in args))
+        is_generation = (not args and not kwargs) or (
+            args and all(isinstance(a, NotBoundType) for a in args)
+        )
         eval_ns = {"self": this, "state": state}
         for s_inst in list(_ACTIVE_SUTS.get().values()):
             if hasattr(s_inst, "state") and s_inst.state is not None:
@@ -2534,16 +2990,18 @@ def _build_linear_transition(
             for p_name in param_names:
                 eval_ns.update(drawn)
                 if p_name not in param_domains:
-                    raise PretenseSpecificationError(f"Parameter '{p_name}' has no require_arg declaration in '{attr_name}'")
+                    raise PretenseSpecificationError(
+                        f"Parameter '{p_name}' has no require_arg declaration in '{attr_name}'"
+                    )
                 d_code, pr_code = param_domains[p_name]
-                dom = eval(d_code, eval_globs, eval_ns)
+                dom = eval(d_code, {**eval_globs, **eval_ns})
                 if not isinstance(dom, Domain):
                     dom = Domain.of(dom)
 
                 valid_pref: List[Any] = []
                 if pr_code is not None:
                     try:
-                        pr_vals = eval(pr_code, eval_globs, eval_ns)
+                        pr_vals = eval(pr_code, {**eval_globs, **eval_ns})
                         if pr_vals:
                             valid_pref = [v for v in pr_vals if dom.validate(v)]
                     except Exception:
@@ -2597,7 +3055,7 @@ def _build_linear_transition(
                 eval_ns.update(drawn)
                 if p_name in param_domains:
                     d_code, _ = param_domains[p_name]
-                    dom = eval(d_code, eval_globs, eval_ns)
+                    dom = eval(d_code, {**eval_globs, **eval_ns})
                     if not isinstance(dom, Domain):
                         dom = Domain.of(dom)
                     if not dom.validate(val):
@@ -2605,24 +3063,6 @@ def _build_linear_transition(
                         return None
                 drawn[p_name] = val
             return tuple(drawn[p] for p in param_names)
-
-
-    if base_target_fn is not None and base_target_fn is not target_fn:
-        orig_fn = target_fn
-        def make_wrapped(b_fn: Callable[..., Any], o_fn: Callable[..., Any]) -> Callable[..., Any]:
-            def wrapped(self_sm: Any, *args: Any, **kwargs: Any) -> Any:
-                if _in_make_return_value.get():
-                    return o_fn(self_sm, *args, **kwargs)
-                tok = _last_ensured_ret.set(NotBound)
-                try:
-                    res = b_fn(self_sm, *args, **kwargs)
-                    if _last_ensured_ret.get() is NotBound:
-                        res = o_fn(self_sm, *args, **kwargs)
-                    return res
-                finally:
-                    _last_ensured_ret.reset(tok)
-            return wrapped
-        t._target_fn = make_wrapped(base_target_fn, orig_fn)
 
     t.args_fn = linear_args
     return t
@@ -2652,7 +3092,6 @@ class Transition:
         self._target_fn: Optional[Callable[..., Any]] = None
         self._run_consequent: Optional[Callable[..., None]] = None
         self._last_reject_reason: Optional[str] = None
-
 
     def require(self, fn: Callable[..., bool]) -> Callable[..., bool]:
         self.requirements.append(fn)
@@ -2706,6 +3145,7 @@ class StateMachineProto(Generic[StateT]):
             )
             self.transitions.append(t)
             return t
+
         return decorator
 
     def seeding(self) -> Callable[[Callable[..., Any]], Transition]:
@@ -2717,6 +3157,7 @@ class StateMachineProto(Generic[StateT]):
             )
             self.transitions.append(t)
             return t
+
         return decorator
 
     def invariant(self, fn: Callable[..., None]) -> Callable[..., None]:
@@ -2752,12 +3193,19 @@ def _resolve_target_singleton(singletons: Any, target: Any) -> Any:
 
         if class_name:
             for k, v in singletons.items():
-                if getattr(k, "__name__", "") == class_name or getattr(k, "__qualname__", "") == class_name:
+                if (
+                    getattr(k, "__name__", "") == class_name
+                    or getattr(k, "__qualname__", "") == class_name
+                ):
                     return v
 
         if target_name:
             for k, v in singletons.items():
-                if v is not None and hasattr(v, target_name) and callable(getattr(v, target_name)):
+                if (
+                    v is not None
+                    and hasattr(v, target_name)
+                    and callable(getattr(v, target_name))
+                ):
                     return v
 
         if isinstance(target, type):
@@ -2795,10 +3243,21 @@ class StateMachine(Generic[StateT]):
         invariants: Optional[List[Callable[..., None]]] = None,
         singletons: Optional[Dict[Type[Any], Any]] = None,
     ) -> None:
-        self.state: Any = state
-        self.transitions: List[Transition] = list(transitions) if transitions is not None else []
-        self.invariants: List[Callable[..., None]] = list(invariants) if invariants is not None else []
+        self.transitions: List[Transition] = (
+            list(transitions) if transitions is not None else []
+        )
+        self.invariants: List[Callable[..., None]] = (
+            list(invariants) if invariants is not None else []
+        )
         self.singletons: Dict[Type[Any], Any] = dict(singletons or {})
+        if state is not None:
+            self.state: Any = state
+        elif hasattr(self, "make_initial_state") and callable(
+            getattr(self, "make_initial_state")
+        ):
+            self.state = self.make_initial_state()
+        else:
+            self.state = None
 
         # Auto-discover @transition methods on self in class definition order (child overrides parent)
         seen_transitions: set[str] = set()
@@ -2817,25 +3276,41 @@ class StateMachine(Generic[StateT]):
                     except Exception:
                         has_ctx = False
                     if has_ctx:
-                        tr_name = spec.name or getattr(spec.target, "__name__", None) or getattr(getattr(spec.target, "fget", None), "__name__", attr_name)
-                        ctx = TransitionContext(target=spec.target, name=tr_name, is_seeding=getattr(spec, "is_seeding", False))
+                        tr_name = (
+                            spec.name
+                            or getattr(spec.target, "__name__", None)
+                            or getattr(
+                                getattr(spec.target, "fget", None),
+                                "__name__",
+                                attr_name,
+                            )
+                        )
+                        ctx = TransitionContext(
+                            target=spec.target,
+                            name=tr_name,
+                            is_seeding=getattr(spec, "is_seeding", False),
+                        )
                         method = getattr(self, attr_name)
                         method(ctx)
                         t = _build_transition_from_context(ctx)
                     else:
                         target_fn = getattr(attr, "__target_fn__", raw_fn)
-                        t = _build_linear_transition(self, raw_fn, spec, attr_name, target_fn)
+                        t = _build_linear_transition(
+                            self, raw_fn, spec, attr_name, target_fn
+                        )
                     self.transitions.append(t)
-
 
         # Auto-discover invariant_* methods on self
         for attr_name in dir(self.__class__):
-            if attr_name.startswith("invariant_") and callable(getattr(self, attr_name)):
+            if attr_name.startswith("invariant_") and callable(
+                getattr(self, attr_name)
+            ):
                 inv_method = getattr(self, attr_name)
 
                 def _make_inv_wrapper(m: Callable[..., Any]) -> Callable[..., None]:
                     def inv_wrapper(st: Any, sm: Any) -> None:
                         m()
+
                     return inv_wrapper
 
                 self.invariants.append(_make_inv_wrapper(inv_method))
@@ -2864,7 +3339,9 @@ class StateMachine(Generic[StateT]):
             ),
         )
 
-    def as_checked(self, protocol_type: Type[T], real_instance: Optional[T] = None) -> T:
+    def as_checked(
+        self, protocol_type: Type[T], real_instance: Optional[T] = None
+    ) -> T:
         return cast(
             T,
             CheckedAdapter(
@@ -2897,17 +3374,23 @@ class StateMachine(Generic[StateT]):
         for inv in self.invariants:
             inv(self.state, self)
 
-    def dispatch_transition(self, transition_name: Any, *args: Any, **kwargs: Any) -> Any:
+    def dispatch_transition(
+        self, transition_name: Any, *args: Any, **kwargs: Any
+    ) -> Any:
         target_or_name = transition_name
         candidate_transitions = [
-            t for t in self.transitions
+            t
+            for t in self.transitions
             if t.name == target_or_name
             or t.target == target_or_name
             or getattr(t.target, "__name__", None) == target_or_name
-            or getattr(getattr(t.target, "fget", None), "__name__", None) == target_or_name
+            or getattr(getattr(t.target, "fget", None), "__name__", None)
+            == target_or_name
         ]
         if not candidate_transitions:
-            raise KeyError(f"No transition matching '{target_or_name}' in state machine")
+            raise KeyError(
+                f"No transition matching '{target_or_name}' in state machine"
+            )
 
         matched: List[Tuple[Transition, Tuple[Any, ...]]] = []
         rejection_reasons = []
@@ -2916,7 +3399,11 @@ class StateMachine(Generic[StateT]):
             for req in cand.requirements:
                 if not req(self.state, self):
                     chk = getattr(req, "last_check", None)
-                    reason_msg = ", ".join(chk.reasons) if chk and chk.reasons else getattr(req, "__name__", "precondition unmet")
+                    reason_msg = (
+                        ", ".join(chk.reasons)
+                        if chk and chk.reasons
+                        else getattr(req, "__name__", "precondition unmet")
+                    )
                     failed_reqs.append(reason_msg)
             if failed_reqs:
                 rejection_reasons.append(f"'{cand.name}': {', '.join(failed_reqs)}")
@@ -2929,14 +3416,20 @@ class StateMachine(Generic[StateT]):
                     if last_rej:
                         rejection_reasons.append(f"'{cand.name}': {last_rej}")
                     else:
-                        rejection_reasons.append(f"'{cand.name}': argument parsing failed")
+                        rejection_reasons.append(
+                            f"'{cand.name}': argument parsing failed"
+                        )
                     continue
                 matched.append((cand, parsed))
             else:
                 matched.append((cand, args))
 
         if len(matched) == 0:
-            detail = f" (rejection reasons: {'; '.join(rejection_reasons)})" if rejection_reasons else ""
+            detail = (
+                f" (rejection reasons: {'; '.join(rejection_reasons)})"
+                if rejection_reasons
+                else ""
+            )
             raise NoMatchingTransitionError(
                 f"No matching transition for '{target_or_name}' with args={args}, "
                 f"kwargs={kwargs} in state: {self.state}{detail}"
@@ -2976,9 +3469,8 @@ class StateMachine(Generic[StateT]):
         res = None
         raised_exc: Optional[Exception] = None
 
-        target_method_name = (
-            getattr(t.target, "__name__", None)
-            or getattr(getattr(t.target, "fget", None), "__name__", str(t.name))
+        target_method_name = getattr(t.target, "__name__", None) or getattr(
+            getattr(t.target, "fget", None), "__name__", str(t.name)
         )
         target_fn = (
             getattr(target_obj, target_method_name, None)
@@ -3000,7 +3492,9 @@ class StateMachine(Generic[StateT]):
 
         if target_obj is not None and t.target is not None and not t.is_seeding:
             try:
-                if isinstance(t.target, property) or isinstance(getattr(type(target_obj), target_method_name, None), property):
+                if isinstance(t.target, property) or isinstance(
+                    getattr(type(target_obj), target_method_name, None), property
+                ):
                     res = getattr(target_obj, target_method_name)
                 elif hasattr(target_obj, target_method_name):
                     method = getattr(target_obj, target_method_name)
@@ -3010,15 +3504,33 @@ class StateMachine(Generic[StateT]):
             except Exception as e:  # cleanroom: allow-broad-exception
                 raised_exc = e
 
-            sut_outcome: Outcome[Any] = Raised(raised_exc) if raised_exc is not None else Value(res)
+            sut_outcome: Outcome[Any] = (
+                Raised(raised_exc) if raised_exc is not None else Value(res)
+            )
             if t.return_fn is not None:
-                recognized = t.return_fn(self.state, self, *resolved_args, outcome=sut_outcome)
-                if recognized is None and sut_outcome == Value(None) and not (getattr(t, "ctx", None) and getattr(t.ctx, "expected_exception", None)):
+                recognized = t.return_fn(
+                    self.state, self, *resolved_args, outcome=sut_outcome
+                )
+                if (
+                    recognized is None
+                    and sut_outcome == Value(None)
+                    and not (
+                        getattr(t, "ctx", None)
+                        and getattr(t.ctx, "expected_exception", None)
+                    )
+                ):
                     valid_outcome: Outcome[Any] = Value(None)
                 elif recognized is not None:
-                    valid_outcome = recognized if isinstance(recognized, (Value, Raised)) else Value(recognized)
+                    valid_outcome = (
+                        recognized
+                        if isinstance(recognized, (Value, Raised))
+                        else Value(recognized)
+                    )
                 else:
-                    if raised_exc is not None and not (getattr(t, "ctx", None) and getattr(t.ctx, "expected_exception", None)):
+                    if raised_exc is not None and not (
+                        getattr(t, "ctx", None)
+                        and getattr(t.ctx, "expected_exception", None)
+                    ):
                         raise raised_exc
                     raise AssertionError(
                         f"Return Contract Violation: SUT produced invalid outcome {sut_outcome!r} "
@@ -3032,16 +3544,31 @@ class StateMachine(Generic[StateT]):
             check_obj = EnsuresCheck(self.singletons)
             if isinstance(valid_outcome, Raised):
                 if is_lifted and t._run_consequent is not None:
-                    t._run_consequent(self.state, self, valid_outcome, target_obj, check_obj, *resolved_args)
+                    t._run_consequent(
+                        self.state,
+                        self,
+                        valid_outcome,
+                        target_obj,
+                        check_obj,
+                        *resolved_args,
+                    )
                 self.check_invariants()
                 raise valid_outcome.exc
 
-            actual_res = valid_outcome.val if isinstance(valid_outcome, Value) else valid_outcome
+            actual_res = (
+                valid_outcome.val if isinstance(valid_outcome, Value) else valid_outcome
+            )
             if is_lifted and t._run_consequent is not None:
-                t._run_consequent(self.state, self, actual_res, target_obj, check_obj, *resolved_args)
+                t._run_consequent(
+                    self.state, self, actual_res, target_obj, check_obj, *resolved_args
+                )
             else:
-                if t.ensure_fn is not None and (target_obj is not None or self.singletons):
-                    t.ensure_fn(actual_res, target_obj, check_obj, *resolved_args, **kwargs)
+                if t.ensure_fn is not None and (
+                    target_obj is not None or self.singletons
+                ):
+                    t.ensure_fn(
+                        actual_res, target_obj, check_obj, *resolved_args, **kwargs
+                    )
                 if t.provider is not None:
                     t.provider(self.state, self, *resolved_args, result=actual_res)
 
@@ -3050,7 +3577,9 @@ class StateMachine(Generic[StateT]):
         else:
             if t.return_fn is not None:
                 try:
-                    ret_val = t.return_fn(self.state, self, *resolved_args, outcome=NotBound)
+                    ret_val = t.return_fn(
+                        self.state, self, *resolved_args, outcome=NotBound
+                    )
                     if isinstance(ret_val, Raised):
                         if is_lifted and t.provider is not None:
                             t.provider(self.state, self, *resolved_args, result=ret_val)
@@ -3064,7 +3593,9 @@ class StateMachine(Generic[StateT]):
 
             if is_lifted and t._run_consequent is not None:
                 check_obj = EnsuresCheck(self.singletons) if self.singletons else None
-                t._run_consequent(self.state, self, res, None, check_obj, *resolved_args)
+                t._run_consequent(
+                    self.state, self, res, None, check_obj, *resolved_args
+                )
             else:
                 if t.ensure_fn is not None and self.singletons:
                     check_obj = EnsuresCheck(self.singletons)
@@ -3086,8 +3617,11 @@ class StateMachine(Generic[StateT]):
                 "Pretense Hypothesis test case compiler is not registered. "
                 "Ensure pretense is imported (e.g. `import pretense`)."
             )
-        actual_sut_factory = sut_factory if sut_factory is not None else (lambda: self.singletons)
+        actual_sut_factory = (
+            sut_factory if sut_factory is not None else (lambda: self.singletons)
+        )
         import copy
+
         return StateMachine._compiler(
             proto=self,
             sut_factory=actual_sut_factory,
@@ -3098,12 +3632,18 @@ class StateMachine(Generic[StateT]):
 
     def __getattr__(self, name: str) -> Any:
         # Check if attribute corresponds to a seeding transition
-        for t in self.transitions:
-            if t.is_seeding and t.name == name:
-                def invoke_seeding(*args: Any, **kwargs: Any) -> Any:
-                    return self.dispatch_transition(name, *args, **kwargs)
-                return invoke_seeding
-        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
+        transitions = self.__dict__.get("transitions")
+        if transitions:
+            for t in transitions:
+                if t.is_seeding and t.name == name:
+
+                    def invoke_seeding(*args: Any, **kwargs: Any) -> Any:
+                        return self.dispatch_transition(name, *args, **kwargs)
+
+                    return invoke_seeding
+        raise AttributeError(
+            f"'{type(self).__name__}' object has no attribute '{name}'"
+        )
 
 
 class CheckedAdapter:
@@ -3118,21 +3658,46 @@ class CheckedAdapter:
         self._target_protocol: Type[Any] = target_protocol
         self._state_machine: Any = state_machine
         self._real_instance: Optional[Any] = real_instance
+        self._is_terminal: bool = False
         if real_instance is not None and hasattr(state_machine, "bind_singleton"):
             state_machine.bind_singleton(target_protocol, real_instance)
             if type(real_instance) is not target_protocol:
                 state_machine.bind_singleton(type(real_instance), real_instance)
 
+    def violating(
+        self,
+        exc_type: Optional[Type[BaseException]] = None,
+        match: str = "",
+    ) -> _ViolatingAdapter:
+        """Returns a violating adapter context for contract violation testing on the terminal transition."""
+        if self._is_terminal:
+            raise PretenseSpecificationError(
+                f"Cannot invoke violating() on terminal CheckedAdapter for '{getattr(self._target_protocol, '__name__', str(self._target_protocol))}'; "
+                "component is in an undefined state after a contract violation."
+            )
+        return _ViolatingAdapter(self, exc_type=exc_type, match=match)
+
     def __getattr__(self, name: str) -> Any:
         if name.startswith("_"):
             raise AttributeError(name)
+
+        if self._is_terminal:
+            lifecycle_methods = {"initialize", "teardown", "close", "cleanup"}
+            if name in lifecycle_methods:
+                return lambda *_a, **_kw: None
+            raise PretenseSpecificationError(
+                f"Cannot invoke '{name}' on terminal CheckedAdapter for '{getattr(self._target_protocol, '__name__', str(self._target_protocol))}'; "
+                "component is in an undefined state after a contract violation."
+            )
 
         # 1. Find 1:1 base interface transition method first (outer onion)
         base_method = None
         for c in reversed(type(self._state_machine).__mro__):
             if issubclass(c, StateMachine) and hasattr(c, name):
                 m = getattr(c, name)
-                if hasattr(m, "__transition_spec__") or hasattr(m, "__pretense_transition__"):
+                if hasattr(m, "__transition_spec__") or hasattr(
+                    m, "__pretense_transition__"
+                ):
                     base_method = m
                     break
         if base_method is None:
@@ -3140,7 +3705,10 @@ class CheckedAdapter:
             if tr_method is not None and (
                 hasattr(tr_method, "__transition_spec__")
                 or hasattr(tr_method, "__pretense_transition__")
-                or any(getattr(t, "name", None) == name for t in getattr(self._state_machine, "transitions", []))
+                or any(
+                    getattr(t, "name", None) == name
+                    for t in getattr(self._state_machine, "transitions", [])
+                )
             ):
                 base_method = tr_method
 
@@ -3156,7 +3724,9 @@ class CheckedAdapter:
                 for t in getattr(self._state_machine, "transitions", []):
                     if getattr(t, "name", None) == name:
                         tgt = getattr(t, "target", None)
-                        if isinstance(tgt, property) or (tgt is not None and hasattr(tgt, "fget")):
+                        if isinstance(tgt, property) or (
+                            tgt is not None and hasattr(tgt, "fget")
+                        ):
                             is_prop = True
                             break
 
@@ -3203,6 +3773,102 @@ class CheckedAdapter:
         )
 
 
+class _ViolatingAdapter:
+    """Proxy returned by CheckedAdapter.violating() enabling contract violation testing on the terminal transition."""
+
+    def __init__(
+        self,
+        checked_adapter: CheckedAdapter,
+        exc_type: Optional[Type[BaseException]] = None,
+        match: str = "",
+    ) -> None:
+        self._checked_adapter: CheckedAdapter = checked_adapter
+        self._exc_type: Optional[Type[BaseException]] = exc_type
+        self._match: str = match
+        self._token: Optional[Token[bool]] = None
+
+    def _handle_exception(self, exc: BaseException) -> Any:
+        self._checked_adapter._is_terminal = True
+        if self._exc_type is None:
+            raise exc
+        if not isinstance(exc, self._exc_type):
+            raise AssertionError(
+                f"Expected contract violation {self._exc_type.__name__}, but {type(exc).__name__} was raised: {exc}"
+            ) from exc
+        if self._match and self._match not in str(exc):
+            raise AssertionError(
+                f"Exception message '{exc}' does not match pattern '{self._match}'"
+            ) from exc
+        return exc
+
+    def __getattr__(self, name: str) -> Any:
+        if name.startswith("_"):
+            raise AttributeError(name)
+
+        # First disable preconditions so property evaluation during getattr doesn't trigger require()
+        tok = _disable_preconditions.set(True)
+        try:
+            try:
+                attr = getattr(self._checked_adapter, name)
+            except BaseException as exc:
+                return self._handle_exception(exc)
+        finally:
+            _disable_preconditions.reset(tok)
+
+        if not callable(attr):
+            # Property access succeeded without raising
+            if self._exc_type is not None:
+                raise AssertionError(
+                    f"Expected contract violation {self._exc_type.__name__}, but property '{name}' returned {attr!r}"
+                )
+            return attr
+
+        def direct_violating_dispatch(*args: Any, **kwargs: Any) -> Any:
+            call_tok = _disable_preconditions.set(True)
+            try:
+                try:
+                    res = attr(*args, **kwargs)
+                except BaseException as exc:
+                    return self._handle_exception(exc)
+                else:
+                    if self._exc_type is not None:
+                        raise AssertionError(
+                            f"Expected contract violation {self._exc_type.__name__}, but operation '{name}' returned {res!r}"
+                        )
+                    return res
+            finally:
+                _disable_preconditions.reset(call_tok)
+
+        return direct_violating_dispatch
+
+    def __enter__(self) -> _ViolatingAdapter:
+        self._token = _disable_preconditions.set(True)
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> bool:
+        if self._token is not None:
+            _disable_preconditions.reset(self._token)
+            self._token = None
+        if exc_val is not None:
+            self._checked_adapter._is_terminal = True
+            if self._exc_type is None:
+                return False  # Let caller catch it (e.g. self.assertRaises)
+            if issubclass(exc_type, self._exc_type):
+                if self._match and self._match not in str(exc_val):
+                    raise AssertionError(
+                        f"Exception message '{exc_val}' does not match pattern '{self._match}'"
+                    )
+                return True  # Suppress expected exception
+            raise AssertionError(
+                f"Expected contract violation {self._exc_type.__name__}, but {exc_type.__name__} was raised: {exc_val}"
+            )
+        if self._exc_type is not None:
+            raise AssertionError(
+                f"Expected contract violation {self._exc_type.__name__} was not raised"
+            )
+        return False
+
+
 class FakeAdapter:
     """Dynamic test double conforming to an interface protocol."""
 
@@ -3225,7 +3891,8 @@ class FakeAdapter:
             if not t.is_seeding
             and (
                 getattr(t.target, "__name__", None) == method_name
-                or getattr(getattr(t.target, "fget", None), "__name__", None) == method_name
+                or getattr(getattr(t.target, "fget", None), "__name__", None)
+                == method_name
                 or t.name == method_name
             )
         ]
@@ -3259,8 +3926,14 @@ class FakeAdapter:
                 for req in t.requirements:
                     chk = getattr(req, "last_check", None)
                     if chk and chk.reasons:
-                        rejection_reasons.append(f"'{t.name}': {', '.join(chk.reasons)}")
-            detail = f" (rejection reasons: {'; '.join(rejection_reasons)})" if rejection_reasons else ""
+                        rejection_reasons.append(
+                            f"'{t.name}': {', '.join(chk.reasons)}"
+                        )
+            detail = (
+                f" (rejection reasons: {'; '.join(rejection_reasons)})"
+                if rejection_reasons
+                else ""
+            )
             raise NoMatchingTransitionError(
                 f"No matching transition for '{method_name}' with args={bound_args}, "
                 f"kwargs={bound_kwargs} in state: {self._state}{detail}"
@@ -3312,7 +3985,9 @@ class FakeAdapter:
             )
             for t in self._transitions
         )
-        has_protocol_attr = hasattr(self._target_protocol, name) or name in dir(self._target_protocol)
+        has_protocol_attr = hasattr(self._target_protocol, name) or name in dir(
+            self._target_protocol
+        )
 
         if not (has_transition or has_protocol_attr or name in lifecycle_methods):
             raise AttributeError(
@@ -3345,9 +4020,13 @@ def _instantiate_exception(exc_cls: Any) -> Any:
             return Exception(f"Synthesized exception for {exc_cls}")
 
 
-def synthesize_fake(machine_cls: Type[Any], fake_name: Optional[str] = None) -> Type[Any]:
+def synthesize_fake(
+    machine_cls: Type[Any], fake_name: Optional[str] = None
+) -> Type[Any]:
     """Synthesizes a pure in-memory test double class from a linear state machine."""
-    target_fake_name = fake_name or f"Fake{machine_cls.__name__.replace('StateMachine', '')}"
+    target_fake_name = (
+        fake_name or f"Fake{machine_cls.__name__.replace('StateMachine', '')}"
+    )
 
     class SynthesizedFake:
         __is_pretense_fake__ = True
@@ -3362,7 +4041,11 @@ def synthesize_fake(machine_cls: Type[Any], fake_name: Optional[str] = None) -> 
                     state = init_sm.state
                 except Exception:
                     state = None
-            self._sm = machine_cls(state=state) if state is not None else machine_cls(*args, **kwargs)
+            self._sm = (
+                machine_cls(state=state)
+                if state is not None
+                else machine_cls(*args, **kwargs)
+            )
             self._state = self._sm.state
 
         @property
@@ -3397,6 +4080,7 @@ def synthesize_fake(machine_cls: Type[Any], fake_name: Optional[str] = None) -> 
             if hasattr(sm, name):
                 attr = getattr(sm, name)
                 if callable(attr):
+
                     def fake_method_wrapper(*args: Any, **kwargs: Any) -> Any:
                         token_sut = _current_sut.set(self)
                         token_ver = _is_verification.set(False)
@@ -3426,13 +4110,26 @@ def synthesize_fake(machine_cls: Type[Any], fake_name: Optional[str] = None) -> 
                     for t in getattr(sm, "transitions", []):
                         if getattr(t, "name", None) == name:
                             tgt = getattr(t, "target", None)
-                            if isinstance(tgt, property) or (tgt is not None and hasattr(tgt, "fget")):
+                            if isinstance(tgt, property) or (
+                                tgt is not None and hasattr(tgt, "fget")
+                            ):
                                 is_prop = True
                                 break
-                    if not is_prop and (hasattr(self._state, name) or name in ("size", "is_empty", "is_full")):
+                    if not is_prop and (
+                        hasattr(self._state, name)
+                        or name in ("size", "is_empty", "is_full")
+                    ):
                         try:
-                            sig = inspect.signature(attr)
-                            user_params = [p for p in sig.parameters.values() if p.name not in ("self", "ctx")]
+                            check_fn = getattr(attr, "__target_fn__", attr)
+                            spec = getattr(attr, "__transition_spec__", None)
+                            if spec is not None and spec.fn is not None:
+                                check_fn = spec.fn
+                            sig = inspect.signature(check_fn)
+                            user_params = [
+                                p
+                                for p in sig.parameters.values()
+                                if p.name not in ("self", "ctx")
+                            ]
                             if not user_params:
                                 is_prop = True
                         except Exception:
@@ -3452,22 +4149,28 @@ def synthesize_fake(machine_cls: Type[Any], fake_name: Optional[str] = None) -> 
                 return len(self._state.items)
             if name == "is_empty" and hasattr(self._state, "items"):
                 return len(self._state.items) == 0
-            if name == "is_full" and hasattr(self._state, "items") and hasattr(self._state, "capacity"):
+            if (
+                name == "is_full"
+                and hasattr(self._state, "items")
+                and hasattr(self._state, "capacity")
+            ):
                 return len(self._state.items) >= self._state.capacity
 
-            raise AttributeError(f"'{target_fake_name}' object has no attribute '{name}'")
+            raise AttributeError(
+                f"'{target_fake_name}' object has no attribute '{name}'"
+            )
 
     SynthesizedFake.__name__ = target_fake_name
     SynthesizedFake.__qualname__ = target_fake_name
     return SynthesizedFake
 
 
-
 class PretenseEngine(Singleton[SystemTier], Protocol):
-
     """System-tier service coordinating state machine compilation, test execution, and fake generation."""
 
     def compile_state_machine(self, machine_cls: Type[Any]) -> Type[Any]: ...
     def run_suite(self, config: PretenseRunnerConfig) -> PretenseRunResult: ...
-    def synthesize_test(self, target_cls: Type[Any], trace: Sequence[TraceStep]) -> str: ...
+    def synthesize_test(
+        self, target_cls: Type[Any], trace: Sequence[TraceStep]
+    ) -> str: ...
     def synthesize_fake(self, machine_cls: Type[Any]) -> Type[Any]: ...

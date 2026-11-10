@@ -78,7 +78,9 @@ class DshWorkspaceImplTest(unittest.TestCase):
             self.assertEqual(report.role_name, "low")
 
             agents_md_path = os.path.join(self.test_dir, "AGENTS.md")
-            patch_path = os.path.join(app_info.resolve_state_dir(self.test_dir), "dsh_patch.yml")
+            patch_path = os.path.join(
+                app_info.resolve_state_dir(self.test_dir), "dsh_patch.yml"
+            )
             self.assertIn(agents_md_path, report.configured_files)
             self.assertIn(patch_path, report.configured_files)
 
@@ -96,8 +98,14 @@ class DshWorkspaceImplTest(unittest.TestCase):
             self.assertIn("WORKSPACE UNDO & ROLLBACK", agents_content)
             self.assertIn("bin/revert", agents_content)
             self.assertIn("ROUND CONCLUSION PROTOCOL", agents_content)
-            self.assertIn("When you have no outstanding work to do and `bin/get_work` does not give you more work to do", agents_content)
-            self.assertIn("Executing ad-hoc tests, runtime assertions, or inline Python scripts", agents_content)
+            self.assertIn(
+                "When you have no outstanding work to do and `bin/get_work` does not give you more work to do",
+                agents_content,
+            )
+            self.assertIn(
+                "Executing ad-hoc tests, runtime assertions, or inline Python scripts",
+                agents_content,
+            )
             self.assertNotIn("INCREMENTAL AUTHORING", agents_content)
 
             # Validate patch content
@@ -129,7 +137,9 @@ class DshWorkspaceImplTest(unittest.TestCase):
                 model_name="Qwen3.6-35B-A3B-oQ6-mtp",
                 provider="omlx",
             )
-            patch_path = os.path.join(app_info.resolve_state_dir(self.test_dir), "dsh_patch.yml")
+            patch_path = os.path.join(
+                app_info.resolve_state_dir(self.test_dir), "dsh_patch.yml"
+            )
             self.assertTrue(os.path.isfile(patch_path))
             with open(patch_path, "r", encoding="utf-8") as f:
                 patch_content = f.read()
@@ -162,9 +172,14 @@ class DshWorkspaceImplTest(unittest.TestCase):
             self.assertIn("DO NOT EDIT FILES", content)
             self.assertNotIn("WORKSPACE UNDO & ROLLBACK", content)
             self.assertNotIn("bin/revert", content)
-            self.assertIn("strictly forbidden from modifying files or executing git commands", content)
+            self.assertIn(
+                "strictly forbidden from modifying files or executing git commands",
+                content,
+            )
 
-            patch_path = os.path.join(app_info.resolve_state_dir(self.test_dir), "dsh_patch.yml")
+            patch_path = os.path.join(
+                app_info.resolve_state_dir(self.test_dir), "dsh_patch.yml"
+            )
             with open(patch_path, "r", encoding="utf-8") as f:
                 patch_content = f.read()
             self.assertIn("id: tool-edit", patch_content)
@@ -189,7 +204,9 @@ class DshWorkspaceImplTest(unittest.TestCase):
                 role_name="lib",
                 model_name="my-custom-qwen",
             )
-            patch_path = os.path.join(app_info.resolve_state_dir(self.test_dir), "dsh_patch.yml")
+            patch_path = os.path.join(
+                app_info.resolve_state_dir(self.test_dir), "dsh_patch.yml"
+            )
             self.assertTrue(os.path.isfile(patch_path))
             with open(patch_path, "r", encoding="utf-8") as f:
                 patch_content = f.read()

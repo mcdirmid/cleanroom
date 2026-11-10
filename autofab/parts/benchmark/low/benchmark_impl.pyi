@@ -66,6 +66,9 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
         baseline: bool = False,
         pretense: bool = False,
         method: Optional[str] = None,
+        dsh_web: bool = False,
+        dsh_desktop: bool = False,
+        experiment: Optional[str] = None,
     ) -> benchmark.FlightRecord:
         """Executes a benchmark flight for a designated model and unit.
 
@@ -85,6 +88,7 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
         - WHEN baseline is True and pretense is True, MUST evaluate verification gates with pretense and record methodology as pretense_baseline.
         - WHEN method is 'combined' (or when combined is requested), MUST execute synthesis and verification using both standard unit testing and Pretense fuzzing, evaluate composite verification gates, and record methodology as combined (or combined_baseline when baseline is True).
         - WHEN baseline is True and method is 'combined', MUST evaluate composite verification gates and record methodology as combined_baseline.
+        - MUST delete all existing conversations that have [<flight_scope>] in their titles from DeepSeek Harness when starting a new benchmark run.
         - WHEN harness is not 'antigravity', MUST announce headless coordination initiation banner and stream real-time execution progress to standard output.
         - WHEN harness is 'antigravity' and ANTIGRAVITY_AGENT is not present in the environment, MUST raise ValueError rejecting execution.
         - MUST harvest telemetry and evaluate verification gates.
@@ -100,6 +104,7 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
         record: benchmark.FlightRecord,
         unit: benchmark.BenchmarkUnit,
         results_dir: Optional[str] = None,
+        experiment: Optional[str] = None,
     ) -> Optional[Tuple[str, str]]:
         """Archives synthesized library and test files into the results directory with embedded metrics.
 
@@ -235,7 +240,7 @@ def __orphan__() -> None:
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-19T18:45:00Z
-# LAST_CHANGED: 2026-11-04T11:30:00Z
-# CHANGE: Support --method combined, pretense, standard and combined_baseline fused role
+# LAST_CHANGED: 2026-11-09T23:32:00Z
+# CHANGE: Delete existing conversations matching benchmark_N on flight start
 # SPEC_QA_AUDIT: 2026-10-19T19:35:00Z
 # --- END CLEANROOM METADATA ---

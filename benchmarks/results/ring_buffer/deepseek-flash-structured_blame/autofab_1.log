@@ -1,0 +1,5 @@
+[CHANGE] benchmark_2/parts/ring_buffer/lib/ring_buffer.py: Formalize ring buffer interface: package-qualified pretense imports, apply @data_type to BufferError/BufferEmptyError, @poly_type protocol, and @operation/@test_only stubs matching low/ring_buffer.pyi
+[CHANGE] benchmark_2/parts/ring_buffer/lib/ring_buffer_impl.py: Implement RingBuffer singleton backed by deque(maxlen=10): capacity/size/is_empty/is_full properties, overwrite-evicting push, BufferEmptyError-guarded pop, clear, and non-mutating FIFO snapshot_items
+[CHANGE] benchmark_2/parts/ring_buffer/tests/ring_buffer_impl_test.py: Authored RingBuffer unit tests covering initial state, push available-capacity and overwrite-eviction paths, pop non-empty and empty BufferEmptyError, clear reset, FIFO non-mutating snapshots, and singleton resolution within an active lifecycle phase scope.
+[AUDIT] benchmark_2/parts/ring_buffer/lib/ring_buffer_impl.py: QA_AUDIT
+[AUDIT] benchmark_2/parts/ring_buffer/lib/ring_buffer_impl.py: COVERAGE_AUDIT

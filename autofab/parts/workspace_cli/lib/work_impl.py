@@ -21,6 +21,7 @@ from autofab.parts.control.lib import work_scheduler
 from autofab.parts.metadata.lib import src_metadata
 from autofab.parts.dag.lib import dag_storage
 from autofab.parts.workspace.lib import role_registry
+
 try:
     from support.lib import app_info
 except ImportError:
@@ -30,7 +31,6 @@ from . import (
     pending,
     work,
 )
-
 
 
 def _classify_unit_type(unit_name: str) -> str:
@@ -56,7 +56,11 @@ def _get_part_units(repo_root: str, part_dir: str) -> Dict[str, List[str]]:
     if os.path.isdir(high_dir):
         units = {}
         for fname in sorted(os.listdir(high_dir)):
-            if not fname.endswith(".md") or fname.startswith(".") or fname == "__init__.md":
+            if (
+                not fname.endswith(".md")
+                or fname.startswith(".")
+                or fname == "__init__.md"
+            ):
                 continue
             unit_name = fname[:-3]
             deps: List[str] = []
@@ -66,7 +70,11 @@ def _get_part_units(repo_root: str, part_dir: str) -> Dict[str, List[str]]:
                         s = line.strip()
                         for pfx in ("imports:", "implements:", "assembles:"):
                             if s.startswith(pfx):
-                                deps.extend(x.strip() for x in s[len(pfx) :].split(",") if x.strip())
+                                deps.extend(
+                                    x.strip()
+                                    for x in s[len(pfx) :].split(",")
+                                    if x.strip()
+                                )
                         if s.startswith("## "):
                             break
             except (OSError, UnicodeDecodeError):
@@ -102,12 +110,20 @@ def _find_part_dirs_in_scope(repo_root: str, dir_scope: str = "") -> List[str]:
     if not dir_scope:
         parts_p = os.path.join(repo_root, "parts")
         if os.path.isdir(parts_p):
-            return [os.path.join("parts", d) for d in sorted(os.listdir(parts_p)) if os.path.isdir(os.path.join(parts_p, d)) and not d.startswith(".")]
+            return [
+                os.path.join("parts", d)
+                for d in sorted(os.listdir(parts_p))
+                if os.path.isdir(os.path.join(parts_p, d)) and not d.startswith(".")
+            ]
         return []
     scope_p = os.path.join(repo_root, dir_scope)
     parts_p = os.path.join(scope_p, "parts")
     if os.path.isdir(parts_p):
-        return [os.path.join(dir_scope, "parts", d) for d in sorted(os.listdir(parts_p)) if os.path.isdir(os.path.join(parts_p, d)) and not d.startswith(".")]
+        return [
+            os.path.join(dir_scope, "parts", d)
+            for d in sorted(os.listdir(parts_p))
+            if os.path.isdir(os.path.join(parts_p, d)) and not d.startswith(".")
+        ]
     return [dir_scope] if os.path.isdir(scope_p) else []
 
 
@@ -134,7 +150,9 @@ def _parse_pattern_info(src_pattern: str) -> Tuple[str, str, str]:
     return dir_name, prefix, suffix
 
 
-def _materialize_starter_template(target_path: str, role_name_or_address: str, workspace_dir: str) -> None:
+def _materialize_starter_template(
+    target_path: str, role_name_or_address: str, workspace_dir: str
+) -> None:
     storage = None
     try:
         storage = get_singleton(dag_storage.DagStorage)
@@ -146,7 +164,6 @@ def _materialize_starter_template(target_path: str, role_name_or_address: str, w
             role_address=dag_storage.RoleAddress(role_name_or_address),
         )
         storage.materialize_template(node)
-
 
 
 def _find_all_dirty_in_scope(
@@ -177,24 +194,36 @@ def _find_all_dirty_in_scope(
                     repo_root, part_dir, unit_name, r_name, repo_root
                 )
                 if eval_res.is_dirty:
-                    target_file = r_def.src_pattern.format(unit_dir=part_dir, unit_name=unit_name) if r_def.src_pattern else f"{part_dir}/{r_name}/{unit_name}"
+                    target_file = (
+                        r_def.src_pattern.format(unit_dir=part_dir, unit_name=unit_name)
+                        if r_def.src_pattern
+                        else f"{part_dir}/{r_name}/{unit_name}"
+                    )
                     if not r_def.src_pattern:
                         fb_deps = [
                             d.split(":")[-1]
                             for d in list(r_def.feedback_role_deps)
                             + list(getattr(r_def, "star_feedback_role_deps", ()))
                         ]
-                        fb_def = reg.resolve_role_definition(fb_deps[0], repo_root=repo_root) if fb_deps else None
+                        fb_def = (
+                            reg.resolve_role_definition(fb_deps[0], repo_root=repo_root)
+                            if fb_deps
+                            else None
+                        )
                         if fb_def and fb_def.src_pattern:
-                            target_file = fb_def.src_pattern.format(unit_dir=part_dir, unit_name=unit_name)
+                            target_file = fb_def.src_pattern.format(
+                                unit_dir=part_dir, unit_name=unit_name
+                            )
                     dirty_units.append(
                         {
                             "unit_name": unit_name,
                             "part_dir": part_dir,
                             "role": r_name,
                             "target_file": target_file,
-                            "reasons": list(eval_res.dirtiness_reasons) or ["In-band metadata dirty"],
-                            "dirtiness_reasons": list(eval_res.dirtiness_reasons) or ["In-band metadata dirty"],
+                            "reasons": list(eval_res.dirtiness_reasons)
+                            or ["In-band metadata dirty"],
+                            "dirtiness_reasons": list(eval_res.dirtiness_reasons)
+                            or ["In-band metadata dirty"],
                         }
                     )
     return dirty_units
@@ -258,7 +287,6 @@ def _get_role_upstream_chain(
     return order
 
 
-
 # Contract: WorkspaceWorkManager realizes work discovery across directory scopes and pending buffer tracking in agent_session tier.
 class WorkspaceWorkManager(work.WorkspaceWorkManager):
     """Realizes work discovery across directory scopes and pending buffer tracking."""
@@ -298,7 +326,9 @@ class WorkspaceWorkManager(work.WorkspaceWorkManager):
         main_root: Optional[str] = None,
         role_name: Optional[str] = None,
     ) -> bool:
-        return self._pending().is_pending_target_dirty(target_path, workspace_dir, main_root, role_name)
+        return self._pending().is_pending_target_dirty(
+            target_path, workspace_dir, main_root, role_name
+        )
 
     # Contract: Delegates resolving pending target dirty reasons and feedback to WorkspacePendingManager.
     def get_pending_target_reasons(
@@ -308,7 +338,9 @@ class WorkspaceWorkManager(work.WorkspaceWorkManager):
         main_root: Optional[str] = None,
         role_name: Optional[str] = None,
     ) -> Sequence[str]:
-        return self._pending().get_pending_target_reasons(target_path, workspace_dir, main_root, role_name)
+        return self._pending().get_pending_target_reasons(
+            target_path, workspace_dir, main_root, role_name
+        )
 
     def _eval_unit_dirty(
         self,
@@ -318,7 +350,9 @@ class WorkspaceWorkManager(work.WorkspaceWorkManager):
         eval_role: str,
         repo_root: Optional[str] = None,
     ) -> bool:
-        res = self._dirtiness().evaluate_unit_dirty(ws_root, part_dir, unit_name, eval_role, repo_root)
+        res = self._dirtiness().evaluate_unit_dirty(
+            ws_root, part_dir, unit_name, eval_role, repo_root
+        )
         return res.is_dirty
 
     # Contract: Computes ready and blocked dirty units directly from build manifests and metadata.
@@ -353,10 +387,14 @@ class WorkspaceWorkManager(work.WorkspaceWorkManager):
 
         reg = get_singleton(role_registry.WorkspaceRegistry)
         active_role_def = reg.resolve_role_definition(clean_role, repo_root=repo_root)
-        fused_roles_set = set(active_role_def.fused_roles) if active_role_def.fused_roles else set()
+        fused_roles_set = (
+            set(active_role_def.fused_roles) if active_role_def.fused_roles else set()
+        )
 
         if fused_roles_set:
-            dirty_in_role = [item for item in all_dirty if item["role"] in fused_roles_set]
+            dirty_in_role = [
+                item for item in all_dirty if item["role"] in fused_roles_set
+            ]
         else:
             dirty_in_role = [item for item in all_dirty if item["role"] == clean_role]
 
@@ -382,7 +420,9 @@ class WorkspaceWorkManager(work.WorkspaceWorkManager):
             target_clean = target_clean.strip()
             if target_clean:
                 allowed_units = {target_clean} | get_transitive_deps(target_clean)
-                dirty_in_role = [item for item in dirty_in_role if item["unit_name"] in allowed_units]
+                dirty_in_role = [
+                    item for item in dirty_in_role if item["unit_name"] in allowed_units
+                ]
                 if not dirty_in_role:
                     return (), ()
 
@@ -393,14 +433,18 @@ class WorkspaceWorkManager(work.WorkspaceWorkManager):
             uname = item["unit_name"]
             item_role = item["role"]
             item_role_def = reg.resolve_role_definition(item_role, repo_root=repo_root)
-            item_upstream_roles = _get_role_upstream_chain(item_role, repo_root=repo_root)
+            item_upstream_roles = _get_role_upstream_chain(
+                item_role, repo_root=repo_root
+            )
             item_is_auditor = _is_auditor_role(item_role, repo_root=repo_root)
             item_feedback_roles = [
                 d.split(":")[-1]
                 for d in list(item_role_def.feedback_role_deps)
                 + list(getattr(item_role_def, "star_feedback_role_deps", ()))
             ]
-            item_silent_cross = [d.split(":")[-1] for d in item_role_def.silent_cross_role_deps]
+            item_silent_cross = [
+                d.split(":")[-1] for d in item_role_def.silent_cross_role_deps
+            ]
             item_star_roles = [
                 d.split(":")[-1]
                 for d in list(item_role_def.star_role_deps)
@@ -416,12 +460,25 @@ class WorkspaceWorkManager(work.WorkspaceWorkManager):
                 if fused_roles_set and up_r in fused_roles_set:
                     continue
                 up_r_def = reg.resolve_role_definition(up_r, repo_root=repo_root)
-                if up_r_def.active_component_types and u_ctype not in up_r_def.active_component_types:
+                if (
+                    up_r_def.active_component_types
+                    and u_ctype not in up_r_def.active_component_types
+                ):
                     continue
                 up_r_pat = up_r_def.src_pattern
-                if up_r_pat and part_dir and not os.path.isdir(os.path.join(repo_root, part_dir, _parse_pattern_info(up_r_pat)[0])):
+                if (
+                    up_r_pat
+                    and part_dir
+                    and not os.path.isdir(
+                        os.path.join(
+                            repo_root, part_dir, _parse_pattern_info(up_r_pat)[0]
+                        )
+                    )
+                ):
                     continue
-                if (part_dir, uname, up_r) in dirty_part_lookup or (not part_dir and (uname, up_r) in dirty_lookup):
+                if (part_dir, uname, up_r) in dirty_part_lookup or (
+                    not part_dir and (uname, up_r) in dirty_lookup
+                ):
                     blocked_reasons.append(
                         f"Upstream role '{up_r}' is dirty for unit '{uname}'"
                     )
@@ -432,29 +489,53 @@ class WorkspaceWorkManager(work.WorkspaceWorkManager):
                     if fused_roles_set and fb_r in fused_roles_set:
                         continue
                     fb_r_def = reg.resolve_role_definition(fb_r, repo_root=repo_root)
-                    if fb_r_def.active_component_types and u_ctype not in fb_r_def.active_component_types:
+                    if (
+                        fb_r_def.active_component_types
+                        and u_ctype not in fb_r_def.active_component_types
+                    ):
                         continue
-                    if (part_dir, uname, fb_r) in dirty_part_lookup or (not part_dir and (uname, fb_r) in dirty_lookup):
+                    if (part_dir, uname, fb_r) in dirty_part_lookup or (
+                        not part_dir and (uname, fb_r) in dirty_lookup
+                    ):
                         blocked_reasons.append(
                             f"Feedback target '{fb_r}' is dirty or has unacted feedback for unit '{uname}'"
                         )
 
             # Check 3: Inter-unit module dependencies
             transitive_deps = get_transitive_deps(uname)
-            roles_to_check = [r for r in item_upstream_roles if not _is_auditor_role(r, repo_root=repo_root)]
+            roles_to_check = [
+                r
+                for r in item_upstream_roles
+                if not _is_auditor_role(r, repo_root=repo_root)
+            ]
             for dep_u in sorted(transitive_deps):
                 dep_part = all_units.get(dep_u, part_dir)
                 dep_ctype = _classify_unit_type(dep_u)
                 for r_check in roles_to_check:
                     if fused_roles_set and r_check in fused_roles_set:
                         continue
-                    r_check_def = reg.resolve_role_definition(r_check, repo_root=repo_root)
-                    if r_check_def.active_component_types and dep_ctype not in r_check_def.active_component_types:
+                    r_check_def = reg.resolve_role_definition(
+                        r_check, repo_root=repo_root
+                    )
+                    if (
+                        r_check_def.active_component_types
+                        and dep_ctype not in r_check_def.active_component_types
+                    ):
                         continue
                     r_check_pat = r_check_def.src_pattern
-                    if r_check_pat and dep_part and not os.path.isdir(os.path.join(repo_root, dep_part, _parse_pattern_info(r_check_pat)[0])):
+                    if (
+                        r_check_pat
+                        and dep_part
+                        and not os.path.isdir(
+                            os.path.join(
+                                repo_root, dep_part, _parse_pattern_info(r_check_pat)[0]
+                            )
+                        )
+                    ):
                         continue
-                    if (dep_part, dep_u, r_check) in dirty_part_lookup or (not dep_part and (dep_u, r_check) in dirty_lookup):
+                    if (dep_part, dep_u, r_check) in dirty_part_lookup or (
+                        not dep_part and (dep_u, r_check) in dirty_lookup
+                    ):
                         blocked_reasons.append(
                             f"Prerequisite unit '{dep_u}' is dirty in role '{r_check}'"
                         )
@@ -462,7 +543,9 @@ class WorkspaceWorkManager(work.WorkspaceWorkManager):
             raw_deps = raw_module_deps.get(uname, [])
             dep_files: List[str] = []
             for dep in raw_deps:
-                dep_pkg, dep_u = _parse_dependency_label(dep, all_units.get(dep.lstrip(":"), part_dir))
+                dep_pkg, dep_u = _parse_dependency_label(
+                    dep, all_units.get(dep.lstrip(":"), part_dir)
+                )
                 if not dep.startswith("//"):
                     dep_pkg = all_units.get(dep_u, part_dir)
 
@@ -476,8 +559,12 @@ class WorkspaceWorkManager(work.WorkspaceWorkManager):
                     star_cand = star_pat.format(unit_dir=dep_pkg, unit_name=dep_u)
                     cand = star_cand
                     # Contract: Resolves companion interface contracts without the _impl suffix for any implementation unit ending in _impl when expanding star role dependencies.
-                    if not os.path.isfile(os.path.join(repo_root, star_cand)) and dep_u.endswith("_impl"):
-                        iface_cand = star_pat.format(unit_dir=dep_pkg, unit_name=dep_u[:-5])
+                    if not os.path.isfile(
+                        os.path.join(repo_root, star_cand)
+                    ) and dep_u.endswith("_impl"):
+                        iface_cand = star_pat.format(
+                            unit_dir=dep_pkg, unit_name=dep_u[:-5]
+                        )
                         if os.path.isfile(os.path.join(repo_root, iface_cand)):
                             cand = iface_cand
                     if cand not in dep_files:
@@ -495,7 +582,11 @@ class WorkspaceWorkManager(work.WorkspaceWorkManager):
 
         for item in sorted_ready:
             item_role = item["role"]
-            r_def = reg.resolve_role_definition(item_role, repo_root=repo_root) if reg else None
+            r_def = (
+                reg.resolve_role_definition(item_role, repo_root=repo_root)
+                if reg
+                else None
+            )
             if r_def and r_def.src_pattern:
                 target_file = item["target_file"]
                 full_target = os.path.join(repo_root, target_file)
@@ -514,6 +605,7 @@ class WorkspaceWorkManager(work.WorkspaceWorkManager):
                     item["target_file"], repo_root, role_name=item["role"]
                 ),
             )
+
         ready_items = [_to_queue_item(item, True) for item in sorted_ready]
         blocked_items = [_to_queue_item(item, False) for item in blocked_candidates]
         return ready_items, blocked_items
@@ -534,9 +626,17 @@ class WorkspaceWorkManager(work.WorkspaceWorkManager):
             pending_mgr = self._pending()
             pending_targets = pending_mgr.get_pending_work(workspace_dir)
             if pending_targets:
-                still_dirty = [pt for pt in pending_targets if pending_mgr.is_pending_target_dirty(pt, workspace_dir, role_name=clean_role)]
+                still_dirty = [
+                    pt
+                    for pt in pending_targets
+                    if pending_mgr.is_pending_target_dirty(
+                        pt, workspace_dir, role_name=clean_role
+                    )
+                ]
                 if still_dirty:
-                    raise RuntimeError(f"Pending dirty work remains in workspace: {', '.join(still_dirty)}")
+                    raise RuntimeError(
+                        f"Pending dirty work remains in workspace: {', '.join(still_dirty)}"
+                    )
                 pending_mgr.clear_pending_work(workspace_dir)
 
         eval_root = workspace_dir or os.getcwd()
@@ -548,13 +648,19 @@ class WorkspaceWorkManager(work.WorkspaceWorkManager):
         if has_role_desc:
             try:
                 m_root = reg.discover_repository_root(eval_root)
-                if m_root and os.path.isdir(m_root) and os.path.realpath(m_root) != os.path.realpath(eval_root):
+                if (
+                    m_root
+                    and os.path.isdir(m_root)
+                    and os.path.realpath(m_root) != os.path.realpath(eval_root)
+                ):
                     eval_root = os.path.realpath(m_root)
             except Exception:
                 pass
 
         active_role_def = reg.resolve_role_definition(clean_role, repo_root=eval_root)
-        fused_roles_set = set(active_role_def.fused_roles) if active_role_def.fused_roles else set()
+        fused_roles_set = (
+            set(active_role_def.fused_roles) if active_role_def.fused_roles else set()
+        )
 
         scheduler = None
         if not fused_roles_set:
@@ -569,14 +675,20 @@ class WorkspaceWorkManager(work.WorkspaceWorkManager):
                 if schedule is not None and schedule.tasks:
                     sched_ready: List[work.WorkQueueItem] = []
                     for task in schedule.tasks:
-                        task_role = task.node.role_address.split(":")[-1].strip().lower()
+                        task_role = (
+                            task.node.role_address.split(":")[-1].strip().lower()
+                        )
                         if clean_role and task_role != clean_role:
                             continue
-                        reasons = [m.content for m in task.feedback_messages] or ["target is dirty"]
+                        reasons = [m.content for m in task.feedback_messages] or [
+                            "target is dirty"
+                        ]
                         target_file = str(task.node.unit_address)
                         full_target = os.path.join(eval_root, target_file)
                         if not os.path.isfile(full_target):
-                            _materialize_starter_template(target_file, task.node.role_address, eval_root)
+                            _materialize_starter_template(
+                                target_file, task.node.role_address, eval_root
+                            )
                         sched_ready.append(
                             work.WorkQueueItem(
                                 target_file=target_file,
@@ -592,12 +704,18 @@ class WorkspaceWorkManager(work.WorkspaceWorkManager):
                         )
                     total_sched_ready = len(sched_ready)
                     remaining_count = 0
-                    if batch_size is not None and batch_size > 0 and len(sched_ready) > batch_size:
+                    if (
+                        batch_size is not None
+                        and batch_size > 0
+                        and len(sched_ready) > batch_size
+                    ):
                         remaining_count = len(sched_ready) - batch_size
                         sched_ready = list(sched_ready[:batch_size])
 
                     if workspace_dir:
-                        self.set_pending_work(workspace_dir, [item.target_file for item in sched_ready]) if sched_ready else self.clear_pending_work(workspace_dir)
+                        self.set_pending_work(
+                            workspace_dir, [item.target_file for item in sched_ready]
+                        ) if sched_ready else self.clear_pending_work(workspace_dir)
 
                     is_clean = total_sched_ready == 0
                     return work.WorkQueueSummary(
@@ -620,7 +738,9 @@ class WorkspaceWorkManager(work.WorkspaceWorkManager):
             ready_items = list(ready_items[:batch_size])
 
         if workspace_dir:
-            self.set_pending_work(workspace_dir, [item.target_file for item in ready_items]) if ready_items else self.clear_pending_work(workspace_dir)
+            self.set_pending_work(
+                workspace_dir, [item.target_file for item in ready_items]
+            ) if ready_items else self.clear_pending_work(workspace_dir)
 
         is_clean = total_ready == 0 and len(blocked_items) == 0
         return work.WorkQueueSummary(
@@ -648,6 +768,8 @@ class WorkspaceWorkManager(work.WorkspaceWorkManager):
         part_dir: str,
     ) -> Mapping[str, Sequence[str]]:
         return _get_part_units(repo_root, part_dir)
+
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-18T19:13:51Z
 # LAST_CHANGED: 2026-10-31T02:00:00Z

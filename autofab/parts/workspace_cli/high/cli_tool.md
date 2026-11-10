@@ -20,21 +20,23 @@ The workspace tool runner dispatches and executes role commands matching an argu
 
 The workspace tool runner evaluates ready tasks for the active role scope through the work manager, presenting the bounded batch of ready items without extraneous remaining or blocked queue details, throttling unacted feedback reasons exceeding maximum character limits when configured, and formatting structured console reports carrying target paths, the companion specification contracts to read, and actionable next steps.
 
-The workspace tool runner submits target files, evaluating verification checks and rejecting failing targets prior to submission unless bypassed, enforcing producer change summaries, attesting auditor stamps, appending submission records to the event log, and clearing the pending target buffers on success.
+The workspace tool runner submits target files, evaluating verification checks, committing staged blame feedback to culprits when staged blame exists for a failing target, disallowing manual submission without preceding blame in auditor roles, rejecting failing targets without staged blame unless bypassed, enforcing producer change summaries, attesting auditor stamps, appending submission records to the event log, and clearing the pending target buffers on success.
 
-The workspace tool runner attributes defect blame or failure diagnostics to culprit targets, propagating feedback, appending feedback records to the event log, and clearing the pending target buffers on success.
+The workspace tool runner attributes defect blame or failure diagnostics to culprit targets, supporting structured blame options (--slug, --viol, --facet, --lines, --witness) and validating structured blame when the structured blame experiment is active, staging critique feedback for subsequent commit upon submit, and notifying the caller to stage additional blame or commit staged blame.
+
+The workspace tool runner rejects active feedback delivered to an unmodified target file, enforcing that the target file has not been modified since receiving feedback, immediately removing the feedback comment block from the target file header, recording the contest explanation into the workspace blame buffer and event log, and clearing the target from pending work buffers on success.
 
 The workspace tool runner evaluates statement test coverage across implementation and test pairs against target thresholds.
 
 The workspace tool runner restores modified workspace files or the entire workspace tree from git snapshot points, and creates git commit checkpoints of active workspace state.
 
-The workspace tool runner evaluates static verification checks, linters, and type checking for specified or pending target files, regenerating a missing target file from its starter template before verification for roles that declare source patterns and upstream dependencies, and surfacing unacted feedback warnings when targets carrying unaddressed feedback pass static verification.
+The workspace tool runner evaluates static verification checks, linters, and type checking for specified or pending target files, regenerating a missing target file from its starter template before verification for roles that declare source patterns and upstream dependencies.
 
 The workspace tool runner commissions isolated role workspaces for specified roles or across all declared roles within a directory scope, dynamically discovering or requiring the directory scope without hardcoded defaults, supporting resetting stale work buffers and stamping model execution profiles, and refreshes system configuration files, bin utilities, and companion guides across the active role workspaces.
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-14T08:35:00Z
-CHANGE: throttle unacted feedback reasons by max_feedback_chars in work reports
+LAST_CHANGED: 2026-11-09T19:50:00Z
+CHANGE: Omit redundant feedback repetition on check_files
 SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->

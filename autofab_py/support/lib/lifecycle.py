@@ -143,9 +143,6 @@ def _resolve_tier(val: LifecycleTier | str) -> LifecycleTier:
     raise TypeError(f"Expected LifecycleTier or str, got {type(val).__name__}")
 
 
-
-
-
 class _InitState(Enum):
     UNINITIALIZED = auto()
     INITIALIZING = auto()

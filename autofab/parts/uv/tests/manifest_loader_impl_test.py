@@ -41,9 +41,7 @@ def _make_dag_node(unit_address: str, role_address: str = "") -> DagNode:
 class FakeUvTarget:
     tier = "system"
 
-    def normalize_target(
-        self, target_identifier: TargetIdentifier
-    ) -> DagNode:
+    def normalize_target(self, target_identifier: TargetIdentifier) -> DagNode:
         ident_str = str(target_identifier).strip()
         role_part = ""
         if "#" in ident_str:
@@ -52,7 +50,9 @@ class FakeUvTarget:
             pkg = ident_str
             target_name = pkg.split("/")[-1] if "/" in pkg else pkg
             ident_str = f"{pkg}:{target_name}"
-        return DagNode(unit_address=UnitAddress(ident_str), role_address=RoleAddress(role_part))
+        return DagNode(
+            unit_address=UnitAddress(ident_str), role_address=RoleAddress(role_part)
+        )
 
     def extract_node_dir(self, node: DagNode) -> NodeDirectory:
         raw_pkg = node.unit_address.split(":", 1)[0].lstrip("/")
@@ -164,9 +164,17 @@ feedback_role_deps = ["planning"]
 silent_role_deps = []
 allows_step_mode = false
 """
-        with open(os.path.join(self.test_dir, app_info.DEFAULT_ROLES_FILE), "w", encoding="utf-8") as f:
+        with open(
+            os.path.join(self.test_dir, app_info.DEFAULT_ROLES_FILE),
+            "w",
+            encoding="utf-8",
+        ) as f:
             f.write(toml_content)
-        with open(os.path.join(self.test_dir, app_info.DEFAULT_CONFIG_FILE), "w", encoding="utf-8") as f:
+        with open(
+            os.path.join(self.test_dir, app_info.DEFAULT_CONFIG_FILE),
+            "w",
+            encoding="utf-8",
+        ) as f:
             f.write('methodology = "//"\n')
 
     def tearDown(self) -> None:
@@ -181,7 +189,9 @@ allows_step_mode = false
         os.makedirs(high_dir, exist_ok=True)
         hls_file = os.path.join(high_dir, "my_unit.md")
         with open(hls_file, "w", encoding="utf-8") as f:
-            f.write("# implementation component\n\nimports: //other/pkg:other_unit\nimplements: iface_unit\n\n## Summary\n")
+            f.write(
+                "# implementation component\n\nimports: //other/pkg:other_unit\nimplements: iface_unit\n\n## Summary\n"
+            )
 
         with enter_phase("system", registry=self.registry) as scope:
             loader = scope.get_singleton(UvManifestLoader)
@@ -210,8 +220,12 @@ allows_step_mode = false
                 "//pkg/sub:iface_unit#lib",
             }
             self.assertEqual(set(manifest.dependencies), expected_deps)
-            self.assertEqual(set(manifest.silent_dependencies), {"//pkg/sub:my_unit#low"})
-            self.assertEqual(set(manifest.feedback_dependencies), {"//pkg/sub:my_unit#qa"})
+            self.assertEqual(
+                set(manifest.silent_dependencies), {"//pkg/sub:my_unit#low"}
+            )
+            self.assertEqual(
+                set(manifest.feedback_dependencies), {"//pkg/sub:my_unit#qa"}
+            )
 
     def test_retrieve_manifest_inactive_component_type(self) -> None:
         """CUJ: Synthesizing promptless pass-through node when component type is not active."""
@@ -243,9 +257,17 @@ allows_step_mode = false
         """CUJ: Resolving bare unit name across sibling packages in parts root."""
         os.makedirs(os.path.join(self.test_dir, "parts/pkg_a/high"), exist_ok=True)
         os.makedirs(os.path.join(self.test_dir, "parts/pkg_b/high"), exist_ok=True)
-        with open(os.path.join(self.test_dir, "parts/pkg_a/high/unit_a.md"), "w", encoding="utf-8") as f:
+        with open(
+            os.path.join(self.test_dir, "parts/pkg_a/high/unit_a.md"),
+            "w",
+            encoding="utf-8",
+        ) as f:
             f.write("# implementation component\n\n## Summary\n")
-        with open(os.path.join(self.test_dir, "parts/pkg_b/high/unit_b.md"), "w", encoding="utf-8") as f:
+        with open(
+            os.path.join(self.test_dir, "parts/pkg_b/high/unit_b.md"),
+            "w",
+            encoding="utf-8",
+        ) as f:
             f.write("# implementation component\n\nimports: unit_a\n\n## Summary\n")
 
         node = _make_dag_node("//parts/pkg_b:unit_b", "lib")
@@ -301,7 +323,9 @@ allows_step_mode = false
         os.makedirs(high_dir, exist_ok=True)
         hls_file = os.path.join(high_dir, "asm_unit.md")
         with open(hls_file, "w", encoding="utf-8") as f:
-            f.write("# asm_unit assembly component\n\nassembles: part1, //other:part2\n")
+            f.write(
+                "# asm_unit assembly component\n\nassembles: part1, //other:part2\n"
+            )
 
         with enter_phase("system", registry=self.registry) as scope:
             loader = scope.get_singleton(UvManifestLoader)
@@ -324,13 +348,9 @@ allows_step_mode = false
             f.write("# asm_unit assembly component\n\nassembles: part1\n")
         # A dependent producer unit that declares the pass-through target as a dependency.
         consumer = _make_dag_node("//pkg/sub:consumer", "lib")
-        with open(
-            os.path.join(high_dir, "consumer.md"), "w", encoding="utf-8"
-        ) as f:
+        with open(os.path.join(high_dir, "consumer.md"), "w", encoding="utf-8") as f:
             f.write(
-                "# consumer implementation component\n"
-                "\n"
-                "imports: //pkg/sub:asm_unit\n"
+                "# consumer implementation component\n\nimports: //pkg/sub:asm_unit\n"
             )
 
         with enter_phase("system", registry=self.registry) as scope:
@@ -365,7 +385,9 @@ allows_step_mode = false
         """CUJ: Upward search from package directory discovers configuration methodology binding."""
         pkg_dir = os.path.join(self.test_dir, "pkg")
         os.makedirs(os.path.join(pkg_dir, "sub", "high"), exist_ok=True)
-        with open(os.path.join(pkg_dir, app_info.DEFAULT_CONFIG_FILE), "w", encoding="utf-8") as f:
+        with open(
+            os.path.join(pkg_dir, app_info.DEFAULT_CONFIG_FILE), "w", encoding="utf-8"
+        ) as f:
             f.write('methodology = "//custom_methodology"\n')
 
         custom_meth_dir = os.path.join(self.test_dir, "custom_methodology")
@@ -376,10 +398,18 @@ src_pattern = "{unit_dir}/lib/{unit_name}.py"
 prompt_template = "CUSTOM PROMPT for {unit_name}"
 active_component_types = ["implementation"]
 """
-        with open(os.path.join(custom_meth_dir, app_info.DEFAULT_ROLES_FILE), "w", encoding="utf-8") as f:
+        with open(
+            os.path.join(custom_meth_dir, app_info.DEFAULT_ROLES_FILE),
+            "w",
+            encoding="utf-8",
+        ) as f:
             f.write(custom_toml)
 
-        with open(os.path.join(pkg_dir, "sub", "high", "custom_unit.md"), "w", encoding="utf-8") as f:
+        with open(
+            os.path.join(pkg_dir, "sub", "high", "custom_unit.md"),
+            "w",
+            encoding="utf-8",
+        ) as f:
             f.write("# custom_unit implementation component\n")
 
         node = _make_dag_node("//pkg/sub:custom_unit", "lib")
@@ -408,7 +438,11 @@ prompt_template = "Test {unit_name}"
 verification_success_message = "{unit_name}_test.py passed static checks in {unit_dir}."
 active_component_types = ["implementation"]
 """
-        with open(os.path.join(self.test_dir, app_info.DEFAULT_ROLES_FILE), "w", encoding="utf-8") as f:
+        with open(
+            os.path.join(self.test_dir, app_info.DEFAULT_ROLES_FILE),
+            "w",
+            encoding="utf-8",
+        ) as f:
             f.write(toml_content)
 
         node = _make_dag_node("//pkg/sub:my_unit", "test")
@@ -437,9 +471,15 @@ active_component_types = ["implementation"]
         # Create a valid parts package
         valid_part = os.path.join(self.test_dir, "my_scope/parts/widget")
         os.makedirs(os.path.join(valid_part, "high"), exist_ok=True)
-        with open(os.path.join(self.test_dir, "my_scope/parts/autofab.toml"), "w", encoding="utf-8") as f:
+        with open(
+            os.path.join(self.test_dir, "my_scope/parts/autofab.toml"),
+            "w",
+            encoding="utf-8",
+        ) as f:
             f.write('methodology = "//test"\n')
-        with open(os.path.join(valid_part, "high/widget.md"), "w", encoding="utf-8") as f:
+        with open(
+            os.path.join(valid_part, "high/widget.md"), "w", encoding="utf-8"
+        ) as f:
             f.write("# implementation component\n\n## Summary\n")
 
         # Pass a filesystem path as unit address
@@ -471,17 +511,25 @@ star_feedback_role_deps = ["pretense"]
 feedback_role_deps = ["lib"]
 active_component_types = ["implementation"]
 """
-        with open(os.path.join(self.test_dir, app_info.DEFAULT_ROLES_FILE), "w", encoding="utf-8") as f:
+        with open(
+            os.path.join(self.test_dir, app_info.DEFAULT_ROLES_FILE),
+            "w",
+            encoding="utf-8",
+        ) as f:
             f.write(toml_content)
 
         widget_dir = os.path.join(self.test_dir, "pkg/parts/widget")
         os.makedirs(os.path.join(widget_dir, "high"), exist_ok=True)
-        with open(os.path.join(widget_dir, "high/widget.md"), "w", encoding="utf-8") as f:
+        with open(
+            os.path.join(widget_dir, "high/widget.md"), "w", encoding="utf-8"
+        ) as f:
             f.write("# implementation component\n\nimports: gadget\n\n## Summary\n")
 
         gadget_dir = os.path.join(self.test_dir, "pkg/parts/gadget")
         os.makedirs(os.path.join(gadget_dir, "high"), exist_ok=True)
-        with open(os.path.join(gadget_dir, "high/gadget.md"), "w", encoding="utf-8") as f:
+        with open(
+            os.path.join(gadget_dir, "high/gadget.md"), "w", encoding="utf-8"
+        ) as f:
             f.write("# implementation component\n\n## Summary\n")
 
         node = _make_dag_node("//pkg/parts/widget:widget", "pretense_qa")

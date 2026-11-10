@@ -76,7 +76,11 @@ def is_uninitialized_pretense_module(content: str) -> bool:
     stripped = content.strip()
     if not stripped:
         return True
-    if "<TargetClass>" in content or "<target_impl>" in content or "_unimplemented_transition" in content:
+    if (
+        "<TargetClass>" in content
+        or "<target_impl>" in content
+        or "_unimplemented_transition" in content
+    ):
         return True
     try:
         tree = ast.parse(content)
@@ -151,7 +155,10 @@ def check_pretense_structure(
                 for alias in node.names:
                     if alias.name.endswith("State") and alias.name != "State":
                         imported_state = True
-                    elif alias.name.endswith("StateMachine") and alias.name not in ("StateMachine", "StateMachineProto"):
+                    elif alias.name.endswith("StateMachine") and alias.name not in (
+                        "StateMachine",
+                        "StateMachineProto",
+                    ):
                         imported_sm = True
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             if node.name.startswith("make_") and "fake" in node.name:
@@ -173,7 +180,9 @@ def check_pretense_structure(
                     base_id = base.value.attr
             if base_id in ("TestCase", "unittest.TestCase"):
                 test_classes.append(c)
-            elif base_id in ("StateMachine", "StateMachineProto") or base_id.endswith("StateMachine"):
+            elif base_id in ("StateMachine", "StateMachineProto") or base_id.endswith(
+                "StateMachine"
+            ):
                 sm_classes.append(c)
 
     # Also check for compiled hypothesis test case assignment
@@ -186,9 +195,13 @@ def check_pretense_structure(
 
     if is_interface:
         if not sm_classes and not imported_sm:
-            errors.append("Missing Pretense StateMachine class in interface pretense module.")
+            errors.append(
+                "Missing Pretense StateMachine class in interface pretense module."
+            )
         if not state_classes and not imported_state:
-            errors.append("Missing Pretense model state class (interface must define a dataclass ending with 'State').")
+            errors.append(
+                "Missing Pretense model state class (interface must define a dataclass ending with 'State')."
+            )
         for tc in test_classes:
             if tc.name.endswith("Real") or "Real" in tc.name:
                 errors.append(
@@ -206,8 +219,14 @@ def check_pretense_structure(
             "The implementation pseudo-state machine defines zero state classes; it piggybacks on the interface StateMachine state."
         )
 
-    if not state_classes and not imported_state and not (test_classes or compiled_tests):
-        errors.append("Missing Pretense model state class (must define or import a dataclass ending with 'State').")
+    if (
+        not state_classes
+        and not imported_state
+        and not (test_classes or compiled_tests)
+    ):
+        errors.append(
+            "Missing Pretense model state class (must define or import a dataclass ending with 'State')."
+        )
 
     if not test_classes and not compiled_tests:
         errors.append(
@@ -236,7 +255,13 @@ def check_pretense_imports(
             if isinstance(node, ast.ImportFrom):
                 if node.module and "pretense" in node.module:
                     for alias in node.names:
-                        if alias.name in ("ensure", "ensure_ret", "ensure_raises", "TransitionContext", "Expr"):
+                        if alias.name in (
+                            "ensure",
+                            "ensure_ret",
+                            "ensure_raises",
+                            "TransitionContext",
+                            "Expr",
+                        ):
                             errors.append(
                                 f"{prefix}{node.lineno}: error [PN_NO_LEGACY_IMPORT]: Importing legacy Pretense symbol '{alias.name}' is strictly prohibited in Pretense 1 Next. "
                                 "Use 'make_return_value', 'call_target', 'raises', 'assert', 'sut', 'sut_state', or 'require'."
@@ -248,6 +273,10 @@ def check_pretense_imports(
                         elif is_impl and alias.name == "make_return_value":
                             errors.append(
                                 f"{prefix}{node.lineno}: error [PN_IMPL_NO_MAKE_RETURN_VALUE_IMPORT]: Importing 'make_return_value' is strictly prohibited in implementation pretense modules (*_impl_pretense.py). Implementation pseudo-state machines must use 'call_target(...)', not 'make_return_value()'."
+                            )
+                        elif is_impl and alias.name == "transition":
+                            errors.append(
+                                f"{prefix}{node.lineno}: error [PN_IMPL_NO_TRANSITION_IMPORT]: Importing 'transition' is strictly prohibited in implementation pretense modules (*_impl_pretense.py). Outer transitions are declared exclusively on interface state machines; implementation pseudo-state machines only override inner transitions ('inner_<name>')."
                             )
     except SyntaxError:
         pass
@@ -272,7 +301,6 @@ def check_single_argument_assertions(tree: ast.AST, file_path: str = "") -> list
                     "assert test cannot be a tuple 'assert (x, y)'. A non-empty tuple evaluates to True."
                 )
     return errors
-
 
 
 def check_transition_outcomes(tree: ast.AST, file_path: str = "") -> list[str]:
@@ -312,7 +340,11 @@ def check_transition_outcomes(tree: ast.AST, file_path: str = "") -> list[str]:
 
         for child in ast.walk(node):
             if isinstance(child, ast.Call) and isinstance(child.func, ast.Attribute):
-                target_id = child.func.value.id if isinstance(child.func.value, ast.Name) else ""
+                target_id = (
+                    child.func.value.id
+                    if isinstance(child.func.value, ast.Name)
+                    else ""
+                )
                 if child.func.attr == "raises":
                     if target_id == "ctx":
                         has_raises = True
@@ -385,11 +417,14 @@ def check_pretense_next_transition(
         if isinstance(d, ast.Call):
             func = d.func
             if (isinstance(func, ast.Name) and func.id == "transition") or (
-                isinstance(func, ast.Attribute) and func.attr in ("transition", "seeding")
+                isinstance(func, ast.Attribute)
+                and func.attr in ("transition", "seeding")
             ):
                 has_trans_dec = True
                 dec_call = d
-                if (isinstance(func, ast.Attribute) and func.attr == "seeding") or any(kw.arg == "seeding" for kw in d.keywords):
+                if (isinstance(func, ast.Attribute) and func.attr == "seeding") or any(
+                    kw.arg == "seeding" for kw in d.keywords
+                ):
                     is_seeding = True
                 break
         elif (isinstance(d, ast.Name) and d.id == "transition") or (
@@ -403,8 +438,18 @@ def check_pretense_next_transition(
     if not has_trans_dec:
         return errors
 
+    if is_impl:
+        errors.append(
+            f"{file_path}:{node.lineno}: error [PN_IMPL_NO_OUTER_TRANSITION]: Implementation pseudo-state machines must NOT declare '@transition' or override outer transition '{fn_name}'. Implementation pseudo-state machines must only override inner transitions ('inner_{fn_name}') to bind the SUT so that precondition and domain guards remain active."
+        )
+
     # PN001: Correct decorator
-    if dec_call and not dec_call.args and not any(kw.arg in ("seeding", "name") for kw in dec_call.keywords) and getattr(dec_call.func, "attr", "") != "seeding":
+    if (
+        dec_call
+        and not dec_call.args
+        and not any(kw.arg in ("seeding", "name") for kw in dec_call.keywords)
+        and getattr(dec_call.func, "attr", "") != "seeding"
+    ):
         errors.append(
             f"{file_path}:{node.lineno}: error [PN001]: @transition decorator must specify target method, e.g. @transition(TargetClass.method)."
         )
@@ -454,7 +499,11 @@ def check_pretense_next_transition(
     # Legacy macros prohibition & require purity
     for child in ast.walk(node):
         if isinstance(child, ast.Call):
-            func_id = child.func.id if isinstance(child.func, ast.Name) else getattr(child.func, "attr", "")
+            func_id = (
+                child.func.id
+                if isinstance(child.func, ast.Name)
+                else getattr(child.func, "attr", "")
+            )
             if func_id == "ensure":
                 errors.append(
                     f"{file_path}:{child.lineno}: error [PRE_LINT_NO_LEGACY_ENSURE]: 'ensure(...)' is obsolete in Pretense 1 Next. Use native Python 'assert ...' instead."
@@ -475,15 +524,23 @@ def check_pretense_next_transition(
             elif func_id == "require":
                 for sub in ast.walk(child):
                     if isinstance(sub, ast.Call) and (
-                        (isinstance(sub.func, ast.Name) and sub.func.id in ("sut", "sut_state"))
-                        or (isinstance(sub.func, ast.Attribute) and sub.func.attr in ("sut", "sut_state"))
+                        (
+                            isinstance(sub.func, ast.Name)
+                            and sub.func.id in ("sut", "sut_state")
+                        )
+                        or (
+                            isinstance(sub.func, ast.Attribute)
+                            and sub.func.attr in ("sut", "sut_state")
+                        )
                     ):
                         errors.append(
                             f"{file_path}:{child.lineno}: error [PN009_REQUIRE_PURITY]: require() cannot reference SUT via sut(...). It must only inspect 'self.state'."
                         )
                     elif isinstance(sub, ast.Name) and sub.id in input_args:
                         errors.append(
-                            f"{file_path}:{child.lineno}: error [PN009_REQUIRE_PURITY]: require() cannot reference transition input argument '{sub.id}'. Preconditions only evaluate state. To constrain input arguments relative to state, use require_arg."
+                            f"{file_path}:{child.lineno}: error [PN009_REQUIRE_PURITY]: require() cannot reference transition input argument '{sub.id}'. "
+                            f"Preconditions only evaluate state. To constrain input arguments relative to state collections (such as entity existence), use: "
+                            f"'require_arg({sub.id}, Domain.in_set(self.state.<collection>), error=ExpectedError)' (or positional 'require_arg({sub.id}, Domain.in_set(self.state.<collection>), ExpectedError)')."
                         )
 
     # Pivot Node Verification (only for non-seeding transitions)
@@ -492,12 +549,24 @@ def check_pretense_next_transition(
             isinstance(c, ast.Call)
             and (
                 (isinstance(c.func, ast.Name) and c.func.id == "make_return_value")
-                or (isinstance(c.func, ast.Attribute) and c.func.attr == "make_return_value")
+                or (
+                    isinstance(c.func, ast.Attribute)
+                    and c.func.attr == "make_return_value"
+                )
             )
             for c in ast.walk(node)
         )
+        has_inner_call = any(
+            isinstance(c, ast.Call)
+            and isinstance(c.func, ast.Attribute)
+            and isinstance(c.func.value, ast.Name)
+            and c.func.value.id == "self"
+            and (c.func.attr.startswith("inner_") or c.func.attr.startswith("_inner_"))
+            for c in ast.walk(node)
+        )
         call_target_calls = [
-            c for c in ast.walk(node)
+            c
+            for c in ast.walk(node)
             if isinstance(c, ast.Call)
             and (
                 (isinstance(c.func, ast.Name) and c.func.id == "call_target")
@@ -506,7 +575,8 @@ def check_pretense_next_transition(
         ]
         has_call_target = len(call_target_calls) > 0
         sut_calls = [
-            c for c in ast.walk(node)
+            c
+            for c in ast.walk(node)
             if isinstance(c, ast.Call)
             and (
                 (isinstance(c.func, ast.Name) and c.func.id == "sut")
@@ -520,27 +590,53 @@ def check_pretense_next_transition(
                 )
         if is_impl:
             mutating_methods = {
-                "add", "remove", "discard", "pop", "popitem", "clear", "update",
-                "append", "extend", "insert", "put", "assign", "set", "delete", "__setitem__",
+                "add",
+                "remove",
+                "discard",
+                "pop",
+                "popitem",
+                "clear",
+                "update",
+                "append",
+                "extend",
+                "insert",
+                "put",
+                "assign",
+                "set",
+                "delete",
+                "__setitem__",
             }
 
             def _is_self_state_target(n: ast.AST) -> bool:
-                if isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name) and n.value.id == "self" and n.attr == "state":
+                if (
+                    isinstance(n, ast.Attribute)
+                    and isinstance(n.value, ast.Name)
+                    and n.value.id == "self"
+                    and n.attr == "state"
+                ):
                     return True
                 if isinstance(n, ast.Attribute):
                     return _is_self_state_target(n.value)
                 return False
 
             for child in ast.walk(node):
-                if isinstance(child, (ast.Assign, ast.AugAssign, ast.AnnAssign)):
-                    targets = [child.target] if hasattr(child, "target") else child.targets  # type: ignore
-                    for t in targets:
+                if isinstance(child, ast.Assign):
+                    for t in child.targets:
                         if _is_self_state_target(t):
                             errors.append(
                                 f"{file_path}:{child.lineno}: error [PN_IMPL_NO_STATE_MUTATION]: Transition '{fn_name}' in implementation pseudo-state machine must not mutate 'self.state'. Model state transitions are already executed by the inherited interface transition before delegating to 'call_target(...)'. Implementation transitions must only invoke 'call_target(...)' and assert postconditions."
                             )
-                elif isinstance(child, ast.Call) and isinstance(child.func, ast.Attribute):
-                    if child.func.attr in mutating_methods and _is_self_state_target(child.func.value):
+                elif isinstance(child, (ast.AugAssign, ast.AnnAssign)):
+                    if _is_self_state_target(child.target):
+                        errors.append(
+                            f"{file_path}:{child.lineno}: error [PN_IMPL_NO_STATE_MUTATION]: Transition '{fn_name}' in implementation pseudo-state machine must not mutate 'self.state'. Model state transitions are already executed by the inherited interface transition before delegating to 'call_target(...)'. Implementation transitions must only invoke 'call_target(...)' and assert postconditions."
+                        )
+                elif isinstance(child, ast.Call) and isinstance(
+                    child.func, ast.Attribute
+                ):
+                    if child.func.attr in mutating_methods and _is_self_state_target(
+                        child.func.value
+                    ):
                         errors.append(
                             f"{file_path}:{child.lineno}: error [PN_IMPL_NO_STATE_MUTATION]: Transition '{fn_name}' in implementation pseudo-state machine must not mutate 'self.state' (calling '{child.func.attr}()' on self.state). Model state transitions are already executed by the inherited interface transition before delegating to 'call_target(...)'. Implementation transitions must only invoke 'call_target(...)' and assert postconditions."
                         )
@@ -549,7 +645,7 @@ def check_pretense_next_transition(
                 errors.append(
                     f"{file_path}:{node.lineno}: error [PN_IMPL_NO_MAKE_RETURN_VALUE]: Transition '{fn_name}' in implementation pseudo-state machine must not call 'make_return_value()'. Use 'ret = call_target(target.method(...))' and 'return ret'."
                 )
-            if not has_call_target:
+            if not has_call_target and not has_inner_call:
                 errors.append(
                     f"{file_path}:{node.lineno}: error [PN_IMPL_CALL_TARGET_REQUIRED]: Transition '{fn_name}' in implementation pseudo-state machine must invoke target method via 'call_target(target.method(...))' or 'call_target(ReturnType)'."
                 )
@@ -560,20 +656,237 @@ def check_pretense_next_transition(
                             f"{file_path}:{ct.lineno}: error [PN_IMPL_CALL_TARGET_ARG_REQUIRED]: 'call_target()' requires an argument wrapping the target invocation (e.g. 'call_target(target.method(...))') or expected return type. Zero-argument 'call_target()' is strictly prohibited."
                         )
         else:
-            if not has_make_return_value:
+            if not has_make_return_value and not has_inner_call:
                 errors.append(
-                    f"{file_path}:{node.lineno}: error [PN_IFACE_MAKE_RETURN_VALUE_REQUIRED]: Transition '{fn_name}' in interface state machine must define an AST pivot via 'make_return_value(...)'. For void methods returning None, invoke 'make_return_value()'."
+                    f"{file_path}:{node.lineno}: error [PN_IFACE_MAKE_RETURN_VALUE_REQUIRED]: Transition '{fn_name}' in interface state machine must call an inner transition ('self.inner_{fn_name}(...)') or define an AST pivot via 'make_return_value(...)'. For void methods returning None, invoke an inner transition returning None."
                 )
 
     return errors
 
 
-def check_lifted_expr_usage(tree: ast.AST, file_path: str = "", is_impl: bool = False) -> list[str]:
+def _check_inner_transition_body(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+    file_path: str,
+    cls_name: str,
+) -> list[str]:
+    """Validates the body of an implementation pseudo-state machine inner transition."""
+    errors: list[str] = []
+    fn_name = node.name
+
+    for child in ast.walk(node):
+        if isinstance(child, ast.Lambda):
+            errors.append(
+                f"{file_path}:{child.lineno}: error [PN002_NO_LAMBDAS]: Lambdas are prohibited in Pretense Next transitions. Write plain Python expressions."
+            )
+        elif isinstance(child, ast.Call):
+            func_id = (
+                child.func.id
+                if isinstance(child.func, ast.Name)
+                else getattr(child.func, "attr", "")
+            )
+            if func_id == "require_arg":
+                errors.append(
+                    f"{file_path}:{child.lineno}: error [PN_IMPL_NO_REQUIRE_ARG]: 'require_arg(...)' is strictly prohibited in implementation pseudo-state machines. Domain constraints and generation domains belong exclusively to the interface state machine."
+                )
+            elif func_id == "require":
+                errors.append(
+                    f"{file_path}:{child.lineno}: error [PN_IMPL_NO_REQUIRE]: 'require(...)' is strictly prohibited in implementation inner transitions. Preconditions belong exclusively to the interface state machine outer transition."
+                )
+            elif func_id == "make_return_value":
+                errors.append(
+                    f"{file_path}:{node.lineno}: error [PN_IMPL_NO_MAKE_RETURN_VALUE]: Inner transition '{fn_name}' in implementation pseudo-state machine must not call 'make_return_value()'. Use 'ret = call_target(target.method(...))' (or 'ret = target.method(...)') and 'return ret'."
+                )
+            elif func_id == "call_target":
+                if len(child.args) == 0 and len(child.keywords) == 0:
+                    errors.append(
+                        f"{file_path}:{child.lineno}: error [PN_IMPL_CALL_TARGET_ARG_REQUIRED]: 'call_target()' requires an argument wrapping the target invocation (e.g. 'call_target(target.method(...))') or expected return type. Zero-argument 'call_target()' is strictly prohibited."
+                    )
+            elif func_id == "sut":
+                if len(child.args) == 0 and len(child.keywords) == 0:
+                    errors.append(
+                        f"{file_path}:{child.lineno}: error [PN_SUT_ARG_REQUIRED]: 'sut()' requires the target class as an argument (e.g. 'target = sut(TargetClass)'). Zero-argument 'sut()' is strictly prohibited."
+                    )
+            elif func_id == "ensure":
+                errors.append(
+                    f"{file_path}:{child.lineno}: error [PRE_LINT_NO_LEGACY_ENSURE]: 'ensure(...)' is obsolete in Pretense 1 Next. Use native Python 'assert ...' instead."
+                )
+            elif func_id == "ensure_ret":
+                errors.append(
+                    f"{file_path}:{child.lineno}: error [PRE_LINT_NO_LEGACY_ENSURE_RET]: 'ensure_ret(...)' is obsolete in Pretense 1 Next. In impl pseudo-SM, use 'ret = call_target(...)' or native return."
+                )
+            elif func_id == "ensure_raises":
+                errors.append(
+                    f"{file_path}:{child.lineno}: error [PRE_LINT_NO_LEGACY_ENSURE_RAISES]: 'ensure_raises(...)' is obsolete in Pretense 1 Next. Use 'with raises(ExpectedException): call_target(...)'."
+                )
+
+    mutating_methods = {
+        "add",
+        "remove",
+        "discard",
+        "pop",
+        "popitem",
+        "clear",
+        "update",
+        "append",
+        "extend",
+        "insert",
+        "put",
+        "assign",
+        "set",
+        "delete",
+        "__setitem__",
+    }
+
+    def _is_self_state_target(n: ast.AST) -> bool:
+        if (
+            isinstance(n, ast.Attribute)
+            and isinstance(n.value, ast.Name)
+            and n.value.id == "self"
+            and n.attr == "state"
+        ):
+            return True
+        if isinstance(n, ast.Attribute):
+            return _is_self_state_target(n.value)
+        return False
+
+    for child in ast.walk(node):
+        if isinstance(child, (ast.Assign, ast.AugAssign, ast.AnnAssign)):
+            targets = [child.target] if hasattr(child, "target") else child.targets  # type: ignore
+            for t in targets:
+                if _is_self_state_target(t):
+                    errors.append(
+                        f"{file_path}:{child.lineno}: error [PN_IMPL_NO_STATE_MUTATION]: Transition '{fn_name}' in implementation pseudo-state machine must not mutate 'self.state'. Model state transitions are already executed by the inherited interface transition before delegating to 'call_target(...)'. Implementation transitions must only invoke 'call_target(...)' and assert postconditions."
+                    )
+        elif isinstance(child, ast.Call) and isinstance(child.func, ast.Attribute):
+            if child.func.attr in mutating_methods and _is_self_state_target(
+                child.func.value
+            ):
+                errors.append(
+                    f"{file_path}:{child.lineno}: error [PN_IMPL_NO_STATE_MUTATION]: Transition '{fn_name}' in implementation pseudo-state machine must not mutate 'self.state' (calling '{child.func.attr}()' on self.state). Model state transitions are already executed by the inherited interface transition before delegating to 'call_target(...)'. Implementation transitions must only invoke 'call_target(...)' and assert postconditions."
+                )
+
+    return errors
+
+
+def check_impl_pseudo_state_machines(
+    tree: ast.AST,
+    file_path: str = "",
+    is_impl: bool = False,
+) -> list[str]:
+    """Validates that implementation pseudo-state machines only override inner transitions.
+
+    Prohibits:
+    1. Declaring @transition on any method in implementation pretense modules (PN_IMPL_NO_OUTER_TRANSITION).
+    2. Overriding outer transitions directly (methods not starting with 'inner_') (PN_IMPL_NO_OUTER_TRANSITION).
+    3. Mutating self.state, calling require/require_arg, or calling make_return_value inside inner transitions.
+    """
+    errors: list[str] = []
+
+    def _get_base_name(base: ast.AST) -> str:
+        if isinstance(base, ast.Name):
+            return base.id
+        elif isinstance(base, ast.Attribute):
+            return base.attr
+        elif isinstance(base, ast.Subscript):
+            return _get_base_name(base.value)
+        return ""
+
+    body = getattr(tree, "body", [])
+    for node in body:
+        if not isinstance(node, ast.ClassDef):
+            continue
+
+        base_names = [_get_base_name(b) for b in node.bases]
+        is_sm = any(
+            b in ("StateMachine", "StateMachineProto") or b.endswith("StateMachine")
+            for b in base_names
+        )
+        is_impl_sm = any(
+            b.endswith("StateMachine")
+            and b not in ("StateMachine", "StateMachineProto")
+            for b in base_names
+        )
+        is_impl_pseudo = (
+            node.name.endswith("ImplPseudoStateMachine")
+            or is_impl_sm
+            or (is_impl and is_sm and not any("TestCase" in b for b in base_names))
+        )
+
+        if is_impl_pseudo:
+            cls_name = node.name
+            for item in node.body:
+                if not isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+                fn_name = item.name
+
+                has_trans = any(
+                    (
+                        isinstance(d, ast.Call)
+                        and (
+                            (isinstance(d.func, ast.Name) and d.func.id == "transition")
+                            or (
+                                isinstance(d.func, ast.Attribute)
+                                and d.func.attr in ("transition", "seeding")
+                            )
+                        )
+                    )
+                    or (isinstance(d, ast.Name) and d.id == "transition")
+                    or (
+                        isinstance(d, ast.Attribute)
+                        and d.attr in ("transition", "seeding")
+                    )
+                    for d in item.decorator_list
+                )
+
+                if fn_name.startswith("inner_") or fn_name.startswith("_inner_"):
+                    if has_trans:
+                        errors.append(
+                            f"{file_path}:{item.lineno}: error [PN_IMPL_NO_OUTER_TRANSITION]: Inner transition '{fn_name}' in implementation pseudo-state machine '{cls_name}' must NOT be decorated with '@transition'. Inner transitions are plain Python methods called by inherited interface transitions."
+                        )
+                    errors.extend(
+                        _check_inner_transition_body(item, file_path, cls_name)
+                    )
+                elif fn_name in (
+                    "__init__",
+                    "__repr__",
+                    "__str__",
+                    "make_initial_state",
+                    "make_sut",
+                ) or fn_name.startswith("_"):
+                    if has_trans:
+                        errors.append(
+                            f"{file_path}:{item.lineno}: error [PN_IMPL_NO_OUTER_TRANSITION]: Method '{fn_name}' in implementation pseudo-state machine '{cls_name}' must NOT be decorated with '@transition'."
+                        )
+                else:
+                    errors.append(
+                        f"{file_path}:{item.lineno}: error [PN_IMPL_NO_OUTER_TRANSITION]: Method '{fn_name}' in implementation pseudo-state machine '{cls_name}' overrides outer transition. Implementation pseudo-state machines must NOT declare '@transition' or override outer transitions; they must only override inner transitions ('inner_{fn_name}') so that interface preconditions, domains, and model state mutations remain active."
+                    )
+
+    return errors
+
+
+def check_lifted_expr_usage(
+    tree: ast.AST, file_path: str = "", is_impl: bool = False
+) -> list[str]:
     """Validates that lifted Expr.value() calls and self.state mutations are properly gated."""
     errors: list[str] = []
+    errors.extend(check_impl_pseudo_state_machines(tree, file_path, is_impl=is_impl))
     mutating_methods = {
-        "add", "remove", "discard", "pop", "popitem", "clear", "update",
-        "append", "extend", "insert", "put", "assign", "set", "delete", "__setitem__",
+        "add",
+        "remove",
+        "discard",
+        "pop",
+        "popitem",
+        "clear",
+        "update",
+        "append",
+        "extend",
+        "insert",
+        "put",
+        "assign",
+        "set",
+        "delete",
+        "__setitem__",
     }
 
     for node in ast.walk(tree):
@@ -584,7 +897,8 @@ def check_lifted_expr_usage(tree: ast.AST, file_path: str = "", is_impl: bool = 
             if isinstance(d, ast.Call):
                 func = d.func
                 if (isinstance(func, ast.Name) and func.id == "transition") or (
-                    isinstance(func, ast.Attribute) and func.attr in ("transition", "seeding")
+                    isinstance(func, ast.Attribute)
+                    and func.attr in ("transition", "seeding")
                 ):
                     is_transition = True
                     break
@@ -600,14 +914,21 @@ def check_lifted_expr_usage(tree: ast.AST, file_path: str = "", is_impl: bool = 
         fn_name = node.name
         raw_params = [a.arg for a in node.args.args if a.arg != "self"]
         if not raw_params or raw_params[-1] != "ctx":
-            errors.extend(check_pretense_next_transition(node, file_path, is_impl=is_impl))
+            errors.extend(
+                check_pretense_next_transition(node, file_path, is_impl=is_impl)
+            )
             continue
 
         expr_param_names = set(raw_params[:-1]) if len(raw_params) >= 2 else set()
         call_funcs = {c.func for c in ast.walk(node) if isinstance(c, ast.Call)}
 
-        def _walk_stmt_or_expr(curr: ast.AST, in_gated_block: bool, in_updates_block: bool) -> None:
-            if isinstance(curr, (ast.FunctionDef, ast.AsyncFunctionDef)) and curr is not node:
+        def _walk_stmt_or_expr(
+            curr: ast.AST, in_gated_block: bool, in_updates_block: bool
+        ) -> None:
+            if (
+                isinstance(curr, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and curr is not node
+            ):
                 return
             if isinstance(curr, ast.Lambda):
                 # Lambdas permit deferred .value() resolution, but forbid mutating self.state
@@ -624,7 +945,9 @@ def check_lifted_expr_usage(tree: ast.AST, file_path: str = "", is_impl: bool = 
                 )
                 _walk_stmt_or_expr(curr.test, in_gated_block, in_updates_block)
                 for stmt in curr.body:
-                    _walk_stmt_or_expr(stmt, in_gated_block or is_gated, in_updates_block or is_updates)
+                    _walk_stmt_or_expr(
+                        stmt, in_gated_block or is_gated, in_updates_block or is_updates
+                    )
                 for stmt in curr.orelse:
                     _walk_stmt_or_expr(stmt, in_gated_block, in_updates_block)
                 return
@@ -685,7 +1008,9 @@ def check_lifted_expr_usage(tree: ast.AST, file_path: str = "", is_impl: bool = 
                     )
 
             if isinstance(curr, (ast.Assign, ast.AugAssign)) and not in_updates_block:
-                targets = curr.targets if isinstance(curr, ast.Assign) else [curr.target]
+                targets = (
+                    curr.targets if isinstance(curr, ast.Assign) else [curr.target]
+                )
                 if any(_targets_self_state(t) for t in targets):
                     errors.append(
                         f"{file_path}:{curr.lineno}: error: Transition '{fn_name}' mutates 'self.state' outside "
@@ -698,7 +1023,7 @@ def check_lifted_expr_usage(tree: ast.AST, file_path: str = "", is_impl: bool = 
         for stmt in node.body:
             _walk_stmt_or_expr(stmt, False, False)
 
-    return errors
+    return list(dict.fromkeys(errors))
 
 
 def check_no_residual_sentinels(tree: ast.AST, file_path: str = "") -> list[str]:
@@ -725,7 +1050,11 @@ def check_no_residual_sentinels(tree: ast.AST, file_path: str = "") -> list[str]
 
         if is_transition:
             for child in ast.walk(node):
-                if isinstance(child, ast.Call) and isinstance(child.func, ast.Attribute) and child.func.attr == "returns":
+                if (
+                    isinstance(child, ast.Call)
+                    and isinstance(child.func, ast.Attribute)
+                    and child.func.attr == "returns"
+                ):
                     if child.args:
                         ret_arg = child.args[0]
                         if isinstance(ret_arg, ast.Name) and ret_arg.id == "NotBound":
@@ -741,7 +1070,11 @@ def check_no_residual_sentinels(tree: ast.AST, file_path: str = "") -> list[str]
                                         f"Transitions must return concrete values, state expressions, or Raised(...) exceptions."
                                     )
                                     break
-                elif isinstance(child, ast.Return) and isinstance(child.value, ast.Name) and child.value.id == "NotBound":
+                elif (
+                    isinstance(child, ast.Return)
+                    and isinstance(child.value, ast.Name)
+                    and child.value.id == "NotBound"
+                ):
                     errors.append(
                         f"{file_path}:{child.lineno}: error: Transition '{node.name}' returns sentinel 'NotBound'. "
                         f"Transitions must return concrete values, state expressions, or Raised(...) exceptions."
@@ -749,8 +1082,13 @@ def check_no_residual_sentinels(tree: ast.AST, file_path: str = "") -> list[str]
 
         if node.name.startswith("test_"):
             for child in ast.walk(node):
-                if isinstance(child, ast.Call) and isinstance(child.func, ast.Attribute):
-                    if child.func.attr in ("assertEqual", "assertNotEqual") and len(child.args) >= 2:
+                if isinstance(child, ast.Call) and isinstance(
+                    child.func, ast.Attribute
+                ):
+                    if (
+                        child.func.attr in ("assertEqual", "assertNotEqual")
+                        and len(child.args) >= 2
+                    ):
                         for a in child.args[:2]:
                             if isinstance(a, ast.Name) and a.id == "NotBound":
                                 errors.append(
@@ -802,8 +1140,14 @@ def _is_trivial_requirement(call: ast.Call) -> bool:
         if isinstance(body, ast.Call):
             if body.args:
                 cond = body.args[0]
-                if isinstance(cond, ast.Attribute) and cond.attr in ("initialized", "is_initialized"):
-                    if isinstance(cond.value, ast.Attribute) and cond.value.attr == "state":
+                if isinstance(cond, ast.Attribute) and cond.attr in (
+                    "initialized",
+                    "is_initialized",
+                ):
+                    if (
+                        isinstance(cond.value, ast.Attribute)
+                        and cond.value.attr == "state"
+                    ):
                         return True
                     elif isinstance(cond.value, ast.Name) and cond.value.id == "state":
                         return True
@@ -859,7 +1203,9 @@ def _is_discriminating_domain_expr(val: ast.AST) -> bool:
     return False
 
 
-def check_multi_transition_disambiguation(tree: ast.AST, file_path: str = "") -> list[str]:
+def check_multi_transition_disambiguation(
+    tree: ast.AST, file_path: str = ""
+) -> list[str]:
     """Enforces strict 1:1 transitions (PN_STRICT_1_TO_1)."""
     errors: list[str] = []
     classes = [n for n in getattr(tree, "body", []) if isinstance(n, ast.ClassDef)]
@@ -895,7 +1241,9 @@ def check_multi_transition_disambiguation(tree: ast.AST, file_path: str = "") ->
     return errors
 
 
-def check_no_algorithmic_state_machines(tree: ast.AST, file_path: str = "") -> list[str]:
+def check_no_algorithmic_state_machines(
+    tree: ast.AST, file_path: str = ""
+) -> list[str]:
     """Validates that StateMachine classes act as lightweight specification oracles rather than algorithmic engines."""
     errors: list[str] = []
     classes = [n for n in getattr(tree, "body", []) if isinstance(n, ast.ClassDef)]
@@ -963,9 +1311,15 @@ def check_no_algorithmic_state_machines(tree: ast.AST, file_path: str = "") -> l
                         )
 
                 # Check 2: Nested algorithmic functions (backtrack, solve, search, etc.)
-                if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) and child is not item:
+                if (
+                    isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef))
+                    and child is not item
+                ):
                     lower_name = child.name.lower()
-                    if any(algo_word in lower_name for algo_word in ("backtrack", "solve", "search", "recurse")):
+                    if any(
+                        algo_word in lower_name
+                        for algo_word in ("backtrack", "solve", "search", "recurse")
+                    ):
                         errors.append(
                             f"{file_path}:{child.lineno}: error: State machine method '{item.name}' defines nested algorithmic function '{child.name}'. "
                             f"State machine Fakes must not implement complex algorithmic solving. Algorithmic verification belongs in real SUT tests."
@@ -994,7 +1348,12 @@ def check_pretense_target_internals(
     if pyi_elements and "classes" in pyi_elements:
         target_classes = {c["name"] for c in pyi_elements["classes"]}
 
-    target_attr_names = {c.lower() for c in target_classes} | {"sut", "target", "engine", "service"}
+    target_attr_names = {c.lower() for c in target_classes} | {
+        "sut",
+        "target",
+        "engine",
+        "service",
+    }
 
     local_target_vars: set[str] = set()
     for node in ast.walk(tree):
@@ -1014,10 +1373,16 @@ def check_pretense_target_internals(
     for node in ast.walk(tree):
         if isinstance(node, ast.Attribute):
             attr = node.attr
-            if attr.startswith("_") and not (attr.startswith("__") and attr.endswith("__")):
+            if attr.startswith("_") and not (
+                attr.startswith("__") and attr.endswith("__")
+            ):
                 val = node.value
                 # Check self.<target>._private
-                if isinstance(val, ast.Attribute) and isinstance(val.value, ast.Name) and val.value.id == "self":
+                if (
+                    isinstance(val, ast.Attribute)
+                    and isinstance(val.value, ast.Name)
+                    and val.value.id == "self"
+                ):
                     if val.attr.lower() in target_attr_names or (
                         val.attr != "state"
                         and not val.attr.startswith("_")
@@ -1052,11 +1417,20 @@ def check_pretense_target_internals(
                 if isinstance(first_arg, ast.Name) and first_arg.id in target_classes:
                     is_target = True
                     target_desc = f"target class '{first_arg.id}'"
-                elif isinstance(first_arg, ast.Attribute) and isinstance(first_arg.value, ast.Name) and first_arg.value.id == "self":
-                    if first_arg.attr.lower() in target_attr_names or any(tc.lower() in first_arg.attr.lower() for tc in target_classes):
+                elif (
+                    isinstance(first_arg, ast.Attribute)
+                    and isinstance(first_arg.value, ast.Name)
+                    and first_arg.value.id == "self"
+                ):
+                    if first_arg.attr.lower() in target_attr_names or any(
+                        tc.lower() in first_arg.attr.lower() for tc in target_classes
+                    ):
                         is_target = True
                         target_desc = f"target instance 'self.{first_arg.attr}'"
-                elif isinstance(first_arg, ast.Name) and first_arg.id in local_target_vars:
+                elif (
+                    isinstance(first_arg, ast.Name)
+                    and first_arg.id in local_target_vars
+                ):
                     is_target = True
                     target_desc = f"target instance '{first_arg.id}'"
                 if is_target:
@@ -1099,7 +1473,11 @@ def check_no_scaffold_placeholders(tree: ast.AST, file_path: str = "") -> list[s
                 and isinstance(node.func.value, ast.Name)
                 and node.func.value.id == "self"
             ):
-                if node.args and isinstance(node.args[0], ast.Constant) and "must be implemented" in str(node.args[0].value):
+                if (
+                    node.args
+                    and isinstance(node.args[0], ast.Constant)
+                    and "must be implemented" in str(node.args[0].value)
+                ):
                     errors.append(
                         f"{file_path}:{node.lineno}: error: test method still contains scaffold placeholder 'self.fail'. "
                         f"You must implement concrete test logic."
@@ -1126,8 +1504,13 @@ def check_no_scaffold_placeholders(tree: ast.AST, file_path: str = "") -> list[s
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             if node.name.startswith("test"):
                 non_doc_stmts = [
-                    s for s in node.body
-                    if not (isinstance(s, ast.Expr) and isinstance(s.value, ast.Constant) and isinstance(s.value.value, str))
+                    s
+                    for s in node.body
+                    if not (
+                        isinstance(s, ast.Expr)
+                        and isinstance(s.value, ast.Constant)
+                        and isinstance(s.value.value, str)
+                    )
                 ]
                 if len(non_doc_stmts) == 1 and isinstance(non_doc_stmts[0], ast.Pass):
                     errors.append(
@@ -1154,7 +1537,10 @@ def check_no_pre_seeding(tree: ast.AST, file_path: str = "") -> list[str]:
         "tuple",
     }
     for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "make_sut":
+        if (
+            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name == "make_sut"
+        ):
             for child in ast.walk(node):
                 if isinstance(child, (ast.For, ast.While)):
                     errors.append(
@@ -1168,7 +1554,9 @@ def check_no_pre_seeding(tree: ast.AST, file_path: str = "") -> list[str]:
                     elif isinstance(child.func, ast.Attribute):
                         func_name = child.func.attr
 
-                    if (func_name.startswith("__") and func_name.endswith("__")) or func_name == "__enter__":
+                    if (
+                        func_name.startswith("__") and func_name.endswith("__")
+                    ) or func_name == "__enter__":
                         continue
                     if func_name.startswith("make_") and "fake" in func_name:
                         if child.args or child.keywords:
@@ -1181,7 +1569,18 @@ def check_no_pre_seeding(tree: ast.AST, file_path: str = "") -> list[str]:
                         continue
                     if func_name in allowed_call_names:
                         continue
-                    if func_name in ("submit", "push", "deposit", "withdraw", "put", "add", "dispatch", "fetch_and_execute", "clear", "reset") or func_name.startswith("set_"):
+                    if func_name in (
+                        "submit",
+                        "push",
+                        "deposit",
+                        "withdraw",
+                        "put",
+                        "add",
+                        "dispatch",
+                        "fetch_and_execute",
+                        "clear",
+                        "reset",
+                    ) or func_name.startswith("set_"):
                         errors.append(
                             f"{file_path}:{child.lineno}: error: [PRE_LINT_NO_PRE_SEEDING] pre-seeding call '{func_name}' is prohibited in 'make_sut()'; "
                             f"components and collaborator fakes must start in blank initial states. Use seeding transitions during fuzzing instead."
@@ -1192,13 +1591,18 @@ def check_no_pre_seeding(tree: ast.AST, file_path: str = "") -> list[str]:
             if "StateMachine" in node.name or node.name.endswith("State"):
                 continue
             is_test_case = any(
-                (isinstance(b, ast.Name) and b.id in ("TestCase", "unittest.TestCase")) or
-                (isinstance(b, ast.Attribute) and b.attr == "TestCase")
+                (isinstance(b, ast.Name) and b.id in ("TestCase", "unittest.TestCase"))
+                or (isinstance(b, ast.Attribute) and b.attr == "TestCase")
                 for b in node.bases
             ) or (
-                (node.name.startswith("Test") or node.name.endswith("Real") or node.name.endswith("Fake"))
+                (
+                    node.name.startswith("Test")
+                    or node.name.endswith("Real")
+                    or node.name.endswith("Fake")
+                )
                 and any(
-                    isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef)) and m.name.startswith("test")
+                    isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef))
+                    and m.name.startswith("test")
                     for m in node.body
                 )
             )
@@ -1209,20 +1613,38 @@ def check_no_pre_seeding(tree: ast.AST, file_path: str = "") -> list[str]:
                             if isinstance(stmt, ast.Assign):
                                 for target in stmt.targets:
                                     target_str = ast.unparse(target)
-                                    if ".state." in target_str or target_str.endswith(".state"):
+                                    if ".state." in target_str or target_str.endswith(
+                                        ".state"
+                                    ):
                                         errors.append(
                                             f"{file_path}:{stmt.lineno}: error: [PRE_LINT_NO_STATE_POKING] direct mutation of internal model state '{target_str}' is prohibited in test methods. Manipulate state exclusively via public operations or declared '@transition.seeding' methods."
                                         )
                             elif isinstance(stmt, ast.AugAssign):
                                 target_str = ast.unparse(stmt.target)
-                                if ".state." in target_str or target_str.endswith(".state"):
+                                if ".state." in target_str or target_str.endswith(
+                                    ".state"
+                                ):
                                     errors.append(
                                         f"{file_path}:{stmt.lineno}: error: [PRE_LINT_NO_STATE_POKING] direct mutation of internal model state '{target_str}' is prohibited in test methods. Manipulate state exclusively via public operations or declared '@transition.seeding' methods."
                                     )
-                            elif isinstance(stmt, ast.Call) and isinstance(stmt.func, ast.Attribute):
-                                if stmt.func.attr in ("append", "add", "extend", "insert", "remove", "pop", "clear", "update", "discard"):
+                            elif isinstance(stmt, ast.Call) and isinstance(
+                                stmt.func, ast.Attribute
+                            ):
+                                if stmt.func.attr in (
+                                    "append",
+                                    "add",
+                                    "extend",
+                                    "insert",
+                                    "remove",
+                                    "pop",
+                                    "clear",
+                                    "update",
+                                    "discard",
+                                ):
                                     val_str = ast.unparse(stmt.func.value)
-                                    if ".state." in val_str or val_str.endswith(".state"):
+                                    if ".state." in val_str or val_str.endswith(
+                                        ".state"
+                                    ):
                                         errors.append(
                                             f"{file_path}:{stmt.lineno}: error: [PRE_LINT_NO_STATE_POKING] mutating internal model state via '{ast.unparse(stmt.func)}' is prohibited in test methods. Manipulate state exclusively via public operations or declared '@transition.seeding' methods."
                                         )
@@ -1248,9 +1670,14 @@ def check_no_raises_in_test_cases(tree: ast.AST, file_path: str = "") -> list[st
             or (isinstance(b, ast.Attribute) and b.attr == "TestCase")
             for b in node.bases
         ) or (
-            (node.name.startswith("Test") or node.name.endswith("Real") or node.name.endswith("Fake"))
+            (
+                node.name.startswith("Test")
+                or node.name.endswith("Real")
+                or node.name.endswith("Fake")
+            )
             and any(
-                isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef)) and m.name.startswith("test")
+                isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and m.name.startswith("test")
                 for m in node.body
             )
         )
@@ -1278,7 +1705,8 @@ def check_no_raises_in_test_cases(tree: ast.AST, file_path: str = "") -> list[st
                             errors.append(
                                 f"{file_path}:{child.lineno}: error: [PRE_LINT_NO_RAISES_IN_TEST_CASE] "
                                 f"'with raises(...)' is Pretense transition DSL for AST pivots. "
-                                f"Inside unittest.TestCase test methods, use 'self.assertRaises(...)'. "
+                                "Inside test methods, verify contract violations (*Error) via 'self.checked.violating(ExpectedError).method(...)' "
+                                "or 'with self.checked.violating(ExpectedError):'. Calling 'self.assertRaises(...)' is strictly prohibited (PN_NO_ASSERT_RAISES)."
                             )
                 elif isinstance(child, ast.Expr) and isinstance(child.value, ast.Call):
                     call = child.value
@@ -1291,12 +1719,156 @@ def check_no_raises_in_test_cases(tree: ast.AST, file_path: str = "") -> list[st
                         errors.append(
                             f"{file_path}:{child.lineno}: error: [PRE_LINT_NO_RAISES_IN_TEST_CASE] "
                             f"'raises(...)' is Pretense transition DSL for AST pivots. "
-                            f"Inside unittest.TestCase test methods, use 'self.assertRaises(...)'. "
+                            "Inside test methods, verify contract violations (*Error) via 'self.checked.violating(ExpectedError).method(...)' "
+                            "or 'with self.checked.violating(ExpectedError):'. Calling 'self.assertRaises(...)' is strictly prohibited (PN_NO_ASSERT_RAISES)."
                         )
     return errors
 
 
-def check_no_call_target_in_interface(tree: ast.AST, file_path: str = "", is_interface: bool = False) -> list[str]:
+def check_no_assert_raises(tree: ast.AST, file_path: str = "") -> list[str]:
+    """Ensures test methods in Pretense modules do not use 'assertRaises' or 'assertRaisesRegex' (PN_NO_ASSERT_RAISES).
+
+    Contract violations (*Error) must be verified on the SUT via 'self.checked.violating(ExpectedError).method(...)'
+    or 'with self.checked.violating(ExpectedError):' (which self-asserts the exception and marks the adapter terminal).
+    Operational postcondition exceptions (*Exception) are handled via transition pivots with 'with raises(ExpectedException):'.
+    Using 'self.assertRaises(...)', 'self.assertRaisesRegex(...)', or wrapping violating() in assertRaises is strictly prohibited.
+    """
+    errors: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            func_name = ""
+            if isinstance(node.func, ast.Attribute):
+                func_name = node.func.attr
+            elif isinstance(node.func, ast.Name):
+                func_name = node.func.id
+            if func_name in ("assertRaises", "assertRaisesRegex"):
+                errors.append(
+                    f"{file_path}:{node.lineno}: error [PN_NO_ASSERT_RAISES]: "
+                    f"Calling '{func_name}' is strictly prohibited in Pretense test modules. "
+                    "Contract violations (*Error) must be verified via 'self.checked.violating(ExpectedError).<method>(...)' "
+                    "or 'with self.checked.violating(ExpectedError):' (which self-asserts the exception and marks the adapter terminal). "
+                    "Do NOT wrap 'violating(...)' inside 'assertRaises(...)'."
+                )
+    return errors
+
+
+def check_no_raises_for_errors(tree: ast.AST, file_path: str = "") -> list[str]:
+    """Ensures 'raises(...)' or 'with raises(...)' is never used with contract violation errors (*Error).
+
+    Contract violations (*Error) designate precondition or domain failures (invalid inputs or state).
+    They must be gated via 'require(..., error=ExpectedError)' (for state preconditions) or
+    'require_arg(param, Domain.in_set(...), error=ExpectedError)' (for argument domains).
+    'raises(...)' is reserved exclusively for operational exceptions (*Exception).
+    In test cases, contract violations must be tested via 'self.checked.violating(ExpectedError).method(...)'.
+    """
+    errors: list[str] = []
+
+    def _extract_error_names(node: ast.AST) -> list[str]:
+        names: list[str] = []
+        if isinstance(node, ast.Name):
+            if node.id.endswith("Error") or node.id in (
+                "KeyError",
+                "IndexError",
+                "ValueError",
+                "TypeError",
+                "AssertionError",
+            ):
+                names.append(node.id)
+        elif isinstance(node, ast.Attribute):
+            if node.attr.endswith("Error") or node.attr in (
+                "KeyError",
+                "IndexError",
+                "ValueError",
+                "TypeError",
+                "AssertionError",
+            ):
+                names.append(node.attr)
+        elif isinstance(node, (ast.Tuple, ast.List)):
+            for elt in node.elts:
+                names.extend(_extract_error_names(elt))
+        return names
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            func_name = ""
+            if isinstance(node.func, ast.Name):
+                func_name = node.func.id
+            elif isinstance(node.func, ast.Attribute):
+                func_name = node.func.attr
+            if func_name == "raises":
+                err_names: list[str] = []
+                if node.args:
+                    err_names.extend(_extract_error_names(node.args[0]))
+                for kw in node.keywords:
+                    if kw.arg in ("exc", "expected_exception", "error", "exc_type"):
+                        err_names.extend(_extract_error_names(kw.value))
+                for err_name in err_names:
+                    errors.append(
+                        f"{file_path}:{node.lineno}: error: [PRE_LINT_NO_RAISES_ERROR] 'raises({err_name})' is invalid for contract violation errors (*Error). "
+                        f"'raises(...)' is reserved exclusively for operational exceptions (*Exception). Contract errors designate invalid inputs or state preconditions; "
+                        f"gate them using 'require(..., error={err_name})' (or positional 'require(..., {err_name})') for state preconditions, or "
+                        f"'require_arg(<param>, Domain.in_set(self.state.<collection>), error={err_name})' (or positional 'require_arg(<param>, Domain.in_set(self.state.<collection>), {err_name})') for argument domains. "
+                        f"To verify {err_name} in test cases, use 'self.checked.violating({err_name}).method(...)'. "
+                        f"DO NOT rename or redefine {err_name} to an *Exception; exception types are strictly dictated by the Low-Level Specification (low/*.pyi)."
+                    )
+    return errors
+
+
+def check_no_direct_real_access(tree: ast.AST, file_path: str = "") -> list[str]:
+    """Ensures test methods in TestCase classes do not access 'self.real' directly (PN_NO_DIRECT_REAL_ACCESS).
+
+    'self.real' is only permitted during test fixture setup in setUp()/tearDown() to wire
+    'self.checked = self.sm.as_checked(TargetClass, self.real)'.
+    All test methods (def test_*) must interact with the SUT exclusively through 'self.checked'
+    or 'self.checked.violating(...)'. Direct access to 'self.real' in test methods is strictly prohibited.
+    """
+    errors: list[str] = []
+    tree_body: list[ast.stmt] = getattr(tree, "body", [])
+    for node in tree_body:
+        if not isinstance(node, ast.ClassDef):
+            continue
+        if "StateMachine" in node.name or node.name.endswith("State"):
+            continue
+        is_test_case = any(
+            (isinstance(b, ast.Name) and b.id in ("TestCase", "unittest.TestCase"))
+            or (isinstance(b, ast.Attribute) and b.attr == "TestCase")
+            for b in node.bases
+        ) or (
+            (
+                node.name.startswith("Test")
+                or node.name.endswith("Real")
+                or node.name.endswith("Fake")
+            )
+            and any(
+                isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and m.name.startswith("test")
+                for m in node.body
+            )
+        )
+        if not is_test_case:
+            continue
+
+        for item in node.body:
+            if not isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            if not item.name.startswith("test"):
+                continue
+
+            for child in ast.walk(item):
+                if isinstance(child, ast.Attribute) and child.attr == "real":
+                    if isinstance(child.value, ast.Name) and child.value.id == "self":
+                        errors.append(
+                            f"{file_path}:{child.lineno}: error [PN_NO_DIRECT_REAL_ACCESS]: "
+                            f"Direct access to 'self.real' in test method '{item.name}' is strictly prohibited. "
+                            "Tests must drive and verify the component exclusively through 'self.checked' "
+                            "(or 'self.checked.violating(...)')."
+                        )
+    return errors
+
+
+def check_no_call_target_in_interface(
+    tree: ast.AST, file_path: str = "", is_interface: bool = False
+) -> list[str]:
     """Ensures interface state machines do not invoke call_target (call_target belongs in implementation pseudo-state machines)."""
     errors: list[str] = []
     if not is_interface:
@@ -1304,7 +1876,11 @@ def check_no_call_target_in_interface(tree: ast.AST, file_path: str = "", is_int
 
     tree_body: list[ast.stmt] = getattr(tree, "body", [])
     for node in tree_body:
-        if isinstance(node, ast.ClassDef) and "StateMachine" in node.name and not node.name.endswith("PseudoStateMachine"):
+        if (
+            isinstance(node, ast.ClassDef)
+            and "StateMachine" in node.name
+            and not node.name.endswith("PseudoStateMachine")
+        ):
             for item in node.body:
                 if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     for child in ast.walk(item):
@@ -1334,7 +1910,7 @@ def check_multi_interface_inheritance(tree: ast.AST, file_path: str = "") -> lis
         try:
             parts_idx = curr_path.parts.index("parts")
             unit_name = curr_path.name.replace("_pretense.py", "")
-            unit_dir = Path(*curr_path.parts[:parts_idx + 2])
+            unit_dir = Path(*curr_path.parts[: parts_idx + 2])
             cand = unit_dir / "high" / f"{unit_name}.md"
             if cand.is_file():
                 high_spec_path = cand
@@ -1353,7 +1929,7 @@ def check_multi_interface_inheritance(tree: ast.AST, file_path: str = "") -> lis
     for line in high_text.splitlines()[:20]:
         line_s = line.strip()
         if line_s.startswith("implements:"):
-            raw = line_s[len("implements:"):].strip()
+            raw = line_s[len("implements:") :].strip()
             implements_targets = [t.strip() for t in raw.split(",") if t.strip()]
             break
 
@@ -1363,7 +1939,10 @@ def check_multi_interface_inheritance(tree: ast.AST, file_path: str = "") -> lis
     pseudo_sm_cls: ast.ClassDef | None = None
     tree_body: list[ast.stmt] = getattr(tree, "body", [])
     for node in tree_body:
-        if isinstance(node, ast.ClassDef) and ("PseudoStateMachine" in node.name or ("StateMachine" in node.name and node.name != "StateMachine")):
+        if isinstance(node, ast.ClassDef) and (
+            "PseudoStateMachine" in node.name
+            or ("StateMachine" in node.name and node.name != "StateMachine")
+        ):
             pseudo_sm_cls = node
             break
 
@@ -1405,7 +1984,11 @@ def check_interface_transition_coverage(
     sm_cls: ast.ClassDef | None = None
     tree_body: list[ast.stmt] = getattr(tree, "body", [])
     for node in tree_body:
-        if isinstance(node, ast.ClassDef) and "StateMachine" in node.name and not node.name.endswith("PseudoStateMachine"):
+        if (
+            isinstance(node, ast.ClassDef)
+            and "StateMachine" in node.name
+            and not node.name.endswith("PseudoStateMachine")
+        ):
             sm_cls = node
             break
 
@@ -1414,7 +1997,9 @@ def check_interface_transition_coverage(
 
     declared_transitions: dict[str, ast.FunctionDef | ast.AsyncFunctionDef] = {}
     for item in sm_cls.body:
-        if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) and not item.name.startswith("_"):
+        if isinstance(
+            item, (ast.FunctionDef, ast.AsyncFunctionDef)
+        ) and not item.name.startswith("_"):
             for dec in item.decorator_list:
                 is_t = False
                 if isinstance(dec, ast.Name) and dec.id == "transition":
@@ -1422,9 +2007,15 @@ def check_interface_transition_coverage(
                 elif isinstance(dec, ast.Call):
                     if isinstance(dec.func, ast.Name) and dec.func.id == "transition":
                         is_t = True
-                    elif isinstance(dec.func, ast.Attribute) and dec.func.attr == "transition":
+                    elif (
+                        isinstance(dec.func, ast.Attribute)
+                        and dec.func.attr == "transition"
+                    ):
                         is_t = True
-                elif isinstance(dec, ast.Attribute) and dec.attr in ("transition", "seeding"):
+                elif isinstance(dec, ast.Attribute) and dec.attr in (
+                    "transition",
+                    "seeding",
+                ):
                     is_t = True
                 if is_t:
                     declared_transitions[item.name] = item
@@ -1432,7 +2023,9 @@ def check_interface_transition_coverage(
 
     if not declared_transitions:
         if pyi_elements and pyi_elements.get("classes"):
-            total_methods = sum(len(c.get("methods", [])) for c in pyi_elements["classes"])
+            total_methods = sum(
+                len(c.get("methods", [])) for c in pyi_elements["classes"]
+            )
             if total_methods > 0:
                 errors.append(
                     f"{file_path}:{sm_cls.lineno}: error: [PRE_LINT_INTERFACE_TRANSITION_COVERAGE] state machine '{sm_cls.name}' "
@@ -1445,15 +2038,18 @@ def check_interface_transition_coverage(
     for node in tree_body:
         if isinstance(node, ast.ClassDef):
             is_test_case_subclass = any(
-                (isinstance(b, ast.Name) and b.id in ("TestCase", "unittest.TestCase")) or
-                (isinstance(b, ast.Attribute) and b.attr == "TestCase")
+                (isinstance(b, ast.Name) and b.id in ("TestCase", "unittest.TestCase"))
+                or (isinstance(b, ast.Attribute) and b.attr == "TestCase")
                 for b in node.bases
             )
             has_test_methods = any(
-                isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef)) and m.name.startswith("test")
+                isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and m.name.startswith("test")
                 for m in node.body
             )
-            if (is_test_case_subclass or node.name.startswith("Test")) and has_test_methods:
+            if (
+                is_test_case_subclass or node.name.startswith("Test")
+            ) and has_test_methods:
                 test_cases.append(node)
 
     if not test_cases:
@@ -1468,7 +2064,9 @@ def check_interface_transition_coverage(
     accessed_names: set[str] = set()
     for tc in test_cases:
         for item in tc.body:
-            if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) and item.name.startswith("test"):
+            if isinstance(
+                item, (ast.FunctionDef, ast.AsyncFunctionDef)
+            ) and item.name.startswith("test"):
                 for child in ast.walk(item):
                     if isinstance(child, ast.Call):
                         if isinstance(child.func, ast.Attribute):
@@ -1523,7 +2121,11 @@ def extract_pyi_elements(pyi_path: str) -> dict[str, Any]:
             properties: list[str] = []
             for item in node.body:
                 if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    if item.name.startswith("__") and item.name.endswith("__") and item.name != "__init__":
+                    if (
+                        item.name.startswith("__")
+                        and item.name.endswith("__")
+                        and item.name != "__init__"
+                    ):
                         continue
                     is_prop = any(
                         (isinstance(d, ast.Name) and d.id == "property")
@@ -1533,7 +2135,9 @@ def extract_pyi_elements(pyi_path: str) -> dict[str, Any]:
                     if is_prop:
                         properties.append(item.name)
                     else:
-                        raw_args: list[ast.arg] = [a for a in item.args.args if a.arg != "self"]
+                        raw_args: list[ast.arg] = [
+                            a for a in item.args.args if a.arg != "self"
+                        ]
                         raw_args.extend(getattr(item.args, "kwonlyargs", []))
                         arg_info: list[dict[str, str]] = []
                         for a in raw_args:
@@ -1550,12 +2154,14 @@ def extract_pyi_elements(pyi_path: str) -> dict[str, Any]:
                                 ret_type = ast.unparse(item.returns)
                             except Exception:
                                 ret_type = "Any"
-                        methods.append({
-                            "name": item.name,
-                            "args": [a["name"] for a in arg_info],
-                            "arg_info": arg_info,
-                            "return_type": ret_type,
-                        })
+                        methods.append(
+                            {
+                                "name": item.name,
+                                "args": [a["name"] for a in arg_info],
+                                "arg_info": arg_info,
+                                "return_type": ret_type,
+                            }
+                        )
 
             is_protocol = any(
                 (isinstance(b, ast.Name) and b.id == "Protocol")
@@ -1563,12 +2169,14 @@ def extract_pyi_elements(pyi_path: str) -> dict[str, Any]:
                 for b in node.bases
             )
 
-            classes.append({
-                "name": node.name,
-                "methods": methods,
-                "properties": properties,
-                "is_protocol": is_protocol,
-            })
+            classes.append(
+                {
+                    "name": node.name,
+                    "methods": methods,
+                    "properties": properties,
+                    "is_protocol": is_protocol,
+                }
+            )
 
     return {"classes": classes, "has_singleton": has_singleton}
 
@@ -1597,16 +2205,20 @@ def check_transition_protocol_properties(
         for d in node.decorator_list:
             if isinstance(d, ast.Call):
                 func = d.func
-                is_trans = (
-                    (isinstance(func, ast.Name) and func.id == "transition")
-                    or (isinstance(func, ast.Attribute) and func.attr == "transition")
+                is_trans = (isinstance(func, ast.Name) and func.id == "transition") or (
+                    isinstance(func, ast.Attribute) and func.attr == "transition"
                 )
                 if is_trans and d.args:
                     arg0 = d.args[0]
-                    if isinstance(arg0, ast.Attribute) and isinstance(arg0.value, ast.Name):
+                    if isinstance(arg0, ast.Attribute) and isinstance(
+                        arg0.value, ast.Name
+                    ):
                         cls_name = arg0.value.id
                         prop_name = arg0.attr
-                        if cls_name in protocol_props and prop_name in protocol_props[cls_name]:
+                        if (
+                            cls_name in protocol_props
+                            and prop_name in protocol_props[cls_name]
+                        ):
                             errors.append(
                                 f"{file_path}:{d.lineno}: error: '@transition({cls_name}.{prop_name})' accesses property '{prop_name}' on Protocol class '{cls_name}'. "
                                 f"Pyright disallows accessing protocol properties as class variables. Use '@transition(name=\"{prop_name}\")' instead."
@@ -1677,7 +2289,9 @@ def _discover_package_initializers(
                 if not (entry.endswith(".py") or entry.endswith(".pyi")):
                     continue
                 m_stem = entry[:-3] if entry.endswith(".py") else entry[:-4]
-                if m_stem.startswith("_") or m_stem.endswith(("_test", "_pretense", "_ext")):
+                if m_stem.startswith("_") or m_stem.endswith(
+                    ("_test", "_pretense", "_ext")
+                ):
                     continue
                 file_full = os.path.join(d, entry)
                 if not os.path.isfile(file_full):
@@ -1687,10 +2301,16 @@ def _discover_package_initializers(
                 if entry.endswith(".py"):
                     try:
                         content = read_text(file_full)
-                        if "def __initialize__" in content or "singleton_type" in content:
+                        if (
+                            "def __initialize__" in content
+                            or "singleton_type" in content
+                        ):
                             tree = ast.parse(content, filename=file_full)
                             for node in tree.body:
-                                if isinstance(node, ast.FunctionDef) and node.name == "__initialize__":
+                                if (
+                                    isinstance(node, ast.FunctionDef)
+                                    and node.name == "__initialize__"
+                                ):
                                     has_init = True
                                     break
                                 elif isinstance(node, ast.ClassDef):
@@ -1698,7 +2318,9 @@ def _discover_package_initializers(
                                         dec_name = ""
                                         if isinstance(dec, ast.Name):
                                             dec_name = dec.id
-                                        elif isinstance(dec, ast.Call) and isinstance(dec.func, ast.Name):
+                                        elif isinstance(dec, ast.Call) and isinstance(
+                                            dec.func, ast.Name
+                                        ):
                                             dec_name = dec.func.id
                                         if dec_name == "singleton_type":
                                             has_init = True
@@ -1710,7 +2332,9 @@ def _discover_package_initializers(
                 elif entry.endswith(".pyi"):
                     try:
                         elems = extract_pyi_elements(file_full)
-                        if elems.get("has_singleton") or m_stem.endswith(("_impl", "_asm")):
+                        if elems.get("has_singleton") or m_stem.endswith(
+                            ("_impl", "_asm")
+                        ):
                             has_init = True
                     except Exception:
                         pass
@@ -1757,13 +2381,17 @@ def generate_pretense_scaffold(
     classes = elements["classes"]
     has_singleton = elements["has_singleton"] or impl_stem.endswith("_impl")
 
-    package_inits = _discover_package_initializers(
-        pyi_path=pyi_path,
-        lib_dir=lib_dir,
-        impl_path=impl_path,
-        impl_stem=impl_stem,
-        has_singleton=has_singleton,
-    ) if has_singleton else []
+    package_inits = (
+        _discover_package_initializers(
+            pyi_path=pyi_path,
+            lib_dir=lib_dir,
+            impl_path=impl_path,
+            impl_stem=impl_stem,
+            has_singleton=has_singleton,
+        )
+        if has_singleton
+        else []
+    )
 
     init_aliases: dict[str, str] = {}
     if len(package_inits) > 1:
@@ -1773,8 +2401,11 @@ def generate_pretense_scaffold(
 
     # Filter service classes (exclude error, message, config, event, spec, state types)
     service_classes = [
-        c for c in classes
-        if not c["name"].endswith(("Error", "Message", "Config", "Event", "Spec", "State"))
+        c
+        for c in classes
+        if not c["name"].endswith(
+            ("Error", "Message", "Config", "Event", "Spec", "State")
+        )
     ]
     if not service_classes and classes:
         service_classes = classes
@@ -1804,6 +2435,7 @@ def generate_pretense_scaffold(
 
     # Count method occurrences across service classes to disambiguate collisions
     from collections import Counter
+
     method_counts: Counter[str] = Counter()
     for sc in service_classes:
         for m in sc["methods"]:
@@ -1856,237 +2488,286 @@ def generate_pretense_scaffold(
         # Import interface types from lib package
         import_module = f"{lib_pkg}.{clean_stem}" if lib_pkg else clean_stem
         import_classes = [
-            c["name"] for c in classes
-            if not c["name"].endswith(("Error", "Exception"))
+            c["name"] for c in classes if not c["name"].endswith(("Error", "Exception"))
         ]
         if not import_classes:
             import_classes = [target_cls_name]
         lines.append(f"from {import_module} import {', '.join(import_classes)}")
 
-        lines.extend([
-            "",
-            "",
-            "# ==============================================================================",
-            "# 1. State Machine Specification (Model & Transitions)",
-            "# ==============================================================================",
-            "# NOTE: Transitions model target methods 1:1 (@transition(TargetClass.method)).",
-            "# Operational branches and contracted exceptions (with raises(ExpectedException): make_return_value())",
-            "# live naturally inside the single transition body (multi-transition splitting is prohibited).",
-            "# require_arg defines the caller precondition contract (checked at runtime on real calls).",
-            "# Use Domain.type(T) or open domain; use preferred=[...] to cluster/bias fuzz inputs without restricting the contract.",
-            "#",
-            "# REFERENCE PATTERNS:",
-            "#   # 1:1 Transition Pattern with Domain strategies and make_return_value pivot:",
-            "#   @transition(TargetClass.method)",
-            "#   def method(self, arg1: str, count: int) -> ReturnType:",
-            "#       require(self.state.initialized)",
-            "#       require_arg(arg1, Domain.type(str), preferred=[\"sample\"])",
-            "#       require_arg(count, Domain.range(1, 100), preferred=[10])",
-            "#       fake_ret = ReturnType(...)  # or None / value",
-            "#       ret = make_return_value(fake_ret)",
-            "#       self.state.items.append(ret)",
-            "#       assert ret == fake_ret",
-            "#       return ret",
-            "#",
-            "#   # Seeding Transition (sets up state dynamically outside default __init__):",
-            "#   @transition.seeding",
-            "#   def seed_initial(self) -> None:",
-            "#       self.state.initialized = True",
-            "#",
-            "#   # Single service fake factory:",
-            "#   FakeTarget = synthesize_fake(TargetStateMachine)",
-            "#   def make_target_fake(state: Optional[TargetState] = None) -> TargetClass:",
-            "#       return FakeTarget(state=state or TargetState())",
-            "#",
-            "#   # Fixed fake test suite covering 100% of transitions and seeding transitions:",
-            "#   class TestTargetFake(unittest.TestCase):",
-            "#       def setUp(self) -> None:",
-            "#           self.fake = make_target_fake()",
-            "#           self.sm = TargetStateMachine()",
-            "#       def test_transitions_coverage(self) -> None:",
-            "#           self.sm.seed_initial()",
-            "#           self.fake.method(\"sample\", 10)",
-            "",
-            "def _unimplemented_transition(name: str) -> Any:",
-            '    """Placeholder for unmodeled transition return contracts that crashes at runtime."""',
-            '    raise NotImplementedError(',
-            '        f"Pretense transition \'{name}\' returns contract must be implemented; dummy returns are strictly prohibited."',
-            '    )',
-            "",
-            "",
-            "@dataclass",
-            f"class {state_cls_name}:",
-            f'    """Canonical model state for {target_cls_name} operations."""',
-            "    initialized: bool = True",
-        ])
+        lines.extend(
+            [
+                "",
+                "",
+                "# ==============================================================================",
+                "# 1. State Machine Specification (Model & Transitions)",
+                "# ==============================================================================",
+                "# NOTE: Transitions model target methods 1:1 (@transition(TargetClass.method)).",
+                "# Contract violations (*Error, e.g. NodeNotFoundError) are preconditions: use require_arg(arg, Domain.in_set(self.state.items), error=ExpectedError) or require(condition, error=ExpectedError). NEVER use with raises(...) for *Error!",
+                "# with raises(ExpectedException): make_return_value() is reserved exclusively for operational exceptions (*Exception).",
+                "# require_arg defines the caller precondition contract (checked at runtime on real calls).",
+                "# Use Domain.type(T) or open domain; use preferred=[...] to cluster/bias fuzz inputs without restricting the contract.",
+                "#",
+                "# REFERENCE PATTERNS:",
+                "#   # 1:1 Transition Pattern with Domain strategies and make_return_value pivot:",
+                "#   @transition(TargetClass.method)",
+                "#   def method(self, arg1: str, count: int) -> ReturnType:",
+                "#       require(self.state.initialized)",
+                '#       require_arg(arg1, Domain.type(str), preferred=["sample"])',
+                "#       require_arg(count, Domain.range(1, 100), preferred=[10])",
+                "#       fake_ret = ReturnType(...)  # or None / value",
+                "#       ret = make_return_value(fake_ret)",
+                "#       self.state.items.append(ret)",
+                "#       assert ret == fake_ret",
+                "#       return ret",
+                "#",
+                "#   # Seeding Transition (sets up state dynamically outside default __init__):",
+                "#   @transition.seeding",
+                "#   def seed_initial(self) -> None:",
+                "#       self.state.initialized = True",
+                "#",
+                "#   # Single service fake factory:",
+                "#   FakeTarget = synthesize_fake(TargetStateMachine)",
+                "#   def make_target_fake(state: Optional[TargetState] = None) -> TargetClass:",
+                "#       return FakeTarget(state=state or TargetState())",
+                "#",
+                "#   # Fixed fake test suite covering 100% of transitions and seeding transitions:",
+                "#   class TestTargetFake(unittest.TestCase):",
+                "#       def setUp(self) -> None:",
+                "#           self.fake = make_target_fake()",
+                "#           self.sm = TargetStateMachine()",
+                "#       def test_transitions_coverage(self) -> None:",
+                "#           self.sm.seed_initial()",
+                '#           self.fake.method("sample", 10)',
+                "",
+                "def _unimplemented_transition(name: str) -> Any:",
+                '    """Placeholder for unmodeled transition return contracts that crashes at runtime."""',
+                "    raise NotImplementedError(",
+                "        f\"Pretense transition '{name}' returns contract must be implemented; dummy returns are strictly prohibited.\"",
+                "    )",
+                "",
+                "",
+                "@dataclass",
+                f"class {state_cls_name}:",
+                f'    """Canonical model state for {target_cls_name} operations."""',
+                "    initialized: bool = True",
+            ]
+        )
 
         for prop in all_props:
             lines.append(f"    {prop}: Optional[Any] = None")
 
-        lines.extend([
-            "",
-            "",
-            f"class {iface_sm_cls_name}(StateMachine[{state_cls_name}]):",
-            f'    """Unified Pretense State Machine for {pascal_name}."""',
-            "",
-            "    def __init__(",
-            "        self,",
-            f"        state: Optional[{state_cls_name}] = None,",
-            "        singletons: Optional[dict[type[Any], Any]] = None,",
-            "    ) -> None:",
-            f"        super().__init__(state=state or {state_cls_name}(), singletons=singletons)",
-        ])
+        lines.extend(
+            [
+                "",
+                "",
+                f"class {iface_sm_cls_name}(StateMachine[{state_cls_name}]):",
+                f'    """Unified Pretense State Machine for {pascal_name}."""',
+                "",
+                "    def __init__(",
+                "        self,",
+                f"        state: Optional[{state_cls_name}] = None,",
+                "        singletons: Optional[dict[type[Any], Any]] = None,",
+                "    ) -> None:",
+                f"        super().__init__(state=state or self.make_initial_state(), singletons=singletons)",
+                "",
+                f"    def make_initial_state(self) -> {state_cls_name}:",
+                f'        """Constructs initial model state. May be specialized by pseudo-state machines."""',
+                f"        return {state_cls_name}()",
+            ]
+        )
 
         for sc in service_classes:
             cls_name = sc["name"]
             for m in sc["methods"]:
                 mname = m["name"]
-                arg_info = m.get("arg_info", [{"name": a, "type": "Any"} for a in m["args"]])
+                arg_info = m.get(
+                    "arg_info", [{"name": a, "type": "Any"} for a in m["args"]]
+                )
                 ret_type = m.get("return_type", "Any")
-                fn_name = mname if method_counts[mname] == 1 else f"{cls_name.lower()}_{mname}"
-                lines.extend([
-                    "",
-                    f"    @transition({cls_name}.{mname})",
-                    f"    def {fn_name}(",
-                    "        self,",
-                ])
+                fn_name = (
+                    mname
+                    if method_counts[mname] == 1
+                    else f"{cls_name.lower()}_{mname}"
+                )
+                lines.extend(
+                    [
+                        "",
+                        f"    @transition({cls_name}.{mname})",
+                        f"    def {fn_name}(",
+                        "        self,",
+                    ]
+                )
                 for ai in arg_info:
                     atype = ai["type"] if ai["type"] else "Any"
                     lines.append(f"        {ai['name']}: {atype},")
-                lines.extend([
-                    "    ) -> None:",
-                    "        require(self.state.initialized)",
-                ])
+                lines.extend(
+                    [
+                        "    ) -> None:",
+                        "        require(self.state.initialized)",
+                    ]
+                )
                 for ai in arg_info:
                     dom_expr = _default_domain_arg(ai["name"], ai.get("type", ""))
                     lines.append(f"        require_arg({ai['name']}, {dom_expr})")
                 if ret_type in ("None", "NoneType"):
-                    lines.extend([
-                        "        ret = make_return_value()",
-                        "        assert ret is None",
-                        "        return ret",
-                    ])
+                    lines.extend(
+                        [
+                            "        ret = make_return_value()",
+                            "        assert ret is None",
+                            "        return ret",
+                        ]
+                    )
                 else:
-                    lines.extend([
-                        f"        ret: {ret_type} = make_return_value(_unimplemented_transition('{fn_name}'))",
-                        "        assert ret is not None",
-                        "        return ret",
-                    ])
+                    lines.extend(
+                        [
+                            f"        ret: {ret_type} = make_return_value(_unimplemented_transition('{fn_name}'))",
+                            "        assert ret is not None",
+                            "        return ret",
+                        ]
+                    )
 
         for sc in service_classes:
             cls_name = sc["name"]
             for prop in sc.get("properties", []):
-                fn_name = prop if method_counts[prop] == 0 else f"{cls_name.lower()}_{prop}"
-                lines.extend([
-                    "",
-                    f'    @transition(name="{prop}")',
-                    f"    def {fn_name}(self) -> None:",
-                    "        require(self.state.initialized)",
-                    f"        ret: Any = make_return_value(_unimplemented_transition('{fn_name}'))",
-                    "        assert ret is not None",
-                    "        return ret",
-                ])
+                fn_name = (
+                    prop if method_counts[prop] == 0 else f"{cls_name.lower()}_{prop}"
+                )
+                lines.extend(
+                    [
+                        "",
+                        f'    @transition(name="{prop}")',
+                        f"    def {fn_name}(self) -> None:",
+                        "        require(self.state.initialized)",
+                        f"        ret: Any = make_return_value(_unimplemented_transition('{fn_name}'))",
+                        "        assert ret is not None",
+                        "        return ret",
+                    ]
+                )
 
-        lines.extend([
-            "",
-            "    @transition.seeding",
-            "    def seed_initial(self) -> None:",
-            '        """Seed state machine state for fake initialization."""',
-            "        self.state.initialized = True",
-        ])
+        lines.extend(
+            [
+                "",
+                "    @transition.seeding",
+                "    def seed_initial(self) -> None:",
+                '        """Seed state machine state for fake initialization."""',
+                "        self.state.initialized = True",
+            ]
+        )
 
         fake_cls_name = f"Fake{pascal_name}"
-        lines.extend([
-            "",
-            "",
-            f"proto = {iface_sm_cls_name}()",
-            "",
-            "",
-            "# ==============================================================================",
-            "# 2. State Machine Proto & Fakes",
-            "# ==============================================================================",
-            "",
-            f"{fake_cls_name} = synthesize_fake({iface_sm_cls_name})",
-            "",
-        ])
+        lines.extend(
+            [
+                "",
+                "",
+                f"proto = {iface_sm_cls_name}()",
+                "",
+                "",
+                "# ==============================================================================",
+                "# 2. State Machine Proto & Fakes",
+                "# ==============================================================================",
+                "",
+                f"{fake_cls_name} = synthesize_fake({iface_sm_cls_name})",
+                "",
+            ]
+        )
         if len(service_classes) > 1:
             fake_ret_type = f"Tuple[{', '.join(c['name'] for c in service_classes)}]"
-            lines.extend([
-                f"def make_{clean_stem}_fakes(",
-                f"    state: Optional[{state_cls_name}] = None,",
-                f") -> {fake_ret_type}:",
-                f'    """Synthesizes fake instances for component services sharing model state."""',
-                f"    fake = {fake_cls_name}(state=state or {state_cls_name}())",
-                f"    return (",
-                f"        " + ",\n        ".join("fake" for _ in service_classes) + ",",
-                f"    )",
-            ])
+            lines.extend(
+                [
+                    f"def make_{clean_stem}_fakes(",
+                    f"    state: Optional[{state_cls_name}] = None,",
+                    f") -> {fake_ret_type}:",
+                    f'    """Synthesizes fake instances for component services sharing model state."""',
+                    f"    fake = {fake_cls_name}(state=state or {state_cls_name}())",
+                    f"    return (",
+                    f"        "
+                    + ",\n        ".join("fake" for _ in service_classes)
+                    + ",",
+                    f"    )",
+                ]
+            )
         else:
-            single_cls = service_classes[0]["name"] if service_classes else target_cls_name
-            lines.extend([
-                f"def make_{clean_stem}_fake(",
-                f"    state: Optional[{state_cls_name}] = None,",
-                f") -> {single_cls}:",
-                f'    """Synthesizes fake instance for {single_cls}."""',
-                f"    return {fake_cls_name}(state=state or {state_cls_name}())",
-            ])
+            single_cls = (
+                service_classes[0]["name"] if service_classes else target_cls_name
+            )
+            lines.extend(
+                [
+                    f"def make_{clean_stem}_fake(",
+                    f"    state: Optional[{state_cls_name}] = None,",
+                    f") -> {single_cls}:",
+                    f'    """Synthesizes fake instance for {single_cls}."""',
+                    f"    return {fake_cls_name}(state=state or {state_cls_name}())",
+                ]
+            )
 
         test_fake_cls = f"Test{pascal_name}Fake"
-        lines.extend([
-            "",
-            "",
-            "# ==============================================================================",
-            "# 3. Fixed Scenarios on Fake",
-            "# ==============================================================================",
-            "",
-            f"class {test_fake_cls}(unittest.TestCase):",
-            f'    """Verifies that the synthesized fake satisfies all transitions and seeding transitions."""',
-            "",
-            "    def setUp(self) -> None:",
-        ])
+        lines.extend(
+            [
+                "",
+                "",
+                "# ==============================================================================",
+                "# 3. Fixed Scenarios on Fake",
+                "# ==============================================================================",
+                "",
+                f"class {test_fake_cls}(unittest.TestCase):",
+                f'    """Verifies that the synthesized fake satisfies all transitions and seeding transitions."""',
+                "",
+                "    def setUp(self) -> None:",
+            ]
+        )
         if len(service_classes) > 1:
             lines.append(f"        self.fakes = make_{clean_stem}_fakes()")
             lines.append(f"        self.sm = {iface_sm_cls_name}()")
         else:
             lines.append(f"        self.fake = make_{clean_stem}_fake()")
             lines.append(f"        self.sm = {iface_sm_cls_name}(sut=self.fake)")
-        lines.extend([
-            "",
-            "    def test_transitions_coverage(self) -> None:",
-            '        """Exercises all transitions and seeding transitions on the fake."""',
-            "        self.sm.seed_initial()",
-        ])
+        lines.extend(
+            [
+                "",
+                "    def test_transitions_coverage(self) -> None:",
+                '        """Exercises all transitions and seeding transitions on the fake."""',
+                "        self.sm.seed_initial()",
+            ]
+        )
         for sc in service_classes:
             cls_name = sc["name"]
             for prop in sc.get("properties", []):
-                fn_name = prop if method_counts[prop] == 0 else f"{cls_name.lower()}_{prop}"
+                fn_name = (
+                    prop if method_counts[prop] == 0 else f"{cls_name.lower()}_{prop}"
+                )
                 if len(service_classes) > 1:
                     lines.append(f"        _ = self.sm.{fn_name}()")
                 else:
                     lines.append(f"        _ = self.fake.{prop}")
             for m in sc["methods"]:
                 fn_name = m["name"]
-                arg_info = m.get("arg_info", [{"name": a, "type": "Any"} for a in m["args"]])
-                args_call = ", ".join(_sample_val_for_arg(a["name"], a.get("type", "")) for a in arg_info)
+                arg_info = m.get(
+                    "arg_info", [{"name": a, "type": "Any"} for a in m["args"]]
+                )
+                args_call = ", ".join(
+                    _sample_val_for_arg(a["name"], a.get("type", "")) for a in arg_info
+                )
                 if len(service_classes) > 1:
                     lines.append(f"        self.sm.{fn_name}({args_call})")
                 else:
                     lines.append(f"        self.fake.{fn_name}({args_call})")
 
-        lines.extend([
-            "",
-            "",
-            "# ==============================================================================",
-            "# 4. Hypothesis Stateful Fuzzing on Fake",
-            "# ==============================================================================",
-            "",
-            f"Fake{pascal_name}FuzzTest = compile_hypothesis_test_case(",
-            "    proto=proto,",
-            f"    initial_state_factory={state_cls_name},",
-            f'    name="Fake{pascal_name}FuzzTest",',
-            ")",
-            "",
-        ])
+        lines.extend(
+            [
+                "",
+                "",
+                "# ==============================================================================",
+                "# 4. Hypothesis Stateful Fuzzing on Fake",
+                "# ==============================================================================",
+                "",
+                f"Fake{pascal_name}FuzzTest = compile_hypothesis_test_case(",
+                "    proto=proto,",
+                "    initial_state_factory=proto.make_initial_state,",
+                f'    name="Fake{pascal_name}FuzzTest",',
+                ")",
+                "",
+            ]
+        )
         return "\n".join(lines)
 
     # --------------------------------------------------------------------------
@@ -2109,26 +2790,30 @@ def generate_pretense_scaffold(
             "    require,",
             "    sut,",
             "    sut_state,",
-            "    transition,",
             ")",
             "from pretense.compiler import compile_hypothesis_test_case",
         ]
 
         if has_singleton:
-            lines.append("from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_singleton, system")
+            lines.append(
+                "from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_singleton, system"
+            )
 
-        pretense_pkg = lib_pkg.rsplit(".", 1)[0] + ".pretense" if lib_pkg else "pretense"
+        pretense_pkg = (
+            lib_pkg.rsplit(".", 1)[0] + ".pretense" if lib_pkg else "pretense"
+        )
         iface_symbols = [iface_sm_cls_name, state_cls_name, f"Fake{pascal_name}"]
         if len(service_classes) > 1:
             iface_symbols.append(f"make_{clean_stem}_fakes")
         else:
             iface_symbols.append(f"make_{clean_stem}_fake")
-        lines.append(f"from {pretense_pkg}.{clean_stem}_pretense import ({', '.join(iface_symbols)})")
+        lines.append(
+            f"from {pretense_pkg}.{clean_stem}_pretense import ({', '.join(iface_symbols)})"
+        )
 
         import_module = f"{lib_pkg}.{impl_stem}" if lib_pkg else impl_stem
         import_classes = [
-            c["name"] for c in classes
-            if not c["name"].endswith(("Error", "Exception"))
+            c["name"] for c in classes if not c["name"].endswith(("Error", "Exception"))
         ]
         if not import_classes:
             import_classes = [target_cls_name]
@@ -2141,222 +2826,291 @@ def generate_pretense_scaffold(
                 m_imp = f"{lib_pkg}.{mod}" if lib_pkg else mod
                 lines.append(f"from {m_imp} import __initialize__ as {alias}")
 
-        lines.extend([
-            "",
-            "",
-            "# ==============================================================================",
-            "# 1. Implementation Pseudo-State Machine",
-            "# ==============================================================================",
-            "# REFERENCE PATTERNS:",
-            "#   # Implementation pseudo-state machine transition override with call_target:",
-            "#   @transition(TargetClass.method)",
-            "#   def method(self, *args) -> Any:",
-            "#       target: TargetClass = sut(TargetClass)",
-            "#       old_val = target.property",
-            "#       ret = call_target(target.method(*args))",
-            "#       assert target.property == old_val",
-            "#       return ret",
-            "#",
-            "#   # Real implementation scenario test driving self.checked (100% statement coverage):",
-            "#   class TestTargetImplReal(unittest.TestCase):",
-            "#       def setUp(self) -> None:",
-            "#           self.registry = LifecycleRegistry()",
-            "#           __initialize__(self.registry)",
-            "#           self.phase_scope = enter_phase(system, registry=self.registry)",
-            "#           self.phase_scope.__enter__()",
-            "#           self.real = get_singleton(TargetClass)",
-            "#           self.sm = TargetImplPseudoStateMachine(singletons={TargetClass: self.real})",
-            "#           self.checked = self.sm.as_checked(TargetClass, self.real)",
-            "#       def tearDown(self) -> None:",
-            "#           self.phase_scope.__exit__(None, None, None)",
-            "#       def test_real_conformance(self) -> None:",
-            "#           self.checked.method(*args)",
-            "",
-            f"class {impl_sm_cls_name}({iface_sm_cls_name}):",
-            f'    """Implementation pseudo-state machine for {pascal_name}."""',
-        ])
+        lines.extend(
+            [
+                "",
+                "",
+                "# ==============================================================================",
+                "# 1. Implementation Pseudo-State Machine",
+                "# ==============================================================================",
+                "# REFERENCE PATTERNS:",
+                "#   # Implementation pseudo-state machine inner transition override with call_target:",
+                "#   def inner_method(self, *args) -> Any:",
+                "#       target: TargetClass = sut(TargetClass)",
+                "#       old_val = target.property",
+                "#       ret = call_target(target.method(*args))",
+                "#       assert target.property == old_val",
+                "#       return ret",
+                "#",
+                "#   # Real implementation scenario test driving self.checked (100% statement coverage):",
+                "#   class TestTargetImplReal(unittest.TestCase):",
+                "#       def setUp(self) -> None:",
+                "#           self.registry = LifecycleRegistry()",
+                "#           __initialize__(self.registry)",
+                "#           self.phase_scope = enter_phase(system, registry=self.registry)",
+                "#           self.phase_scope.__enter__()",
+                "#           self.real = get_singleton(TargetClass)",
+                "#           self.sm = TargetImplPseudoStateMachine(singletons={TargetClass: self.real})",
+                "#           self.checked = self.sm.as_checked(TargetClass, self.real)",
+                "#       def tearDown(self) -> None:",
+                "#           self.phase_scope.__exit__(None, None, None)",
+                "#       def test_real_conformance(self) -> None:",
+                "#           self.checked.method(*args)",
+                "",
+                f"class {impl_sm_cls_name}({iface_sm_cls_name}):",
+                f'    """Implementation pseudo-state machine for {pascal_name}."""',
+            ]
+        )
 
         for sc in service_classes:
             cls_name = sc["name"]
             for m in sc["methods"]:
                 mname = m["name"]
-                arg_info = m.get("arg_info", [{"name": a, "type": "Any"} for a in m["args"]])
-                fn_name = mname if method_counts[mname] == 1 else f"{cls_name.lower()}_{mname}"
+                arg_info = m.get(
+                    "arg_info", [{"name": a, "type": "Any"} for a in m["args"]]
+                )
+                fn_name = (
+                    mname
+                    if method_counts[mname] == 1
+                    else f"{cls_name.lower()}_{mname}"
+                )
                 call_args = ", ".join(ai["name"] for ai in arg_info)
-                lines.extend([
-                    "",
-                    f"    @transition({cls_name}.{mname})",
-                    f"    def {fn_name}(",
-                    "        self,",
-                ])
+                lines.extend(
+                    [
+                        "",
+                        f"    def inner_{fn_name}(",
+                        "        self,",
+                    ]
+                )
                 for ai in arg_info:
                     atype = ai["type"] if ai["type"] else "Any"
                     lines.append(f"        {ai['name']}: {atype},")
-                lines.extend([
-                    "    ) -> Any:",
-                    f"        target: {cls_name} = sut({cls_name})",
-                    f"        ret = call_target(target.{mname}({call_args}))",
-                    "        return ret",
-                ])
+                lines.extend(
+                    [
+                        "    ) -> Any:",
+                        f"        target: {cls_name} = sut({cls_name})",
+                        f"        ret = call_target(target.{mname}({call_args}))",
+                        "        return ret",
+                    ]
+                )
 
         for sc in service_classes:
             cls_name = sc["name"]
             for prop in sc.get("properties", []):
-                fn_name = prop if method_counts[prop] == 0 else f"{cls_name.lower()}_{prop}"
-                lines.extend([
-                    "",
-                    f'    @transition(name="{prop}")',
-                    f"    def {fn_name}(self) -> Any:",
-                    f"        target: {cls_name} = sut({cls_name})",
-                    f"        ret = call_target(getattr(target, \"{prop}\"))",
-                    "        return ret",
-                ])
+                fn_name = (
+                    prop if method_counts[prop] == 0 else f"{cls_name.lower()}_{prop}"
+                )
+                lines.extend(
+                    [
+                        "",
+                        f"    def inner_{fn_name}(self) -> Any:",
+                        f"        target: {cls_name} = sut({cls_name})",
+                        f'        ret = call_target(getattr(target, "{prop}"))',
+                        "        return ret",
+                    ]
+                )
 
-        lines.extend([
-            "",
-            "",
-            f"proto = {impl_sm_cls_name}()",
-            "",
-            "",
-            "# ==============================================================================",
-            "# 2. Real Implementation Tests",
-            "# ==============================================================================",
-            "",
-            f"class Test{pascal_name}ImplReal(unittest.TestCase):",
-            f'    """Verifies that concrete implementation satisfies contracts."""',
-            "",
-            "    def setUp(self) -> None:",
-        ])
+        lines.extend(
+            [
+                "",
+                "",
+                f"proto = {impl_sm_cls_name}()",
+                "",
+                "",
+                "# ==============================================================================",
+                "# 2. Real Implementation Tests",
+                "# ==============================================================================",
+                "",
+                f"class Test{pascal_name}ImplReal(unittest.TestCase):",
+                f'    """Verifies that concrete implementation satisfies contracts."""',
+                "",
+                "    def setUp(self) -> None:",
+            ]
+        )
 
         if has_singleton:
-            lines.extend([
-                "        self.registry = LifecycleRegistry()",
-            ])
+            lines.extend(
+                [
+                    "        self.registry = LifecycleRegistry()",
+                ]
+            )
             if init_aliases:
                 for alias in init_aliases.values():
                     lines.append(f"        {alias}(self.registry)")
             else:
                 lines.append("        __initialize__(self.registry)")
-            lines.extend([
-                "        self.phase_scope = enter_phase(system, registry=self.registry)",
-                "        self.phase_scope.__enter__()",
-            ])
+            lines.extend(
+                [
+                    "        self.phase_scope = enter_phase(system, registry=self.registry)",
+                    "        self.phase_scope.__enter__()",
+                ]
+            )
             if len(service_classes) > 1:
                 for c in service_classes:
-                    lines.append(f"        self.{c['name'].lower()} = get_singleton({c['name']})")
-                svc_dict = ", ".join(f"{c['name']}: self.{c['name'].lower()}" for c in service_classes)
-                lines.append(f"        self.sm = {impl_sm_cls_name}(singletons={{{svc_dict}}})")
+                    lines.append(
+                        f"        self.{c['name'].lower()} = get_singleton({c['name']})"
+                    )
+                svc_dict = ", ".join(
+                    f"{c['name']}: self.{c['name'].lower()}" for c in service_classes
+                )
+                lines.append(
+                    f"        self.sm = {impl_sm_cls_name}(singletons={{{svc_dict}}})"
+                )
                 for c in service_classes:
-                    lines.append(f"        self.checked_{c['name'].lower()} = self.sm.as_checked({c['name']}, self.{c['name'].lower()})")
+                    lines.append(
+                        f"        self.checked_{c['name'].lower()} = self.sm.as_checked({c['name']}, self.{c['name'].lower()})"
+                    )
             else:
                 lines.append(f"        self.real = get_singleton({target_cls_name})")
-                lines.append(f"        self.sm = {impl_sm_cls_name}(singletons={{{target_cls_name}: self.real}})")
-                lines.append(f"        self.checked = self.sm.as_checked({target_cls_name}, self.real)")
-            lines.extend([
-                "",
-                "    def tearDown(self) -> None:",
-                "        self.phase_scope.__exit__(None, None, None)",
-            ])
+                lines.append(
+                    f"        self.sm = {impl_sm_cls_name}(singletons={{{target_cls_name}: self.real}})"
+                )
+                lines.append(
+                    f"        self.checked = self.sm.as_checked({target_cls_name}, self.real)"
+                )
+            lines.extend(
+                [
+                    "",
+                    "    def tearDown(self) -> None:",
+                    "        self.phase_scope.__exit__(None, None, None)",
+                ]
+            )
         else:
             if len(service_classes) > 1:
                 for c in service_classes:
                     lines.append(f"        self.{c['name'].lower()} = {c['name']}()")
-                svc_dict = ", ".join(f"{c['name']}: self.{c['name'].lower()}" for c in service_classes)
-                lines.append(f"        self.sm = {impl_sm_cls_name}(singletons={{{svc_dict}}})")
+                svc_dict = ", ".join(
+                    f"{c['name']}: self.{c['name'].lower()}" for c in service_classes
+                )
+                lines.append(
+                    f"        self.sm = {impl_sm_cls_name}(singletons={{{svc_dict}}})"
+                )
                 for c in service_classes:
-                    lines.append(f"        self.checked_{c['name'].lower()} = self.sm.as_checked({c['name']}, self.{c['name'].lower()})")
+                    lines.append(
+                        f"        self.checked_{c['name'].lower()} = self.sm.as_checked({c['name']}, self.{c['name'].lower()})"
+                    )
             else:
                 lines.append(f"        self.real = {target_cls_name}()")
-                lines.append(f"        self.sm = {impl_sm_cls_name}(singletons={{{target_cls_name}: self.real}})")
-                lines.append(f"        self.checked = self.sm.as_checked({target_cls_name}, self.real)")
+                lines.append(
+                    f"        self.sm = {impl_sm_cls_name}(singletons={{{target_cls_name}: self.real}})"
+                )
+                lines.append(
+                    f"        self.checked = self.sm.as_checked({target_cls_name}, self.real)"
+                )
 
-        lines.extend([
-            "",
-            "    def test_real_conformance(self) -> None:",
-            "        # Drive scenarios via self.checked.<method>(*args).",
-            f'        self.fail("Test{pascal_name}ImplReal.test_real_conformance must be implemented with concrete scenarios.")',
-            "",
-            "",
-            "# ==============================================================================",
-            "# 3. Hypothesis Stateful Fuzzing on Real SUT",
-            "# ==============================================================================",
-            "",
-        ])
+        lines.extend(
+            [
+                "",
+                "    def test_real_conformance(self) -> None:",
+                "        # Drive scenarios via self.checked.<method>(*args).",
+                f'        self.fail("Test{pascal_name}ImplReal.test_real_conformance must be implemented with concrete scenarios.")',
+                "",
+                "",
+                "# ==============================================================================",
+                "# 3. Hypothesis Stateful Fuzzing on Real SUT",
+                "# ==============================================================================",
+                "",
+            ]
+        )
 
         if len(service_classes) > 1:
             sut_cls_name = f"{pascal_name}SUT"
-            lines.extend([
-                f"class {sut_cls_name}:",
-                f'    """Aggregate SUT exposing component services for {pascal_name} state machine testing."""',
-                "",
-                "    def __init__(self) -> None:",
-                "        self.__dict__[\"_services\"] = ()",
-            ])
+            lines.extend(
+                [
+                    f"class {sut_cls_name}:",
+                    f'    """Aggregate SUT exposing component services for {pascal_name} state machine testing."""',
+                    "",
+                    "    def __init__(self) -> None:",
+                    '        self.__dict__["_services"] = ()',
+                ]
+            )
             if has_singleton:
-                lines.extend([
-                    "        self.registry = LifecycleRegistry()",
-                    "        __initialize__(self.registry)",
-                    "        self.phase_scope = enter_phase(system, registry=self.registry)",
-                    "        self.phase_scope.__enter__()",
-                ])
+                lines.extend(
+                    [
+                        "        self.registry = LifecycleRegistry()",
+                        "        __initialize__(self.registry)",
+                        "        self.phase_scope = enter_phase(system, registry=self.registry)",
+                        "        self.phase_scope.__enter__()",
+                    ]
+                )
                 for c in service_classes:
-                    lines.append(f"        self.{c['name'].lower()} = get_singleton({c['name']})")
-                svc_tuple = ", ".join(f"self.{c['name'].lower()}" for c in service_classes)
-                lines.append(f"        self.__dict__[\"_services\"] = ({svc_tuple},)")
+                    lines.append(
+                        f"        self.{c['name'].lower()} = get_singleton({c['name']})"
+                    )
+                svc_tuple = ", ".join(
+                    f"self.{c['name'].lower()}" for c in service_classes
+                )
+                lines.append(f'        self.__dict__["_services"] = ({svc_tuple},)')
             else:
                 for c in service_classes:
                     lines.append(f"        self.{c['name'].lower()} = {c['name']}()")
-                svc_tuple = ", ".join(f"self.{c['name'].lower()}" for c in service_classes)
-                lines.append(f"        self.__dict__[\"_services\"] = ({svc_tuple},)")
+                svc_tuple = ", ".join(
+                    f"self.{c['name'].lower()}" for c in service_classes
+                )
+                lines.append(f'        self.__dict__["_services"] = ({svc_tuple},)')
 
-            lines.extend([
-                "",
-                "    def __getattr__(self, name: str) -> Any:",
-                "        if name.startswith(\"__\") and name.endswith(\"__\"):",
-                "            raise AttributeError(name)",
-                "        for service in self.__dict__.get(\"_services\", ()):",
-                "            if hasattr(service, name):",
-                "                return getattr(service, name)",
-                f'        raise AttributeError(f"{{type(self).__name__}} has no attribute {{name!r}}")',
-                "",
-                f"def make_sut() -> {sut_cls_name}:",
-                f"    return {sut_cls_name}()",
-            ])
+            lines.extend(
+                [
+                    "",
+                    "    def __getattr__(self, name: str) -> Any:",
+                    '        if name.startswith("__") and name.endswith("__"):',
+                    "            raise AttributeError(name)",
+                    '        for service in self.__dict__.get("_services", ()):',
+                    "            if hasattr(service, name):",
+                    "                return getattr(service, name)",
+                    f'        raise AttributeError(f"{{type(self).__name__}} has no attribute {{name!r}}")',
+                    "",
+                    f"def make_sut() -> {sut_cls_name}:",
+                    f"    return {sut_cls_name}()",
+                ]
+            )
         else:
-            single_cls = service_classes[0]["name"] if service_classes else target_cls_name
-            lines.extend([
-                f"def make_sut() -> {single_cls}:",
-            ])
+            single_cls = (
+                service_classes[0]["name"] if service_classes else target_cls_name
+            )
+            lines.extend(
+                [
+                    f"def make_sut() -> {single_cls}:",
+                ]
+            )
             if has_singleton:
-                lines.extend([
-                    "    registry = LifecycleRegistry()",
-                ])
+                lines.extend(
+                    [
+                        "    registry = LifecycleRegistry()",
+                    ]
+                )
                 if init_aliases:
                     for alias in init_aliases.values():
                         lines.append(f"    {alias}(registry)")
                 else:
                     lines.append("    __initialize__(registry)")
-                lines.extend([
-                    "    scope = enter_phase(system, registry=registry)",
-                    "    scope.__enter__()",
-                    f"    return get_singleton({single_cls})",
-                ])
+                lines.extend(
+                    [
+                        "    scope = enter_phase(system, registry=registry)",
+                        "    scope.__enter__()",
+                        f"    return get_singleton({single_cls})",
+                    ]
+                )
             else:
-                lines.extend([
-                    f"    return {single_cls}()",
-                ])
+                lines.extend(
+                    [
+                        f"    return {single_cls}()",
+                    ]
+                )
 
-        lines.extend([
-            "",
-            "",
-            f"{pascal_name}FuzzTest = compile_hypothesis_test_case(",
-            "    proto=proto,",
-            "    sut_factory=make_sut,",
-            f"    initial_state_factory={state_cls_name},",
-            f'    name="{pascal_name}FuzzTest",',
-            ")",
-            "",
-        ])
+        lines.extend(
+            [
+                "",
+                "",
+                f"{pascal_name}FuzzTest = compile_hypothesis_test_case(",
+                "    proto=proto,",
+                "    sut_factory=make_sut,",
+                "    initial_state_factory=proto.make_initial_state,",
+                f'    name="{pascal_name}FuzzTest",',
+                ")",
+                "",
+            ]
+        )
         return "\n".join(lines)
 
     # --------------------------------------------------------------------------
@@ -2391,13 +3145,14 @@ def generate_pretense_scaffold(
     ]
 
     if has_singleton:
-        lines.append("from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_singleton, system")
+        lines.append(
+            "from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_singleton, system"
+        )
 
     # Import target classes from lib package
     import_module = f"{lib_pkg}.{impl_stem}" if lib_pkg else impl_stem
     import_classes = [
-        c["name"] for c in classes
-        if not c["name"].endswith(("Error", "Exception"))
+        c["name"] for c in classes if not c["name"].endswith(("Error", "Exception"))
     ]
     if not import_classes:
         import_classes = [target_cls_name]
@@ -2412,30 +3167,32 @@ def generate_pretense_scaffold(
 
     sm_cls_name = f"{pascal_name}StateMachine"
 
-    lines.extend([
-        "",
-        "",
-        "# ==============================================================================",
-        "# 1. State Machine Specification (Model & Transitions)",
-        "# ==============================================================================",
-        "# NOTE: Transitions model target methods 1:1 (@transition(TargetClass.method)).",
-        "# Operational branches and contracted exceptions (with raises(ExpectedException): make_return_value())",
-        "# live naturally inside the single transition body (multi-transition splitting is prohibited).",
-        "# require_arg defines the caller precondition contract (checked at runtime on real calls).",
-        "# Use Domain.type(T) or open domain; use preferred=[...] to cluster/bias fuzz inputs without restricting the contract.",
-        "",
-        "def _unimplemented_transition(name: str) -> Any:",
-        '    """Placeholder for unmodeled transition return contracts that crashes at runtime."""',
-        '    raise NotImplementedError(',
-        '        f"Pretense transition \'{name}\' returns contract must be implemented; dummy returns are strictly prohibited."',
-        '    )',
-        "",
-        "",
-        "@dataclass",
-        f"class {state_cls_name}:",
-        f'    """Canonical model state for {target_cls_name} operations."""',
-        "    initialized: bool = True",
-    ])
+    lines.extend(
+        [
+            "",
+            "",
+            "# ==============================================================================",
+            "# 1. State Machine Specification (Model & Transitions)",
+            "# ==============================================================================",
+            "# NOTE: Transitions model target methods 1:1 (@transition(TargetClass.method)).",
+            "# Contract violations (*Error, e.g. NodeNotFoundError) are preconditions: use require_arg(arg, Domain.in_set(self.state.items), error=ExpectedError) or require(condition, error=ExpectedError). NEVER use with raises(...) for *Error!",
+            "# with raises(ExpectedException): make_return_value() is reserved exclusively for operational exceptions (*Exception).",
+            "# require_arg defines the caller precondition contract (checked at runtime on real calls).",
+            "# Use Domain.type(T) or open domain; use preferred=[...] to cluster/bias fuzz inputs without restricting the contract.",
+            "",
+            "def _unimplemented_transition(name: str) -> Any:",
+            '    """Placeholder for unmodeled transition return contracts that crashes at runtime."""',
+            "    raise NotImplementedError(",
+            "        f\"Pretense transition '{name}' returns contract must be implemented; dummy returns are strictly prohibited.\"",
+            "    )",
+            "",
+            "",
+            "@dataclass",
+            f"class {state_cls_name}:",
+            f'    """Canonical model state for {target_cls_name} operations."""',
+            "    initialized: bool = True",
+        ]
+    )
 
     for prop in all_props:
         lines.append(f"    {prop}: Optional[Any] = None")
@@ -2443,66 +3200,78 @@ def generate_pretense_scaffold(
     sut_cls_name = f"{pascal_name}SUT"
     if len(service_classes) > 1:
         sut_type = sut_cls_name
-        lines.extend([
-            "",
-            "",
-            f"class {sut_cls_name}:",
-            f'    """Aggregate SUT exposing component services for {pascal_name} state machine testing."""',
-            "",
-            "    tier = system",
-            "",
-            "    def __init__(self) -> None:",
-            "        self.__dict__[\"_services\"] = ()",
-        ])
+        lines.extend(
+            [
+                "",
+                "",
+                f"class {sut_cls_name}:",
+                f'    """Aggregate SUT exposing component services for {pascal_name} state machine testing."""',
+                "",
+                "    tier = system",
+                "",
+                "    def __init__(self) -> None:",
+                '        self.__dict__["_services"] = ()',
+            ]
+        )
         if has_singleton:
-            lines.extend([
-                "        self.registry = LifecycleRegistry()",
-            ])
+            lines.extend(
+                [
+                    "        self.registry = LifecycleRegistry()",
+                ]
+            )
             if init_aliases:
                 for alias in init_aliases.values():
                     lines.append(f"        {alias}(self.registry)")
             else:
                 lines.append("        __initialize__(self.registry)")
-            lines.extend([
-                "        self.phase_scope = enter_phase(system, registry=self.registry)",
-                "        self.phase_scope.__enter__()",
-            ])
+            lines.extend(
+                [
+                    "        self.phase_scope = enter_phase(system, registry=self.registry)",
+                    "        self.phase_scope.__enter__()",
+                ]
+            )
             for c in service_classes:
-                lines.append(f"        self.{c['name'].lower()} = get_singleton({c['name']})")
+                lines.append(
+                    f"        self.{c['name'].lower()} = get_singleton({c['name']})"
+                )
             svc_tuple = ", ".join(f"self.{c['name'].lower()}" for c in service_classes)
-            lines.append(f"        self.__dict__[\"_services\"] = ({svc_tuple},)")
+            lines.append(f'        self.__dict__["_services"] = ({svc_tuple},)')
         else:
             for c in service_classes:
                 lines.append(f"        self.{c['name'].lower()} = {c['name']}()")
             svc_tuple = ", ".join(f"self.{c['name'].lower()}" for c in service_classes)
-            lines.append(f"        self.__dict__[\"_services\"] = ({svc_tuple},)")
+            lines.append(f'        self.__dict__["_services"] = ({svc_tuple},)')
 
-        lines.extend([
-            "",
-            "    def __getattr__(self, name: str) -> Any:",
-            "        if name.startswith(\"__\") and name.endswith(\"__\"):",
-            "            raise AttributeError(name)",
-            "        for service in self.__dict__.get(\"_services\", ()):",
-            "            if hasattr(service, name):",
-            "                return getattr(service, name)",
-            f'        raise AttributeError(f"{{type(self).__name__}} has no attribute {{name!r}}")',
-        ])
+        lines.extend(
+            [
+                "",
+                "    def __getattr__(self, name: str) -> Any:",
+                '        if name.startswith("__") and name.endswith("__"):',
+                "            raise AttributeError(name)",
+                '        for service in self.__dict__.get("_services", ()):',
+                "            if hasattr(service, name):",
+                "                return getattr(service, name)",
+                f'        raise AttributeError(f"{{type(self).__name__}} has no attribute {{name!r}}")',
+            ]
+        )
     else:
         sut_type = service_classes[0]["name"] if service_classes else target_cls_name
 
-    lines.extend([
-        "",
-        "",
-        f"class {sm_cls_name}(StateMachine[{state_cls_name}]):",
-        f'    """Unified Pretense State Machine for {pascal_name}."""',
-        "",
-        "    def __init__(",
-        "        self,",
-        f"        state: Optional[{state_cls_name}] = None,",
-        "        singletons: Optional[dict[type[Any], Any]] = None,",
-        "    ) -> None:",
-        f"        super().__init__(state=state or {state_cls_name}(), singletons=singletons)",
-    ])
+    lines.extend(
+        [
+            "",
+            "",
+            f"class {sm_cls_name}(StateMachine[{state_cls_name}]):",
+            f'    """Unified Pretense State Machine for {pascal_name}."""',
+            "",
+            "    def __init__(",
+            "        self,",
+            f"        state: Optional[{state_cls_name}] = None,",
+            "        singletons: Optional[dict[type[Any], Any]] = None,",
+            "    ) -> None:",
+            f"        super().__init__(state=state or {state_cls_name}(), singletons=singletons)",
+        ]
+    )
 
     # Transitions for methods across all service classes
     transition_counter = 1
@@ -2510,38 +3279,50 @@ def generate_pretense_scaffold(
         cls_name = sc["name"]
         for m in sc["methods"]:
             mname = m["name"]
-            arg_info = m.get("arg_info", [{"name": a, "type": "Any"} for a in m["args"]])
+            arg_info = m.get(
+                "arg_info", [{"name": a, "type": "Any"} for a in m["args"]]
+            )
             ret_type = m.get("return_type", "Any")
-            fn_name = mname if method_counts[mname] == 1 else f"{cls_name.lower()}_{mname}"
-            lines.extend([
-                "",
-                f"    @transition({cls_name}.{mname})",
-                f"    def {fn_name}(",
-                "        self,",
-            ])
+            fn_name = (
+                mname if method_counts[mname] == 1 else f"{cls_name.lower()}_{mname}"
+            )
+            lines.extend(
+                [
+                    "",
+                    f"    @transition({cls_name}.{mname})",
+                    f"    def {fn_name}(",
+                    "        self,",
+                ]
+            )
             for ai in arg_info:
                 atype = ai["type"] if ai["type"] else "Any"
                 lines.append(f"        {ai['name']}: {atype},")
-            lines.extend([
-                "    ) -> None:",
-                "        require(self.state.initialized)",
-            ])
+            lines.extend(
+                [
+                    "    ) -> None:",
+                    "        require(self.state.initialized)",
+                ]
+            )
             for ai in arg_info:
                 dom_expr = _default_domain_arg(ai["name"], ai.get("type", ""))
                 lines.append(f"        require_arg({ai['name']}, {dom_expr})")
             call_args = ", ".join(ai["name"] for ai in arg_info)
             if ret_type in ("None", "NoneType"):
-                lines.extend([
-                    "        ret = make_return_value()",
-                    "        assert ret is None",
-                    "        return ret",
-                ])
+                lines.extend(
+                    [
+                        "        ret = make_return_value()",
+                        "        assert ret is None",
+                        "        return ret",
+                    ]
+                )
             else:
-                lines.extend([
-                    f"        ret: {ret_type} = make_return_value(_unimplemented_transition('{fn_name}'))",
-                    "        assert ret is not None",
-                    "        return ret",
-                ])
+                lines.extend(
+                    [
+                        f"        ret: {ret_type} = make_return_value(_unimplemented_transition('{fn_name}'))",
+                        "        assert ret is not None",
+                        "        return ret",
+                    ]
+                )
             transition_counter += 1
 
     # Transitions for properties across service classes
@@ -2549,37 +3330,43 @@ def generate_pretense_scaffold(
         cls_name = sc["name"]
         for prop in sc.get("properties", []):
             fn_name = prop if method_counts[prop] == 0 else f"{cls_name.lower()}_{prop}"
-            lines.extend([
-                "",
-                f'    @transition(name="{prop}")',
-                f"    def {fn_name}(self) -> None:",
-                "        require(self.state.initialized)",
-                f"        ret: Any = make_return_value(_unimplemented_transition('{fn_name}'))",
-                "        assert ret is not None",
-                "        return ret",
-            ])
+            lines.extend(
+                [
+                    "",
+                    f'    @transition(name="{prop}")',
+                    f"    def {fn_name}(self) -> None:",
+                    "        require(self.state.initialized)",
+                    f"        ret: Any = make_return_value(_unimplemented_transition('{fn_name}'))",
+                    "        assert ret is not None",
+                    "        return ret",
+                ]
+            )
             transition_counter += 1
 
     # Seeding transition
-    lines.extend([
-        "",
-        "    @transition.seeding",
-        "    def seed_initial(self) -> None:",
-        '        """Seed state machine state for fake initialization."""',
-        "        self.state.initialized = True",
-    ])
+    lines.extend(
+        [
+            "",
+            "    @transition.seeding",
+            "    def seed_initial(self) -> None:",
+            '        """Seed state machine state for fake initialization."""',
+            "        self.state.initialized = True",
+        ]
+    )
 
-    lines.extend([
-        "",
-        "",
-        f"proto = {sm_cls_name}()",
-        "",
-        "",
-        "# ==============================================================================",
-        "# 2. State Machine Proto & Fakes",
-        "# ==============================================================================",
-        "",
-    ])
+    lines.extend(
+        [
+            "",
+            "",
+            f"proto = {sm_cls_name}()",
+            "",
+            "",
+            "# ==============================================================================",
+            "# 2. State Machine Proto & Fakes",
+            "# ==============================================================================",
+            "",
+        ]
+    )
 
     clean_stem = impl_stem.replace("_impl", "")
     fake_cls_name = f"Fake{pascal_name}"
@@ -2587,144 +3374,192 @@ def generate_pretense_scaffold(
     lines.append("")
     if len(service_classes) > 1:
         fake_ret_type = f"Tuple[{', '.join(c['name'] for c in service_classes)}]"
-        lines.extend([
-            f"def make_{clean_stem}_fakes(",
-            f"    state: Optional[{state_cls_name}] = None,",
-            f") -> {fake_ret_type}:",
-            f'    """Synthesizes fake instances for component services sharing model state."""',
-            f"    fake = {fake_cls_name}(state=state or {state_cls_name}())",
-            f"    return (",
-            f"        " + ",\n        ".join("fake" for _ in service_classes) + ",",
-            f"    )",
-        ])
+        lines.extend(
+            [
+                f"def make_{clean_stem}_fakes(",
+                f"    state: Optional[{state_cls_name}] = None,",
+                f") -> {fake_ret_type}:",
+                f'    """Synthesizes fake instances for component services sharing model state."""',
+                f"    fake = {fake_cls_name}(state=state or {state_cls_name}())",
+                f"    return (",
+                f"        " + ",\n        ".join("fake" for _ in service_classes) + ",",
+                f"    )",
+            ]
+        )
     else:
         single_cls = service_classes[0]["name"] if service_classes else target_cls_name
-        lines.extend([
-            f"def make_{clean_stem}_fake(",
-            f"    state: Optional[{state_cls_name}] = None,",
-            f") -> {single_cls}:",
-            f'    """Synthesizes fake instance for {single_cls}."""',
-            f"    return {fake_cls_name}(state=state or {state_cls_name}())",
-        ])
+        lines.extend(
+            [
+                f"def make_{clean_stem}_fake(",
+                f"    state: Optional[{state_cls_name}] = None,",
+                f") -> {single_cls}:",
+                f'    """Synthesizes fake instance for {single_cls}."""',
+                f"    return {fake_cls_name}(state=state or {state_cls_name}())",
+            ]
+        )
 
-    lines.extend([
-        "",
-        "",
-        "# ==============================================================================",
-        "# 3. Real Implementation Tests",
-        "# ==============================================================================",
-        "",
-        f"class Test{pascal_name}ImplReal(unittest.TestCase):",
-        f'    """Verifies that concrete implementation satisfies contracts."""',
-        "",
-        "    def setUp(self) -> None:",
-    ])
+    lines.extend(
+        [
+            "",
+            "",
+            "# ==============================================================================",
+            "# 3. Real Implementation Tests",
+            "# ==============================================================================",
+            "",
+            f"class Test{pascal_name}ImplReal(unittest.TestCase):",
+            f'    """Verifies that concrete implementation satisfies contracts."""',
+            "",
+            "    def setUp(self) -> None:",
+        ]
+    )
 
     if has_singleton:
-        lines.extend([
-            "        self.registry = LifecycleRegistry()",
-        ])
+        lines.extend(
+            [
+                "        self.registry = LifecycleRegistry()",
+            ]
+        )
         if init_aliases:
             for alias in init_aliases.values():
                 lines.append(f"        {alias}(self.registry)")
         else:
             lines.append("        __initialize__(self.registry)")
-        lines.extend([
-            "        self.phase_scope = enter_phase(system, registry=self.registry)",
-            "        self.phase_scope.__enter__()",
-        ])
+        lines.extend(
+            [
+                "        self.phase_scope = enter_phase(system, registry=self.registry)",
+                "        self.phase_scope.__enter__()",
+            ]
+        )
         if len(service_classes) > 1:
             for c in service_classes:
-                lines.append(f"        self.{c['name'].lower()} = get_singleton({c['name']})")
-            svc_dict = ", ".join(f"{c['name']}: self.{c['name'].lower()}" for c in service_classes)
+                lines.append(
+                    f"        self.{c['name'].lower()} = get_singleton({c['name']})"
+                )
+            svc_dict = ", ".join(
+                f"{c['name']}: self.{c['name'].lower()}" for c in service_classes
+            )
             lines.append(f"        self.sm = {sm_cls_name}(singletons={{{svc_dict}}})")
             for c in service_classes:
-                lines.append(f"        self.checked_{c['name'].lower()} = self.sm.as_checked({c['name']}, self.{c['name'].lower()})")
+                lines.append(
+                    f"        self.checked_{c['name'].lower()} = self.sm.as_checked({c['name']}, self.{c['name'].lower()})"
+                )
         else:
             lines.append(f"        self.real = get_singleton({target_cls_name})")
-            lines.append(f"        self.sm = {sm_cls_name}(singletons={{{target_cls_name}: self.real}})")
-            lines.append(f"        self.checked = self.sm.as_checked({target_cls_name}, self.real)")
-        lines.extend([
-            "",
-            "    def tearDown(self) -> None:",
-            "        self.phase_scope.__exit__(None, None, None)",
-        ])
+            lines.append(
+                f"        self.sm = {sm_cls_name}(singletons={{{target_cls_name}: self.real}})"
+            )
+            lines.append(
+                f"        self.checked = self.sm.as_checked({target_cls_name}, self.real)"
+            )
+        lines.extend(
+            [
+                "",
+                "    def tearDown(self) -> None:",
+                "        self.phase_scope.__exit__(None, None, None)",
+            ]
+        )
     else:
         if len(service_classes) > 1:
             for c in service_classes:
                 lines.append(f"        self.{c['name'].lower()} = {c['name']}()")
-            svc_dict = ", ".join(f"{c['name']}: self.{c['name'].lower()}" for c in service_classes)
+            svc_dict = ", ".join(
+                f"{c['name']}: self.{c['name'].lower()}" for c in service_classes
+            )
             lines.append(f"        self.sm = {sm_cls_name}(singletons={{{svc_dict}}})")
             for c in service_classes:
-                lines.append(f"        self.checked_{c['name'].lower()} = self.sm.as_checked({c['name']}, self.{c['name'].lower()})")
+                lines.append(
+                    f"        self.checked_{c['name'].lower()} = self.sm.as_checked({c['name']}, self.{c['name'].lower()})"
+                )
         else:
             lines.append(f"        self.real = {target_cls_name}()")
-            lines.append(f"        self.sm = {sm_cls_name}(singletons={{{target_cls_name}: self.real}})")
-            lines.append(f"        self.checked = self.sm.as_checked({target_cls_name}, self.real)")
+            lines.append(
+                f"        self.sm = {sm_cls_name}(singletons={{{target_cls_name}: self.real}})"
+            )
+            lines.append(
+                f"        self.checked = self.sm.as_checked({target_cls_name}, self.real)"
+            )
 
-    lines.extend([
-        "",
-        "    def test_real_conformance(self) -> None:",
-        "        # Drive scenarios via self.checked.<method>(*args) or self.sm.dispatch_transition('<transition_name>', *args).",
-        "        # Operational postconditions and invariants are verified automatically by ensure(...);",
-        "        # fixed scenario tests should contain no redundant manual self.assertEqual/assertTrue assertions.",
-        f'        self.fail("Test{pascal_name}ImplReal.test_real_conformance must be implemented with concrete scenarios.")',
-    ])
+    lines.extend(
+        [
+            "",
+            "    def test_real_conformance(self) -> None:",
+            "        # Drive scenarios via self.checked.<method>(*args) or self.sm.dispatch_transition('<transition_name>', *args).",
+            "        # Operational postconditions and invariants are verified automatically by ensure(...);",
+            "        # fixed scenario tests should contain no redundant manual self.assertEqual/assertTrue assertions.",
+            f'        self.fail("Test{pascal_name}ImplReal.test_real_conformance must be implemented with concrete scenarios.")',
+        ]
+    )
 
-    lines.extend([
-        "",
-        "",
-        "# ==============================================================================",
-        "# 4. Hypothesis Stateful Fuzzing",
-        "# ==============================================================================",
-        "",
-    ])
+    lines.extend(
+        [
+            "",
+            "",
+            "# ==============================================================================",
+            "# 4. Hypothesis Stateful Fuzzing",
+            "# ==============================================================================",
+            "",
+        ]
+    )
 
     if len(service_classes) > 1:
-        lines.extend([
-            f"def make_sut() -> {sut_cls_name}:",
-            f"    return {sut_cls_name}()",
-        ])
+        lines.extend(
+            [
+                f"def make_sut() -> {sut_cls_name}:",
+                f"    return {sut_cls_name}()",
+            ]
+        )
     else:
         single_cls = service_classes[0]["name"] if service_classes else target_cls_name
-        lines.extend([
-            f"def make_sut() -> {single_cls}:",
-        ])
+        lines.extend(
+            [
+                f"def make_sut() -> {single_cls}:",
+            ]
+        )
         if has_singleton:
-            lines.extend([
-                "    registry = LifecycleRegistry()",
-            ])
+            lines.extend(
+                [
+                    "    registry = LifecycleRegistry()",
+                ]
+            )
             if init_aliases:
                 for alias in init_aliases.values():
                     lines.append(f"    {alias}(registry)")
             else:
                 lines.append("    __initialize__(registry)")
-            lines.extend([
-                "    scope = enter_phase(system, registry=registry)",
-                "    scope.__enter__()",
-                f"    return get_singleton({single_cls})",
-            ])
+            lines.extend(
+                [
+                    "    scope = enter_phase(system, registry=registry)",
+                    "    scope.__enter__()",
+                    f"    return get_singleton({single_cls})",
+                ]
+            )
         else:
-            lines.extend([
-                f"    return {single_cls}()",
-            ])
+            lines.extend(
+                [
+                    f"    return {single_cls}()",
+                ]
+            )
 
-    lines.extend([
-        "",
-        "",
-        f"{pascal_name}FuzzTest = compile_hypothesis_test_case(",
-        "    proto=proto,",
-        "    sut_factory=make_sut,",
-        f"    initial_state_factory={state_cls_name},",
-        f'    name="{pascal_name}FuzzTest",',
-        ")",
-        "",
-    ])
+    lines.extend(
+        [
+            "",
+            "",
+            f"{pascal_name}FuzzTest = compile_hypothesis_test_case(",
+            "    proto=proto,",
+            "    sut_factory=make_sut,",
+            "    initial_state_factory=proto.make_initial_state,",
+            f'    name="{pascal_name}FuzzTest",',
+            ")",
+            "",
+        ]
+    )
 
     return "\n".join(lines)
 
 
-def _resolve_lib_dir_and_pkg(module_path: str, user_lib_pkg: str | None = None) -> tuple[str, str]:
+def _resolve_lib_dir_and_pkg(
+    module_path: str, user_lib_pkg: str | None = None
+) -> tuple[str, str]:
     """Resolves (filesystem_lib_dir, dot_separated_pkg_name) for the library directory."""
     abs_mod = os.path.abspath(module_path)
     parent_dir = os.path.dirname(abs_mod)
@@ -2743,12 +3578,15 @@ def _resolve_lib_dir_and_pkg(module_path: str, user_lib_pkg: str | None = None) 
             from autofab_py.support.lib import app_info
         except Exception:
             import app_info  # type: ignore
-    markers = getattr(app_info, "get_config_filenames", lambda: ())() + getattr(app_info, "get_roles_filenames", lambda: ())() + ("pyproject.toml",)
+    markers = (
+        getattr(app_info, "get_config_filenames", lambda: ())()
+        + getattr(app_info, "get_roles_filenames", lambda: ())()
+        + ("pyproject.toml",)
+    )
     while curr and curr != os.path.dirname(curr):
         if any(os.path.isfile(os.path.join(curr, marker)) for marker in markers):
             repo_root = curr
         curr = os.path.dirname(curr)
-
 
     default_lib_dir = os.path.join(part_dir, "lib")
     if user_lib_pkg:
@@ -2841,7 +3679,9 @@ def main() -> int:
 
     if args.scaffold:
         if not pyi_path or not os.path.isfile(pyi_path):
-            sys.stderr.write(f"Cannot scaffold {args.module_path}: specification .pyi not found\n")
+            sys.stderr.write(
+                f"Cannot scaffold {args.module_path}: specification .pyi not found\n"
+            )
             return 1
         is_interface = None
         if args.interface:
@@ -2874,7 +3714,10 @@ def main() -> int:
             sys.stderr.write(f"{err}\n")
         return 1
 
-    if is_uninitialized_pretense_module(content) and "_unimplemented_transition" not in content:
+    if (
+        is_uninitialized_pretense_module(content)
+        and "_unimplemented_transition" not in content
+    ):
         sys.stderr.write(
             f"{args.module_path} is uninitialized (missing State dataclass or TestCase classes). "
             f"Consult your Companion Guide (autofab_py/guides/pretense.md) for required structure.\n"
@@ -2901,13 +3744,17 @@ def main() -> int:
         stem = os.path.basename(args.module_path)
         is_interface = not stem.endswith("_impl_pretense.py")
 
-    struct_errs = check_pretense_structure(tree, args.module_path, is_interface=is_interface)
+    struct_errs = check_pretense_structure(
+        tree, args.module_path, is_interface=is_interface
+    )
     all_errors.extend(struct_errs)
 
     assert_errs = check_single_argument_assertions(tree, args.module_path)
     all_errors.extend(assert_errs)
 
-    import_errs = check_pretense_imports(content, pyi_path, is_impl=not is_interface, file_path=args.module_path)
+    import_errs = check_pretense_imports(
+        content, pyi_path, is_impl=not is_interface, file_path=args.module_path
+    )
     all_errors.extend(import_errs)
 
     test_import_errs = check_test_imports(lib_pkg, args.module_path)
@@ -2922,7 +3769,9 @@ def main() -> int:
     private_import_errs = check_no_private_imports(args.module_path, tree=tree)
     all_errors.extend(private_import_errs)
 
-    tautology_errs = check_tautological_assertions(args.module_path, tree=tree, check_empty=True)
+    tautology_errs = check_tautological_assertions(
+        args.module_path, tree=tree, check_empty=True
+    )
     all_errors.extend(tautology_errs)
 
     no_error_test_errs = check_no_error_testing(args.module_path, tree=tree)
@@ -2937,13 +3786,17 @@ def main() -> int:
     sys_module_errs = check_no_sys_modules_tampering(args.module_path, tree=tree)
     all_errors.extend(sys_module_errs)
 
-    probe_errs = check_no_top_level_probes(args.module_path, tree=tree, error_code="PRE_LINT_NO_TOP_LEVEL_PROBE")
+    probe_errs = check_no_top_level_probes(
+        args.module_path, tree=tree, error_code="PRE_LINT_NO_TOP_LEVEL_PROBE"
+    )
     all_errors.extend(probe_errs)
 
     outcome_errs = check_transition_outcomes(tree, args.module_path)
     all_errors.extend(outcome_errs)
 
-    lifted_errs = check_lifted_expr_usage(tree, args.module_path, is_impl=not is_interface)
+    lifted_errs = check_lifted_expr_usage(
+        tree, args.module_path, is_impl=not is_interface
+    )
     all_errors.extend(lifted_errs)
 
     sentinel_errs = check_no_residual_sentinels(tree, args.module_path)
@@ -2958,31 +3811,52 @@ def main() -> int:
     frozen_errs = check_no_frozen_exceptions(args.module_path)
     all_errors.extend(frozen_errs)
 
-    skip_errs = check_banned_skips(args.module_path, tree=tree, error_code="PRE_LINT_NO_SKIP")
+    skip_errs = check_banned_skips(
+        args.module_path, tree=tree, error_code="PRE_LINT_NO_SKIP"
+    )
     all_errors.extend(skip_errs)
 
     pre_seeding_errs = check_no_pre_seeding(tree, args.module_path)
     all_errors.extend(pre_seeding_errs)
 
-    call_target_iface_errs = check_no_call_target_in_interface(tree, args.module_path, is_interface=is_interface)
+    call_target_iface_errs = check_no_call_target_in_interface(
+        tree, args.module_path, is_interface=is_interface
+    )
     all_errors.extend(call_target_iface_errs)
 
     no_raises_errs = check_no_raises_in_test_cases(tree, args.module_path)
     all_errors.extend(no_raises_errs)
 
+    assert_raises_errs = check_no_assert_raises(tree, args.module_path)
+    all_errors.extend(assert_raises_errs)
+
+    no_raises_error_errs = check_no_raises_for_errors(tree, args.module_path)
+    all_errors.extend(no_raises_error_errs)
+
+    direct_real_errs = check_no_direct_real_access(tree, args.module_path)
+    all_errors.extend(direct_real_errs)
+
     multi_iface_errs = check_multi_interface_inheritance(tree, args.module_path)
     all_errors.extend(multi_iface_errs)
 
-    pyi_elements = extract_pyi_elements(pyi_path) if pyi_path and os.path.isfile(pyi_path) else None
+    pyi_elements = (
+        extract_pyi_elements(pyi_path)
+        if pyi_path and os.path.isfile(pyi_path)
+        else None
+    )
 
     coverage_errs = check_interface_transition_coverage(
         tree, args.module_path, is_interface=is_interface, pyi_elements=pyi_elements
     )
     all_errors.extend(coverage_errs)
-    target_internal_errs = check_pretense_target_internals(tree, args.module_path, pyi_elements=pyi_elements)
+    target_internal_errs = check_pretense_target_internals(
+        tree, args.module_path, pyi_elements=pyi_elements
+    )
     all_errors.extend(target_internal_errs)
 
-    proto_prop_errs = check_transition_protocol_properties(tree, args.module_path, pyi_elements=pyi_elements)
+    proto_prop_errs = check_transition_protocol_properties(
+        tree, args.module_path, pyi_elements=pyi_elements
+    )
     all_errors.extend(proto_prop_errs)
 
     placeholder_errs = check_no_scaffold_placeholders(tree, args.module_path)

@@ -41,7 +41,9 @@ class UvModelConfigImplTest(unittest.TestCase):
         sys.argv = [app_info.APP_NAME]
 
         # Ensure no accidental TOML file is read by pointing to nonexistent file
-        os.environ[f"{app_info.ENV_PREFIX}_MODEL_CONFIG_FILE"] = "/tmp/nonexistent_models_12345.toml"
+        os.environ[f"{app_info.ENV_PREFIX}_MODEL_CONFIG_FILE"] = (
+            "/tmp/nonexistent_models_12345.toml"
+        )
 
         reg = LifecycleRegistry()
         __initialize__(reg)
@@ -221,7 +223,9 @@ conversation_limit = 8
         """Discovering workspace model_configs.toml naturally without explicit path env var."""
         with tempfile.TemporaryDirectory() as tmp_root:
             with open(os.path.join(tmp_root, "model_configs.toml"), "w") as f:
-                f.write('default = "workspace-model"\n[models.workspace-model]\nconversation_limit = 42\n')
+                f.write(
+                    'default = "workspace-model"\n[models.workspace-model]\nconversation_limit = 42\n'
+                )
             os.chdir(tmp_root)
             os.environ.pop(f"{app_info.ENV_PREFIX}_MODEL_CONFIG_FILE", None)
             os.environ.pop(f"{app_info.ENV_PREFIX}_MODEL", None)
@@ -239,7 +243,9 @@ conversation_limit = 8
         """Discovering model_configs.toml by walking up parent directories."""
         with tempfile.TemporaryDirectory() as tmp_root:
             with open(os.path.join(tmp_root, "model_configs.toml"), "w") as f:
-                f.write('default = "parent-model"\n[models.parent-model]\nconversation_limit = 55\n')
+                f.write(
+                    'default = "parent-model"\n[models.parent-model]\nconversation_limit = 55\n'
+                )
             sub_dir = os.path.join(tmp_root, "a", "b", "c")
             os.makedirs(sub_dir)
             os.chdir(sub_dir)
@@ -261,7 +267,9 @@ conversation_limit = 8
             autofab_dir = os.path.join(tmp_home, f".{app_info.APP_NAME}")
             os.makedirs(autofab_dir, exist_ok=True)
             with open(os.path.join(autofab_dir, "models.toml"), "w") as f:
-                f.write('default = "home-model"\n[models.home-model]\nconversation_limit = 77\n')
+                f.write(
+                    'default = "home-model"\n[models.home-model]\nconversation_limit = 77\n'
+                )
 
             with tempfile.TemporaryDirectory() as empty_dir:
                 os.chdir(empty_dir)
@@ -297,7 +305,9 @@ conversation_limit = 8
                 self.assertEqual(agent_cfg.conversation_limit, 20)
 
             with open(autofab_toml, "w") as f:
-                f.write('default = "cr-model"\n[models.cr-model]\nconversation_limit = 99\n')
+                f.write(
+                    'default = "cr-model"\n[models.cr-model]\nconversation_limit = 99\n'
+                )
 
             reg2 = LifecycleRegistry()
             __initialize__(reg2)
@@ -337,7 +347,9 @@ is_step_mode = false
         """Discovering model_configs.toml in user config directory when repo config is absent."""
         user_cfg = os.path.join(self.tmp_config_dir.name, "model_configs.toml")
         with open(user_cfg, "w") as f:
-            f.write('default = "user-global-model"\n[models.user-global-model]\nconversation_limit = 88\n')
+            f.write(
+                'default = "user-global-model"\n[models.user-global-model]\nconversation_limit = 88\n'
+            )
 
         with tempfile.TemporaryDirectory() as empty_dir:
             os.chdir(empty_dir)

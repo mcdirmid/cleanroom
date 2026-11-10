@@ -8,16 +8,18 @@ from typing import Any, Dict, List, Mapping, Optional, Protocol, Sequence, Tuple
 @dataclasses.dataclass(frozen=True)
 class ModelSpec:
     """Describes an evaluated language model and its rate card."""
+
     identifier: str
     tier: int
     tier_label: str
     provider: str
     rate_uncached_in: float  # $ per 1M tokens
-    rate_cached_in: float    # $ per 1M tokens
-    rate_out: float          # $ per 1M tokens (includes reasoning tokens)
+    rate_cached_in: float  # $ per 1M tokens
+    rate_out: float  # $ per 1M tokens (includes reasoning tokens)
     endpoint: Optional[str] = None
     quantization: Optional[str] = None
     default_harness: str = "antigravity"
+    run_timeout_seconds: float = 3600.0
 
     def compute_cost(self, uncached_in: int, cached_in: int, out: int) -> float:
         cost = (
@@ -31,6 +33,7 @@ class ModelSpec:
 @dataclasses.dataclass(frozen=True)
 class BenchmarkUnit:
     """Identifies an evaluation target in a benchmark suite."""
+
     suite: str
     task_id: str
     unit_dir: str
@@ -44,6 +47,7 @@ class BenchmarkUnit:
 @dataclasses.dataclass
 class FlightMeasurements:
     """Captures empirical telemetry measurements from a benchmark flight."""
+
     inbound_tokens_uncached: int = 0
     inbound_tokens_cached: int = 0
     outbound_tokens: int = 0
@@ -55,16 +59,21 @@ class FlightMeasurements:
 
     def compute_totals(self, model: ModelSpec) -> None:
         self.total_tokens = (
-            self.inbound_tokens_uncached + self.inbound_tokens_cached + self.outbound_tokens
+            self.inbound_tokens_uncached
+            + self.inbound_tokens_cached
+            + self.outbound_tokens
         )
         self.financial_cost_usd = model.compute_cost(
-            self.inbound_tokens_uncached, self.inbound_tokens_cached, self.outbound_tokens
+            self.inbound_tokens_uncached,
+            self.inbound_tokens_cached,
+            self.outbound_tokens,
         )
 
 
 @dataclasses.dataclass
 class VerificationOutcomes:
     """Summarizes quality gate outcomes for a benchmark flight."""
+
     spec_linter_pass: bool = False
     pyright_errors: int = 0
     unit_tests_passed: int = 0
@@ -78,6 +87,7 @@ class VerificationOutcomes:
 @dataclasses.dataclass
 class FlightRecord:
     """Records the complete empirical outcome of an evaluation run."""
+
     flight_id: str
     timestamp: str
     rq: str
@@ -105,8 +115,7 @@ class FlightRecord:
 class BenchmarkEvaluator(Singleton[SystemTier], Protocol):
     """Coordinates benchmark flight execution and report generation."""
 
-    def get_suite_catalog(self) -> Mapping[str, Sequence[BenchmarkUnit]]:
-        ...
+    def get_suite_catalog(self) -> Mapping[str, Sequence[BenchmarkUnit]]: ...
 
     def execute_flight(
         self,
@@ -123,42 +132,35 @@ class BenchmarkEvaluator(Singleton[SystemTier], Protocol):
         antigravity_dispatch: str = "message",
         baseline: bool = False,
         pretense: bool = False,
-    ) -> FlightRecord:
-        ...
+    ) -> FlightRecord: ...
 
     def archive_flight_artifacts(
         self,
         record: FlightRecord,
         unit: BenchmarkUnit,
         results_dir: Optional[str] = None,
-    ) -> Optional[Tuple[str, str]]:
-        ...
+    ) -> Optional[Tuple[str, str]]: ...
 
-    def drain_unit_workspace(self, unit: BenchmarkUnit) -> None:
-        ...
+    def drain_unit_workspace(self, unit: BenchmarkUnit) -> None: ...
 
-    def generate_report(self, records: Sequence[FlightRecord], output_path: Optional[str] = None) -> str:
-        ...
+    def generate_report(
+        self, records: Sequence[FlightRecord], output_path: Optional[str] = None
+    ) -> str: ...
 
-    def save_flight_json(self, record: FlightRecord, logs_dir: str) -> str:
-        ...
+    def save_flight_json(self, record: FlightRecord, logs_dir: str) -> str: ...
 
     def harvest_flight(
         self,
         flight_id: str,
         results_dir: Optional[str] = None,
         mutation_testing: bool = False,
-    ) -> Optional[FlightRecord]:
-        ...
+    ) -> Optional[FlightRecord]: ...
 
-    def run_cli(self, argv: Optional[Sequence[str]] = None) -> int:
-        ...
+    def run_cli(self, argv: Optional[Sequence[str]] = None) -> int: ...
+
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-19T18:45:00Z
 # LAST_CHANGED: 2026-11-03T09:10:00Z
 # CHANGE: Remove pretense2 benchmark evaluation pipeline
 # --- END CLEANROOM METADATA ---
-
-
-

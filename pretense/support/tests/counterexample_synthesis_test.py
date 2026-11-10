@@ -21,8 +21,11 @@ class DAGState:
 
 proto = StateMachineProto[DAGState]()
 
+
 @proto.transition(BuggyTarget.add_node)
-def add_fresh_node(): pass
+def add_fresh_node():
+    pass
+
 
 @add_fresh_node.arguments
 def _(state: DAGState, this: object, node_id: str | NotBoundType = NotBound):
@@ -32,9 +35,11 @@ def _(state: DAGState, this: object, node_id: str | NotBoundType = NotBound):
         return None
     return (node_id,)
 
+
 @add_fresh_node.returns
 def _(state: DAGState, this, node_id: str, outcome=NotBound):
     return None
+
 
 @add_fresh_node.provide
 def _(state: DAGState, this, node_id: str, result: None):
@@ -43,11 +48,14 @@ def _(state: DAGState, this, node_id: str, result: None):
 
 # Transition: duplicate node expects ValueError!
 @proto.transition(BuggyTarget.add_node)
-def add_duplicate_node(): pass
+def add_duplicate_node():
+    pass
+
 
 @add_duplicate_node.require
 def _(state: DAGState, this) -> bool:
     return len(state.nodes) > 0
+
 
 @add_duplicate_node.arguments
 def _(state: DAGState, this: object, node_id: str | NotBoundType = NotBound):
@@ -56,6 +64,7 @@ def _(state: DAGState, this: object, node_id: str | NotBoundType = NotBound):
     elif node_id not in state.nodes:
         return None
     return (node_id,)
+
 
 @add_duplicate_node.returns
 def _(state: DAGState, this, node_id: str, outcome=NotBound):
@@ -81,8 +90,18 @@ def test_counterexample_shrinking_and_synthesis() -> None:
     import unittest
     from pretense.synthesis import TraceStep, synthesize_unit_test
 
-    step1 = TraceStep(transition_name="add_fresh_node", args=("node_0",), is_seeding=False, target_name="add_node")
-    step2 = TraceStep(transition_name="add_duplicate_node", args=("node_0",), is_seeding=False, target_name="add_node")
+    step1 = TraceStep(
+        transition_name="add_fresh_node",
+        args=("node_0",),
+        is_seeding=False,
+        target_name="add_node",
+    )
+    step2 = TraceStep(
+        transition_name="add_duplicate_node",
+        args=("node_0",),
+        is_seeding=False,
+        target_name="add_node",
+    )
     code = synthesize_unit_test(
         "test_duplicate_regression",
         "proto",
@@ -94,4 +113,3 @@ def test_counterexample_shrinking_and_synthesis() -> None:
     assert "sm.dispatch_transition('add_fresh_node', 'node_0')" in code
     assert "sm.dispatch_transition('add_duplicate_node', 'node_0')" in code
     assert "Failure: Expected SUT to raise ValueError" in code
-

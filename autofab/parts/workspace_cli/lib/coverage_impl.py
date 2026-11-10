@@ -152,7 +152,11 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
             if isinstance(exc, ast.Call):
                 fn = exc.func
                 name = fn.id if isinstance(fn, ast.Name) else getattr(fn, "attr", "")
-                if name.endswith("Error") or name.endswith("Exception") or name == "unreachable":
+                if (
+                    name.endswith("Error")
+                    or name.endswith("Exception")
+                    or name == "unreachable"
+                ):
                     return name
             elif isinstance(exc, (ast.Name, ast.Attribute)):
                 name = exc.id if isinstance(exc, ast.Name) else getattr(exc, "attr", "")
@@ -181,7 +185,9 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
                 elif isinstance(node, ast.If):
                     for b_stmt in node.body:
                         if isinstance(b_stmt, ast.Raise):
-                            err = _extract_error_name(b_stmt.exc) if b_stmt.exc else None
+                            err = (
+                                _extract_error_name(b_stmt.exc) if b_stmt.exc else None
+                            )
                             if err:
                                 error_names.append(err)
                                 if (
@@ -202,16 +208,22 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
         if error_names:
             unique_errs = sorted(set(error_names))
             contracted_found = [
-                e for e in unique_errs
+                e
+                for e in unique_errs
                 if e in contracted_errors or e.split(".")[-1] in contracted_errors
             ]
             uncontracted_found = [
-                e for e in unique_errs
-                if e not in contracted_errors and e.split(".")[-1] not in contracted_errors
+                e
+                for e in unique_errs
+                if e not in contracted_errors
+                and e.split(".")[-1] not in contracted_errors
             ]
             if contracted_found:
                 err_str = ", ".join(contracted_found)
-                return ("test", f"TEST-COVERAGE-DEFICIT: missing contracted error assertion for {err_str}")
+                return (
+                    "test",
+                    f"TEST-COVERAGE-DEFICIT: missing contracted error assertion for {err_str}",
+                )
             if uncontracted_found:
                 err_str = ", ".join(uncontracted_found)
                 return ("lib", f"LIB-PRAGMA-REQUIRED: raises {err_str}")
@@ -234,7 +246,9 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
             src_lines = []
 
         shown_spans = (
-            cov.missing_spans[:max_spans] if max_spans is not None else cov.missing_spans
+            cov.missing_spans[:max_spans]
+            if max_spans is not None
+            else cov.missing_spans
         )
         lines: List[str] = []
         lines.append(f"Uncovered statement spans in {cov.module_name}:")
@@ -381,7 +395,9 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
                 exc = stmt.exc
                 if isinstance(exc, ast.Call):
                     fn = exc.func
-                    name = fn.id if isinstance(fn, ast.Name) else getattr(fn, "attr", "")
+                    name = (
+                        fn.id if isinstance(fn, ast.Name) else getattr(fn, "attr", "")
+                    )
                     return name.endswith("Error") or name == "unreachable"
                 elif isinstance(exc, (ast.Name, ast.Attribute)):
                     name = exc.id if isinstance(exc, ast.Name) else exc.attr
@@ -397,7 +413,12 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
                 if start is not None:
                     for ln in range(start, (end or start) + 1):
                         non_exec.add(ln)
-            elif isinstance(node, ast.If) and not node.orelse and node.body and all(_is_error_stmt(s) for s in node.body):
+            elif (
+                isinstance(node, ast.If)
+                and not node.orelse
+                and node.body
+                and all(_is_error_stmt(s) for s in node.body)
+            ):
                 start = getattr(node.body[0], "lineno", None)
                 end = getattr(node.body[-1], "end_lineno", start)
                 if start is not None:
@@ -416,7 +437,11 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
                 and isinstance(node.value.value, str)
             ):
                 start = node.lineno
-                end = node.end_lineno if hasattr(node, "end_lineno") and node.end_lineno is not None else node.lineno
+                end = (
+                    node.end_lineno
+                    if hasattr(node, "end_lineno") and node.end_lineno is not None
+                    else node.lineno
+                )
                 for ln in range(start, end + 1):
                     non_exec.add(ln)
         return non_exec
@@ -435,7 +460,9 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
         if hasattr(trace_mod, "_find_executable_linenos"):
             exec_dict = trace_mod._find_executable_linenos(abs_impl)
             if isinstance(exec_dict, dict):
-                raw_exec = {ln for ln in exec_dict.keys() if isinstance(ln, int) and ln > 0}
+                raw_exec = {
+                    ln for ln in exec_dict.keys() if isinstance(ln, int) and ln > 0
+                }
         non_exec = self.get_non_executable_lines(ipath)
         exec_lines = raw_exec - non_exec
 
@@ -443,15 +470,18 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
         ws_root: Optional[Path] = None
         curr: Optional[Path] = tpath.parent
         while curr and curr != curr.parent:
-            if any(
-                (curr / marker).exists()
-                for marker in (
-                    "pyproject.toml",
-                    "autofab.toml",
-                    "cleanroom.toml",
-                    ".role_descriptor.json",
+            if (
+                any(
+                    (curr / marker).exists()
+                    for marker in (
+                        "pyproject.toml",
+                        "autofab.toml",
+                        "cleanroom.toml",
+                        ".role_descriptor.json",
+                    )
                 )
-            ) or (curr / "parts").is_dir():
+                or (curr / "parts").is_dir()
+            ):
                 ws_root = curr
                 break
             curr = curr.parent
@@ -492,7 +522,9 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
             pypaths.extend(str(d) for d in extra_dirs)
             if "PYTHONPATH" in env:
                 pypaths.extend(
-                    p for p in env["PYTHONPATH"].split(os.pathsep) if p and p not in pypaths
+                    p
+                    for p in env["PYTHONPATH"].split(os.pathsep)
+                    if p and p not in pypaths
                 )
             env["PYTHONPATH"] = os.pathsep.join(pypaths)
 
@@ -501,7 +533,9 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
         with tempfile.NamedTemporaryFile(suffix=".coverage", delete=False) as tmp_cov:
             cov_data_file = tmp_cov.name
 
-        include_arg = f"{abs_impl},{Path(impl_path)}" if str(impl_path) != abs_impl else abs_impl
+        include_arg = (
+            f"{abs_impl},{Path(impl_path)}" if str(impl_path) != abs_impl else abs_impl
+        )
         cmd = [
             sys.executable,
             "-m",
@@ -562,11 +596,15 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
                 test_passed = False
                 out_str = res.stdout.strip()
                 err_str = res.stderr.strip()
-                test_error = f"{out_str}\n{err_str}".strip() or "Test suite execution failed."
+                test_error = (
+                    f"{out_str}\n{err_str}".strip() or "Test suite execution failed."
+                )
         except subprocess.TimeoutExpired:
             ran_subprocess = True
             test_passed = False
-            test_error = f"Test suite execution timed out after {cmd_timeout:.1f} seconds."
+            test_error = (
+                f"Test suite execution timed out after {cmd_timeout:.1f} seconds."
+            )
         except (OSError, PermissionError):
             ran_subprocess = False
 
@@ -580,10 +618,15 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
                     c_data = cov_lib.Coverage(data_file=cov_data_file)
                     c_data.load()
                     cov_data = c_data.get_data()
-                    lines = cov_data.lines(abs_impl) or cov_data.lines(str(Path(impl_path)))
+                    lines = cov_data.lines(abs_impl) or cov_data.lines(
+                        str(Path(impl_path))
+                    )
                     if not lines:
                         for mf in cov_data.measured_files():
-                            if os.path.realpath(mf) == abs_impl or Path(mf).name == ipath.name:
+                            if (
+                                os.path.realpath(mf) == abs_impl
+                                or Path(mf).name == ipath.name
+                            ):
                                 lines = cov_data.lines(mf)
                                 if lines:
                                     break
@@ -629,7 +672,14 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
                 loader = unittest.TestLoader()
                 try:
                     suite = loader.loadTestsFromName(test_mod_name)
-                except (ImportError, AttributeError, SyntaxError, TypeError, ValueError, NameError) as e:
+                except (
+                    ImportError,
+                    AttributeError,
+                    SyntaxError,
+                    TypeError,
+                    ValueError,
+                    NameError,
+                ) as e:
                     test_load_error = str(e)
                     test_passed = False
                     return
@@ -638,7 +688,9 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
                     mod = sys.modules.get(test_mod_name)
                     if mod:
                         for attr_name in sorted(dir(mod)):
-                            if attr_name.startswith("test_") and callable(getattr(mod, attr_name)):
+                            if attr_name.startswith("test_") and callable(
+                                getattr(mod, attr_name)
+                            ):
                                 fn = getattr(mod, attr_name)
                                 suite.addTest(unittest.FunctionTestCase(fn))
 
@@ -673,7 +725,9 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
 
             if not test_passed:
                 test_error = (
-                    test_load_error or test_failures_str or "Test suite execution failed."
+                    test_load_error
+                    or test_failures_str
+                    or "Test suite execution failed."
                 )
 
             results = tracer.results()
@@ -741,17 +795,21 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
             has_lib_pragma = False
             for start, end in cov.missing_spans:
                 owner, disp = self.classify_span(cov.file_path, start, end)
-                span_classifications.append({
-                    "span": [start, end],
-                    "owner": owner,
-                    "disposition": disp,
-                })
+                span_classifications.append(
+                    {
+                        "span": [start, end],
+                        "owner": owner,
+                        "disposition": disp,
+                    }
+                )
                 if owner == "test":
                     has_test_spans = True
                 elif owner == "lib":
                     has_lib_pragma = True
 
-            all_lib_pragma = bool(cov.missing_spans and not has_test_spans and has_lib_pragma)
+            all_lib_pragma = bool(
+                cov.missing_spans and not has_test_spans and has_lib_pragma
+            )
             status_data = {
                 "module_name": cov.module_name,
                 "test_name": cov.test_name,
@@ -776,13 +834,13 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
             if not log_p.is_absolute():
                 log_p = root / log_p
             log_p.parent.mkdir(parents=True, exist_ok=True)
-            report = self.format_coverage_report(
-                cov, threshold, max_spans=max_spans
-            )
+            report = self.format_coverage_report(cov, threshold, max_spans=max_spans)
             with open(log_p, "w", encoding="utf-8") as f:
                 f.write(report)
 
         return cov
+
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-11-03T23:45:00Z

@@ -62,10 +62,19 @@ class LRUStateMachine(StateMachine[LRUState]):
         self.state.capacity = capacity
         self.state.items = OrderedDict(list(items.items())[:capacity])
 
+    @transition(LRUProtocol.capacity)
+    def capacity(self) -> int:
+        ret = self.inner_capacity()
+        assert ret > 0
+        return ret
+
+    def inner_capacity(self) -> int:
+        return self.state.capacity
+
     @transition(LRUProtocol.configure)
     def configure(self, capacity: int) -> None:
         require_arg(capacity, Domain.integers(min_value=1))
-        make_return_value(None)
+        self.inner_configure(capacity)
         self.state.capacity = capacity
         while len(self.state.items) > self.state.capacity:
             self.state.items.popitem(last=False)
@@ -73,13 +82,15 @@ class LRUStateMachine(StateMachine[LRUState]):
         assert sut(LRUProtocol).capacity == capacity
         assert sut(LRUProtocol).size <= capacity
 
+    def inner_configure(self, capacity: int) -> None:
+        return None
+
     @transition(LRUProtocol.get)
     def get(self, key: str, default: Optional[Any] = None) -> Any:
         require_arg(key, Domain.text())
         require_arg(default, Domain.any(), preferred=[None])
         assert sut(LRUProtocol).size == len(self.state.items)
-        fake_val = self.state.items.get(key, default)
-        ret = make_return_value(fake_val)
+        ret = self.inner_get(key, default)
         if key in self.state.items:
             self.state.hits += 1
             self.state.items.move_to_end(key)
@@ -89,15 +100,14 @@ class LRUStateMachine(StateMachine[LRUState]):
             assert ret == default
         return ret
 
+    def inner_get(self, key: str, default: Optional[Any] = None) -> Any:
+        return self.state.items.get(key, default)
+
     @transition(LRUProtocol.put)
     def put(self, key: str, value: Any) -> Optional[Tuple[str, Any]]:
         require_arg(key, Domain.text())
         require_arg(value, Domain.any())
-        if key not in self.state.items and len(self.state.items) >= self.state.capacity:
-            fake_evicted = next(iter(self.state.items.items()))
-        else:
-            fake_evicted = None
-        evicted = make_return_value(fake_evicted)
+        evicted = self.inner_put(key, value)
         if evicted is not None:
             ev_k, _ = evicted
             if ev_k in self.state.items:
@@ -108,19 +118,31 @@ class LRUStateMachine(StateMachine[LRUState]):
         assert sut(LRUProtocol).size == len(self.state.items)
         return evicted
 
+    def inner_put(self, key: str, value: Any) -> Optional[Tuple[str, Any]]:
+        if key not in self.state.items and len(self.state.items) >= self.state.capacity:
+            fake_evicted = next(iter(self.state.items.items()))
+        else:
+            fake_evicted = None
+        return fake_evicted
+
     @transition(LRUProtocol.remove)
     def remove(self, key: str) -> Any:
         require_arg(key, Domain.text())
         if key in self.state.items:
-            fake_val = self.state.items.pop(key)
-            ret = make_return_value(fake_val)
-            assert ret == fake_val
+            ret = self.inner_remove(key)
+            expected = self.state.items.pop(key)
+            assert ret == expected
             assert sut(LRUProtocol).size == len(self.state.items)
             return ret
         else:
             with raises(CacheKeyNotFoundError):
-                make_return_value(None)
+                self.inner_remove(key)
             raise CacheKeyNotFoundError()
+
+    def inner_remove(self, key: str) -> Any:
+        if key in self.state.items:
+            return self.state.items.get(key)
+        return None
 
 
 # Real implementation for verification testing
@@ -163,34 +185,41 @@ class ConcreteLRU:
         raise CacheKeyNotFoundError(f"Key {key} not found")
 
 
-# Implementation pseudo state machine overriding put to check private state
+# Implementation pseudo state machine overriding inner transitions to drive target and check private state
 class LRUImplPseudoStateMachine(LRUStateMachine):
-    @transition(name="capacity")
-    def capacity(self) -> Any:
-        # AST Pivot on property
+    def inner_capacity(self) -> Any:
         target = sut(ConcreteLRU)
-        ret = call_target(target.capacity)
+        ret = target.capacity
         assert ret == target._capacity
         return ret
 
-    @transition(ConcreteLRU.put)
-    def put(self, key: str, value: Any) -> Any:
+    def inner_configure(self, capacity: int) -> None:
+        super().inner_configure(capacity)
+        target = sut(ConcreteLRU)
+        target.configure(capacity)
+
+    def inner_get(self, key: str, default: Optional[Any] = None) -> Any:
+        super().inner_get(key, default)
+        target = sut(ConcreteLRU)
+        return target.get(key, default)
+
+    def inner_put(self, key: str, value: Any) -> Any:
+        super().inner_put(key, value)
         target = sut(ConcreteLRU)
         # Pre-call snapshot on private target state
         old_count = len(target._dict)
         is_update = key in target._dict
-        ret = call_target(target.put(key, value))
+        ret = target.put(key, value)
         # Post-call differential check on private target state
         if is_update or ret is not None:
             assert len(target._dict) == old_count
         else:
             assert len(target._dict) == old_count + 1
-        if key not in self.state.items and len(self.state.items) >= self.state.capacity:
-            if self.state.items:
-                self.state.items.popitem(last=False)
-        self.state.items[key] = value
-        self.state.items.move_to_end(key)
         return ret
+
+    def inner_remove(self, key: str) -> Any:
+        target = sut(ConcreteLRU)
+        return target.remove(key)
 
 
 FakeLRU = synthesize_fake(LRUStateMachine)

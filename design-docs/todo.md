@@ -423,7 +423,7 @@ Autofab provides deep integration with DeepSeek Harness (`dsh`) across direct JS
 
 1. **DSH Web Service Architecture & Daemon Management**:
    - **Daemon Service**: DSH Web runs as a macOS background service managed via `launchd`: `~/Library/LaunchAgents/com.deepseek.dsh-web.plist`, listening on port 3080 with bridge on port 47821.
-   - **Remote Access URL & Active Token**: The only supported remote access endpoint is `http://seans-macbook-pro-2.local:3080/?token=<active_token>` (extracted dynamically from `~/.dsh/dsh-web.log`).
+   - **Remote Access URL & Active Token**: The only supported remote access endpoint is `http://seans-macbook-pro-2.local:3080/?token=<active_token>` (extracted dynamically from `~/.dsh/dsh-web.log`), always presented as a clickable markdown hyperlink.
    - **Security Fence**: The `/api` browser-trust fence accepts connections matching `trustedHosts` configured in `~/.dsh/profiles/web/cordis.patch.yml` under `@deepseek-ai/dsh-client-connection`.
 
 2. **The Operational Baseline: Ungrouped First-Class Sessions & Lean Preset Parity**:
@@ -623,35 +623,39 @@ The following prioritized roadmap outlines the active forward engineering tasks 
 
 ---
 
-### Task 3: Contract Slug Integration in Low-Level Specifications & Test Requirement Traceability
+### Task 3: Specification Contract Slugs & Anti-Mechanistic Auditor Protection Linter
 - **Priority**: High
-- **Component**: `autofab_py/` (`support/tools/`), `autofab/guides/low_to_test.md`
-- **Design Specification**: [`pretense.md`](file:///Users/seanmcdirmid/projects/autofab/design-docs/pretense.md) Section 6 & Section 2
-- **Objective**: Eliminate errors of omission and test suite blind spots without requiring expensive frontier models by formalizing requirement slugs in Low-Level Specifications (`low/*.pyi`) and asserting that every postcondition clause has matching comment/docstring slug tags in tests (`# [slug:<id>]`) verified via zero-token AST/regex linters, avoiding runtime decorators or metadata overhead.
-- **Problem Statement**:
-  - In `dag_engine_lite`, the Qwen Autofab run greenlit three genuine soundness defects (off-by-one retry counter, node re-registration edge retention, and scheduler state removal desynchronization) while achieving 100% test pass rates, 95% statement coverage, and 90% branch coverage.
-  - The defects occurred because the test author never conceived of the edge-case postconditions declared in `low/*.pyi` docstrings.
-  - AST code coverage and mutation testing (`mutmut`) only evaluate existing code and are fundamentally blind to errors of omission.
-- **Implementation Steps**:
-  1. **Low-Level Specification Slug Schema**:
-     - Formalize `[slug:<interface>.<method>.<clause>]` syntax in `low/*.pyi` docstring postconditions (e.g. `[slug:dag.add_node.replace_existing]`).
-     - Align with existing factored contract slugs in `planning/*.md` (`planning_format.md`).
-  2. **Test Comment Tagging Convention**:
-     - Test methods document covered requirements using standard comments or docstring tags (e.g. `# [slug:<slug_id>]` or `"""[slug:<slug_id>]"""`), keeping tests clean and free of runtime decorator dependencies.
-  3. **Deterministic Traceability Linter**:
-     - Implement a zero-token Python linter in `autofab_py/` that parses all `[slug:...]` declarations from `low/*.pyi` and scans `tests/*_test.py` comments/docstrings for matching slug references.
-     - Integrate into `bin/check_files`: fail Pass 1 if any slug declared in `low/*.pyi` lacks a corresponding test comment reference.
-  4. **Guide & Prompt Alignment**:
-     - Update `autofab_py/guides/low_to_test.md` to instruct the Certifier ($W_{\text{test}}$) to systematically enumerate and tag test methods with the exact slug comments matching specification clauses.
-  5. **Corpus Migration**:
-     - Retrofit contract slugs into benchmark suites (`benchmarks/parts/dag_engine_lite/low/`), establishing the baseline for the upcoming `semver_solver` benchmark.
+- **Component**: `autofab_py/` (`support/lib/slug_lint.py`, `support/lib/build_lint_common.py`, `guides/`)
+- **Design Specification**: [`feedback_embargo_checker.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/feedback_embargo_checker.md) Section 7
+- **Objective**: Prevent downstream auditors (QA, Coverage, Pretense QA) from mechanistically taking `lib`, `test`, or `pretense` files' word for what specification `<contract>` is implemented, while ensuring that all specification postconditions and auditor blame messages are strictly grounded in formalized requirement slugs.
+- **Problem Statement & Threat Model**:
+  - Slugs belong **exclusively to the Specification Plane** (`high/*.md`, `planning/*.md`, `low/*.pyi`) and the **Auditor Blame Channel** (`bin/blame --spec-slug="[slug:...]" ...`). Code artifacts must remain pure Python evaluated on empirical execution and AST semantics, never on self-attested claims.
+  - If a code author inlines real, declared `<contract>` IDs into comments or docstrings (e.g. `# realizes semver.compare_precedence.tri_state`), an auditor reading the code is cognitively tempted into a shallow, mechanistic confirmation bias—assuming the requirement is met because the comment says so.
+  - Generic slug boilerplate (such as `[slug:` or variable names like `slug = ...`) is irrelevant to auditor bias.
+  - Hallucinated or non-existent contract names are also irrelevant because they do not map to real specification clauses and cannot satisfy any contract under verification.
+  - **Only real `<contract>` IDs that actually exist in the unit's `low/*.pyi` specification are dangerous.**
+- **Implementation Steps & Actionable TODOs**:
+  1. [x] **Specification Plane Slug Schema**:
+     - Formalize `[slug:<interface>.<method>.<clause>]` syntax in `low/*.pyi` docstring postconditions (e.g. `[slug:semver.compare_precedence.tri_state]`).
+     - Enforce syntax grammar and local uniqueness in `low/*.pyi` via `validate_spec_slugs`.
+  2. [ ] **Fix & Refactor Linter (`slug_lint.py`) for Anti-Mechanistic Auditor Protection**:
+     - Replace the useless naive string check (`"[slug:" in line`) with a grounded semantic check.
+     - **Dynamic Spec Resolution**: Dynamically locate the companion `low/*.pyi` specification for the unit containing the target `lib/`, `tests/`, or `pretense/` file.
+     - **Extract Real Declared Contract IDs**: Parse and extract the set of all real, declared `<contract>` IDs from the companion `low/*.pyi`.
+     - **Anti-Mechanistic Comment & Docstring Scanner**: Scan comments and docstrings in `lib/*.py`, `tests/*_test.py`, and `pretense/*.py` for references to those real declared `<contract>` IDs.
+     - **Reject Dangerous Real IDs**: Fail Pass 1 of `bin/check_files` if any real, declared `<contract>` ID is referenced in code comments/docstrings.
+     - **Ignore Boilerplate & Hallucinations**: Do not flag harmless syntactic boilerplate (e.g. `[slug:`) or hallucinated names that do not exist in `low/*.pyi`.
+  3. [ ] **Guide & Prompt Alignment**:
+     - Ensure `autofab_py/guides/low_to_lib.md`, `low_to_test.md`, and `pretense.md` explicitly instruct workers never to inline specification contract IDs into comments or docstrings, explaining that auditors evaluate empirical behavior, not self-attested comments.
+  4. [ ] **Update Unit Tests**:
+     - Expand `slug_lint_test.py` to verify that real declared `<contract>` IDs in comments fail, while generic `slug` variables, `[slug:` boilerplate without real contract IDs, and non-existent/hallucinated names pass cleanly.
 
 ---
 
 ### Task 4: Feedback Embargo Checker Sub-Agent & Anti-Pruning Verification Gate
 - **Priority**: High
 - **Component**: `autofab/parts/workspace_cli/` & `autofab/parts/agent/`
-- **Design Specification**: [`benchmark_design_doc.md`](file:///Users/seanmcdirmid/projects/autofab/design-docs/benchmark_design_doc.md)
+- **Design Specification**: [`feedback_embargo_checker.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/feedback_embargo_checker.md) (complements [`benchmark_design_doc.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/benchmark_design_doc.md))
 - **Objective**: Prevent auditor overreach, code micromanagement, and destructive pruning during Autofab convergence by intercepting `bin/blame` and verifying that all auditor feedback strictly conforms to the information embargo and common specification grounding.
 - **Problem Statement**:
   - In `semver_solver` benchmark runs, the `pretense_coverage` auditor repeatedly cited private internal helper lines in the library implementation (`_check_bare_partial`, lines 211 and 321) and demanded that valid defensive edge-case handling (empty clauses in `||` and wildcards `*`, `x`) be pruned as "dead code" because existing tests did not exercise them.

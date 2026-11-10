@@ -98,9 +98,13 @@ def resolve_model_parameters(
                 continue
             m_field = str(v.get("model", "")).lower().strip()
             if (
-                (m_field and (target_clean == m_field or target_clean in m_field or m_field in target_clean))
-                or target_clean in k.lower()
-            ):
+                m_field
+                and (
+                    target_clean == m_field
+                    or target_clean in m_field
+                    or m_field in target_clean
+                )
+            ) or target_clean in k.lower():
                 matched_data = v
                 break
 
@@ -171,19 +175,25 @@ def _extract_blame_fingerprint(
                 if isinstance(data, list):
                     for item in data:
                         if isinstance(item, dict):
-                            crit = (item.get("explanation") or item.get("critique") or "").strip().lower()
+                            crit = (
+                                (item.get("explanation") or item.get("critique") or "")
+                                .strip()
+                                .lower()
+                            )
                             if crit:
                                 critique_parts.append(crit)
             except Exception:
                 pass
     critique_str = " ".join(sorted(critique_parts))
-    critique_hash = hashlib.sha256(critique_str.encode("utf-8")).hexdigest()[:16] if critique_str else ""
+    critique_hash = (
+        hashlib.sha256(critique_str.encode("utf-8")).hexdigest()[:16]
+        if critique_str
+        else ""
+    )
     return (sorted_targets, critique_hash)
 
 
-def _get_upstream_roles_for_role(
-    r_name: str, reg: Any, repo_root: str
-) -> Set[str]:
+def _get_upstream_roles_for_role(r_name: str, reg: Any, repo_root: str) -> Set[str]:
     """Dynamically resolves transitive upstream roles that the given role depends on."""
     visited: Set[str] = set()
     clean_r = r_name.split(":")[-1].strip().lower()
@@ -218,7 +228,7 @@ def _extract_unit_keys(target_path: str) -> Set[Tuple[str, str]]:
     stem = os.path.splitext(fname)[0]
     for suffix in ("_test", "_pretense"):
         if stem.endswith(suffix):
-            stem = stem[:-len(suffix)]
+            stem = stem[: -len(suffix)]
             break
     keys = {(part_dir, stem)}
     if stem.endswith("_impl"):
@@ -261,7 +271,9 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
             target_clean = target_role.strip().lower()
             matching_idx = None
             for idx, r_entry in enumerate(all_roles):
-                r_name = r_entry.role_name if hasattr(r_entry, "role_name") else str(r_entry)
+                r_name = (
+                    r_entry.role_name if hasattr(r_entry, "role_name") else str(r_entry)
+                )
                 if r_name.lower() == target_clean:
                     matching_idx = idx
                     break
@@ -273,7 +285,11 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
 
         for r_entry in all_roles:
             role = r_entry.role_name if hasattr(r_entry, "role_name") else str(r_entry)
-            r_def = r_entry if hasattr(r_entry, "role_name") else reg.resolve_role_definition(role, repo_root=root)
+            r_def = (
+                r_entry
+                if hasattr(r_entry, "role_name")
+                else reg.resolve_role_definition(role, repo_root=root)
+            )
             role_definitions[role] = r_def
             ready_items, _ = work_mgr.compute_role_work_queue(
                 role, dir_scope=dir_scope, repo_root=root
@@ -286,10 +302,11 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
                 ws_dir = reg.compute_workspace_dir(
                     role, dir_scope=dir_scope, repo_root=root
                 )
-                if not os.path.isdir(ws_dir) or not os.path.isdir(os.path.join(ws_dir, "bin")):
+                if not os.path.isdir(ws_dir) or not os.path.isdir(
+                    os.path.join(ws_dir, "bin")
+                ):
                     prov = get_singleton(provision.WorkspaceProvisioner)
                     prov.commission(role, dir_scope=dir_scope, repo_root=root)
-
 
                 dispatch = subagent_coordinator.RoleDispatch(
                     role_name=role,
@@ -402,9 +419,15 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
         root = repo_root or reg.discover_repository_root()
 
         # Resolve model parameters from model_configs.toml
-        resolved_batch, _, resolved_unproductive = _resolve_model_parameters(root, model_name=model_name)
+        resolved_batch, _, resolved_unproductive = _resolve_model_parameters(
+            root, model_name=model_name
+        )
         effective_batch_size = batch_size if batch_size is not None else resolved_batch
-        user_unproductive = max_unproductive_rounds if max_unproductive_rounds is not None else max_unproductive_turns
+        user_unproductive = (
+            max_unproductive_rounds
+            if max_unproductive_rounds is not None
+            else max_unproductive_turns
+        )
         effective_max_unproductive = (
             user_unproductive
             if user_unproductive is not None
@@ -416,7 +439,10 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
         last_blame_fingerprints: Dict[str, Tuple[Tuple[str, ...], str]] = {}
         subagent_restarts: Dict[str, int] = {}
 
-        print(f"[ORCHESTRATE] Starting orchestration: scope='{dir_scope}', max_waves={max_waves}", flush=True)
+        print(
+            f"[ORCHESTRATE] Starting orchestration: scope='{dir_scope}', max_waves={max_waves}",
+            flush=True,
+        )
 
         # Reset and recommission role workspaces for declared roles in scope to ensure clean initial state with model binding
         all_scope_roles = reg.list_roles(repo_root=root, dir_scope=dir_scope)
@@ -424,7 +450,9 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
             target_clean = target_role.strip().lower()
             matching_idx = None
             for idx, r_entry in enumerate(all_scope_roles):
-                r_name = r_entry.role_name if hasattr(r_entry, "role_name") else str(r_entry)
+                r_name = (
+                    r_entry.role_name if hasattr(r_entry, "role_name") else str(r_entry)
+                )
                 if r_name.lower() == target_clean:
                     matching_idx = idx
                     break
@@ -432,15 +460,21 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
                 all_scope_roles = list(all_scope_roles[: matching_idx + 1])
             else:
                 try:
-                    fused_r_def = reg.resolve_role_definition(target_role, repo_root=root, dir_scope=dir_scope)
+                    fused_r_def = reg.resolve_role_definition(
+                        target_role, repo_root=root, dir_scope=dir_scope
+                    )
                     if fused_r_def and fused_r_def.fused_roles:
                         all_scope_roles = [fused_r_def]
                 except Exception:
                     pass
 
         for r_entry in all_scope_roles:
-            r_name = r_entry.role_name if hasattr(r_entry, "role_name") else str(r_entry)
-            ws_dir = reg.compute_workspace_dir(r_name, dir_scope=dir_scope, repo_root=root)
+            r_name = (
+                r_entry.role_name if hasattr(r_entry, "role_name") else str(r_entry)
+            )
+            ws_dir = reg.compute_workspace_dir(
+                r_name, dir_scope=dir_scope, repo_root=root
+            )
             if os.path.isdir(ws_dir):
                 shutil.rmtree(ws_dir, ignore_errors=True)
             try:
@@ -467,10 +501,37 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
         cumulative_cost = 0.0
         failure_msg: Optional[str] = None
         active_workers: Dict[str, str] = {}  # role_name -> task_handle
-        assigned_targets_map: Dict[str, Sequence[str]] = {}  # role_name -> assigned targets
-        worker_idle_cycles: Dict[str, int] = {}  # role_name -> count of consecutive idle poll intervals
+        assigned_targets_map: Dict[
+            str, Sequence[str]
+        ] = {}  # role_name -> assigned targets
+        worker_idle_cycles: Dict[
+            str, int
+        ] = {}  # role_name -> count of consecutive idle poll intervals
         worker_start_times: Dict[str, float] = {}  # role_name -> timestamp of dispatch
+
+        def _notify_state(converged: bool = False, failed: bool = False) -> None:
+            update_fn = getattr(harness, "update_orchestration_state", None)
+            if callable(update_fn):
+                try:
+                    scope_role_names = [
+                        r.role_name if hasattr(r, "role_name") else str(r)
+                        for r in all_scope_roles
+                    ]
+                    update_fn(
+                        dir_scope=dir_scope,
+                        wave_count=wave_count,
+                        active_workers=dict(active_workers),
+                        assigned_targets=dict(assigned_targets_map),
+                        all_scope_roles=scope_role_names,
+                        converged=converged,
+                        failed=failed,
+                    )
+                except Exception:
+                    pass
+
         try:
+            _notify_state()
+
             # Continuous dynamic queue-driven process supervision loop
             sleep_interval = poll_interval if poll_interval is not None else 10.0
 
@@ -495,7 +556,11 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
                             cumulative_cached += res.telemetry.cached_tokens
                             cumulative_output += res.telemetry.output_tokens
                             cumulative_cost += res.telemetry.cost_usd
-                        tok_info = f", tokens={res.telemetry.total_tokens} (${res.telemetry.cost_usd:.4f})" if res.telemetry else ""
+                        tok_info = (
+                            f", tokens={res.telemetry.total_tokens} (${res.telemetry.cost_usd:.4f})"
+                            if res.telemetry
+                            else ""
+                        )
                         print(
                             f"[ORCHESTRATE] Worker '{role_name}' finished [{res.status}]: "
                             f"submitted={len(res.submitted_targets)}, blamed={len(res.blamed_targets)}{tok_info}, "
@@ -503,27 +568,40 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
                             flush=True,
                         )
                         if res.status == "failed":
-                            failure_msg = res.failure_reason or f"Role {role_name} failed execution."
+                            failure_msg = (
+                                res.failure_reason
+                                or f"Role {role_name} failed execution."
+                            )
                             break
 
                         r_def = None
                         try:
-                            r_def = reg.resolve_role_definition(role_name, repo_root=root)
+                            r_def = reg.resolve_role_definition(
+                                role_name, repo_root=root
+                            )
                         except Exception:
                             pass
 
                         is_auditor = False
                         if r_def:
                             is_auditor = bool(
-                                r_def.audit_tag or not r_def.src_pattern or not r_def.writable_file_patterns
+                                r_def.audit_tag
+                                or not r_def.src_pattern
+                                or not r_def.writable_file_patterns
                             )
 
                         if r_def and r_def.fused_roles and res.status != "failed":
-                            ws_dir = reg.compute_workspace_dir(role_name, dir_scope=dir_scope, repo_root=root)
+                            ws_dir = reg.compute_workspace_dir(
+                                role_name, dir_scope=dir_scope, repo_root=root
+                            )
                             try:
-                                from autofab.support.lib import autofab_role_tool as role_tool
+                                from autofab.support.lib import (
+                                    autofab_role_tool as role_tool,
+                                )
                             except ImportError:
-                                from autofab.support.lib import autofab_role_tool as role_tool
+                                from autofab.support.lib import (
+                                    autofab_role_tool as role_tool,
+                                )
                             v_code = role_tool.run_verify_fused_cli([ws_dir])
                             if v_code != 0:
                                 retry_key = f"fused_retry_{role_name}"
@@ -539,11 +617,16 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
                                 queue_dirty = True
                                 continue
                             else:
-                                unproductive_rounds.pop(f"fused_retry_{role_name}", None)
+                                unproductive_rounds.pop(
+                                    f"fused_retry_{role_name}", None
+                                )
                                 role_tool.run_harvest_fused_cli([ws_dir])
                                 submitted_count += len(assigned_for_role) or 1
 
-                        if len(res.submitted_targets) == 0 and len(res.blamed_targets) == 0:
+                        if (
+                            len(res.submitted_targets) == 0
+                            and len(res.blamed_targets) == 0
+                        ):
                             # Verify whether assigned targets transitioned to clean or were resolved in active work queue
                             ready_now, _ = work_mgr.compute_role_work_queue(
                                 role_name,
@@ -554,7 +637,10 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
                             ready_targets_now = {item.target_file for item in ready_now}
                             is_resolved = False
                             if assigned_for_role:
-                                is_resolved = any(t not in ready_targets_now for t in assigned_for_role)
+                                is_resolved = any(
+                                    t not in ready_targets_now
+                                    for t in assigned_for_role
+                                )
                             elif not ready_now:
                                 is_resolved = True
 
@@ -562,28 +648,39 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
                                 unproductive_rounds[role_name] = 0
                                 unresolved_reminders.pop(role_name, None)
                             else:
-                                unproductive_rounds[role_name] = unproductive_rounds.get(role_name, 0) + 1
+                                unproductive_rounds[role_name] = (
+                                    unproductive_rounds.get(role_name, 0) + 1
+                                )
                                 unresolved_reminders[role_name] = (
                                     f"CRITICAL REMINDER: The previous round for role '{role_name}' concluded without submitting, blaming, or failing any assigned targets.\n"
                                     f"While ready targets remain unresolved, conversational commentary without tool execution is strictly prohibited.\n"
                                     f"You must verify your work with `bin/check_files <target>` and immediately resolve targets by running:\n"
-                                    f"  - `bin/submit <target> \"<summary>\"` (to certify valid targets),\n"
-                                    f"  - `bin/blame <culprit_target> \"<critique>\"` (if an upstream dependency has defects), or\n"
+                                    f'  - `bin/submit <target> "<summary>"` (to certify valid targets),\n'
+                                    f'  - `bin/blame <culprit_target> "<critique>"` (if an upstream dependency has defects), or\n'
                                     f"  - `bin/fail` (if encountering an unrecoverable failure).\n"
                                     f"Once all ready targets are resolved, or when `bin/get_work` gives no further work to do, conclude your round immediately with summary text and NO tool calls."
                                 )
-                                if unproductive_rounds[role_name] >= effective_max_unproductive:
+                                if (
+                                    unproductive_rounds[role_name]
+                                    >= effective_max_unproductive
+                                ):
                                     failure_msg = (
                                         f"Role '{role_name}' made no progress (0 submitted, 0 blamed) "
                                         f"for {unproductive_rounds[role_name]} consecutive rounds."
                                     )
-                                    print(f"[ORCHESTRATE] Circuit breaker tripped: {failure_msg}", flush=True)
+                                    print(
+                                        f"[ORCHESTRATE] Circuit breaker tripped: {failure_msg}",
+                                        flush=True,
+                                    )
                                     break
                         else:
                             unproductive_rounds[role_name] = 0
                             unresolved_reminders.pop(role_name, None)
 
-                        if len(res.submitted_targets) > 0 and len(res.blamed_targets) == 0:
+                        if (
+                            len(res.submitted_targets) > 0
+                            and len(res.blamed_targets) == 0
+                        ):
                             consecutive_identical_blames[role_name] = 0
                             last_blame_fingerprints.pop(role_name, None)
                             subagent_restarts[role_name] = 0
@@ -591,23 +688,46 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
                         if len(res.submitted_targets) > 0:
                             # When an author submits modified targets, clear consecutive blames
                             # for any other roles that had blamed those targets, as the code under test has been modified.
-                            sub_set = {os.path.normpath(t).replace("\\", "/") for t in res.submitted_targets}
+                            sub_set = {
+                                os.path.normpath(t).replace("\\", "/")
+                                for t in res.submitted_targets
+                            }
                             for other_role, fp in list(last_blame_fingerprints.items()):
                                 if other_role != role_name:
-                                    blamed_set = {os.path.normpath(t).replace("\\", "/") for t in fp[0]}
+                                    blamed_set = {
+                                        os.path.normpath(t).replace("\\", "/")
+                                        for t in fp[0]
+                                    }
                                     if blamed_set & sub_set or any(
-                                        any(bt.endswith(st) or st.endswith(bt) for st in sub_set)
+                                        any(
+                                            bt.endswith(st) or st.endswith(bt)
+                                            for st in sub_set
+                                        )
                                         for bt in blamed_set
                                     ):
                                         consecutive_identical_blames[other_role] = 0
                                         last_blame_fingerprints.pop(other_role, None)
 
                         if len(res.blamed_targets) > 0:
-                            ws_dir = reg.compute_workspace_dir(role_name, dir_scope=dir_scope, repo_root=root)
-                            blame_fp = _extract_blame_fingerprint(ws_dir, res.blamed_targets)
-                            candidate_buffers = app_info.get_blame_buffer_filenames() if hasattr(app_info, "get_blame_buffer_filenames") else ()
+                            ws_dir = reg.compute_workspace_dir(
+                                role_name, dir_scope=dir_scope, repo_root=root
+                            )
+                            blame_fp = _extract_blame_fingerprint(
+                                ws_dir, res.blamed_targets
+                            )
+                            candidate_buffers = (
+                                app_info.get_blame_buffer_filenames()
+                                if hasattr(app_info, "get_blame_buffer_filenames")
+                                else ()
+                            )
                             if not candidate_buffers:
-                                candidate_buffers = (getattr(app_info, "DEFAULT_BLAME_BUFFER_FILE", ".autofab_blame_buffer.json"),)
+                                candidate_buffers = (
+                                    getattr(
+                                        app_info,
+                                        "DEFAULT_BLAME_BUFFER_FILE",
+                                        ".autofab_blame_buffer.json",
+                                    ),
+                                )
                             for bname in candidate_buffers:
                                 bp = os.path.join(ws_dir, bname)
                                 if os.path.isfile(bp):
@@ -618,7 +738,9 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
 
                             prev_fp = last_blame_fingerprints.get(role_name)
                             if prev_fp is not None and prev_fp == blame_fp:
-                                consecutive_identical_blames[role_name] = consecutive_identical_blames.get(role_name, 0) + 1
+                                consecutive_identical_blames[role_name] = (
+                                    consecutive_identical_blames.get(role_name, 0) + 1
+                                )
                             else:
                                 last_blame_fingerprints[role_name] = blame_fp
                                 consecutive_identical_blames[role_name] = 1
@@ -631,7 +753,10 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
                                         f"Role '{role_name}' delivered identical blame repeatedly and exceeded max 10 restarts "
                                         f"(blamed targets: {list(res.blamed_targets)})."
                                     )
-                                    print(f"[ORCHESTRATE] Circuit breaker tripped: {failure_msg}", flush=True)
+                                    print(
+                                        f"[ORCHESTRATE] Circuit breaker tripped: {failure_msg}",
+                                        flush=True,
+                                    )
                                     break
                                 else:
                                     print(
@@ -646,9 +771,16 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
                                     if os.path.isdir(ws_dir):
                                         shutil.rmtree(ws_dir, ignore_errors=True)
                                     prov = get_singleton(provision.WorkspaceProvisioner)
-                                    prov.commission(role_name, dir_scope=dir_scope, repo_root=root, model=model_name)
+                                    prov.commission(
+                                        role_name,
+                                        dir_scope=dir_scope,
+                                        repo_root=root,
+                                        model=model_name,
+                                    )
                                     if effective_batch_size is not None:
-                                        _persist_batch_size(ws_dir, effective_batch_size)
+                                        _persist_batch_size(
+                                            ws_dir, effective_batch_size
+                                        )
                                     consecutive_identical_blames[role_name] = 0
                                     advisory = (
                                         f"[CIRCUIT BREAKER ADVISORY] Your previous session in workspace '{ws_dir}' was terminated "
@@ -658,7 +790,11 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
                                     )
                                     unresolved_reminders[role_name] = advisory
 
+                if worker_finished:
+                    _notify_state()
+
                 if failure_msg is not None:
+                    _notify_state(failed=True)
                     for h in active_workers.values():
                         harness.interrupt_role(h)
                     break
@@ -670,8 +806,12 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
                     pending_mgr = None
 
                 for role_name, handle in list(active_workers.items()):
-                    ws_dir = reg.compute_workspace_dir(role_name, dir_scope=dir_scope, repo_root=root)
-                    pending_work = pending_mgr.get_pending_work(ws_dir) if pending_mgr else []
+                    ws_dir = reg.compute_workspace_dir(
+                        role_name, dir_scope=dir_scope, repo_root=root
+                    )
+                    pending_work = (
+                        pending_mgr.get_pending_work(ws_dir) if pending_mgr else []
+                    )
                     assigned_for_role = assigned_targets_map.get(role_name, ())
                     ready_for_role, _ = work_mgr.compute_role_work_queue(
                         role_name,
@@ -680,13 +820,20 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
                         target_unit=target_node,
                     )
                     ready_targets_set = {item.target_file for item in ready_for_role}
-                    has_unresolved_assigned = any(t in ready_targets_set for t in assigned_for_role)
+                    has_unresolved_assigned = any(
+                        t in ready_targets_set for t in assigned_for_role
+                    )
 
                     # Enforce an initialization grace period before evaluating idle worker reaping
                     worker_age = time.time() - worker_start_times.get(role_name, 0.0)
                     grace_period = 15.0 if sleep_interval >= 0.1 else 0.0
 
-                    if worker_age >= grace_period and not pending_work and not has_unresolved_assigned and assigned_for_role:
+                    if (
+                        worker_age >= grace_period
+                        and not pending_work
+                        and not has_unresolved_assigned
+                        and assigned_for_role
+                    ):
                         idle_count = worker_idle_cycles.get(role_name, 0) + 1
                         worker_idle_cycles[role_name] = idle_count
                         if idle_count >= 2:
@@ -704,6 +851,7 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
                                 worker_idle_cycles.pop(role_name, None)
                                 worker_start_times.pop(role_name, None)
                                 worker_finished = True
+                                _notify_state()
                     else:
                         worker_idle_cycles[role_name] = 0
 
@@ -713,7 +861,11 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
                 candidate_ready_map: Dict[str, Sequence[str]] = {}
 
                 for r_entry in roles_to_evaluate:
-                    r_name = r_entry.role_name if hasattr(r_entry, "role_name") else str(r_entry)
+                    r_name = (
+                        r_entry.role_name
+                        if hasattr(r_entry, "role_name")
+                        else str(r_entry)
+                    )
                     ready, blocked = work_mgr.compute_role_work_queue(
                         r_name,
                         dir_scope=dir_scope,
@@ -723,7 +875,9 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
                     if ready:
                         all_clean = False
                         if r_name not in active_workers:
-                            candidate_ready_map[r_name] = [item.target_file for item in ready]
+                            candidate_ready_map[r_name] = [
+                                item.target_file for item in ready
+                            ]
                     if blocked:
                         all_clean = False
                         blocked_count += len(blocked)
@@ -756,12 +910,20 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
                 # 3. Clean convergence check
                 if not active_workers and all_clean:
                     for r_entry in all_scope_roles:
-                        r_name = r_entry.role_name if hasattr(r_entry, "role_name") else str(r_entry)
-                        ws_dir = reg.compute_workspace_dir(r_name, dir_scope=dir_scope, repo_root=root)
+                        r_name = (
+                            r_entry.role_name
+                            if hasattr(r_entry, "role_name")
+                            else str(r_entry)
+                        )
+                        ws_dir = reg.compute_workspace_dir(
+                            r_name, dir_scope=dir_scope, repo_root=root
+                        )
                         if os.path.isdir(ws_dir):
                             shutil.rmtree(ws_dir, ignore_errors=True)
 
-                    total_tokens = cumulative_input + cumulative_cached + cumulative_output
+                    total_tokens = (
+                        cumulative_input + cumulative_cached + cumulative_output
+                    )
                     telemetry = subagent_coordinator.TokenUsage(
                         input_tokens=cumulative_input,
                         cached_tokens=cumulative_cached,
@@ -773,6 +935,7 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
                         f"[ORCHESTRATE] Clean convergence achieved across all roles in scope '{dir_scope}'!",
                         flush=True,
                     )
+                    _notify_state(converged=True)
                     return subagent_coordinator.OrchestrationSummary(
                         is_converged=True,
                         total_waves=wave_count,
@@ -784,7 +947,9 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
 
                 # 4. Deadlock check: no active workers, no ready roles, but blocked units remain
                 if not active_workers and not ready_roles_map:
-                    total_tokens = cumulative_input + cumulative_cached + cumulative_output
+                    total_tokens = (
+                        cumulative_input + cumulative_cached + cumulative_output
+                    )
                     telemetry = subagent_coordinator.TokenUsage(
                         input_tokens=cumulative_input,
                         cached_tokens=cumulative_cached,
@@ -796,6 +961,7 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
                         f"[ORCHESTRATE] Deadlocked: {blocked_count} units blocked on unresolved prerequisites.",
                         flush=True,
                     )
+                    _notify_state(failed=True)
                     return subagent_coordinator.OrchestrationSummary(
                         is_converged=False,
                         total_waves=wave_count,
@@ -810,18 +976,42 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
                 if wave_count < max_waves:
                     for r_name, target_paths in ready_roles_map.items():
                         if r_name not in active_workers:
-                            if effective_batch_size is not None and effective_batch_size > 0:
+                            if (
+                                effective_batch_size is not None
+                                and effective_batch_size > 0
+                            ):
                                 target_paths = target_paths[:effective_batch_size]
 
-                            ws_dir = reg.compute_workspace_dir(r_name, dir_scope=dir_scope, repo_root=root)
-                            if not os.path.isdir(ws_dir) or not os.path.isdir(os.path.join(ws_dir, "bin")):
+                            ws_dir = reg.compute_workspace_dir(
+                                r_name, dir_scope=dir_scope, repo_root=root
+                            )
+                            if not os.path.isdir(ws_dir) or not os.path.isdir(
+                                os.path.join(ws_dir, "bin")
+                            ):
                                 prov = get_singleton(provision.WorkspaceProvisioner)
-                                prov.commission(r_name, dir_scope=dir_scope, repo_root=root, model=model_name)
+                                prov.commission(
+                                    r_name,
+                                    dir_scope=dir_scope,
+                                    repo_root=root,
+                                    model=model_name,
+                                )
                             else:
                                 try:
                                     sync_svc = get_singleton(sync.WorkspaceSynchronizer)
-                                    sync_svc.pull(ws_dir, root, r_name, dir_scope=dir_scope, silent=True)
-                                    sync_svc.refresh_system_files(ws_dir, root, r_name, dir_scope=dir_scope, silent=True)
+                                    sync_svc.pull(
+                                        ws_dir,
+                                        root,
+                                        r_name,
+                                        dir_scope=dir_scope,
+                                        silent=True,
+                                    )
+                                    sync_svc.refresh_system_files(
+                                        ws_dir,
+                                        root,
+                                        r_name,
+                                        dir_scope=dir_scope,
+                                        silent=True,
+                                    )
                                 except Exception:
                                     pass
 
@@ -856,6 +1046,7 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
 
                     if dispatched_any:
                         wave_count += 1
+                        _notify_state()
                 elif not active_workers:
                     # Max waves reached and all active workers have finished
                     break
@@ -864,6 +1055,7 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
                 if active_workers:
                     time.sleep(sleep_interval)
         except (KeyboardInterrupt, SystemExit):
+            _notify_state(failed=True)
             print(
                 f"[ORCHESTRATE] Interruption received; interrupting {len(active_workers)} active worker(s) and cleaning up workspaces...",
                 flush=True,
@@ -874,8 +1066,12 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
                 except Exception:
                     pass
             for r_entry in all_scope_roles:
-                r_name = r_entry.role_name if hasattr(r_entry, "role_name") else str(r_entry)
-                ws_dir = reg.compute_workspace_dir(r_name, dir_scope=dir_scope, repo_root=root)
+                r_name = (
+                    r_entry.role_name if hasattr(r_entry, "role_name") else str(r_entry)
+                )
+                ws_dir = reg.compute_workspace_dir(
+                    r_name, dir_scope=dir_scope, repo_root=root
+                )
                 if os.path.isdir(ws_dir):
                     shutil.rmtree(ws_dir, ignore_errors=True)
             raise
@@ -907,7 +1103,10 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
                 status_message=f"Orchestration failed: {failure_msg}",
             )
 
-        print(f"[ORCHESTRATE] Maximum wave limit ({max_waves}) reached before convergence.", flush=True)
+        print(
+            f"[ORCHESTRATE] Maximum wave limit ({max_waves}) reached before convergence.",
+            flush=True,
+        )
         return subagent_coordinator.OrchestrationSummary(
             is_converged=False,
             total_waves=wave_count,
@@ -929,6 +1128,8 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
     ) -> Tuple[Optional[int], Optional[int], Optional[int]]:
         """Dynamically resolves subagent batch sizes, token limits, and unproductive round thresholds."""
         return _resolve_model_parameters(repo_root, model_name=model_name)
+
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-30T19:55:00Z
 # LAST_CHANGED: 2026-10-30T19:55:00Z

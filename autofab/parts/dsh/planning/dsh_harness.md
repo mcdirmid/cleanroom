@@ -15,16 +15,17 @@ Autonomous multi-agent execution requires reliable process management, non-block
 
 ### Contracts
 
-- A dsh harness adapter formats task prompts, evaluates server reachability, dispatches role rounds over the local RPC bridge when reachable, and falls back to dispatching headless subagent processes within the designated role workspace directory. [dispatch_dsh_subagent_round]
-- A dsh harness adapter provides non-blocking polling and awaiting of round completion via the RPC bridge or process supervision without mandatory execution timeouts, terminating active executions only when an explicit timeout limit is configured. [poll_and_await_dsh_round]
+- A dsh harness adapter formats task prompts, evaluates server reachability, dispatches role rounds over the local RPC bridge when reachable, renaming older role conversations to put `[<scope>] dead - <role>` after a replacement role conversation is issued, and falls back to dispatching headless subagent processes within the designated role workspace directory. [dispatch_dsh_subagent_round]
+- A dsh harness adapter provides non-blocking polling and awaiting of round completion via the RPC bridge or process supervision without mandatory execution timeouts, terminating active executions only when an explicit timeout limit is configured, and cancelling active executions upon interrupt without marking active role threads dead before a replacement exists. [poll_and_await_dsh_round]
 - A dsh harness adapter inspects workspace blame buffers, round logs, and pending work queues to determine blamed and submitted targets. [inspect_blame_and_submitted_targets]
 - A dsh harness adapter extracts token telemetry from DeepSeek Harness event streams or session storage archives, calculates incremental round deltas from cumulative session metrics across persistent session rounds to prevent double-counting, and calculates monetary expenditures using standard model pricing rate cards. [extract_and_calculate_token_telemetry]
 - A dsh harness adapter produces a complete role round result capturing status, submitted targets, blamed targets, failure diagnostics, token usage telemetry, and duration. [formulate_role_round_result]
+- A dsh harness adapter publishes authoritative orchestration state snapshots detailing active scopes, execution wave iterations, active running workers with session identifiers and target files, idle completed workers, dead sessions, and convergence outcomes to external coordination storage across role dispatch, round completion, and DAG convergence events. [publish_orchestration_state_snapshot]
 - A dsh harness manager installs the DeepSeek Harness adapter factory into the harness registry. [install_dsh_harness_adapter]
 
 ### Woven Contracts
 
-- When executing a role round, the harness adapter dispatches the subagent round over RPC or headless CLI, polls or awaits completion without mandatory execution timeouts, inspects blame buffers, extracts token telemetry, and formulates the role round result. [dispatch_dsh_subagent_round, poll_and_await_dsh_round, inspect_blame_and_submitted_targets, extract_and_calculate_token_telemetry, formulate_role_round_result, subagent_coordinator: [dispatch_concurrent_role_workers, poll_active_role_workers]]
+- When executing a role round, the harness adapter dispatches the subagent round over RPC or headless CLI, polls or awaits completion without mandatory execution timeouts, inspects blame buffers, extracts token telemetry, formulates the role round result, and publishes orchestration state snapshots. [dispatch_dsh_subagent_round, poll_and_await_dsh_round, inspect_blame_and_submitted_targets, extract_and_calculate_token_telemetry, formulate_role_round_result, publish_orchestration_state_snapshot, subagent_coordinator: [dispatch_concurrent_role_workers, poll_active_role_workers]]
 
 ## Grounding
 
@@ -47,7 +48,7 @@ Autonomous multi-agent execution requires reliable process management, non-block
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-21T01:00:00Z
-CHANGE: Calculate incremental round deltas from cumulative session metrics across persistent session rounds
+LAST_CHANGED: 2026-11-09T22:10:00Z
+CHANGE: Authoritative orchestration state snapshot publishing to external coordination storage
 SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->

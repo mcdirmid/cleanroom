@@ -63,7 +63,9 @@ class WorkspaceWorkManager(Singleton[AgentSessionTier], Protocol):
     def set_pending_work(self, workspace_dir: str, targets: Sequence[str]) -> None: ...
 
     # Contract: Removes a submitted target from local pending work buffer.
-    def remove_pending_target(self, workspace_dir: str, submitted_target: str) -> None: ...
+    def remove_pending_target(
+        self, workspace_dir: str, submitted_target: str
+    ) -> None: ...
 
     # Contract: Checks whether a pending target file is still dirty across local and main workspaces.
     def is_pending_target_dirty(
@@ -109,6 +111,7 @@ class WorkspaceWorkManager(Singleton[AgentSessionTier], Protocol):
         workspace_dir: str,
         role_name: Optional[str] = None,
     ) -> Sequence[str]: ...
+
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z

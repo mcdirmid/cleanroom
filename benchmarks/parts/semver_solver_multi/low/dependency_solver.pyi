@@ -86,7 +86,7 @@ class PackageRepository(Protocol):
             release: Package release publication to register.
 
         POSTCONDITIONS:
-        - MUST register the package release into the repository.
+        - [slug:dependency_solver.repo.register_release]: MUST register the package release into the repository.
         """
         ...
 
@@ -104,10 +104,10 @@ class PackageRepository(Protocol):
             PackageNotFoundError: If name is not registered in the repository.
 
         PRECONDITIONS:
-        - WHEN name is not registered, MUST raise PackageNotFoundError.
+        - [slug:dependency_solver.repo.missing_package]: WHEN name is not registered, MUST raise PackageNotFoundError.
 
         POSTCONDITIONS:
-        - MUST yield all registered releases for package name ordered by version precedence descending.
+        - [slug:dependency_solver.repo.descending_releases]: MUST yield all registered releases for package name ordered by version precedence descending.
         """
         ...
 
@@ -122,7 +122,7 @@ class PackageRepository(Protocol):
             True if the package exists, False otherwise.
 
         POSTCONDITIONS:
-        - MUST evaluate to True when package name exists in repository, and False otherwise.
+        - [slug:dependency_solver.repo.has_membership]: MUST evaluate to True when package name exists in repository, and False otherwise.
         """
         ...
 
@@ -134,7 +134,7 @@ class PackageRepository(Protocol):
             Set of registered package name strings.
 
         POSTCONDITIONS:
-        - MUST produce the set of all registered package names.
+        - [slug:dependency_solver.repo.all_names]: MUST produce the set of all registered package names.
         """
         ...
 
@@ -160,13 +160,13 @@ class DependencySolver(Protocol):
             ResolutionConflictError: If dependencies cannot be satisfied mutually or reference missing packages.
 
         PRECONDITIONS:
-        - WHEN dependency constraints are unsatisfiable, MUST raise ResolutionConflictError identifying conflicting packages.
-        - WHEN a dependency references a package absent from the repository, MUST raise ResolutionConflictError without allowing PackageNotFoundError to escape.
+        - [slug:dependency_solver.solver.unsatisfiable_conflict]: WHEN dependency constraints are unsatisfiable, MUST raise ResolutionConflictError identifying conflicting packages.
+        - [slug:dependency_solver.solver.missing_package_conflict]: WHEN a dependency references a package absent from the repository, MUST raise ResolutionConflictError without allowing PackageNotFoundError to escape.
 
         POSTCONDITIONS:
-        - MUST compute a mutually compatible version assignment satisfying all transitive package dependencies.
-        - MUST select the highest precedence compatible release for each required package.
-        - MUST produce a ResolutionOutcome containing the selected version mapping and derivation steps.
+        - [slug:dependency_solver.solver.compatible_assignment]: MUST compute a mutually compatible version assignment satisfying all transitive package dependencies.
+        - [slug:dependency_solver.solver.highest_precedence]: MUST select the highest precedence compatible release for each required package.
+        - [slug:dependency_solver.solver.derivation_report]: MUST produce a ResolutionOutcome containing the selected version mapping and derivation steps.
         """
         ...
 

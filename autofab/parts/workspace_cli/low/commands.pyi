@@ -55,7 +55,9 @@ class WorkspaceCommandHandler(Singleton[AgentSessionTier], Protocol):
 
         POSTCONDITIONS:
         - WHEN target is modified and has not been verified via check_files since modification and no_verify is False, MUST reject submission and return non-zero exit code.
-        - WHEN verification checks fail and no_verify is False, MUST reject submission and return non-zero exit code.
+        - WHEN staged blame entries exist for failing target, MUST commit staged blame to culprits, mark culprits dirty, clear staged blame buffer, and return zero exit code.
+        - WHEN caller is an auditor role and no staged blame exists for target, MUST reject submission and return non-zero exit code.
+        - WHEN verification checks fail without staged blame and no_verify is False, MUST reject submission and return non-zero exit code.
         - WHEN submission is accepted, MUST append submission message to autofab_files_ext.AUTOFAB_LOG_FILE both in the canonical repository and the local workspace root.
         - WHEN submission is accepted, MUST clear target from pending work.
         """
@@ -72,8 +74,27 @@ class WorkspaceCommandHandler(Singleton[AgentSessionTier], Protocol):
 
         POSTCONDITIONS:
         - WHEN workspace target files are modified and have not been verified via check_files since modification, MUST reject blame attribution and return non-zero exit code.
-        - WHEN critique is accepted, MUST append blame message to autofab_files_ext.AUTOFAB_LOG_FILE both in the canonical repository and the local workspace root.
-        - WHEN critique is accepted, MUST clear target from pending work.
+        - WHEN caller role is configured and culprit role is neither in caller's feedback_role_deps nor star_feedback_role_deps, MUST reject blame attribution and return non-zero exit code.
+        - WHEN structured blame experiment is active and critique fails structured blame validation (specification slug grounding in low specifications, violation taxonomy, facet noun phrase constraints, or symbol embargo), MUST reject blame attribution and return non-zero exit code.
+        - MUST stage blame entry into workspace staged blame buffer rather than immediately committing attribution.
+        """
+        ...
+
+    @operation
+    def run_reject(
+        self,
+        file_path: str,
+        reason: str,
+        repo_root: Optional[str] = None,
+    ) -> int:
+        """Rejects active feedback on an unmodified target file and scrubs feedback from header.
+
+        POSTCONDITIONS:
+        - WHEN target file is modified since receiving feedback, MUST reject and return non-zero exit code.
+        - WHEN target file has no active feedback in header, MUST reject and return non-zero exit code.
+        - WHEN rejection is accepted, MUST scrub feedback header from target file.
+        - WHEN rejection is accepted, MUST record rejection into autofab_files_ext.BLAME_BUFFER_FILE and append to autofab_files_ext.AUTOFAB_LOG_FILE.
+        - WHEN rejection is accepted, MUST clear target from pending work.
         """
         ...
 
@@ -132,7 +153,7 @@ class WorkspaceCommandHandler(Singleton[AgentSessionTier], Protocol):
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-10-14T17:50:00Z
-# CHANGE: Define commands low-level interface specification
+# LAST_CHANGED: 2026-11-07T10:20:00Z
+# CHANGE: Define reject operation and stage-and-commit submit postconditions with auditor blame requirement
 # SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---

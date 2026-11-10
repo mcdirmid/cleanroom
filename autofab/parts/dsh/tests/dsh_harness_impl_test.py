@@ -93,18 +93,23 @@ class FakeDshTelemetryParser:
     def __init__(self, server_available: bool = True, fail_rpc: bool = False) -> None:
         self.server_available = server_available
         self.fail_rpc = fail_rpc
+        self.next_session_id: Optional[str] = None
         self.dispatched: list[dict[str, Any]] = []
         self.polled_handles: list[str] = []
-        self.round_status: dsh_telemetry.DshRpcRoundStatus = dsh_telemetry.DshRpcRoundStatus(
-            is_active=False,
-            is_completed=True,
-            metrics=dsh_telemetry.DshSessionTokenMetrics(
-                input_tokens=600,
-                cached_tokens=200,
-                output_tokens=150,
-                total_tokens=950,
-                cost_usd=0.0001,
-            ),
+        self.renamed: list[tuple[str, str]] = []
+        self.deleted: list[str] = []
+        self.round_status: dsh_telemetry.DshRpcRoundStatus = (
+            dsh_telemetry.DshRpcRoundStatus(
+                is_active=False,
+                is_completed=True,
+                metrics=dsh_telemetry.DshSessionTokenMetrics(
+                    input_tokens=600,
+                    cached_tokens=200,
+                    output_tokens=150,
+                    total_tokens=950,
+                    cost_usd=0.0001,
+                ),
+            )
         )
 
     @property
@@ -130,14 +135,16 @@ class FakeDshTelemetryParser:
     ) -> Optional[str]:
         if not self.server_available or self.fail_rpc:
             return None
-        sid = session_id or f"mock-sid-{role_name}"
-        self.dispatched.append({
-            "workspace_dir": workspace_dir,
-            "role_name": role_name,
-            "prompt_text": prompt_text,
-            "session_id": sid,
-            "dir_scope": dir_scope,
-        })
+        sid = self.next_session_id or session_id or f"mock-sid-{role_name}"
+        self.dispatched.append(
+            {
+                "workspace_dir": workspace_dir,
+                "role_name": role_name,
+                "prompt_text": prompt_text,
+                "session_id": sid,
+                "dir_scope": dir_scope,
+            }
+        )
         return f"dsh_rpc::{sid}::mock-msg-1"
 
     dispatch_turn_rpc = dispatch_round_rpc
@@ -177,6 +184,30 @@ class FakeDshTelemetryParser:
     ) -> None:
         pass
 
+    def rename_session(
+        self,
+        session_id: str,
+        title: str,
+        sessions_dir: Optional[str] = None,
+    ) -> bool:
+        self.renamed.append((session_id, title))
+        return True
+
+    def delete_session(
+        self,
+        session_id: str,
+        sessions_dir: Optional[str] = None,
+    ) -> bool:
+        self.deleted.append(session_id)
+        return True
+
+    def cleanup_scope_sessions(
+        self,
+        dir_scope: str,
+        sessions_dir: Optional[str] = None,
+    ) -> int:
+        return 0
+
 
 class DshHarnessImplTest(unittest.TestCase):
     """Test cases for DshTelemetryParser, DshHarnessAdapter, and DshHarnessManager."""
@@ -206,6 +237,7 @@ class DshHarnessImplTest(unittest.TestCase):
 
     def tearDown(self) -> None:
         shutil.rmtree(self.test_dir, ignore_errors=True)
+
     def test_dispatch_and_await_clean_round_in_simulation(self) -> None:
         """Requirement: MUST execute round and return clean status when work is completed."""
         with enter_phase(agent_session.agent_session, registry=self.registry):
@@ -215,7 +247,9 @@ class DshHarnessImplTest(unittest.TestCase):
             )
 
             # Setup pending work before round
-            self.work_mgr.set_pending_work(self.test_dir, ["high/unit_a.md", "high/unit_b.md"])
+            self.work_mgr.set_pending_work(
+                self.test_dir, ["high/unit_a.md", "high/unit_b.md"]
+            )
 
             dispatch = subagent_coordinator.RoleDispatch(
                 role_name="high",
@@ -321,6 +355,54 @@ class DshHarnessImplTest(unittest.TestCase):
             # Failure MUST reset session ID
             self.assertFalse(os.path.exists(sess_file))
 
+    def test_worker_session_recycling_after_n_rounds(self) -> None:
+        """Requirement: MUST recycle session ID and baselines after N=4 completed rounds."""
+        with enter_phase(agent_session.agent_session, registry=self.registry):
+            adapter = DshHarnessAdapter(
+                model_name="DeepSeek-V41-Flash",
+                simulation_mode=True,
+                max_rounds_per_worker=4,
+            )
+
+            state_dir = app_info.resolve_state_dir(self.test_dir)
+            os.makedirs(state_dir, exist_ok=True)
+            sess_file = os.path.join(state_dir, "dsh_session_id.txt")
+
+            dispatch = subagent_coordinator.RoleDispatch(
+                role_name="lib",
+                workspace_dir=self.test_dir,
+                dir_scope="//pkg",
+                ready_targets=("lib/unit_a.py",),
+                batch_size=1,
+                task_prompt="",
+            )
+
+            # Rounds 1 to 3: session persists
+            for i in range(1, 4):
+                self.work_mgr.set_pending_work(self.test_dir, ["lib/unit_a.py"])
+                with open(sess_file, "w", encoding="utf-8") as f:
+                    f.write("persistent-session-456\n")
+                handle = adapter.dispatch_role(dispatch)
+                self.work_mgr.remove_pending_target(self.test_dir, "lib/unit_a.py")
+                res = adapter.await_role(handle)
+                self.assertEqual(res.status, "clean")
+                self.assertTrue(
+                    os.path.exists(sess_file), f"Session should persist at round {i}"
+                )
+                self.assertEqual(adapter._worker_round_counts[self.test_dir], i)
+
+            # Round 4: completes round 4 and recycles session (removes session file and resets count to 0)
+            self.work_mgr.set_pending_work(self.test_dir, ["lib/unit_a.py"])
+            handle = adapter.dispatch_role(dispatch)
+            self.work_mgr.remove_pending_target(self.test_dir, "lib/unit_a.py")
+            res = adapter.await_role(handle)
+            self.assertEqual(res.status, "clean")
+            self.assertFalse(
+                os.path.exists(sess_file),
+                "Session must be recycled and removed after round 4",
+            )
+            self.assertEqual(adapter._worker_round_counts[self.test_dir], 0)
+
     def test_poll_role_in_simulation(self) -> None:
         """Requirement: MUST return completed turn result immediately in simulation mode."""
         with enter_phase(agent_session.agent_session, registry=self.registry):
@@ -356,8 +438,8 @@ class DshHarnessImplTest(unittest.TestCase):
             parser = mgr.get_telemetry_parser()
             self.assertIsNotNone(parser)
 
-    def test_format_task_prompt_auditor_versus_author(self) -> None:
-        """Requirement: MUST tailor task prompts distinguishing auditor from author roles."""
+    def test_format_task_prompt_concise_directives(self) -> None:
+        """Requirement: MUST format concise task prompts with AGENTS.md and get_work directives."""
         with enter_phase(agent_session.agent_session, registry=self.registry):
             adapter = DshHarnessAdapter(simulation_mode=True)
             auditor_dispatch = subagent_coordinator.RoleDispatch(
@@ -373,9 +455,10 @@ class DshHarnessImplTest(unittest.TestCase):
             prompt_file = os.path.join(log_dir, f".dsh_prompt_{task_handle}.md")
             with open(prompt_file, "r", encoding="utf-8") as f:
                 prompt = f.read()
-            self.assertIn("Auditor", prompt)
-            self.assertIn("AGENTS.md", prompt)
-            self.assertIn("bin/get_work", prompt)
+            self.assertEqual(
+                prompt,
+                "1. Read `AGENTS.md` if not already in context.\n2. Run `bin/get_work`.\n",
+            )
 
     def test_format_task_prompt_incorporates_coordinator_reminder(self) -> None:
         """Requirement: MUST incorporate coordinator reminder directive into task prompt."""
@@ -394,8 +477,11 @@ class DshHarnessImplTest(unittest.TestCase):
             prompt_file = os.path.join(log_dir, f".dsh_prompt_{task_handle}.md")
             with open(prompt_file, "r", encoding="utf-8") as f:
                 prompt = f.read()
-            self.assertIn("## Coordinator Directive / Action Required", prompt)
-            self.assertIn("CRITICAL REMINDER: The previous round concluded without submitting.", prompt)
+            self.assertIn("Directive:", prompt)
+            self.assertIn(
+                "CRITICAL REMINDER: The previous round concluded without submitting.",
+                prompt,
+            )
 
     def test_registering_dsh_harness_factory(self) -> None:
         """Scenario 7: Installs DeepSeek Harness adapter factory into HarnessRegistry."""
@@ -470,7 +556,9 @@ class DshHarnessImplTest(unittest.TestCase):
         orig_env = dict(os.environ)
         try:
             # 1. Explicit sessions_dir argument initializes cleanly
-            adapter1 = DshHarnessAdapter(sessions_dir="/custom/sessions/path", simulation_mode=True)
+            adapter1 = DshHarnessAdapter(
+                sessions_dir="/custom/sessions/path", simulation_mode=True
+            )
             self.assertIsNotNone(adapter1)
 
             # 2. DSH_SESSIONS_DIR env var
@@ -529,7 +617,9 @@ class DshHarnessImplTest(unittest.TestCase):
         """Scenario 5: Non-blocking polling over RPC bridge returns None while active and result when completed."""
         with enter_phase(agent_session.agent_session, registry=self.registry):
             fake_parser = FakeDshTelemetryParser(server_available=True)
-            fake_parser.round_status = dsh_telemetry.DshRpcRoundStatus(is_active=True, is_completed=False)
+            fake_parser.round_status = dsh_telemetry.DshRpcRoundStatus(
+                is_active=True, is_completed=False
+            )
             adapter = DshHarnessAdapter(
                 model_name="DeepSeek-V41-Flash",
                 simulation_mode=False,
@@ -554,7 +644,9 @@ class DshHarnessImplTest(unittest.TestCase):
             fake_parser.round_status = dsh_telemetry.DshRpcRoundStatus(
                 is_active=False,
                 is_completed=True,
-                metrics=dsh_telemetry.DshSessionTokenMetrics(input_tokens=100, total_tokens=100),
+                metrics=dsh_telemetry.DshSessionTokenMetrics(
+                    input_tokens=100, total_tokens=100
+                ),
             )
             self.work_mgr.remove_pending_target(self.test_dir, "lib/foo.py")
             res_done = adapter.poll_role(handle)
@@ -611,9 +703,14 @@ class DshHarnessImplTest(unittest.TestCase):
                 handle = adapter.dispatch_role(dispatch)
             result = adapter.await_role(handle)
             self.assertEqual(result.status, "failed")
-            self.assertIn("DeepSeek Harness Desktop RPC is unavailable after retries", result.failure_reason or "")
+            self.assertIn(
+                "DeepSeek Harness Desktop RPC is unavailable after retries",
+                result.failure_reason or "",
+            )
 
-    def test_dispatch_role_prompt_includes_agents_md_and_guide_without_disk_pending_write(self) -> None:
+    def test_dispatch_role_prompt_includes_agents_md_and_guide_without_disk_pending_write(
+        self,
+    ) -> None:
         """Requirement: MUST include AGENTS.md reminder, companion guide, and avoid pre-writing pending work to disk."""
         with enter_phase(agent_session.agent_session, registry=self.registry):
             fake_parser = FakeDshTelemetryParser(server_available=True)
@@ -636,7 +733,9 @@ class DshHarnessImplTest(unittest.TestCase):
             self.assertTrue(handle.startswith("dsh_lib_"))
 
             # Verify no pending work file was written on disk
-            pending_file = os.path.join(self.test_dir, app_info.DEFAULT_PENDING_WORK_FILE)
+            pending_file = os.path.join(
+                self.test_dir, app_info.DEFAULT_PENDING_WORK_FILE
+            )
             self.assertFalse(os.path.isfile(pending_file))
 
             # Verify prompt contents in dispatched RPC
@@ -669,14 +768,20 @@ class DshHarnessImplTest(unittest.TestCase):
             os.makedirs(scoped_dir, exist_ok=True)
             scoped_log = os.path.join(scoped_dir, app_info.DEFAULT_LOG_FILE)
             with open(scoped_log, "w", encoding="utf-8") as f:
-                f.write("[CHANGE] benchmarks/parts/foo/tests/foo_test.py: Added unit tests\n")
+                f.write(
+                    "[CHANGE] benchmarks/parts/foo/tests/foo_test.py: Added unit tests\n"
+                )
 
             result = adapter.await_role(handle)
             self.assertEqual(result.role, "test")
             self.assertEqual(result.status, "clean")
-            self.assertIn("benchmarks/parts/foo/tests/foo_test.py", result.submitted_targets)
+            self.assertIn(
+                "benchmarks/parts/foo/tests/foo_test.py", result.submitted_targets
+            )
 
-    def test_await_role_matches_clean_and_submitted_and_audit_action_records(self) -> None:
+    def test_await_role_matches_clean_and_submitted_and_audit_action_records(
+        self,
+    ) -> None:
         """Scenario 2: MUST parse [CLEAN], [SUBMITTED], and [AUDIT] action records into submitted_targets."""
         with enter_phase(agent_session.agent_session, registry=self.registry):
             adapter = DshHarnessAdapter(
@@ -688,7 +793,11 @@ class DshHarnessImplTest(unittest.TestCase):
                 role_name="lib",
                 workspace_dir=self.test_dir,
                 dir_scope="//pkg",
-                ready_targets=("lib/clean_target.py", "lib/sub_target.py", "lib/audit_target.py"),
+                ready_targets=(
+                    "lib/clean_target.py",
+                    "lib/sub_target.py",
+                    "lib/audit_target.py",
+                ),
                 batch_size=3,
                 task_prompt="",
             )
@@ -730,7 +839,9 @@ class DshHarnessImplTest(unittest.TestCase):
 
             # Simulate worker running bin/get_work and bin/submit target1.py
             # leaving only target2.py in pending work file
-            pending_file = os.path.join(self.test_dir, app_info.DEFAULT_PENDING_WORK_FILE)
+            pending_file = os.path.join(
+                self.test_dir, app_info.DEFAULT_PENDING_WORK_FILE
+            )
             with open(pending_file, "w", encoding="utf-8") as f:
                 json.dump({"targets": ["lib/target2.py"]}, f)
             self.work_mgr.set_pending_work(self.test_dir, ["lib/target2.py"])
@@ -890,13 +1001,30 @@ class DshHarnessImplTest(unittest.TestCase):
             # Interrupt the role
             adapter.interrupt_role(handle)
 
+            # Verifies session is NOT renamed to dead on interrupt (replacement does not exist yet)
+            dead_renames = [r for r in fake_parser.renamed if "dead" in r[1]]
+            self.assertEqual(len(dead_renames), 0)
+
             # On subsequent poll, task is immediately harvested despite parser reporting active
             res = adapter.poll_role(handle)
             self.assertIsNotNone(res)
             assert res is not None
             self.assertEqual(res.role, "lib")
 
-    def test_await_role_ignores_historical_event_log_lines_prior_to_dispatch(self) -> None:
+            # Dispatch replacement session for the role
+            fake_parser.next_session_id = "mock-sid-replacement"
+            new_handle = adapter.dispatch_role(dispatch)
+
+            # Verifies previous session is now renamed to dead after replacement is issued
+            dead_renames = [r for r in fake_parser.renamed if "dead" in r[1]]
+            self.assertTrue(len(dead_renames) > 0)
+            self.assertEqual(dead_renames[-1][0], "mock-sid-lib")
+            self.assertIn("dead - lib", dead_renames[-1][1])
+            self.assertIn("[pkg]", dead_renames[-1][1])
+
+    def test_await_role_ignores_historical_event_log_lines_prior_to_dispatch(
+        self,
+    ) -> None:
         """Requirement: MUST ignore action records in candidate event logs written prior to dispatch."""
         with enter_phase(agent_session.agent_session, registry=self.registry):
             event_log = os.path.join(self.test_dir, app_info.DEFAULT_LOG_FILE)
@@ -952,14 +1080,59 @@ class DshHarnessImplTest(unittest.TestCase):
             resolved = _resolve_default_sessions_dir()
             self.assertNotEqual(resolved, dsh_web_cand)
 
+    def test_update_orchestration_state(self) -> None:
+        """Verifies update_orchestration_state writes authoritative state snapshot."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            state_file = os.path.join(tmp_dir, "autofab_state.json")
+            with patch.dict(os.environ, {"AUTOFAB_STATE_FILE": state_file}):
+                adapter = DshHarnessAdapter(simulation_mode=True)
+                adapter._active_role_sessions[("scope_test", "role_a")] = (
+                    "sid_role_a_123"
+                )
+                adapter._dead_role_sessions["scope_test"] = [
+                    {"sessionId": "sid_old_1", "role": "role_a", "reason": "superseded"}
+                ]
+
+                adapter.update_orchestration_state(
+                    dir_scope="scope_test",
+                    wave_count=2,
+                    active_workers={"role_a": "h_1"},
+                    assigned_targets={"role_a": ["parts/a/lib/a.py"]},
+                    all_scope_roles=["role_a", "role_b"],
+                    converged=False,
+                    failed=False,
+                )
+
+                self.assertTrue(os.path.isfile(state_file))
+                with open(state_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+
+                self.assertEqual(data.get("activeScope"), "scope_test")
+                scope_data = data["scopes"]["scope_test"]
+                self.assertEqual(scope_data.get("wave"), 2)
+                self.assertEqual(scope_data.get("status"), "running")
+                self.assertFalse(scope_data.get("converged"))
+
+                role_a = scope_data["roles"]["role_a"]
+                self.assertEqual(role_a.get("sessionId"), "sid_role_a_123")
+                self.assertEqual(role_a.get("status"), "running")
+                self.assertEqual(role_a.get("targets"), ["parts/a/lib/a.py"])
+
+                role_b = scope_data["roles"]["role_b"]
+                self.assertEqual(role_b.get("status"), "idle")
+
+                dead_sessions = scope_data.get("deadSessions", [])
+                self.assertEqual(len(dead_sessions), 1)
+                self.assertEqual(dead_sessions[0].get("sessionId"), "sid_old_1")
+
 
 if __name__ == "__main__":
     unittest.main()
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-30T19:50:00Z
-# LAST_CHANGED: 2026-11-05T21:55:00Z
-# CHANGE: Add test verifying _resolve_default_sessions_dir gating on AUTOFAB_DSH_WEB==1
+# LAST_CHANGED: 2026-11-09T22:10:00Z
+# CHANGE: Test update_orchestration_state snapshot persistence
 # COVERAGE_AUDIT: 2026-10-18T19:13:51Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

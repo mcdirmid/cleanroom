@@ -24,9 +24,9 @@ The *dsh harness manager* of an agent session creates and manages DeepSeek Harne
 
 When executing a role round:
 
-- The dsh harness adapter formats task prompts, evaluates whether an active DeepSeek Harness server or Desktop application is reachable over the local RPC bridge, dispatches the round over the RPC bridge when reachable to stream real-time progress to the Desktop UI without file lock contention, and falls back to dispatching headless subagent processes within the designated role workspace directory when unreachable.
+- The dsh harness adapter formats task prompts, evaluates whether an active DeepSeek Harness server or Desktop application is reachable over the local RPC bridge, dispatches the round over the RPC bridge when reachable to stream real-time progress to the Desktop UI without file lock contention, renaming older role conversations to put `[<scope>] dead - <role>` (e.g. `[benchmark_N] dead - <role>`) after a new replacement role conversation is issued to distinguish active role threads from obsolete ones without marking threads dead before their replacement exists, and falls back to dispatching headless subagent processes within the designated role workspace directory when unreachable.
 
-- The dsh harness adapter provides non-blocking polling and awaiting of round completion via the RPC bridge or process supervision without mandatory execution timeouts, terminating active executions only when an explicit timeout limit is configured.
+- The dsh harness adapter provides non-blocking polling and awaiting of round completion via the RPC bridge or process supervision without mandatory execution timeouts, terminating active executions only when an explicit timeout limit is configured, and cancelling active executions upon interrupt without marking active role threads as dead before a replacement exists.
 
 - The dsh harness adapter inspects workspace blame buffers, round execution logs, and pending work queues to determine blamed and submitted targets.
 
@@ -34,9 +34,11 @@ When executing a role round:
 
 - The dsh harness adapter produces a complete role round result capturing status, submitted targets, blamed targets, failure diagnostics, token usage telemetry, and duration.
 
+- The dsh harness adapter publishes authoritative orchestration state snapshots detailing active scopes, execution wave iterations, active running workers with session identifiers and target files, idle completed workers, dead sessions, and convergence outcomes to external coordination storage across role dispatch, round completion, and DAG convergence events.
+
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-20T22:50:00Z
-LAST_CHANGED: 2026-10-21T01:00:00Z
-CHANGE: Calculate incremental round deltas from cumulative session metrics across persistent session rounds
+LAST_CHANGED: 2026-11-09T22:10:00Z
+CHANGE: Authoritative orchestration state snapshot publishing to external coordination storage
 SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->

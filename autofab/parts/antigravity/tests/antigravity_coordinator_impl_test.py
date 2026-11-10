@@ -73,7 +73,9 @@ class AntigravityCoordinatorImplTest(unittest.TestCase):
             self.assertIn("PreToolUse", hooks_data["checkpoint-pre-edit"])
             pre_tool = hooks_data["checkpoint-pre-edit"]["PreToolUse"][0]
             self.assertEqual(pre_tool["matcher"], "edit_file|write_file")
-            self.assertEqual(pre_tool["hooks"][0]["command"], "./bin/checkpoint pre-edit")
+            self.assertEqual(
+                pre_tool["hooks"][0]["command"], "./bin/checkpoint pre-edit"
+            )
 
     def test_configure_workspace_auditor_rules_and_hooks(self) -> None:
         """Auditor role workspace configures deny hooks and zero file-editing permissions."""
@@ -90,7 +92,9 @@ class AntigravityCoordinatorImplTest(unittest.TestCase):
             with open(rule_file, "r", encoding="utf-8") as f:
                 content = f.read()
             self.assertIn("Zero File-Editing Permissions", content)
-            self.assertIn("strictly forbidden from creating, modifying, editing", content)
+            self.assertIn(
+                "strictly forbidden from creating, modifying, editing", content
+            )
 
             hooks_file = os.path.join(self.test_dir, ".agents", "hooks.json")
             with open(hooks_file, "r", encoding="utf-8") as f:
@@ -99,7 +103,10 @@ class AntigravityCoordinatorImplTest(unittest.TestCase):
             self.assertNotIn("checkpoint-pre-edit", hooks_data)
             pre_tool = hooks_data["deny-edits-auditor"]["PreToolUse"][0]
             self.assertEqual(pre_tool["matcher"], "edit_file|write_file")
-            self.assertIn("Auditor roles have zero file-editing permissions", pre_tool["hooks"][0]["command"])
+            self.assertIn(
+                "Auditor roles have zero file-editing permissions",
+                pre_tool["hooks"][0]["command"],
+            )
 
     def test_generate_coordinator_skill(self) -> None:
         """Scenario 1 & 2: Verifies skill generation and workspace pinning requirements."""
@@ -115,7 +122,9 @@ class AntigravityCoordinatorImplTest(unittest.TestCase):
 
             skill_doc = generator.generate_coordinator_skill(dir_scope="pkg_a")
             self.assertEqual(skill_doc.name, app_info.get_coordinator_skill_name())
-            self.assertIn(f"name: {app_info.get_coordinator_skill_name()}", skill_doc.frontmatter)
+            self.assertIn(
+                f"name: {app_info.get_coordinator_skill_name()}", skill_doc.frontmatter
+            )
             self.assertIn("NO CODE CUSTODY", skill_doc.content)
             self.assertIn("STRICT BOUNDARY INVARIANT", skill_doc.content)
             self.assertIn("Workspace: inherit", skill_doc.content)
@@ -157,9 +166,16 @@ class AntigravityCoordinatorImplTest(unittest.TestCase):
                 ready_targets=("tests/foo_test.py",),
                 task_prompt="CRITICAL REMINDER: Unresolved targets must be concluded.",
             )
-            spec_reminder = generator.format_dispatch_directive(dispatch_with_reminder, model="flash")
-            self.assertIn("CRITICAL REMINDER: Unresolved targets must be concluded.", spec_reminder.prompt)
-            self.assertIn(f"Execute autonomous {app_info.APP_TITLE} round", spec_reminder.prompt)
+            spec_reminder = generator.format_dispatch_directive(
+                dispatch_with_reminder, model="flash"
+            )
+            self.assertIn(
+                "CRITICAL REMINDER: Unresolved targets must be concluded.",
+                spec_reminder.prompt,
+            )
+            self.assertIn(
+                f"Execute autonomous {app_info.APP_TITLE} round", spec_reminder.prompt
+            )
 
     def test_parse_wake_notification_json(self) -> None:
         """Scenario 4: Verifies parsing structured JSON wake notification message."""

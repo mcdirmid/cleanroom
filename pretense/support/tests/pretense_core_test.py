@@ -63,14 +63,20 @@ def test_fake_zero_ambiguity_and_dispatch():
     proto = StateMachineProto[DummyState]()
 
     @proto.transition(DummyTarget.add_item)
-    def add_fresh_item(): pass
+    def add_fresh_item():
+        pass
 
     @add_fresh_item.require
     def _(state: DummyState, this) -> bool:
         return len(state.items) < 100
 
     @add_fresh_item.arguments
-    def _(state: DummyState, this: object, item_id: str | NotBoundType = NotBound, tags: Set[str] | NotBoundType = NotBound) -> Optional[Tuple[str, Set[str]]]:
+    def _(
+        state: DummyState,
+        this: object,
+        item_id: str | NotBoundType = NotBound,
+        tags: Set[str] | NotBoundType = NotBound,
+    ) -> Optional[Tuple[str, Set[str]]]:
         if isinstance(item_id, NotBoundType):
             resolved_id = "fresh_item"
         elif item_id in state.items:
@@ -85,11 +91,19 @@ def test_fake_zero_ambiguity_and_dispatch():
         return resolved_id, resolved_tags
 
     @add_fresh_item.returns
-    def _(state: DummyState, this: object, item_id: str, tags: Set[str], outcome: object = NotBound):
+    def _(
+        state: DummyState,
+        this: object,
+        item_id: str,
+        tags: Set[str],
+        outcome: object = NotBound,
+    ):
         return None
 
     @add_fresh_item.provide
-    def _(state: DummyState, this: object, item_id: str, tags: Set[str], result: None) -> None:
+    def _(
+        state: DummyState, this: object, item_id: str, tags: Set[str], result: None
+    ) -> None:
         state.items.add(item_id)
 
     # 1. Success dispatch
@@ -108,14 +122,16 @@ def test_fake_ambiguity_detection():
 
     # Two transitions with identical match profiles
     @proto.transition(DummyTarget.add_item)
-    def branch_one(): pass
+    def branch_one():
+        pass
 
     @branch_one.arguments
     def _(state, this, item_id=NotBound, tags=NotBound):
         return "x", set()
 
     @proto.transition(DummyTarget.add_item)
-    def branch_two(): pass
+    def branch_two():
+        pass
 
     @branch_two.arguments
     def _(state, this, item_id=NotBound, tags=NotBound):
@@ -132,7 +148,8 @@ def test_fake_exception_handling_bypasses_provide():
     provide_executed = False
 
     @proto.transition(DummyTarget.add_item)
-    def fail_transition(): pass
+    def fail_transition():
+        pass
 
     @fail_transition.returns
     def _(state, this, *args, outcome=NotBound):
@@ -164,10 +181,16 @@ def test_hypothesis_compilation_and_execution():
     proto = StateMachineProto[DummyState]()
 
     @proto.transition(RealTarget.add_item)
-    def add_fresh(): pass
+    def add_fresh():
+        pass
 
     @add_fresh.arguments
-    def _(state: DummyState, this: object, item_id: str | NotBoundType = NotBound, tags: Set[str] | NotBoundType = NotBound):
+    def _(
+        state: DummyState,
+        this: object,
+        item_id: str | NotBoundType = NotBound,
+        tags: Set[str] | NotBoundType = NotBound,
+    ):
         if item_id is NotBound:
             item_id = f"item_{len(state.items)}"
         return item_id, set()
@@ -240,5 +263,3 @@ def test_pretense_cli_target_timeout(tmp_path):
     assert "execution timed out after 0.5s" in proc.stderr
     assert "infinite loop or deadlock detected" in proc.stderr
     assert "Thread stack trace at timeout" in proc.stderr
-
-

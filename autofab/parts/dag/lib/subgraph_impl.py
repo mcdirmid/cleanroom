@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Dict, List, Optional, Sequence, Set
 
 from support.lib.lifecycle import (
-
     LifecycleRegistry,
     Singleton,
     SystemTier,
@@ -201,6 +200,8 @@ class DagSubgraph(subgraph.DagSubgraph):
                 raise RuntimeError(
                     f"Node visit limit exceeded ({visit_limit}) for node '{node.unit_address}:{node.role_address}'"
                 )
+
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-11T04:59:23Z

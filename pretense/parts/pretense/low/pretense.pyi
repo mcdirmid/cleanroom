@@ -208,6 +208,13 @@ class require_arg(Generic[T]):
         error: Optional[Union[Type[BaseException], BaseException]] = None,
     ) -> None: ...
     @overload
+    def __init__(
+        self,
+        val: T,
+        domain: Domain[T],
+        preferred: Union[Type[BaseException], BaseException],
+    ) -> None: ...
+    @overload
     def __call__(
         self,
         val: Sequence[E],
@@ -230,6 +237,13 @@ class require_arg(Generic[T]):
         domain: Domain[T],
         preferred: Optional[Sequence[T]] = None,
         error: Optional[Union[Type[BaseException], BaseException]] = None,
+    ) -> None: ...
+    @overload
+    def __call__(
+        self,
+        val: T,
+        domain: Domain[T],
+        preferred: Union[Type[BaseException], BaseException],
     ) -> None: ...
 
 
@@ -637,6 +651,8 @@ class CheckedAdapter:
         state_machine: Any,
         real_instance: Optional[Any] = None,
     ) -> None: ...
+
+    def violating(self, exc_type: Optional[Type[BaseException]] = None, match: str = "") -> Any: ...
 
     def __getattr__(self, name: str) -> Any: ...
 

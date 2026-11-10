@@ -67,7 +67,13 @@ class MockWorkScheduler:
 class MockSubmissionCoordinator:
     tier = agent_session.agent_session
 
-    def submit_target(self, target_node, change_summary=None, has_modifications=False, in_batch_dependencies=None):
+    def submit_target(
+        self,
+        target_node,
+        change_summary=None,
+        has_modifications=False,
+        in_batch_dependencies=None,
+    ):
         return submit.SubmissionOutcome(accepted=True, message="Target submitted.")
 
 
@@ -77,7 +83,14 @@ class MockAttributionCoordinator:
     def __init__(self) -> None:
         self.last_blame: Any = None
 
-    def blame_target(self, source_node, blame_target_node, explanation, in_batch_dependencies=None, in_batch_dependents=None):
+    def blame_target(
+        self,
+        source_node,
+        blame_target_node,
+        explanation,
+        in_batch_dependencies=None,
+        in_batch_dependents=None,
+    ):
         self.last_blame = (source_node, blame_target_node, explanation)
         return attribution.AttributionOutcome(
             accepted=True, message="Blame recorded", affected_nodes=[source_node]
@@ -181,7 +194,9 @@ class ControlCoordinateImplTest(unittest.TestCase):
             self.assertEqual(len(self.coordinator.open_targets), 1)
             self.assertEqual(len(self.mock_storage.materialized), 1)
             self.assertEqual(self.mock_storage.materialized[0], schedule.tasks[0].node)
-            self.assertEqual(list(self.mock_role_config.nodes), [schedule.tasks[0].node])
+            self.assertEqual(
+                list(self.mock_role_config.nodes), [schedule.tasks[0].node]
+            )
 
     def test_dispatch_check_files_all_work(self) -> None:
         with enter_phase(agent_session.agent_session, registry=self.registry):
@@ -196,6 +211,7 @@ class ControlCoordinateImplTest(unittest.TestCase):
                 change_summary="Fixed", has_modifications=True
             )
             self.assertTrue(outcome.success)
+
     def test_get_node_for_alias_with_file_proxy(self) -> None:
         node_lib = dag_storage.DagNode(
             unit_address=dag_storage.UnitAddress("parts/foo:my_widget"),
@@ -260,7 +276,9 @@ class ControlCoordinateImplTest(unittest.TestCase):
             self.assertTrue(outcome.success)
             self.assertEqual(len(self.coordinator.open_targets), 0)
 
-    def test_dispatch_blame_resolves_when_alias_matches_source_node_via_file_proxy(self) -> None:
+    def test_dispatch_blame_resolves_when_alias_matches_source_node_via_file_proxy(
+        self,
+    ) -> None:
         source_node = dag_storage.DagNode(
             unit_address=dag_storage.UnitAddress("parts/foo:bar"),
             role_address=dag_storage.RoleAddress("qa"),
@@ -302,8 +320,9 @@ class ControlCoordinateImplTest(unittest.TestCase):
             self.assertTrue(outcome.success)
             self.assertEqual(len(self.coordinator.open_targets), 0)
 
-
-    def test_dispatch_blame_rejects_self_blame_without_leaking_bazel_target(self) -> None:
+    def test_dispatch_blame_rejects_self_blame_without_leaking_bazel_target(
+        self,
+    ) -> None:
         source_node = dag_storage.DagNode(
             unit_address=dag_storage.UnitAddress("parts/foo:bar"),
             role_address=dag_storage.RoleAddress("qa"),
@@ -318,7 +337,9 @@ class ControlCoordinateImplTest(unittest.TestCase):
             )
             self.assertFalse(outcome.success)
             self.assertNotIn("//", outcome.message)
-            self.assertIn("could not be resolved to an upstream dependency", outcome.message)
+            self.assertIn(
+                "could not be resolved to an upstream dependency", outcome.message
+            )
 
 
 if __name__ == "__main__":

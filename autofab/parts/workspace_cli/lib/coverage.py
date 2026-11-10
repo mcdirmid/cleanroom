@@ -89,6 +89,7 @@ class CoverageEvaluator(Singleton[SystemTier], Protocol):
         max_spans: Optional[int] = None,
     ) -> ModuleCoverage: ...
 
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-11T05:20:45Z

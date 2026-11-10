@@ -67,6 +67,7 @@ class AttributionCoordinator(Singleton[AgentSessionTier], Protocol):
         self, node: dag_storage.DagNode, val: Any, val_str: str
     ) -> Optional[file_alias.BoundFile]: ...
 
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-06T10:45:00Z

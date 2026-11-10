@@ -43,8 +43,8 @@ class TaskQueue(Protocol):
             QueueUnavailableException: If the task queue is unavailable.
 
         POSTCONDITIONS:
-        - WHEN queue is unavailable, MUST raise QueueUnavailableException.
-        - WHEN queue is available, MUST append task to queue tail and increment pending_count by 1.
+        - [slug:task_queue.submit.unavailable_queue]: WHEN queue is unavailable, MUST raise QueueUnavailableException.
+        - [slug:task_queue.submit.append_task]: WHEN queue is available, MUST append task to queue tail and increment pending_count by 1.
         """
         ...
 
@@ -60,11 +60,11 @@ class TaskQueue(Protocol):
             QueueUnavailableException: If the task queue is unavailable.
 
         PRECONDITIONS:
-        - WHEN pending_count equals 0, MUST raise QueueEmptyError.
+        - [slug:task_queue.dispatch.empty_queue]: WHEN pending_count equals 0, MUST raise QueueEmptyError.
 
         POSTCONDITIONS:
-        - WHEN queue is unavailable, MUST raise QueueUnavailableException.
-        - WHEN pending_count is greater than 0, MUST pop oldest task, decrement pending_count by 1, and return task_id.
+        - [slug:task_queue.dispatch.unavailable_queue]: WHEN queue is unavailable, MUST raise QueueUnavailableException.
+        - [slug:task_queue.dispatch.pop_task]: WHEN pending_count is greater than 0, MUST pop oldest task, decrement pending_count by 1, and return task_id.
         """
         ...
 
@@ -80,8 +80,8 @@ class TaskQueue(Protocol):
             QueueUnavailableException: If the task queue is unavailable.
 
         POSTCONDITIONS:
-        - WHEN queue is unavailable, MUST raise QueueUnavailableException.
-        - WHEN queue is available, MUST record outcome for task_id.
+        - [slug:task_queue.complete.unavailable_queue]: WHEN queue is unavailable, MUST raise QueueUnavailableException.
+        - [slug:task_queue.complete.record_outcome]: WHEN queue is available, MUST record outcome for task_id.
         """
         ...
 
@@ -96,8 +96,8 @@ class TaskQueue(Protocol):
             Recorded outcome string if completed, else None.
 
         POSTCONDITIONS:
-        - WHEN task_id has recorded outcome, MUST return recorded outcome string.
-        - WHEN task_id has no recorded outcome, MUST return None.
+        - [slug:task_queue.get_outcome.completed_task]: WHEN task_id has recorded outcome, MUST return recorded outcome string.
+        - [slug:task_queue.get_outcome.uncompleted_task]: WHEN task_id has no recorded outcome, MUST return None.
         """
         ...
 
@@ -106,8 +106,8 @@ class TaskQueue(Protocol):
         """Purges all pending tasks and recorded outcomes from the queue.
 
         POSTCONDITIONS:
-        - MUST purge all pending tasks and reset pending_count to 0.
-        - MUST purge all recorded task outcomes.
+        - [slug:task_queue.clear.purge_tasks]: MUST purge all pending tasks and reset pending_count to 0.
+        - [slug:task_queue.clear.purge_outcomes]: MUST purge all recorded task outcomes.
         """
         ...
 

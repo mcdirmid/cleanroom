@@ -43,7 +43,7 @@ Given: an active DeepSeek Harness server or Desktop application listening on a l
 1. The telemetry parser evaluates server reachability.
    Observed: reachability is confirmed.
    Realized by: probing the active application port and verifying cookie authentication.
-2. The telemetry parser dispatches a role round with workspace directory, role name, task prompt, and directory scope.
+1. The telemetry parser dispatches a role round with workspace directory, role name, task prompt, and directory scope.
    Observed: the round is accepted by the server over the JSON-RPC bridge with session titled with scope and role directly within the role workspace directory, and a task handle is returned.
    Realized by: executing session/create (using role workspace directory directly without workspaceId), session/rename, session/selectModel (resolving declared model profile names against model configuration definitions discovered in workspace ancestors, working directories, user configuration, or repository hierarchy and mapping local MLX providers to oMLX endpoints), and session/prompt RPC requests.
 
@@ -52,7 +52,7 @@ Given: an active DeepSeek Harness server or Desktop application listening on a l
 Given: a task handle representing an active role round dispatched over the RPC bridge.
 
 1. The telemetry parser polls round status across string statuses and dictionary outcomes.
-   Observed: a DshRpcRoundStatus record is returned indicating execution state and accumulated token usage, recognizing terminal outcomes in string states ('completed', 'done', 'success', 'closed', 'error', 'failed', 'aborted') or dictionary structures with 'completed' or 'errored' keys.
+   Observed: a DshRpcRoundStatus record is returned indicating execution state and accumulated token usage, recognizing terminal outcomes in string states ('completed', 'done', 'success', 'closed', 'error', 'failed', 'aborted') or dictionary structures with 'completed' or 'errored' keys, or returning completed with error when the worker is absent from active worker listings beyond an initial grace period.
    Realized by: querying session status and event records over the JSON-RPC bridge or bridge tool endpoints.
 
 ### Scenario 7 — Dispatching round over DSH Web bridge as ungrouped session
@@ -62,12 +62,23 @@ Given: DeepSeek Harness Web mode enabled via environment configuration and an ac
 1. The telemetry parser evaluates server reachability.
    Observed: reachability is confirmed via the Web loopback bridge endpoint without requiring desktop cookies.
    Realized by: discovering active Web bridge endpoint from bridge configuration.
-2. The telemetry parser dispatches a role round.
+1. The telemetry parser dispatches a role round.
    Observed: the role worker is spawned directly as an independent top-level session with a globally unique task name labeled `[<scope>] <role>` under Ungrouped without container attachment or parent session reference.
    Realized by: invoking dsh_spawn with a unique task name, formatted label, and cwd without invoking dsh_container or passing parent_session.
 
+### Scenario 8 — Renaming, deleting, and cleaning up scope sessions
+
+Given: an active DeepSeek Harness Web bridge or Desktop server with existing sessions.
+
+1. The telemetry parser renames a session by identifier.
+   Observed: the session title is updated to the proposed title.
+   Realized by: invoking dsh_rename_session over the Web bridge or session/rename over Desktop RPC.
+1. The telemetry parser cleans up conversations matching a directory scope.
+   Observed: all sessions containing `[<scope>]` in their title are deleted from the server.
+   Realized by: listing sessions via dsh_list_sessions or session/list, filtering by `[<scope>]` in the title, and deleting each matching session via dsh_delete_session or session/delete.
+
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-11-06T17:48:00Z
-CHANGE: Ensure globally unique task names for Web role round dispatches
+LAST_CHANGED: 2026-11-10T01:30:00Z
+CHANGE: Conclude missing RPC workers as errored completion when absent from registry beyond grace period
 -->

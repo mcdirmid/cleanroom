@@ -5,6 +5,7 @@ from typing import Protocol, Sequence
 
 from .dag_storage import DagNode
 
+
 # Contract: DagSubgraph protocol modeling an active execution subgraph rooted at a target node.
 class DagSubgraph(Singleton[SystemTier], Protocol):
     """System service modeling an active execution subgraph rooted at a target node."""
@@ -64,6 +65,7 @@ class DagSubgraph(Singleton[SystemTier], Protocol):
         - MUST enforce execution iteration limits across recorded node visits.
         """
         ...
+
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z

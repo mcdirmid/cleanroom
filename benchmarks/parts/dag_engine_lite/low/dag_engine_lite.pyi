@@ -184,12 +184,12 @@ class DAG(Singleton[SystemTier], Protocol):
             retries: Number of permitted retry attempts upon exception.
 
         PRECONDITIONS:
-        - MUST ensure node_id is not already registered in the graph (checked precondition; raises DuplicateNodeError on caller violation).
+        - [slug:dag_lite.dag.add_node.duplicate_node]: MUST ensure node_id is not already registered in the graph (checked precondition; raises DuplicateNodeError on caller violation).
 
         POSTCONDITIONS:
-        - MUST register the node definition into the graph.
-        - WHEN dependencies are provided, MUST add directed dependency edges from each dependency to node_id.
-        - MUST defer missing dependency existence checks to validate() and topological_sort() without eagerly raising NodeNotFoundError.
+        - [slug:dag_lite.dag.add_node.register_definition]: MUST register the node definition into the graph.
+        - [slug:dag_lite.dag.add_node.directed_dependencies]: WHEN dependencies are provided, MUST add directed dependency edges from each dependency to node_id.
+        - [slug:dag_lite.dag.add_node.defer_dependency_checks]: MUST defer missing dependency existence checks to validate() and topological_sort() without eagerly raising NodeNotFoundError.
         """
         ...
 
@@ -202,10 +202,10 @@ class DAG(Singleton[SystemTier], Protocol):
             downstream_id: Identifier of the dependent node.
 
         PRECONDITIONS:
-        - MUST ensure upstream_id and downstream_id exist in the graph (checked precondition; raises NodeNotFoundError on caller violation).
+        - [slug:dag_lite.dag.add_edge.nodes_must_exist]: MUST ensure upstream_id and downstream_id exist in the graph (checked precondition; raises NodeNotFoundError on caller violation).
 
         POSTCONDITIONS:
-        - MUST establish a directed dependency edge from upstream_id to downstream_id.
+        - [slug:dag_lite.dag.add_edge.directed_edge]: MUST establish a directed dependency edge from upstream_id to downstream_id.
         """
         ...
 
@@ -217,11 +217,11 @@ class DAG(Singleton[SystemTier], Protocol):
             node_id: Identifier of the node to remove.
 
         PRECONDITIONS:
-        - MUST ensure node_id exists in the graph (checked precondition; raises NodeNotFoundError on caller violation).
+        - [slug:dag_lite.dag.remove_node.node_must_exist]: MUST ensure node_id exists in the graph (checked precondition; raises NodeNotFoundError on caller violation).
 
         POSTCONDITIONS:
-        - MUST remove the node and its incident edges.
-        - MUST purge the node identifier from wave scheduler state tracking.
+        - [slug:dag_lite.dag.remove_node.purge_incident_edges]: MUST remove the node and its incident edges.
+        - [slug:dag_lite.dag.remove_node.purge_scheduler_state]: MUST purge the node identifier from wave scheduler state tracking.
         """
         ...
 
@@ -248,10 +248,10 @@ class DAG(Singleton[SystemTier], Protocol):
             The registered NodeDefinition.
 
         PRECONDITIONS:
-        - MUST ensure node_id exists in the graph (checked precondition; raises NodeNotFoundError on caller violation).
+        - [slug:dag_lite.dag.get_node.node_must_exist]: MUST ensure node_id exists in the graph (checked precondition; raises NodeNotFoundError on caller violation).
 
         POSTCONDITIONS:
-        - MUST return the NodeDefinition matching node_id.
+        - [slug:dag_lite.dag.get_node.return_definition]: MUST return the NodeDefinition matching node_id.
         """
         ...
 
@@ -266,10 +266,10 @@ class DAG(Singleton[SystemTier], Protocol):
             Set of upstream node identifiers.
 
         PRECONDITIONS:
-        - MUST ensure node_id exists in the graph (checked precondition; raises NodeNotFoundError on caller violation).
+        - [slug:dag_lite.dag.get_dependencies.node_must_exist]: MUST ensure node_id exists in the graph (checked precondition; raises NodeNotFoundError on caller violation).
 
         POSTCONDITIONS:
-        - MUST return all direct upstream dependencies.
+        - [slug:dag_lite.dag.get_dependencies.return_upstream]: MUST return all direct upstream dependencies.
         """
         ...
 
@@ -284,10 +284,10 @@ class DAG(Singleton[SystemTier], Protocol):
             Set of downstream node identifiers.
 
         PRECONDITIONS:
-        - MUST ensure node_id exists in the graph (checked precondition; raises NodeNotFoundError on caller violation).
+        - [slug:dag_lite.dag.get_dependents.node_must_exist]: MUST ensure node_id exists in the graph (checked precondition; raises NodeNotFoundError on caller violation).
 
         POSTCONDITIONS:
-        - MUST return all direct downstream dependents.
+        - [slug:dag_lite.dag.get_dependents.return_downstream]: MUST return all direct downstream dependents.
         """
         ...
 
@@ -305,11 +305,11 @@ class DAG(Singleton[SystemTier], Protocol):
         """Validates graph consistency, completeness, and acyclicity.
 
         PRECONDITIONS:
-        - MUST ensure all referenced dependencies across registered nodes exist in the graph (checked precondition; raises NodeNotFoundError on caller violation).
-        - MUST ensure the graph contains no directed cycles (checked precondition; raises CycleError on caller violation).
+        - [slug:dag_lite.dag.validate.dependencies_exist]: MUST ensure all referenced dependencies across registered nodes exist in the graph (checked precondition; raises NodeNotFoundError on caller violation).
+        - [slug:dag_lite.dag.validate.acyclic_graph]: MUST ensure the graph contains no directed cycles (checked precondition; raises CycleError on caller violation).
 
         POSTCONDITIONS:
-        - WHEN all referenced nodes exist and no cycle exists, MUST complete without error.
+        - [slug:dag_lite.dag.validate.complete_valid]: WHEN all referenced nodes exist and no cycle exists, MUST complete without error.
         """
         ...
 
@@ -324,11 +324,11 @@ class DAG(Singleton[SystemTier], Protocol):
             List of node identifiers in topological order.
 
         PRECONDITIONS:
-        - MUST ensure the graph contains no directed cycles (checked precondition; raises CycleError on caller violation).
+        - [slug:dag_lite.dag.topological_sort.acyclic_graph]: MUST ensure the graph contains no directed cycles (checked precondition; raises CycleError on caller violation).
 
         POSTCONDITIONS:
-        - MUST return a valid topological ordering where every prerequisite precedes its dependents.
-        - MUST break ties between concurrent ready nodes using priority descending and lexicographical node_id ascending.
+        - [slug:dag_lite.dag.topological_sort.dependency_order]: MUST return a valid topological ordering where every prerequisite precedes its dependents.
+        - [slug:dag_lite.dag.topological_sort.tie_breaking]: MUST break ties between concurrent ready nodes using priority descending and lexicographical node_id ascending.
         """
         ...
 
@@ -365,8 +365,8 @@ class DAG(Singleton[SystemTier], Protocol):
             Tuple of (critical path node identifiers, total path weight).
 
         POSTCONDITIONS:
-        - MUST return the sequence of nodes that forms the longest path through the DAG.
-        - MUST return the cumulative weight of that path.
+        - [slug:dag_lite.dag.critical_path.longest_path]: MUST return the sequence of nodes that forms the longest path through the DAG.
+        - [slug:dag_lite.dag.critical_path.cumulative_weight]: MUST return the cumulative weight of that path.
         """
         ...
 
@@ -383,9 +383,9 @@ class WaveScheduler(Singleton[SystemTier], Protocol):
             List of node identifiers ready for execution, ordered by priority descending.
 
         POSTCONDITIONS:
-        - MUST return all nodes currently in READY state whose upstream dependencies are SUCCEEDED.
-        - MUST order returned nodes by priority descending, then node_id ascending.
-        - WHEN no nodes are ready, MUST return an empty list.
+        - [slug:dag_lite.scheduler.next_wave.ready_nodes]: MUST return all nodes currently in READY state whose upstream dependencies are SUCCEEDED.
+        - [slug:dag_lite.scheduler.next_wave.priority_order]: MUST order returned nodes by priority descending, then node_id ascending.
+        - [slug:dag_lite.scheduler.next_wave.empty_when_no_ready]: WHEN no nodes are ready, MUST return an empty list.
         """
         ...
 
@@ -397,7 +397,7 @@ class WaveScheduler(Singleton[SystemTier], Protocol):
             node_id: Identifier of the executing node.
 
         POSTCONDITIONS:
-        - MUST update the node state to RUNNING.
+        - [slug:dag_lite.scheduler.mark_running.state_transition]: MUST update the node state to RUNNING.
         """
         ...
 
@@ -409,8 +409,8 @@ class WaveScheduler(Singleton[SystemTier], Protocol):
             node_id: Identifier of the completed node.
 
         POSTCONDITIONS:
-        - MUST update the node state to SUCCEEDED.
-        - MUST evaluate downstream dependents and promote newly unblocked nodes to READY.
+        - [slug:dag_lite.scheduler.mark_succeeded.state_transition]: MUST update the node state to SUCCEEDED.
+        - [slug:dag_lite.scheduler.mark_succeeded.promote_dependents]: MUST evaluate downstream dependents and promote newly unblocked nodes to READY.
         """
         ...
 
@@ -427,10 +427,10 @@ class WaveScheduler(Singleton[SystemTier], Protocol):
             failure_policy: Failure policy applied upon failure.
 
         POSTCONDITIONS:
-        - MUST update the node state to FAILED.
-        - WHEN failure_policy is SKIP_DOWNSTREAM, MUST transition all transitive dependents to SKIPPED.
-        - WHEN failure_policy is FAIL_FAST, MUST transition all remaining PENDING nodes to CANCELLED.
-        - WHEN failure_policy is CONTINUE_ON_ERROR, MUST leave unblocked independent nodes eligible for execution and transition blocked dependents of failed nodes to SKIPPED.
+        - [slug:dag_lite.scheduler.mark_failed.state_transition]: MUST update the node state to FAILED.
+        - [slug:dag_lite.scheduler.mark_failed.skip_downstream]: WHEN failure_policy is SKIP_DOWNSTREAM, MUST transition all transitive dependents to SKIPPED.
+        - [slug:dag_lite.scheduler.mark_failed.fail_fast]: WHEN failure_policy is FAIL_FAST, MUST transition all remaining PENDING nodes to CANCELLED.
+        - [slug:dag_lite.scheduler.mark_failed.continue_on_error]: WHEN failure_policy is CONTINUE_ON_ERROR, MUST leave unblocked independent nodes eligible for execution and transition blocked dependents of failed nodes to SKIPPED.
         """
         ...
 
@@ -442,10 +442,10 @@ class WaveScheduler(Singleton[SystemTier], Protocol):
             True if all nodes in the DAG have reached terminal states.
 
         POSTCONDITIONS:
-        - WHEN all nodes in the DAG have reached terminal states (SUCCEEDED, FAILED, SKIPPED, CANCELLED), MUST return True.
-        - WHEN no ready nodes remain and unexecuted nodes are blocked by failed dependencies, MUST return True.
-        - WHEN any node in the DAG remains non-terminal and eligible to execute, MUST return False.
-        - WHEN the DAG contains no nodes, MUST return True.
+        - [slug:dag_lite.scheduler.is_finished.all_terminal]: WHEN all nodes in the DAG have reached terminal states (SUCCEEDED, FAILED, SKIPPED, CANCELLED), MUST return True.
+        - [slug:dag_lite.scheduler.is_finished.blocked_by_failure]: WHEN no ready nodes remain and unexecuted nodes are blocked by failed dependencies, MUST return True.
+        - [slug:dag_lite.scheduler.is_finished.non_terminal_remaining]: WHEN any node in the DAG remains non-terminal and eligible to execute, MUST return False.
+        - [slug:dag_lite.scheduler.is_finished.empty_dag]: WHEN the DAG contains no nodes, MUST return True.
         """
         ...
 
@@ -460,7 +460,7 @@ class WaveScheduler(Singleton[SystemTier], Protocol):
             Current NodeState.
 
         PRECONDITIONS:
-        - MUST ensure node_id is registered in the scheduled DAG (checked precondition; raises NodeNotFoundError on caller violation).
+        - [slug:dag_lite.scheduler.get_state.node_must_exist]: MUST ensure node_id is registered in the scheduled DAG (checked precondition; raises NodeNotFoundError on caller violation).
         """
         ...
 
@@ -492,15 +492,15 @@ class DAGRunner(Singleton[SystemTier], Protocol):
             Consolidated DAGRunReport recording all node outcomes and metrics.
 
         PRECONDITIONS:
-        - MUST ensure all referenced dependencies across registered nodes exist in the graph (checked precondition; raises NodeNotFoundError on caller violation).
-        - MUST ensure the graph contains no directed cycles (checked precondition; raises CycleError on caller violation).
+        - [slug:dag_lite.runner.run.dependencies_exist]: MUST ensure all referenced dependencies across registered nodes exist in the graph (checked precondition; raises NodeNotFoundError on caller violation).
+        - [slug:dag_lite.runner.run.acyclic_graph]: MUST ensure the graph contains no directed cycles (checked precondition; raises CycleError on caller violation).
 
         POSTCONDITIONS:
-        - MUST validate graph invariants before commencing wave execution.
-        - MUST execute ready waves sequentially.
-        - MUST execute retries up to the configured retry count for failed node actions.
-        - MUST apply the specified failure_policy to the scheduler upon node failure.
-        - MUST return a DAGRunReport capturing all node states, execution durations, and critical path.
+        - [slug:dag_lite.runner.run.validate_before_waves]: MUST validate graph invariants before commencing wave execution.
+        - [slug:dag_lite.runner.run.sequential_waves]: MUST execute ready waves sequentially.
+        - [slug:dag_lite.runner.run.retry_failures]: MUST execute retries up to the configured retry count for failed node actions.
+        - [slug:dag_lite.runner.run.apply_failure_policy]: MUST apply the specified failure_policy to the scheduler upon node failure.
+        - [slug:dag_lite.runner.run.consolidated_report]: MUST return a DAGRunReport capturing all node states, execution durations, and critical path.
         """
         ...
 

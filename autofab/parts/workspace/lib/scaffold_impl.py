@@ -15,11 +15,16 @@ from . import roles, scaffold
 
 
 try:
-    from support.lib import app_info
+    from support.lib import app_info, markdown_preprocessor
+
     ROLE_CONFIG_FILE = app_info.DEFAULT_ROLE_DESCRIPTOR
 except Exception:
     import app_info  # type: ignore
-    ROLE_CONFIG_FILE = getattr(app_info, "DEFAULT_ROLE_DESCRIPTOR", ".autofab_role.json")
+    import markdown_preprocessor  # type: ignore
+
+    ROLE_CONFIG_FILE = getattr(
+        app_info, "DEFAULT_ROLE_DESCRIPTOR", ".autofab_role.json"
+    )
 
 
 def write_file_with_perms(
@@ -31,6 +36,11 @@ def write_file_with_perms(
         try:
             os.chmod(dst, 0o644)
         except OSError:
+            pass
+    if dst.endswith(".md"):
+        try:
+            content = markdown_preprocessor.preprocess_markdown(content)
+        except Exception:
             pass
     with open(dst, "w", encoding="utf-8") as f:
         f.write(content)
@@ -81,7 +91,11 @@ def _declared_units(repo_root: str, scope_dir: str) -> List[Tuple[str, str]]:
         try:
             for sub in sorted(os.listdir(part_dir)):
                 sub_dir = os.path.join(part_dir, sub)
-                if not os.path.isdir(sub_dir) or sub.startswith((".", "venv", "bazel-", "__pycache__")) or sub in ("tests", "pretense", "ext"):
+                if (
+                    not os.path.isdir(sub_dir)
+                    or sub.startswith((".", "venv", "bazel-", "__pycache__"))
+                    or sub in ("tests", "pretense", "ext")
+                ):
                     continue
                 try:
                     for fname in os.listdir(sub_dir):
@@ -90,7 +104,11 @@ def _declared_units(repo_root: str, scope_dir: str) -> List[Tuple[str, str]]:
                         if not fname.endswith((".pyi", ".py", ".md")):
                             continue
                         stem = os.path.splitext(fname)[0]
-                        if stem and stem != "__init__" and not stem.endswith(("_ext", "_test", "_pretense")):
+                        if (
+                            stem
+                            and stem != "__init__"
+                            and not stem.endswith(("_ext", "_test", "_pretense"))
+                        ):
                             stems.add(stem)
                 except OSError:
                     pass
@@ -118,7 +136,9 @@ def _missing_target_skeleton(
         if workspace_dir:
             template_candidates.append(os.path.join(workspace_dir, role_def.template))
             template_candidates.append(
-                os.path.join(workspace_dir, "templates", os.path.basename(role_def.template))
+                os.path.join(
+                    workspace_dir, "templates", os.path.basename(role_def.template)
+                )
             )
         template_candidates.append(os.path.join(repo_root, role_def.template))
         template_candidates.append(
@@ -162,6 +182,7 @@ def _create_missing_target_skeletons(
         if role_def.template_command:
             try:
                 import subprocess
+
                 cmd = role_def.template_command.format(
                     target_file=dst_path,
                     unit_dir=unit_dir,
@@ -177,12 +198,20 @@ def _create_missing_target_skeletons(
                     capture_output=True,
                     timeout=30,
                 )
-                if res.returncode == 0 and os.path.isfile(dst_path) and os.path.getsize(dst_path) > 0:
+                if (
+                    res.returncode == 0
+                    and os.path.isfile(dst_path)
+                    and os.path.getsize(dst_path) > 0
+                ):
                     created.append(rel_path)
                     if rel_path.endswith(".py"):
                         curr_p = os.path.dirname(dst_path)
                         ws_root_clean = os.path.abspath(workspace_dir)
-                        while curr_p and curr_p != ws_root_clean and curr_p.startswith(ws_root_clean):
+                        while (
+                            curr_p
+                            and curr_p != ws_root_clean
+                            and curr_p.startswith(ws_root_clean)
+                        ):
                             p_init = os.path.join(curr_p, "__init__.py")
                             if not os.path.isfile(p_init):
                                 write_file_with_perms(p_init, "", readonly=False)
@@ -190,11 +219,20 @@ def _create_missing_target_skeletons(
                     continue
                 elif res.returncode != 0:
                     err_msg = res.stderr.decode("utf-8", errors="replace").strip()
-                    sys.stderr.write(f"Warning: template_command failed for {rel_path}: {err_msg}\n")
+                    sys.stderr.write(
+                        f"Warning: template_command failed for {rel_path}: {err_msg}\n"
+                    )
             except Exception as e:
-                sys.stderr.write(f"Warning: template_command execution error for {rel_path}: {e}\n")
+                sys.stderr.write(
+                    f"Warning: template_command execution error for {rel_path}: {e}\n"
+                )
         skeleton = _missing_target_skeleton(
-            repo_root, rel_path, unit_dir, unit_name, role_def, workspace_dir=workspace_dir
+            repo_root,
+            rel_path,
+            unit_dir,
+            unit_name,
+            role_def,
+            workspace_dir=workspace_dir,
         )
         if skeleton is None:
             continue
@@ -203,7 +241,9 @@ def _create_missing_target_skeletons(
         if rel_path.endswith(".py"):
             curr_p = os.path.dirname(dst_path)
             ws_root_clean = os.path.abspath(workspace_dir)
-            while curr_p and curr_p != ws_root_clean and curr_p.startswith(ws_root_clean):
+            while (
+                curr_p and curr_p != ws_root_clean and curr_p.startswith(ws_root_clean)
+            ):
                 p_init = os.path.join(curr_p, "__init__.py")
                 if not os.path.isfile(p_init):
                     write_file_with_perms(p_init, "", readonly=False)
@@ -230,7 +270,11 @@ def _collect_and_compile_runner_pycs(bin_dir: str) -> dict[str, bytes]:
                             os.path.exists(os.path.join(cand, ".git"))
                             or any(
                                 os.path.exists(os.path.join(cand, m))
-                                for m in (*app_info.get_config_filenames(), *app_info.get_roles_filenames(), "pyproject.toml")
+                                for m in (
+                                    *app_info.get_config_filenames(),
+                                    *app_info.get_roles_filenames(),
+                                    "pyproject.toml",
+                                )
                             )
                         ):
                             repo_root = cand
@@ -239,9 +283,13 @@ def _collect_and_compile_runner_pycs(bin_dir: str) -> dict[str, bytes]:
                 pass
     if not repo_root or not os.path.isdir(repo_root):
         try:
-            cand = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".."))
+            cand = os.path.abspath(
+                os.path.join(os.path.dirname(__file__), "..", "..", "..", "..")
+            )
             cfg_markers = app_info.get_config_filenames() + ("pyproject.toml",)
-            if os.path.isdir(cand) and any(os.path.isfile(os.path.join(cand, m)) for m in cfg_markers):
+            if os.path.isdir(cand) and any(
+                os.path.isfile(os.path.join(cand, m)) for m in cfg_markers
+            ):
                 repo_root = cand
         except Exception:
             pass
@@ -268,6 +316,7 @@ def _collect_and_compile_runner_pycs(bin_dir: str) -> dict[str, bytes]:
 
     import py_compile
     import tempfile
+
     with tempfile.TemporaryDirectory() as td:
         empty_init = os.path.join(td, "empty__init__.py")
         with open(empty_init, "w") as f:
@@ -304,26 +353,42 @@ def _collect_and_compile_runner_pycs(bin_dir: str) -> dict[str, bytes]:
                         src_path = os.path.join(sdir, fname)
                         dst_pyc = os.path.join(td, f"{mod_name}_{len(pycs)}.pyc")
                         try:
-                            py_compile.compile(src_path, dst_pyc, optimize=2, doraise=True)
+                            py_compile.compile(
+                                src_path, dst_pyc, optimize=2, doraise=True
+                            )
                             with open(dst_pyc, "rb") as pf:
                                 pyc_bytes = pf.read()
-                            is_lifecycle = (fname == "lifecycle.py")
-                            is_canonical_lifecycle = is_lifecycle and os.path.getsize(src_path) > 1000
-                            if not is_lifecycle or is_canonical_lifecycle or arcname_py not in pycs:
+                            is_lifecycle = fname == "lifecycle.py"
+                            is_canonical_lifecycle = (
+                                is_lifecycle and os.path.getsize(src_path) > 1000
+                            )
+                            if (
+                                not is_lifecycle
+                                or is_canonical_lifecycle
+                                or arcname_py not in pycs
+                            ):
                                 try:
                                     with open(src_path, "rb") as sf:
                                         src_bytes = sf.read()
                                         pycs[arcname_py] = src_bytes
                                         pycs[f"support/lib/{arcname_py}"] = src_bytes
                                         if pkg_name:
-                                            pycs[f"{pkg_name}/support/lib/{arcname_py}"] = src_bytes
+                                            pycs[
+                                                f"{pkg_name}/support/lib/{arcname_py}"
+                                            ] = src_bytes
                                 except Exception:
                                     pass
-                            if not is_lifecycle or is_canonical_lifecycle or arcname_pyc not in pycs:
+                            if (
+                                not is_lifecycle
+                                or is_canonical_lifecycle
+                                or arcname_pyc not in pycs
+                            ):
                                 pycs[arcname_pyc] = pyc_bytes
                                 pycs[f"support/lib/{arcname_pyc}"] = pyc_bytes
                             if pkg_name:
-                                pycs[f"{pkg_name}/support/lib/{arcname_pyc}"] = pyc_bytes
+                                pycs[f"{pkg_name}/support/lib/{arcname_pyc}"] = (
+                                    pyc_bytes
+                                )
                         except Exception:
                             pass
             except OSError:
@@ -337,8 +402,12 @@ def _collect_and_compile_runner_pycs(bin_dir: str) -> dict[str, bytes]:
                     if os.path.isdir(parts_root):
                         for root, _, files in os.walk(parts_root):
                             if "/lib" in root or root.endswith("/lib"):
-                                rel_long = os.path.relpath(root, repo_root).replace(os.sep, "/")
-                                rel_short = os.path.relpath(root, os.path.join(repo_root, p_dir)).replace(os.sep, "/")
+                                rel_long = os.path.relpath(root, repo_root).replace(
+                                    os.sep, "/"
+                                )
+                                rel_short = os.path.relpath(
+                                    root, os.path.join(repo_root, p_dir)
+                                ).replace(os.sep, "/")
                                 long_segs = rel_long.split("/")
                                 for i in range(1, len(long_segs)):
                                     k = "/".join(long_segs[:i]) + "/__init__.pyc"
@@ -359,9 +428,13 @@ def _collect_and_compile_runner_pycs(bin_dir: str) -> dict[str, bytes]:
                                 for f in files:
                                     if f.endswith(".py"):
                                         src = os.path.join(root, f)
-                                        dst_pyc = os.path.join(td, f"part_mod_{len(pycs)}.pyc")
+                                        dst_pyc = os.path.join(
+                                            td, f"part_mod_{len(pycs)}.pyc"
+                                        )
                                         try:
-                                            py_compile.compile(src, dst_pyc, optimize=2, doraise=True)
+                                            py_compile.compile(
+                                                src, dst_pyc, optimize=2, doraise=True
+                                            )
                                             with open(dst_pyc, "rb") as pf:
                                                 pyc_data = pf.read()
                                                 pycs[f"{rel_long}/{f}c"] = pyc_data
@@ -393,7 +466,11 @@ def _find_roles_toml_content(bin_dir: str) -> Optional[bytes]:
                             os.path.exists(os.path.join(cand, ".git"))
                             or any(
                                 os.path.exists(os.path.join(cand, m))
-                                for m in (*app_info.get_config_filenames(), *app_info.get_roles_filenames(), "pyproject.toml")
+                                for m in (
+                                    *app_info.get_config_filenames(),
+                                    *app_info.get_roles_filenames(),
+                                    "pyproject.toml",
+                                )
                             )
                         ):
                             repo_root = cand
@@ -402,9 +479,13 @@ def _find_roles_toml_content(bin_dir: str) -> Optional[bytes]:
                 pass
     if not repo_root or not os.path.isdir(repo_root):
         try:
-            cand = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".."))
+            cand = os.path.abspath(
+                os.path.join(os.path.dirname(__file__), "..", "..", "..", "..")
+            )
             cfg_markers = app_info.get_config_filenames() + ("pyproject.toml",)
-            if os.path.isdir(cand) and any(os.path.isfile(os.path.join(cand, m)) for m in cfg_markers):
+            if os.path.isdir(cand) and any(
+                os.path.isfile(os.path.join(cand, m)) for m in cfg_markers
+            ):
                 repo_root = cand
         except Exception:
             pass
@@ -458,6 +539,7 @@ def _find_roles_toml_content(bin_dir: str) -> Optional[bytes]:
         for pkg in ("autofab_py", "autofab_python", "autofab", "support"):
             try:
                 import importlib.resources
+
                 data = importlib.resources.files(pkg).joinpath(fname).read_bytes()
                 if data:
                     return data
@@ -481,6 +563,7 @@ def package_runner_zipapps(
         "fail": "fail",
         "revert": "revert",
         "checkpoint": "checkpoint",
+        "reject": "reject",
     }
     if can_blame:
         tools["blame"] = "blame"
@@ -494,11 +577,14 @@ def package_runner_zipapps(
                 except OSError:
                     pass
 
-    is_auditor = bool(role_def and (not role_def.writable_file_patterns or role_def.audit_tag))
+    is_auditor = bool(
+        role_def and (not role_def.writable_file_patterns or role_def.audit_tag)
+    )
     if is_auditor:
         tools.pop("revert", None)
         tools.pop("checkpoint", None)
-        for r_name in ("revert", "checkpoint"):
+        tools.pop("reject", None)
+        for r_name in ("revert", "checkpoint", "reject"):
             rp = os.path.join(bin_dir, r_name)
             if os.path.isfile(rp):
                 try:
@@ -535,7 +621,11 @@ def package_runner_zipapps(
                             os.path.exists(os.path.join(cand, ".git"))
                             or any(
                                 os.path.exists(os.path.join(cand, m))
-                                for m in (*app_info.get_config_filenames(), *app_info.get_roles_filenames(), "pyproject.toml")
+                                for m in (
+                                    *app_info.get_config_filenames(),
+                                    *app_info.get_roles_filenames(),
+                                    "pyproject.toml",
+                                )
                             )
                         ):
                             pkg_repo_root = cand
@@ -544,9 +634,13 @@ def package_runner_zipapps(
                 pass
     if not pkg_repo_root or not os.path.isdir(pkg_repo_root):
         try:
-            cand = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".."))
+            cand = os.path.abspath(
+                os.path.join(os.path.dirname(__file__), "..", "..", "..", "..")
+            )
             cfg_markers = app_info.get_config_filenames() + ("pyproject.toml",)
-            if os.path.isdir(cand) and any(os.path.isfile(os.path.join(cand, m)) for m in cfg_markers):
+            if os.path.isdir(cand) and any(
+                os.path.isfile(os.path.join(cand, m)) for m in cfg_markers
+            ):
                 pkg_repo_root = cand
         except Exception:
             pass
@@ -677,6 +771,15 @@ def write_role_metadata(
     if max_feedback_chars is not None:
         data["max_feedback_chars"] = max_feedback_chars
 
+    try:
+        from support.lib import experiments
+
+        active_exps = sorted(experiments.get_active_experiments())
+        if active_exps:
+            data["experiments"] = active_exps
+    except Exception:
+        pass
+
     for fname in sorted(set(app_info.get_role_descriptors())):
         p = os.path.join(workspace_dir, fname)
         with open(p, "w", encoding="utf-8") as f:
@@ -696,7 +799,11 @@ def write_role_agents_md(
     """Generates role AGENTS.md instructions in the workspace."""
     agents_path = os.path.join(workspace_dir, "AGENTS.md")
     is_auditor = not role_def.writable_file_patterns
-    can_blame = bool(role_def.feedback_role_deps or role_def.audit_tag or not role_def.writable_file_patterns)
+    can_blame = bool(
+        role_def.feedback_role_deps
+        or role_def.audit_tag
+        or not role_def.writable_file_patterns
+    )
     has_stubs = bool(role_def.stub_role_deps)
     stub_section = ""
     if has_stubs:
@@ -710,7 +817,9 @@ Any library files under `lib/*.py` imported from role dependencies in this works
 """
     guide = role_def.guide_path
     if role_def.guide_path:
-        promoted_guide = os.path.join(workspace_dir, "guides", os.path.basename(role_def.guide_path))
+        promoted_guide = os.path.join(
+            workspace_dir, "guides", os.path.basename(role_def.guide_path)
+        )
         if os.path.isfile(promoted_guide):
             guide = f"guides/{os.path.basename(role_def.guide_path)}"
         elif os.path.isfile(os.path.join(workspace_dir, role_def.guide_path)):
@@ -737,14 +846,13 @@ Any library files under `lib/*.py` imported from role dependencies in this works
 
     constrained_bullet = ""
     if is_constrained:
-        constrained_bullet = (
-            "- **Incremental Authoring (Output Token Ceiling Protection)**: Your engine enforces a strict output token ceiling (e.g. 8K tokens). Emitting a massive monolithic file (>400 lines or >4,000 tokens) in a single tool call truncates output mid-generation, corrupting tool envelopes and causing fatal harness crashes. You MUST author extensive implementations or test suites incrementally in staged passes: write a minimal skeleton with core tests/methods first, verify with `bin/check_files`, and then incrementally append or edit remaining tests or methods in separate focused steps.\n"
-        )
+        constrained_bullet = "- **Incremental Authoring (Output Token Ceiling Protection)**: Your engine enforces a strict output token ceiling (e.g. 8K tokens). Emitting a massive monolithic file (>400 lines or >4,000 tokens) in a single tool call truncates output mid-generation, corrupting tool envelopes and causing fatal harness crashes. You MUST author extensive implementations or test suites incrementally in staged passes: write a minimal skeleton with core tests/methods first, verify with `bin/check_files`, and then incrementally append or edit remaining tests or methods in separate focused steps.\n"
 
     if role_def.fused_roles:
         fused_bins = [f"verify_{cr}" for cr in role_def.fused_roles]
         fused_bins_bullets = "\n".join(
-            f"- `bin/{b}` — Run verification for {b.removeprefix('verify_')}." for b in fused_bins
+            f"- `bin/{b}` — Run verification for {b.removeprefix('verify_')}."
+            for b in fused_bins
         )
         fused_bins_cmds = ", ".join(f"`bin/{b}`" for b in fused_bins)
         workflow = f"""1. Run `bin/get_work` ONCE at session start to inspect assigned ready targets across constituent roles.
@@ -781,8 +889,18 @@ Any library files under `lib/*.py` imported from role dependencies in this works
         resolution_methods = f"(via {fused_bins_cmds}, or `bin/fail`)"
         workflow_binaries_blame = ""
         round_res_line = "Never attempt to manually commit, push, or copy files across workspace boundaries; the coordinator handles atomic harvest after verifying your workspace."
-        runner_tools_list = ", ".join([f"`{b}`" for b in ["get_work"] + fused_bins + ["fail", "revert", "checkpoint"]])
-        fail_stop_tools = ", ".join([f"`bin/{b}`" for b in ["get_work"] + fused_bins + ["fail", "revert", "checkpoint"]])
+        runner_tools_list = ", ".join(
+            [
+                f"`{b}`"
+                for b in ["get_work"] + fused_bins + ["fail", "revert", "checkpoint"]
+            ]
+        )
+        fail_stop_tools = ", ".join(
+            [
+                f"`bin/{b}`"
+                for b in ["get_work"] + fused_bins + ["fail", "revert", "checkpoint"]
+            ]
+        )
         metadata_tools = "(`bin/fail` or coordinator harvest)"
         test_failure_action = "code edits or `bin/fail`"
         workflow_binaries_section = f"""## Mandatory {app_info.APP_TITLE} Workflow Binaries
@@ -799,7 +917,7 @@ All {app_info.APP_TITLE} verification and resolution in this fused role workspac
 2. Follow companion guide `{guide}` for role auditing rules.
 3. For auditor roles, `bin/get_work` automatically executes verification checks on each dirty target.
 4. If all checks pass: `bin/get_work` automatically submits the target with audit attestation and reports 0 ready targets; conclude your round immediately with summary text and ZERO tool calls.
-5. If checks fail: Inspect the structured {app_info.APP_TITLE} Triage Summary surfaced by `bin/get_work` (which extracts the author's `# CHANGE:` header and primary failure). Deliver blame attribution via `bin/blame <culprit_file> "<explanation>"`. Your critique MUST explain specifically why the author's change did not resolve the defect against the common specification.
+5. If checks fail: Inspect the structured {app_info.APP_TITLE} Triage Summary surfaced by `bin/get_work` (which extracts the author's `# CHANGE:` header and primary failure). Stage blame attribution via `bin/blame <culprit_file> "<explanation>"`. Then commit staged blame and conclude the target via `bin/submit <target_file>`.
 6. If target cannot be certified or an unresolvable impasse is reached: `bin/fail <target_file> "<reason>"`
 7. Mandatory Post-Completion: Call `bin/get_work` once to inspect remaining units. If all ready targets are resolved or only blocked targets remain, STOP and conclude your round immediately with summary text and ZERO further tool calls.
 """
@@ -810,16 +928,17 @@ All {app_info.APP_TITLE} verification and resolution in this fused role workspac
   - Your blame explanation MUST explain why the author's `# CHANGE:` attempt did not resolve the defect against the common specification.
   - Formulate blame in terms of specification non-compliance (low/*.pyi, scenarios/*.md, or high/*.md).
   - Multi-line critiques are automatically collapsed into a continuous paragraph, but keep feedback direct and focused.
-- **Actionable Attribution**: Blame the exact culprit file (`lib/*.py` or `tests/*_test.py`). If both implementation and tests are defective, blame each culprit file with specific critiques.
-- **Mandatory Post-Completion Protocol**: Once blame has been recorded via `bin/blame`, custody of the target is immediately returned to upstream authors. You have ZERO remaining work on that target and are STRICTLY FORBIDDEN from attempting to debug or test the author's code, executing python scripts, running dummy shell commands, or re-running `bin/check_files`. Call `bin/get_work` once; if no other ready targets exist, conclude your round immediately with a text summary and ZERO further tool calls."""
+- **Actionable Attribution & Staging**: Blame the exact culprit file (`lib/*.py` or `tests/*_test.py`). If both implementation and tests are defective, blame each culprit file with specific critiques via `bin/blame`. Once all blame is staged, commit blame and conclude the target via `bin/submit <target_file>`.
+- **Mandatory Post-Completion Protocol**: Once blame has been committed via `bin/submit`, custody of the target is immediately returned to upstream authors. You have ZERO remaining work on that target and are STRICTLY FORBIDDEN from attempting to debug or test the author's code, executing python scripts, running dummy shell commands, or re-running `bin/check_files`. Call `bin/get_work` once; if no other ready targets exist, conclude your round immediately with a text summary and ZERO further tool calls."""
         else:
             workflow = f"""1. Run `bin/get_work` to inspect and pull pending work and review any unacted feedback.
 2. Follow companion guide `{guide}` to author or update targets in scope, resolving any feedback.
 3. Run verification checks: `bin/check_files [target_file]`
 4. If checks pass and all feedback is resolved: Submit completed targets via `bin/submit <target_file> "<summary>"` (or `bin/submit <target_file>` if unmodified).
-5. If upstream contracts are defective: Deliver blame attribution via `bin/blame <culprit_contract> "<explanation>"`.
-6. If success is impossible or an unresolvable impasse is reached: `bin/fail <target_file> "<reason>"`
-7. Call `bin/get_work` to inspect remaining units. If all ready targets are resolved or only blocked targets remain, STOP and conclude your round immediately without calling further tools.
+5. If feedback is contested without code changes: Reject feedback via `bin/reject <target_file> "<reason>"` (strictly requires file to be unmodified).
+6. If upstream contracts are defective: Deliver blame attribution via `bin/blame <culprit_contract> "<explanation>"`.
+7. If success is impossible or an unresolvable impasse is reached: `bin/fail <target_file> "<reason>"`
+8. Call `bin/get_work` to inspect remaining units. If all ready targets are resolved or only blocked targets remain, STOP and conclude your round immediately without calling further tools.
 """
             feedback_section = """## Acting on Blame & Feedback (Author Role Requirements)
 - **`bin/check_files` ONLY verifies static types and syntax**: It does NOT execute tests or verify runtime logic.
@@ -835,6 +954,14 @@ All {app_info.APP_TITLE} verification and resolution in this fused role workspac
         if is_auditor:
             resolution_rules = """- **ZERO TOLERANCE FOR COMPLAINING OR IDLING IN CHAT**: When `bin/check_files` fails, stopping with conversational commentary, explaining why output did not change, or complaining without executing `bin/blame` is STRICTLY PROHIBITED. Conversational complaints do not mutate build state, and upstream authoring roles cannot inspect chat transcripts.
 - **Actionable Blame Delivery**: When checks fail due to defects in library code, test code, or upstream specifications, you MUST execute `bin/blame <culprit_file> "<actionable critique>"` immediately. Auditors can blame both the lib and test files if both contain defects.
+<!-- if experiment:structured_blame -->
+- **Structured Blame Requirement (Mandatory under structured_blame)**: Blame critique MUST follow the structured tuple format:
+  `bin/blame <culprit_file> "[slug:<spec.slug>] Violation: <noun phrase> Facet: <noun phrase> [Lines: <range>] [Witness: <key_value_pairs>]"`
+  or via taxonomy tag format:
+  `bin/blame <culprit_file> "[slug:<spec.slug>] [viol:<prefix>.<name>] Facet: <noun phrase> [Lines: <range>] [Witness: <key_value_pairs>]"`
+  or via flags: `bin/blame <culprit_file> --slug <slug> --viol <viol> --facet "<noun phrase>" [--lines "<range>"] [--witness "<values>"]`
+  where slug matches low/*.pyi, violation is a non-prescriptive noun phrase or [viol:<prefix>.<name>], facet is a noun phrase without action verbs, lines specifies a line or range within the culprit file, and witness contains literal key-value pairs (no line numbers or prose).
+<!-- endif -->
 - **Blame Concludes Target Custody**: Calling `bin/blame` immediately transfers custody of the target back to upstream authors. DO NOT run further diagnostic commands, scripts, or checks on blamed targets.
 - **Submission on Success**: When checks pass, you MUST execute `bin/submit <target_file>` immediately.
 - **Fail on Impasse**: If you reach an unresolvable impasse where neither submit nor blame applies, execute `bin/fail <target_file> "<reason>"` immediately.
@@ -842,12 +969,20 @@ All {app_info.APP_TITLE} verification and resolution in this fused role workspac
         else:
             resolution_rules = """- **ZERO TOLERANCE FOR COMPLAINING OR IDLING IN CHAT**: When `bin/check_files` fails, stopping with conversational commentary, explaining why output did not change, or complaining without executing `bin/blame` is STRICTLY PROHIBITED. Conversational complaints do not mutate build state, and upstream authoring roles cannot inspect chat transcripts.
 - **Actionable Blame Delivery**: When checks fail due to defects in library code, test code, or upstream specifications, you MUST execute `bin/blame <culprit_file> "<actionable critique>"` immediately. Auditors can blame both the lib and test files if both contain defects.
+<!-- if experiment:structured_blame -->
+- **Structured Blame Requirement (Mandatory under structured_blame)**: Blame critique MUST follow the structured tuple format:
+  `bin/blame <culprit_file> "[slug:<spec.slug>] Violation: <noun phrase> Facet: <noun phrase> [Lines: <range>] [Witness: <key_value_pairs>]"`
+  or via taxonomy tag format:
+  `bin/blame <culprit_file> "[slug:<spec.slug>] [viol:<prefix>.<name>] Facet: <noun phrase> [Lines: <range>] [Witness: <key_value_pairs>]"`
+  or via flags: `bin/blame <culprit_file> --slug <slug> --viol <viol> --facet "<noun phrase>" [--lines "<range>"] [--witness "<values>"]`
+  where slug matches low/*.pyi, violation is a non-prescriptive noun phrase or [viol:<prefix>.<name>], facet is a noun phrase without action verbs, lines specifies a line or range within the culprit file, and witness contains literal key-value pairs (no line numbers or prose).
+<!-- endif -->
 - **Submission on Success**: When checks pass, you MUST execute `bin/submit <target_file>` immediately.
 - **Fail on Impasse**: If you reach an unresolvable impasse where neither submit nor blame applies, execute `bin/fail <target_file> "<reason>"` immediately.
 - **Never end a round while ready targets remain unresolved. When all ready targets are resolved or only blocked targets remain, conclude your round immediately without further tool calls.**"""
-        resolution_methods = "(`bin/submit`, `bin/blame`, or `bin/fail`)"
+        resolution_methods = "(`bin/submit`, `bin/reject`, `bin/blame`, or `bin/fail`)"
         workflow_binaries_blame = "- `bin/blame` — Attribute blame and return defective targets to upstream roles.\n"
-        round_res_line = "Never attempt to manually commit, push, or copy files across workspace boundaries; round resolution must always occur via `bin/submit`, `bin/blame`, or `bin/fail`."
+        round_res_line = "Never attempt to manually commit, push, or copy files across workspace boundaries; round resolution must always occur via `bin/submit`, `bin/reject`, `bin/blame`, or `bin/fail`."
         if is_auditor:
             runner_tools_list = "`get_work`, `check_files`, `submit`, `blame`, `fail`"
             fail_stop_tools = "`bin/get_work`, `bin/check_files`, `bin/blame`, `bin/submit`, `bin/fail`"
@@ -856,20 +991,21 @@ All {app_info.APP_TITLE} verification and resolution in this fused role workspac
             workflow_binaries_section = f"""## Mandatory {app_info.APP_TITLE} Workflow Binaries
 All {app_info.APP_TITLE} target resolution must proceed through the prescribed workspace binaries:
 - `bin/get_work` — Discover pending units and tasks.
-- `bin/check_files` — Run static verification, linting, and type checking on targets.
+- `bin/check_files` — Run verification (test execution and coverage analysis) to inspect failure diagnostics and triage summaries.
 - `bin/submit` — Submit verified targets to main.
 {workflow_binaries_blame}- `bin/fail` — Report an unresolvable impasse."""
         else:
-            runner_tools_list = "`get_work`, `check_files`, `submit`, `blame`, `fail`, `revert`, `checkpoint`"
-            fail_stop_tools = "`bin/get_work`, `bin/check_files`, `bin/blame`, `bin/submit`, `bin/fail`, `bin/revert`, `bin/checkpoint`"
-            metadata_tools = "(`bin/submit`, `bin/blame`, `bin/fail`)"
-            test_failure_action = "`bin/blame`, `bin/fail`, or code edits"
+            runner_tools_list = "`get_work`, `check_files`, `submit`, `blame`, `reject`, `fail`, `revert`, `checkpoint`"
+            fail_stop_tools = "`bin/get_work`, `bin/check_files`, `bin/blame`, `bin/reject`, `bin/submit`, `bin/fail`, `bin/revert`, `bin/checkpoint`"
+            metadata_tools = "(`bin/submit`, `bin/reject`, `bin/blame`, `bin/fail`)"
+            test_failure_action = "`bin/blame`, `bin/reject`, `bin/fail`, or code edits"
             workflow_binaries_section = f"""## Mandatory {app_info.APP_TITLE} Workflow Binaries
 All {app_info.APP_TITLE} target resolution must proceed through the prescribed workspace binaries:
 - `bin/get_work` — Discover pending units and tasks.
 - `bin/check_files` — Run static verification, linting, and type checking on targets.
 - `bin/submit` — Submit verified targets to main.
-{workflow_binaries_blame}- `bin/revert` — Revert broken edits or file truncations to the last checkpoint (`bin/revert [target]`).
+{workflow_binaries_blame}- `bin/reject` — Reject feedback on an unmodified target file and scrub feedback header (`bin/reject <file> "<reason>"`).
+- `bin/revert` — Revert broken edits or file truncations to the last checkpoint (`bin/revert [target]`).
 - `bin/checkpoint` — Record a git commit snapshot of active workspace state (`bin/checkpoint [label]`).
 - `bin/fail` — Report an unresolvable impasse."""
         ground_truth_bullet = "- **Ground Truth First (Oracle Diagnostics Over Prose)**: Always run `bin/check_files <target>` to establish deterministic ground truth errors before writing or editing code. Do NOT speculate, guess, or infer defects from prose descriptions before checking oracle output."
@@ -897,7 +1033,9 @@ All {app_info.APP_TITLE} target resolution must proceed through the prescribed w
         resolution_methods = "(`bin/submit` or `bin/fail`)"
         workflow_binaries_blame = ""
         round_res_line = "Never attempt to manually commit, push, or copy files across workspace boundaries; round resolution must always occur via `bin/submit` or `bin/fail`."
-        runner_tools_list = "`get_work`, `check_files`, `submit`, `fail`, `revert`, `checkpoint`"
+        runner_tools_list = (
+            "`get_work`, `check_files`, `submit`, `fail`, `revert`, `checkpoint`"
+        )
         fail_stop_tools = "`bin/get_work`, `bin/check_files`, `bin/submit`, `bin/fail`, `bin/revert`, `bin/checkpoint`"
         metadata_tools = "(`bin/submit` or `bin/fail`)"
         test_failure_action = "code edits or `bin/fail`"
@@ -912,7 +1050,7 @@ All {app_info.APP_TITLE} target resolution must proceed through the prescribed w
         ground_truth_bullet = "- **Ground Truth First (Oracle Diagnostics Over Prose)**: Always run `bin/check_files <target>` to establish deterministic ground truth errors before writing or editing code. Do NOT speculate, guess, or infer defects from prose descriptions before checking oracle output."
 
     if is_auditor:
-        custodian_bullet = "- **Auditor Constraint (Zero File Edits & No Debug Scripts)**: You are an auditor (inspector/verifier), NOT an author. All files in this workspace are read-only contracts and test fixtures. You have ZERO assigned writable files and are STRICTLY FORBIDDEN from editing, modifying, creating, or deleting files in this workspace. You perform verification via `bin/check_files` and provide feedback via `bin/blame`. You are STRICTLY FORBIDDEN from authoring ad-hoc python scripts (e.g. `python -c \"...\"`) to debug author code."
+        custodian_bullet = '- **Auditor Constraint (Zero File Edits & No Debug Scripts)**: You are an auditor (inspector/verifier), NOT an author. All files in this workspace are read-only contracts and test fixtures. You have ZERO assigned writable files and are STRICTLY FORBIDDEN from editing, modifying, creating, or deleting files in this workspace. You perform verification via `bin/check_files` and provide feedback via `bin/blame`. You are STRICTLY FORBIDDEN from authoring ad-hoc python scripts (e.g. `python -c "..."`) to debug author code.'
         undo_section = ""
         rule_2 = "2. **Git & File Modification Prohibited**: All files in this workspace are read-only contracts or oracle test fixtures. You are strictly forbidden from editing, creating, renaming, deleting, or mutating any files, and strictly forbidden from executing any git commands."
         permitted_cmds = "You ARE permitted to run read-only shell utilities (`cat`, `grep`, `find`, etc.) or native harness tools strictly WITHIN this workspace directory (`.`) to inspect files. Mutating files, running python debug scripts, and executing git commands are strictly prohibited."
@@ -1026,6 +1164,10 @@ If you determine that success is not possible (e.g. unreachable code under test,
 ## Standard Workflow
 {workflow}
 """
+    try:
+        content = markdown_preprocessor.preprocess_markdown(content)
+    except Exception:
+        pass
     with open(agents_path, "w", encoding="utf-8") as f:
         f.write(content)
     try:
@@ -1048,7 +1190,11 @@ class WorkspaceScaffolder(scaffold.WorkspaceScaffolder):
         can_blame: bool = True,
     ) -> None:
         if role_def is not None:
-            can_blame = bool(role_def.feedback_role_deps or role_def.audit_tag or not role_def.writable_file_patterns)
+            can_blame = bool(
+                role_def.feedback_role_deps
+                or role_def.audit_tag
+                or not role_def.writable_file_patterns
+            )
         package_runner_zipapps(bin_dir, can_blame=can_blame, role_def=role_def)
 
     # Contract: Writes role configuration metadata (autofab_files_ext.ROLE_DESCRIPTOR_FILE) in workspace root.
@@ -1106,6 +1252,8 @@ class WorkspaceScaffolder(scaffold.WorkspaceScaffolder):
         executable: bool = False,
     ) -> None:
         write_file_with_perms(dst, content, readonly=readonly, executable=executable)
+
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-30T11:00:00Z
 # LAST_CHANGED: 2026-11-03T20:40:00Z

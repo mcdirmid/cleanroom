@@ -14,16 +14,24 @@ import sys
 import time
 import tomllib
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
-from support.lib import app_info
-from support.lib.lifecycle import LifecycleRegistry, Singleton, enter_phase, get_default_registry, get_singleton, system
+from support.lib import app_info, experiments
+from support.lib.lifecycle import (
+    LifecycleRegistry,
+    Singleton,
+    enter_phase,
+    get_default_registry,
+    get_singleton,
+    system,
+)
 from . import benchmark
 
 
 # ==============================================================================
 # Model Catalog Loader & Dynamic Discovery (model_configs.toml)
 # ==============================================================================
+
 
 def _load_model_catalog(
     config_path: Optional[str] = None,
@@ -78,6 +86,7 @@ def _load_model_catalog(
                 raw_data = {}
 
     catalog: Dict[str, benchmark.ModelSpec] = {}
+    global_run_timeout = float(raw_data.get("run_timeout_seconds", 3600.0))
     raw_models = raw_data.get("models", {})
     if not isinstance(raw_models, dict):
         return catalog
@@ -85,7 +94,17 @@ def _load_model_catalog(
     models_section: Dict[str, Any] = {}
     for k, v in raw_models.items():
         if isinstance(v, dict):
-            if any(f in v for f in ("model", "model_name", "base_url", "provider", "max_iterations", "tier")):
+            if any(
+                f in v
+                for f in (
+                    "model",
+                    "model_name",
+                    "base_url",
+                    "provider",
+                    "max_iterations",
+                    "tier",
+                )
+            ):
                 models_section[k] = v
             for sub_k, sub_v in v.items():
                 if isinstance(sub_v, dict):
@@ -110,11 +129,21 @@ def _load_model_catalog(
 
         tier_label = str(
             m_data.get("tier_label")
-            or ("Local Engine" if tier == 1 else "Budget API" if tier == 2 else "Mid-Tier Control" if tier == 3 else "Frontier Ceiling")
+            or (
+                "Local Engine"
+                if tier == 1
+                else "Budget API"
+                if tier == 2
+                else "Mid-Tier Control"
+                if tier == 3
+                else "Frontier Ceiling"
+            )
         )
 
         raw_provider = m_data.get("provider")
-        provider = str(raw_provider) if raw_provider else ("mlx" if tier == 1 else "openai")
+        provider = (
+            str(raw_provider) if raw_provider else ("mlx" if tier == 1 else "openai")
+        )
 
         rate_uncached = float(m_data.get("rate_uncached_in", 0.0))
         rate_cached = float(m_data.get("rate_cached_in", 0.0))
@@ -138,6 +167,13 @@ def _load_model_catalog(
         else:
             default_harness = "antigravity"
 
+        run_timeout_val = m_data.get("run_timeout_seconds")
+        run_timeout_seconds = (
+            float(run_timeout_val)
+            if run_timeout_val is not None
+            else global_run_timeout
+        )
+
         spec = benchmark.ModelSpec(
             identifier=identifier,
             tier=tier,
@@ -149,6 +185,7 @@ def _load_model_catalog(
             endpoint=endpoint_str,
             quantization=quant_str,
             default_harness=default_harness,
+            run_timeout_seconds=run_timeout_seconds,
         )
 
         catalog[key] = spec
@@ -156,16 +193,27 @@ def _load_model_catalog(
             catalog[identifier] = spec
 
         # Common aliases normalization
-        if key in ("qwen-moe-q6", "qwen-moe") or "qwen-moe" in identifier.lower() or identifier == "Qwen3.6-35B-A3B-oQ6-mtp":
+        if (
+            key in ("qwen-moe-q6", "qwen-moe")
+            or "qwen-moe" in identifier.lower()
+            or identifier == "Qwen3.6-35B-A3B-oQ6-mtp"
+        ):
             catalog.setdefault("qwen-moe-q6", spec)
             catalog.setdefault("qwen-moe", spec)
-        elif key in ("deepseek-v41-flash", "deepseek-flash") or "deepseek" in identifier.lower():
+        elif (
+            key in ("deepseek-v41-flash", "deepseek-flash")
+            or "deepseek" in identifier.lower()
+        ):
             catalog.setdefault("deepseek-flash", spec)
             catalog.setdefault("deepseek-v41-flash", spec)
-        elif key in ("claude-3.7-sonnet", "sonnet-3.7") or "sonnet" in identifier.lower():
+        elif (
+            key in ("claude-3.7-sonnet", "sonnet-3.7") or "sonnet" in identifier.lower()
+        ):
             catalog.setdefault("sonnet-3.7", spec)
             catalog.setdefault("claude-3.7-sonnet", spec)
-        elif key in ("gemini-flash", "gemini-3.8-flash") or ("gemini" in identifier.lower() and "flash" in identifier.lower()):
+        elif key in ("gemini-flash", "gemini-3.8-flash") or (
+            "gemini" in identifier.lower() and "flash" in identifier.lower()
+        ):
             catalog.setdefault("gemini-flash", spec)
             catalog.setdefault("gemini-3.8-flash", spec)
         elif key in ("gemini-argon", "gemini-4-argon") or "argon" in identifier.lower():
@@ -183,8 +231,11 @@ _MODEL_CATALOG: Dict[str, benchmark.ModelSpec] = _load_model_catalog()
 # Benchmark Suite & Units Catalog
 # ==============================================================================
 
+
 # Contract: __orphan__ - MUST provide benchmark evaluation suites categorized by suite identifiers derived from benchmark part directories.
-def _load_suite_catalog(repo_root: Optional[Path] = None) -> Dict[str, List[benchmark.BenchmarkUnit]]:
+def _load_suite_catalog(
+    repo_root: Optional[Path] = None,
+) -> Dict[str, List[benchmark.BenchmarkUnit]]:
     """Loads benchmark suites dynamically from the benchmark parts directory."""
     catalog: Dict[str, List[benchmark.BenchmarkUnit]] = {}
 
@@ -215,7 +266,9 @@ def _load_suite_catalog(repo_root: Optional[Path] = None) -> Dict[str, List[benc
                             if (high_dir / "lib.md").is_file():
                                 target_addr = f"//benchmarks/parts/{part_name}#lib"
                             elif (high_dir / f"{part_name}.md").is_file():
-                                target_addr = f"//benchmarks/parts/{part_name}#{part_name}"
+                                target_addr = (
+                                    f"//benchmarks/parts/{part_name}#{part_name}"
+                                )
 
                     unit = benchmark.BenchmarkUnit(
                         suite=part_name,
@@ -256,6 +309,7 @@ _SUITE_CATALOG: Dict[str, List[benchmark.BenchmarkUnit]] = _load_suite_catalog()
 # Telemetry Log Harvester
 # ==============================================================================
 
+
 # Contract: __orphan__ - MUST harvest empirical measurements including token counts, step latencies, and role execution rounds from runner log files and transcripts.
 class _LogHarvester:
     """Parses Autofab runner log files and transcripts to harvest empirical measurements."""
@@ -270,9 +324,9 @@ class _LogHarvester:
         round_prefix = f"{app_info.APP_NAME}_round_"
         turn_prefix = f"{app_info.APP_NAME}_turn_"
         if name.startswith(round_prefix):
-            rest = name[len(round_prefix):]
+            rest = name[len(round_prefix) :]
         elif name.startswith(turn_prefix):
-            rest = name[len(turn_prefix):]
+            rest = name[len(turn_prefix) :]
         else:
             return None
         if rest.startswith("task_"):
@@ -297,7 +351,12 @@ class _LogHarvester:
         if not log_dir.is_dir():
             return uncached_in, cached_in, out_tokens, latencies, role_rounds
 
-        log_files = sorted(set(list(log_dir.glob(f".{app_info.APP_NAME}_round_*.log")) + list(log_dir.glob(f".{app_info.APP_NAME}_turn_*.log"))))
+        log_files = sorted(
+            set(
+                list(log_dir.glob(f".{app_info.APP_NAME}_round_*.log"))
+                + list(log_dir.glob(f".{app_info.APP_NAME}_turn_*.log"))
+            )
+        )
         for log_file in log_files:
             if log_file.stat().st_mtime < since_timestamp:
                 continue
@@ -312,20 +371,40 @@ class _LogHarvester:
                 continue
 
             if not role_name:
-                role_match = re.search(r"(?:^|\n)(?:-\s*)?Role:\s*([a-zA-Z0-9_:#/-]+)", content, re.IGNORECASE)
+                role_match = re.search(
+                    r"(?:^|\n)(?:-\s*)?Role:\s*([a-zA-Z0-9_:#/-]+)",
+                    content,
+                    re.IGNORECASE,
+                )
                 if role_match:
-                    r_raw = role_match.group(1).split(":")[-1].split("#")[-1].strip().lower()
+                    r_raw = (
+                        role_match.group(1)
+                        .split(":")[-1]
+                        .split("#")[-1]
+                        .strip()
+                        .lower()
+                    )
                     if r_raw:
                         role_rounds[r_raw] = role_rounds.get(r_raw, 0) + 1
 
-            for m in re.finditer(r"(?:input_tokens|Input tokens)[:=]\s*(\d+)", content, re.IGNORECASE):
+            for m in re.finditer(
+                r"(?:input_tokens|Input tokens)[:=]\s*(\d+)", content, re.IGNORECASE
+            ):
                 uncached_in += int(m.group(1))
-            for m in re.finditer(r"(?:cached_tokens|Cached tokens)[:=]\s*(\d+)", content, re.IGNORECASE):
+            for m in re.finditer(
+                r"(?:cached_tokens|Cached tokens)[:=]\s*(\d+)", content, re.IGNORECASE
+            ):
                 cached_in += int(m.group(1))
-            for m in re.finditer(r"(?:output_tokens|Output tokens)[:=]\s*(\d+)", content, re.IGNORECASE):
+            for m in re.finditer(
+                r"(?:output_tokens|Output tokens)[:=]\s*(\d+)", content, re.IGNORECASE
+            ):
                 out_tokens += int(m.group(1))
 
-            for m in re.finditer(r"Model request:\s*(\d+)(K)?\s*tokens,\s*(\d+)%\s*cached", content, re.IGNORECASE):
+            for m in re.finditer(
+                r"Model request:\s*(\d+)(K)?\s*tokens,\s*(\d+)%\s*cached",
+                content,
+                re.IGNORECASE,
+            ):
                 val = int(m.group(1))
                 if m.group(2):
                     val *= 1000
@@ -341,7 +420,9 @@ class _LogHarvester:
         return uncached_in, cached_in, out_tokens, latencies, role_rounds
 
     @staticmethod
-    def harvest_from_text(content: str) -> Tuple[int, int, int, List[float], Dict[str, int]]:
+    def harvest_from_text(
+        content: str,
+    ) -> Tuple[int, int, int, List[float], Dict[str, int]]:
         uncached_in = 0
         cached_in = 0
         out_tokens = 0
@@ -351,7 +432,9 @@ class _LogHarvester:
         current_role: Optional[str] = None
         seen_step_1 = False
         for line in content.splitlines():
-            m_root = re.search(r"Starting cleaning pass for root [^#\n]+#([a-zA-Z0-9_]+)", line)
+            m_root = re.search(
+                r"Starting cleaning pass for root [^#\n]+#([a-zA-Z0-9_]+)", line
+            )
             if m_root:
                 if current_role and not seen_step_1:
                     role_rounds[current_role] = role_rounds.get(current_role, 0) + 1
@@ -367,14 +450,24 @@ class _LogHarvester:
         if current_role and not seen_step_1:
             role_rounds[current_role] = role_rounds.get(current_role, 0) + 1
 
-        for m in re.finditer(r"(?:input_tokens|Input tokens)[:=]\s*(\d+)", content, re.IGNORECASE):
+        for m in re.finditer(
+            r"(?:input_tokens|Input tokens)[:=]\s*(\d+)", content, re.IGNORECASE
+        ):
             uncached_in += int(m.group(1))
-        for m in re.finditer(r"(?:cached_tokens|Cached tokens)[:=]\s*(\d+)", content, re.IGNORECASE):
+        for m in re.finditer(
+            r"(?:cached_tokens|Cached tokens)[:=]\s*(\d+)", content, re.IGNORECASE
+        ):
             cached_in += int(m.group(1))
-        for m in re.finditer(r"(?:output_tokens|Output tokens)[:=]\s*(\d+)", content, re.IGNORECASE):
+        for m in re.finditer(
+            r"(?:output_tokens|Output tokens)[:=]\s*(\d+)", content, re.IGNORECASE
+        ):
             out_tokens += int(m.group(1))
 
-        for m in re.finditer(r"Model request:\s*(\d+)(K)?\s*tokens,\s*(\d+)%\s*cached", content, re.IGNORECASE):
+        for m in re.finditer(
+            r"Model request:\s*(\d+)(K)?\s*tokens,\s*(\d+)%\s*cached",
+            content,
+            re.IGNORECASE,
+        ):
             val = int(m.group(1))
             if m.group(2):
                 val *= 1000
@@ -387,7 +480,9 @@ class _LogHarvester:
         for m in re.finditer(r"Duration:\s*([\d\.]+)s", content, re.IGNORECASE):
             latencies.append(round(float(m.group(1)), 2))
 
-        for m in re.finditer(r"Worker '[^']+' finished [^:]+:.*?elapsed=([\d\.]+)s", content):
+        for m in re.finditer(
+            r"Worker '[^']+' finished [^:]+:.*?elapsed=([\d\.]+)s", content
+        ):
             latencies.append(round(float(m.group(1)), 2))
 
         m_orch = re.search(
@@ -404,7 +499,9 @@ class _LogHarvester:
                 out_tokens = o_val
 
         if not role_rounds:
-            for m in re.finditer(r"\[ORCHESTRATE\] Dispatched role '([a-zA-Z0-9_]+)'", content):
+            for m in re.finditer(
+                r"\[ORCHESTRATE\] Dispatched role '([a-zA-Z0-9_]+)'", content
+            ):
                 r = m.group(1).lower()
                 role_rounds[r] = role_rounds.get(r, 0) + 1
 
@@ -452,11 +549,19 @@ class _LogHarvester:
         candidate_workers.sort(key=lambda x: x[0], reverse=True)
         latest_file = candidate_workers[0][1]
         try:
-            lines = [l for l in latest_file.read_text(encoding="utf-8", errors="replace").splitlines() if l.strip()]
+            lines = [
+                l
+                for l in latest_file.read_text(
+                    encoding="utf-8", errors="replace"
+                ).splitlines()
+                if l.strip()
+            ]
             if not lines:
                 return False
             last_entry = json.loads(lines[-1])
-            if last_entry.get("type") == "PLANNER_RESPONSE" and not last_entry.get("tool_calls"):
+            if last_entry.get("type") == "PLANNER_RESPONSE" and not last_entry.get(
+                "tool_calls"
+            ):
                 return True
         except (OSError, json.JSONDecodeError, ValueError):
             pass
@@ -510,7 +615,10 @@ class _LogHarvester:
             except (json.JSONDecodeError, ValueError):
                 first_content = header_lines[0] if header_lines else ""
 
-            if re.search(rf"You are an autonomous {app_info.APP_TITLE} '[a-zA-Z0-9_]+' worker", first_content):
+            if re.search(
+                rf"You are an autonomous {app_info.APP_TITLE} '[a-zA-Z0-9_]+' worker",
+                first_content,
+            ):
                 continue
 
             is_parent_directive = (
@@ -520,34 +628,33 @@ class _LogHarvester:
             baseline_worker_name = f"{app_info.APP_NAME}_baseline_worker"
             coord_name = f"{app_info.APP_NAME}_coordinator"
             is_baseline_worker_subagent = (
-                (
-                    baseline_worker_name in header_text
-                    or "Baseline Developer" in header_text
-                    or "autonomous software developer working directly on code" in header_text
-                    or "autonomous software developer working in scope" in header_text
-                )
-                and not is_parent_directive
-            )
+                baseline_worker_name in header_text
+                or "Baseline Developer" in header_text
+                or "autonomous software developer working directly on code"
+                in header_text
+                or "autonomous software developer working in scope" in header_text
+            ) and not is_parent_directive
             is_coord_subagent = (
-                (
-                    coord_name in header_text
-                    or (scope and f"Clean all dirty nodes in {scope}" in header_text)
-                )
-                and not is_parent_directive
-            )
+                coord_name in header_text
+                or (scope and f"Clean all dirty nodes in {scope}" in header_text)
+            ) and not is_parent_directive
 
             # Match exact scope or benchmark_\d+ pattern when scope prefix matches
             scope_match = False
             if scope:
                 if f"Clean all dirty nodes in {scope}" in header_text:
                     scope_match = True
-                elif scope.startswith("benchmark") and re.search(r"Clean all dirty nodes in benchmark_\d+", header_text):
+                elif scope.startswith("benchmark") and re.search(
+                    r"Clean all dirty nodes in benchmark_\d+", header_text
+                ):
                     scope_match = True
             else:
                 scope_match = True
 
             if baseline:
-                if is_baseline_worker_subagent and (not scope or f"scope '{scope}'" in header_text):
+                if is_baseline_worker_subagent and (
+                    not scope or f"scope '{scope}'" in header_text
+                ):
                     candidate_coords.append((3, mtime, entry.name))
                 elif is_coord_subagent and scope_match:
                     candidate_coords.append((3, mtime, entry.name))
@@ -578,7 +685,9 @@ class _LogHarvester:
         candidate_coords.sort(key=lambda x: (x[0], x[1]), reverse=True)
         coord_id = candidate_coords[0][2]
 
-        coord_file = brain_dir / coord_id / ".system_generated" / "logs" / "transcript.jsonl"
+        coord_file = (
+            brain_dir / coord_id / ".system_generated" / "logs" / "transcript.jsonl"
+        )
         worker_roles: Dict[str, str] = {}
         is_baseline = baseline
 
@@ -604,7 +713,9 @@ class _LogHarvester:
                         if m.group(2) != coord_id:
                             worker_roles[m.group(2)] = m.group(1).lower()
 
-                    for m in re.finditer(r'"conversationId":\s*"([0-9a-fA-F\-]{36})"', content):
+                    for m in re.finditer(
+                        r'"conversationId":\s*"([0-9a-fA-F\-]{36})"', content
+                    ):
                         cid = m.group(1)
                         if cid != coord_id and cid not in worker_roles:
                             worker_roles[cid] = "unknown"
@@ -624,7 +735,9 @@ class _LogHarvester:
                             if dur is not None and isinstance(dur, (int, float)):
                                 latencies.append(round(dur / 1000.0, 3))
                             uncached_in += d.get("input_tokens", 0)
-                            cached_in += d.get("cache_read_tokens", 0) + d.get("cached_tokens", 0)
+                            cached_in += d.get("cache_read_tokens", 0) + d.get(
+                                "cached_tokens", 0
+                            )
                             out_tokens += d.get("output_tokens", 0)
             except OSError:
                 pass
@@ -632,22 +745,36 @@ class _LogHarvester:
 
         for cid, r_name in list(worker_roles.items()):
             if r_name == "unknown":
-                sub_file = brain_dir / cid / ".system_generated" / "logs" / "transcript.jsonl"
+                sub_file = (
+                    brain_dir / cid / ".system_generated" / "logs" / "transcript.jsonl"
+                )
                 if sub_file.is_file():
                     try:
-                        with open(sub_file, "r", encoding="utf-8", errors="replace") as f:
+                        with open(
+                            sub_file, "r", encoding="utf-8", errors="replace"
+                        ) as f:
                             for l in f:
                                 try:
                                     d = json.loads(l)
                                 except (json.JSONDecodeError, ValueError):
                                     continue
                                 text = str(d.get("content", ""))
-                                m_role = re.search(rf"{app_info.APP_TITLE} '?([a-zA-Z0-9_]+)'? [Ww]orker", text)
+                                m_role = re.search(
+                                    rf"{app_info.APP_TITLE} '?([a-zA-Z0-9_]+)'? [Ww]orker",
+                                    text,
+                                )
                                 if m_role:
                                     worker_roles[cid] = m_role.group(1).lower()
                                     break
-                                m_role_alt = re.search(r"role[:=]\s*'?([a-zA-Z0-9_]+)'?", text, re.IGNORECASE)
-                                if m_role_alt and m_role_alt.group(1).lower() != "coordinator":
+                                m_role_alt = re.search(
+                                    r"role[:=]\s*'?([a-zA-Z0-9_]+)'?",
+                                    text,
+                                    re.IGNORECASE,
+                                )
+                                if (
+                                    m_role_alt
+                                    and m_role_alt.group(1).lower() != "coordinator"
+                                ):
                                     worker_roles[cid] = m_role_alt.group(1).lower()
                                     break
                     except OSError:
@@ -671,7 +798,9 @@ class _LogHarvester:
                             if dur is not None and isinstance(dur, (int, float)):
                                 latencies.append(round(dur / 1000.0, 3))
                             uncached_in += d.get("input_tokens", 0)
-                            cached_in += d.get("cache_read_tokens", 0) + d.get("cached_tokens", 0)
+                            cached_in += d.get("cache_read_tokens", 0) + d.get(
+                                "cached_tokens", 0
+                            )
                             out_tokens += d.get("output_tokens", 0)
             except OSError:
                 continue
@@ -697,9 +826,15 @@ class _LogHarvester:
                             has_activity = True
                         src = d.get("source")
                         t = d.get("type")
-                        if src in ("SYSTEM", "USER") and t in ("SYSTEM_MESSAGE", "USER_INPUT"):
+                        if src in ("SYSTEM", "USER") and t in (
+                            "SYSTEM_MESSAGE",
+                            "USER_INPUT",
+                        ):
                             content = str(d.get("content", ""))
-                            if "UNRESOLVED ROUND REMINDER" in content or "ended the round without submitting" in content:
+                            if (
+                                "UNRESOLVED ROUND REMINDER" in content
+                                or "ended the round without submitting" in content
+                            ):
                                 continue
                             worker_rounds += 1
             except OSError:
@@ -718,6 +853,7 @@ class _LogHarvester:
 # Two-Pass Verification Gates & Quality Scorer
 # ==============================================================================
 
+
 class _VerificationGate:
     """Executes deterministic verification passes: Spec Lint -> Pyright -> Pytest -> Mutmut."""
 
@@ -730,7 +866,11 @@ class _VerificationGate:
         method: Optional[str] = None,
     ) -> benchmark.VerificationOutcomes:
         outcomes = benchmark.VerificationOutcomes()
-        effective_method = method if method is not None else ("pretense" if use_pretense else "standard")
+        effective_method = (
+            method
+            if method is not None
+            else ("pretense" if use_pretense else "standard")
+        )
 
         extra_paths: list[Path] = []
         unit_full_path = repo_root / unit.unit_dir
@@ -758,11 +898,16 @@ class _VerificationGate:
         spec_path = repo_root / unit.unit_dir / "high"
         if spec_path.is_dir():
             cmd = ["bin/test", f"{unit.unit_dir}", "--spec-only"]
-            proc = subprocess.run(cmd, cwd=repo_root, env=env, capture_output=True, text=True)
+            proc = subprocess.run(
+                cmd, cwd=repo_root, env=env, capture_output=True, text=True
+            )
             # Exit code 0 is all passed, 5 is no tests collected (valid when tests not yet synthesized)
-            outcomes.spec_linter_pass = (proc.returncode in (0, 5))
+            outcomes.spec_linter_pass = proc.returncode in (0, 5)
             if not outcomes.spec_linter_pass:
-                print(f"[VERIFY GATE] Spec linter failed:\n{proc.stdout}\n{proc.stderr}".strip(), file=sys.stderr)
+                print(
+                    f"[VERIFY GATE] Spec linter failed:\n{proc.stdout}\n{proc.stderr}".strip(),
+                    file=sys.stderr,
+                )
         else:
             outcomes.spec_linter_pass = True
 
@@ -787,19 +932,34 @@ class _VerificationGate:
                 text=True,
             )
             err_match = re.search(r"(\d+)\s+errors?", proc.stdout)
-            outcomes.pyright_errors = int(err_match.group(1)) if err_match else (0 if proc.returncode == 0 else 1)
+            outcomes.pyright_errors = (
+                int(err_match.group(1))
+                if err_match
+                else (0 if proc.returncode == 0 else 1)
+            )
             if outcomes.pyright_errors > 0:
-                print(f"[VERIFY GATE] Pyright reported {outcomes.pyright_errors} error(s):\n{proc.stdout}\n{proc.stderr}".strip(), file=sys.stderr)
+                print(
+                    f"[VERIFY GATE] Pyright reported {outcomes.pyright_errors} error(s):\n{proc.stdout}\n{proc.stderr}".strip(),
+                    file=sys.stderr,
+                )
         else:
             outcomes.pyright_errors = 0
 
-        target_stem = unit.target_address.split("#")[-1] if "#" in unit.target_address else unit.task_id
+        target_stem = (
+            unit.target_address.split("#")[-1]
+            if "#" in unit.target_address
+            else unit.task_id
+        )
         if effective_method == "combined":
             pre_passed, pre_failed, pre_cov = 0, 0, 0.0
             pretense_path = repo_root / unit.unit_dir / "pretense"
             if pretense_path.is_dir():
                 target_pretense_file = pretense_path / f"{target_stem}_pretense.py"
-                run_target = str(target_pretense_file) if target_pretense_file.is_file() else str(pretense_path)
+                run_target = (
+                    str(target_pretense_file)
+                    if target_pretense_file.is_file()
+                    else str(pretense_path)
+                )
                 proc = subprocess.run(
                     ["uv", "run", "pretense", run_target, "--no-fuzz", "--cov"],
                     cwd=repo_root,
@@ -812,15 +972,26 @@ class _VerificationGate:
                 cov_match = re.search(r"TOTAL\s+\d+\s+\d+\s+(\d+)%", proc.stdout)
                 pre_passed = int(pass_match.group(1)) if pass_match else 0
                 pre_failed = int(fail_match.group(1)) if fail_match else 0
-                pre_cov = float(cov_match.group(1)) if cov_match else (100.0 if (proc.returncode == 0 and pre_passed > 0) else 0.0)
+                pre_cov = (
+                    float(cov_match.group(1))
+                    if cov_match
+                    else (100.0 if (proc.returncode == 0 and pre_passed > 0) else 0.0)
+                )
                 if pre_failed > 0 or (pre_passed == 0 and proc.returncode != 0):
-                    print(f"[VERIFY GATE] Pretense verification failed:\n{proc.stdout}\n{proc.stderr}".strip(), file=sys.stderr)
+                    print(
+                        f"[VERIFY GATE] Pretense verification failed:\n{proc.stdout}\n{proc.stderr}".strip(),
+                        file=sys.stderr,
+                    )
 
             std_passed, std_failed = 0, 0
             test_path = repo_root / unit.unit_dir / "tests"
             if test_path.is_dir():
                 target_test_file = test_path / f"{target_stem}_test.py"
-                run_target = str(target_test_file) if target_test_file.is_file() else str(test_path)
+                run_target = (
+                    str(target_test_file)
+                    if target_test_file.is_file()
+                    else str(test_path)
+                )
                 proc = subprocess.run(
                     ["uv", "run", "pytest", run_target, "-q"],
                     cwd=repo_root,
@@ -833,18 +1004,29 @@ class _VerificationGate:
                 std_passed = int(pass_match.group(1)) if pass_match else 0
                 std_failed = int(fail_match.group(1)) if fail_match else 0
                 if std_failed > 0 or (std_passed == 0 and proc.returncode != 0):
-                    print(f"[VERIFY GATE] Unit tests failed:\n{proc.stdout}\n{proc.stderr}".strip(), file=sys.stderr)
+                    print(
+                        f"[VERIFY GATE] Unit tests failed:\n{proc.stdout}\n{proc.stderr}".strip(),
+                        file=sys.stderr,
+                    )
 
             outcomes.unit_tests_passed = pre_passed + std_passed
             outcomes.unit_tests_failed = pre_failed + std_failed
-            cov_val = pre_cov if (outcomes.unit_tests_failed == 0 and outcomes.unit_tests_passed > 0) else 0.0
+            cov_val = (
+                pre_cov
+                if (outcomes.unit_tests_failed == 0 and outcomes.unit_tests_passed > 0)
+                else 0.0
+            )
             outcomes.line_coverage_pct = cov_val
             outcomes.branch_coverage_pct = cov_val
         elif effective_method == "pretense":
             pretense_path = repo_root / unit.unit_dir / "pretense"
             if pretense_path.is_dir():
                 target_pretense_file = pretense_path / f"{target_stem}_pretense.py"
-                run_target = str(target_pretense_file) if target_pretense_file.is_file() else str(pretense_path)
+                run_target = (
+                    str(target_pretense_file)
+                    if target_pretense_file.is_file()
+                    else str(pretense_path)
+                )
                 proc = subprocess.run(
                     ["uv", "run", "pretense", run_target, "--no-fuzz", "--cov"],
                     cwd=repo_root,
@@ -855,13 +1037,30 @@ class _VerificationGate:
                 pass_match = re.search(r"(\d+)\s+passed", proc.stdout)
                 fail_match = re.search(r"(\d+)\s+failed", proc.stdout)
                 cov_match = re.search(r"TOTAL\s+\d+\s+\d+\s+(\d+)%", proc.stdout)
-                outcomes.unit_tests_passed = int(pass_match.group(1)) if pass_match else 0
-                outcomes.unit_tests_failed = int(fail_match.group(1)) if fail_match else 0
-                cov_val = float(cov_match.group(1)) if cov_match else (100.0 if (proc.returncode == 0 and outcomes.unit_tests_passed > 0) else 0.0)
+                outcomes.unit_tests_passed = (
+                    int(pass_match.group(1)) if pass_match else 0
+                )
+                outcomes.unit_tests_failed = (
+                    int(fail_match.group(1)) if fail_match else 0
+                )
+                cov_val = (
+                    float(cov_match.group(1))
+                    if cov_match
+                    else (
+                        100.0
+                        if (proc.returncode == 0 and outcomes.unit_tests_passed > 0)
+                        else 0.0
+                    )
+                )
                 outcomes.line_coverage_pct = cov_val
                 outcomes.branch_coverage_pct = cov_val
-                if outcomes.unit_tests_failed > 0 or (outcomes.unit_tests_passed == 0 and proc.returncode != 0):
-                    print(f"[VERIFY GATE] Pretense verification failed:\n{proc.stdout}\n{proc.stderr}".strip(), file=sys.stderr)
+                if outcomes.unit_tests_failed > 0 or (
+                    outcomes.unit_tests_passed == 0 and proc.returncode != 0
+                ):
+                    print(
+                        f"[VERIFY GATE] Pretense verification failed:\n{proc.stdout}\n{proc.stderr}".strip(),
+                        file=sys.stderr,
+                    )
             else:
                 outcomes.unit_tests_passed = 0
                 outcomes.unit_tests_failed = 0
@@ -871,7 +1070,11 @@ class _VerificationGate:
             test_path = repo_root / unit.unit_dir / "tests"
             if test_path.is_dir():
                 target_test_file = test_path / f"{target_stem}_test.py"
-                run_target = str(target_test_file) if target_test_file.is_file() else str(test_path)
+                run_target = (
+                    str(target_test_file)
+                    if target_test_file.is_file()
+                    else str(test_path)
+                )
                 proc = subprocess.run(
                     ["uv", "run", "pytest", run_target, "-q"],
                     cwd=repo_root,
@@ -881,19 +1084,36 @@ class _VerificationGate:
                 )
                 pass_match = re.search(r"(\d+)\s+passed", proc.stdout)
                 fail_match = re.search(r"(\d+)\s+failed", proc.stdout)
-                outcomes.unit_tests_passed = int(pass_match.group(1)) if pass_match else 0
-                outcomes.unit_tests_failed = int(fail_match.group(1)) if fail_match else 0
-                outcomes.line_coverage_pct = 95.0 if outcomes.unit_tests_failed == 0 else 40.0
-                outcomes.branch_coverage_pct = 90.0 if outcomes.unit_tests_failed == 0 else 35.0
-                if outcomes.unit_tests_failed > 0 or (outcomes.unit_tests_passed == 0 and proc.returncode != 0):
-                    print(f"[VERIFY GATE] Unit tests failed:\n{proc.stdout}\n{proc.stderr}".strip(), file=sys.stderr)
+                outcomes.unit_tests_passed = (
+                    int(pass_match.group(1)) if pass_match else 0
+                )
+                outcomes.unit_tests_failed = (
+                    int(fail_match.group(1)) if fail_match else 0
+                )
+                outcomes.line_coverage_pct = (
+                    95.0 if outcomes.unit_tests_failed == 0 else 40.0
+                )
+                outcomes.branch_coverage_pct = (
+                    90.0 if outcomes.unit_tests_failed == 0 else 35.0
+                )
+                if outcomes.unit_tests_failed > 0 or (
+                    outcomes.unit_tests_passed == 0 and proc.returncode != 0
+                ):
+                    print(
+                        f"[VERIFY GATE] Unit tests failed:\n{proc.stdout}\n{proc.stderr}".strip(),
+                        file=sys.stderr,
+                    )
             else:
                 outcomes.unit_tests_passed = 0
                 outcomes.unit_tests_failed = 0
                 outcomes.line_coverage_pct = 0.0
                 outcomes.branch_coverage_pct = 0.0
 
-        if run_mutation and outcomes.unit_tests_passed > 0 and outcomes.unit_tests_failed == 0:
+        if (
+            run_mutation
+            and outcomes.unit_tests_passed > 0
+            and outcomes.unit_tests_failed == 0
+        ):
             outcomes.mutation_score_pct = 87.5
         else:
             outcomes.mutation_score_pct = 0.0
@@ -904,6 +1124,7 @@ class _VerificationGate:
 # ==============================================================================
 # Helper Functions, Archival & Workspace Draining
 # ==============================================================================
+
 
 def _delete_directory_safely(path: Path) -> None:
     """Recursively removes a directory tree ensuring permissions allow deletion without following symlinks."""
@@ -933,15 +1154,22 @@ def _delete_directory_safely(path: Path) -> None:
     shutil.rmtree(str(path), ignore_errors=True)
 
 
-def _has_materialized_artifacts(unit_dir: Path, use_pretense: bool = False, method: Optional[str] = None) -> bool:
+def _has_materialized_artifacts(
+    unit_dir: Path, use_pretense: bool = False, method: Optional[str] = None
+) -> bool:
     """Checks whether non-empty library and unit test/pretense artifacts have been synthesized on disk."""
-    effective_method = method if method is not None else ("pretense" if use_pretense else "standard")
+    effective_method = (
+        method if method is not None else ("pretense" if use_pretense else "standard")
+    )
     lib_dir = unit_dir / "lib"
     if not lib_dir.is_dir():
         return False
     try:
         has_lib = any(
-            f.is_file() and f.suffix == ".py" and not f.name.startswith("__") and f.stat().st_size > 0
+            f.is_file()
+            and f.suffix == ".py"
+            and not f.name.startswith("__")
+            and f.stat().st_size > 0
             for f in lib_dir.iterdir()
         )
         if not has_lib:
@@ -996,7 +1224,9 @@ def _get_execution_stages(
     method: Optional[str] = None,
 ) -> List[str]:
     """Dynamically resolves the execution stages for the active methodology from roles configuration."""
-    effective_method = method if method is not None else ("pretense" if pretense else "standard")
+    effective_method = (
+        method if method is not None else ("pretense" if pretense else "standard")
+    )
     if baseline:
         return ["baseline"]
 
@@ -1005,30 +1235,49 @@ def _get_execution_stages(
         if r_path.is_file():
             try:
                 import tomllib
+
                 with open(r_path, "rb") as f:
                     r_data = tomllib.load(f)
                 stages: List[str] = []
                 roles_dict = r_data.get("roles", {})
-                roles_iter = roles_dict.values() if isinstance(roles_dict, dict) else r_data.get("roles", [])
+                roles_iter = (
+                    roles_dict.values()
+                    if isinstance(roles_dict, dict)
+                    else r_data.get("roles", [])
+                )
                 for role_block in roles_iter:
                     r_pipe = role_block.get("pipeline")
                     include = False
                     if effective_method == "combined":
-                        include = (r_pipe in (None, "", "standard", "pretense"))
+                        include = r_pipe in (None, "", "standard", "pretense")
                     elif effective_method == "pretense":
-                        include = (r_pipe == "pretense")
+                        include = r_pipe == "pretense"
                     else:
-                        include = (r_pipe in (None, "", "standard"))
+                        include = r_pipe in (None, "", "standard")
                     if include:
                         name = role_block.get("name")
-                        if name and name not in ("high", "scenario", "planning", "low", "spec_qa"):
+                        if name and name not in (
+                            "high",
+                            "scenario",
+                            "planning",
+                            "low",
+                            "spec_qa",
+                        ):
                             stages.append(name)
                 if stages:
                     return stages
             except Exception:
                 pass
     if effective_method == "combined":
-        return ["lib", "test", "qa", "coverage", "pretense", "pretense_qa", "pretense_coverage"]
+        return [
+            "lib",
+            "test",
+            "qa",
+            "coverage",
+            "pretense",
+            "pretense_qa",
+            "pretense_coverage",
+        ]
     elif effective_method == "pretense":
         return ["lib", "pretense", "pretense_qa", "pretense_coverage"]
     else:
@@ -1056,7 +1305,11 @@ def _drain_unit_workspace(repo_root: Path, unit: benchmark.BenchmarkUnit) -> Non
                             _delete_directory_safely(ws_entry)
                         elif "benchmark_" in ws_entry.name:
                             m = re.search(r"benchmark_\d+", ws_entry.name)
-                            if m and not (repo_root / m.group(0)).exists() and not (repo_root / f"{m.group(0)}.failed").exists():
+                            if (
+                                m
+                                and not (repo_root / m.group(0)).exists()
+                                and not (repo_root / f"{m.group(0)}.failed").exists()
+                            ):
                                 _delete_directory_safely(ws_entry)
             except OSError:
                 pass
@@ -1065,11 +1318,32 @@ def _drain_unit_workspace(repo_root: Path, unit: benchmark.BenchmarkUnit) -> Non
         for entry in repo_root.iterdir():
             if entry.is_dir() and (
                 entry.name.startswith(f"{scope}_flight_")
-                or (entry.name.startswith("benchmark_") and entry.name.endswith(".failed"))
+                or (
+                    entry.name.startswith("benchmark_")
+                    and entry.name.endswith(".failed")
+                )
             ):
                 _delete_directory_safely(entry)
     except OSError:
         pass
+
+
+def _cleanup_dsh_scope_conversations(scope: str) -> int:
+    """Deletes existing conversations in DeepSeek Harness matching [scope]."""
+    try:
+        from autofab.parts.dsh.lib import dsh_telemetry
+        from support.lib.lifecycle import get_singleton
+
+        parser = get_singleton(dsh_telemetry.DshTelemetryParser)
+        return parser.cleanup_scope_sessions(scope)
+    except Exception:
+        try:
+            from autofab.parts.dsh.lib import dsh_telemetry_impl
+
+            parser = dsh_telemetry_impl.DshTelemetryParser()
+            return parser.cleanup_scope_sessions(scope)
+        except Exception:
+            return 0
 
 
 # Contract: __orphan__ - MUST provision a concise sequential ephemeral flight scope directory (e.g. benchmark_1), explicitly configure methodology pipeline as pretense, combined, or standard, rewrite copied benchmark imports, disallow bare parts imports, mark specifications clean up to specification QA, and copy scope methodology configuration.
@@ -1086,7 +1360,9 @@ def _provision_flight_scope(
     Returns:
         (flight_scope, flight_unit_dir)
     """
-    effective_method = method if method is not None else ("pretense" if pretense else "standard")
+    effective_method = (
+        method if method is not None else ("pretense" if pretense else "standard")
+    )
     ws_bases = _get_role_workspace_bases(repo_root)
     idx = 1
     while True:
@@ -1104,6 +1380,7 @@ def _provision_flight_scope(
                     except OSError:
                         pass
             flight_scope = cand
+            _cleanup_dsh_scope_conversations(flight_scope)
             break
         idx += 1
 
@@ -1125,11 +1402,17 @@ def _provision_flight_scope(
 
     if (original_scope_dir / "__init__.py").is_file():
         try:
-            shutil.copyfile(original_scope_dir / "__init__.py", flight_scope_dir / "__init__.py")
+            shutil.copyfile(
+                original_scope_dir / "__init__.py", flight_scope_dir / "__init__.py"
+            )
         except OSError:
             pass
 
-    for cfg_name in (*app_info.get_config_filenames(), *app_info.get_roles_filenames(), "pyright_spec.json"):
+    for cfg_name in (
+        *app_info.get_config_filenames(),
+        *app_info.get_roles_filenames(),
+        "pyright_spec.json",
+    ):
         cfg_file = original_scope_dir / cfg_name
         if cfg_file.is_file():
             try:
@@ -1144,10 +1427,15 @@ def _provision_flight_scope(
         flight_parts_dir.mkdir(parents=True, exist_ok=True)
         if (orig_parts_dir / "__init__.py").is_file():
             try:
-                shutil.copyfile(orig_parts_dir / "__init__.py", flight_parts_dir / "__init__.py")
+                shutil.copyfile(
+                    orig_parts_dir / "__init__.py", flight_parts_dir / "__init__.py"
+                )
             except OSError:
                 pass
-        for cfg_name in (*app_info.get_config_filenames(), *app_info.get_roles_filenames()):
+        for cfg_name in (
+            *app_info.get_config_filenames(),
+            *app_info.get_roles_filenames(),
+        ):
             cfg_file = orig_parts_dir / cfg_name
             if cfg_file.is_file():
                 try:
@@ -1166,12 +1454,20 @@ def _provision_flight_scope(
                 try:
                     content = c_toml.read_text(encoding="utf-8")
                     if "pipeline =" not in content:
-                        c_toml.write_text(content.strip() + f'\npipeline = "{pipe_name}"\n', encoding="utf-8")
+                        c_toml.write_text(
+                            content.strip() + f'\npipeline = "{pipe_name}"\n',
+                            encoding="utf-8",
+                        )
                 except OSError:
                     pass
-        if not any((toml_dir / cfg).is_file() for cfg in app_info.get_config_filenames()):
+        if not any(
+            (toml_dir / cfg).is_file() for cfg in app_info.get_config_filenames()
+        ):
             try:
-                (toml_dir / app_info.DEFAULT_CONFIG_FILE).write_text(f'methodology = "//autofab_py"\npipeline = "{pipe_name}"\n', encoding="utf-8")
+                (toml_dir / app_info.DEFAULT_CONFIG_FILE).write_text(
+                    f'methodology = "//autofab_py"\npipeline = "{pipe_name}"\n',
+                    encoding="utf-8",
+                )
             except OSError:
                 pass
 
@@ -1198,7 +1494,9 @@ def _provision_flight_scope(
     for root, _, files in os.walk(str(flight_scope_dir)):
         for fname in files:
             p = Path(root) / fname
-            if p.suffix in text_extensions or fname in (app_info.get_config_filenames() + ("pyproject.toml",)):
+            if p.suffix in text_extensions or fname in (
+                app_info.get_config_filenames() + ("pyproject.toml",)
+            ):
                 try:
                     content = p.read_text(encoding="utf-8")
                 except (OSError, UnicodeDecodeError):
@@ -1206,8 +1504,12 @@ def _provision_flight_scope(
                 new_content = content
                 new_content = re.sub(r"\bbenchmarks\.", f"{flight_scope}.", new_content)
                 new_content = re.sub(r"\bbenchmark\.", f"{flight_scope}.", new_content)
-                new_content = re.sub(r"\bfrom parts\.", f"from {flight_scope}.parts.", new_content)
-                new_content = re.sub(r"\bimport parts\.", f"import {flight_scope}.parts.", new_content)
+                new_content = re.sub(
+                    r"\bfrom parts\.", f"from {flight_scope}.parts.", new_content
+                )
+                new_content = re.sub(
+                    r"\bimport parts\.", f"import {flight_scope}.parts.", new_content
+                )
                 if new_content != content:
                     p.write_text(new_content, encoding="utf-8")
 
@@ -1231,7 +1533,9 @@ def _provision_flight_scope(
             _delete_directory_safely(fl_d)
 
     # Synchronize in-band metadata of copied specification files to prevent spurious DAG dirtying
-    now_iso = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    now_iso = datetime.datetime.now(datetime.timezone.utc).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
     if flight_unit_dir.is_dir():
         for s_dir in flight_unit_dir.iterdir():
             if s_dir.is_dir() and not s_dir.name.startswith((".", "__")):
@@ -1239,14 +1543,26 @@ def _provision_flight_scope(
                     if s_file.is_file() and s_file.suffix in (".md", ".pyi"):
                         try:
                             txt = s_file.read_text(encoding="utf-8")
-                            new_txt = re.sub(r"LAST_CLEANED:\s*[^\n]+", f"LAST_CLEANED: {now_iso}", txt)
+                            new_txt = re.sub(
+                                r"LAST_CLEANED:\s*[^\n]+",
+                                f"LAST_CLEANED: {now_iso}",
+                                txt,
+                            )
                             if new_txt != txt:
                                 s_file.write_text(new_txt, encoding="utf-8")
                         except OSError:
                             pass
 
     # Mark specifications clean up to spec_qa within the flight scope so only downstream roles run
-    mark_cmd = ["uv", "run", "autofab", "mark-clean", flight_scope, "--up-to-role", "spec_qa"]
+    mark_cmd = [
+        "uv",
+        "run",
+        "autofab",
+        "mark-clean",
+        flight_scope,
+        "--up-to-role",
+        "spec_qa",
+    ]
     if effective_method == "combined":
         mark_cmd.append("--combined")
     elif effective_method == "pretense":
@@ -1319,7 +1635,12 @@ def _teardown_flight_scope(
                 target_dir = failed_dir
             except Exception as move_err:
                 try:
-                    shutil.copytree(str(flight_scope_dir), str(failed_dir), symlinks=True, dirs_exist_ok=True)
+                    shutil.copytree(
+                        str(flight_scope_dir),
+                        str(failed_dir),
+                        symlinks=True,
+                        dirs_exist_ok=True,
+                    )
                     _delete_directory_safely(flight_scope_dir)
                     target_dir = failed_dir
                 except Exception as copy_err:
@@ -1350,7 +1671,12 @@ def _teardown_flight_scope(
                                 shutil.move(str(ws_entry), str(dest_ws))
                             except Exception:
                                 try:
-                                    shutil.copytree(str(ws_entry), str(dest_ws), symlinks=True, dirs_exist_ok=True)
+                                    shutil.copytree(
+                                        str(ws_entry),
+                                        str(dest_ws),
+                                        symlinks=True,
+                                        dirs_exist_ok=True,
+                                    )
                                     _delete_directory_safely(ws_entry)
                                 except Exception as ws_err:
                                     print(
@@ -1358,7 +1684,10 @@ def _teardown_flight_scope(
                                         file=sys.stderr,
                                     )
                 except OSError as err:
-                    print(f"[ERROR] Error scanning role workspaces for flight '{flight_scope}': {err}", file=sys.stderr)
+                    print(
+                        f"[ERROR] Error scanning role workspaces for flight '{flight_scope}': {err}",
+                        file=sys.stderr,
+                    )
 
         print(
             f"[BENCHMARK] Flight failed verification or execution. Preserved failure artifacts at: {target_dir}",
@@ -1376,6 +1705,7 @@ def _archive_flight_artifacts(
     flight_scope_dir: Optional[Path] = None,
     use_pretense: bool = False,
     method: Optional[str] = None,
+    experiment: Optional[str] = None,
 ) -> Optional[Tuple[str, str]]:
     """Archives synthesized library and test files into the results directory with embedded metrics.
 
@@ -1392,9 +1722,19 @@ def _archive_flight_artifacts(
 
     model_id = str(record.model.get("identifier", "unknown")).replace("/", "_")
     resolved_harness = harness or str(record.model.get("default_harness", "loop"))
-    effective_method = method if method is not None else ("pretense" if use_pretense else None)
+    effective_method = (
+        method if method is not None else ("pretense" if use_pretense else None)
+    )
     is_combined = (effective_method == "combined") or ("combined" in record.methodology)
-    is_pretense = not is_combined and (effective_method == "pretense" or use_pretense or ("pretense" in record.methodology))
+    is_pretense = not is_combined and (
+        effective_method == "pretense"
+        or use_pretense
+        or ("pretense" in record.methodology)
+    )
+    active_experiments = experiments.get_active_experiments()
+    effective_experiment = experiment or (
+        "-".join(active_experiments) if active_experiments else None
+    )
     folder_name = f"{model_id}"
     if is_combined:
         folder_name += "-combined"
@@ -1402,13 +1742,23 @@ def _archive_flight_artifacts(
         folder_name += "-pretense"
     if "baseline" in record.methodology:
         folder_name += "-baseline"
+    if effective_experiment:
+        folder_name += f"-{effective_experiment}"
     benchmark_id = unit.task_id
 
     v = record.verification_outcomes
-    if v is None or not v.spec_linter_pass or v.unit_tests_failed > 0 or v.unit_tests_passed == 0 or v.pyright_errors > 0:
+    if (
+        v is None
+        or not v.spec_linter_pass
+        or v.unit_tests_failed > 0
+        or v.unit_tests_passed == 0
+        or v.pyright_errors > 0
+    ):
         return None
 
-    unit_full_dir = source_dir if source_dir is not None else (repo_root / unit.unit_dir)
+    unit_full_dir = (
+        source_dir if source_dir is not None else (repo_root / unit.unit_dir)
+    )
     lib_dir = unit_full_dir / "lib"
     tests_dir = unit_full_dir / "tests"
     pretense_dir = unit_full_dir / "pretense"
@@ -1431,7 +1781,14 @@ def _archive_flight_artifacts(
                 f"baseline_{flight_scope_dir.name}",
                 f"{app_info.APP_NAME}_lib_{flight_scope_dir.name}",
             ):
-                cand_lib = ws_base / cand_prefix / flight_scope_dir.name / "parts" / unit.task_id / "lib"
+                cand_lib = (
+                    ws_base
+                    / cand_prefix
+                    / flight_scope_dir.name
+                    / "parts"
+                    / unit.task_id
+                    / "lib"
+                )
                 if cand_lib.is_dir():
                     for p in sorted(cand_lib.glob("*.py")):
                         if not p.name.startswith("__") and p.stat().st_size > 0:
@@ -1459,7 +1816,14 @@ def _archive_flight_artifacts(
                     f"baseline_{flight_scope_dir.name}",
                     f"{app_info.APP_NAME}_test_{flight_scope_dir.name}",
                 ):
-                    cand_test = ws_base / cand_prefix / flight_scope_dir.name / "parts" / unit.task_id / "tests"
+                    cand_test = (
+                        ws_base
+                        / cand_prefix
+                        / flight_scope_dir.name
+                        / "parts"
+                        / unit.task_id
+                        / "tests"
+                    )
                     if cand_test.is_dir():
                         for p in sorted(cand_test.glob("*_test.py")):
                             if p.stat().st_size > 0:
@@ -1483,7 +1847,14 @@ def _archive_flight_artifacts(
                     f"pretense_baseline_{flight_scope_dir.name}",
                     f"{app_info.APP_NAME}_pretense_{flight_scope_dir.name}",
                 ):
-                    cand_test = ws_base / cand_prefix / flight_scope_dir.name / "parts" / unit.task_id / "pretense"
+                    cand_test = (
+                        ws_base
+                        / cand_prefix
+                        / flight_scope_dir.name
+                        / "parts"
+                        / unit.task_id
+                        / "pretense"
+                    )
                     if cand_test.is_dir():
                         for p in sorted(cand_test.glob("*_pretense.py")):
                             if p.stat().st_size > 0:
@@ -1512,7 +1883,9 @@ def _archive_flight_artifacts(
                 pass
 
     if is_combined:
-        if (not src_lib_files or not src_test_files or not src_pretense_files) and not target_existing_lib:
+        if (
+            not src_lib_files or not src_test_files or not src_pretense_files
+        ) and not target_existing_lib:
             return None
     elif is_pretense:
         if (not src_lib_files or not src_pretense_files) and not target_existing_lib:
@@ -1536,7 +1909,11 @@ def _archive_flight_artifacts(
                 max_idx = max(max_idx, int(m.group(1)))
         run_idx = max_idx + 1
 
-    dest_lib_path = target_existing_lib if (target_existing_lib and not src_lib_files) else (target_dir / f"lib_{run_idx}.py")
+    dest_lib_path = (
+        target_existing_lib
+        if (target_existing_lib and not src_lib_files)
+        else (target_dir / f"lib_{run_idx}.py")
+    )
     if is_combined:
         dest_test_name = f"test_{run_idx}.py"
         dest_test_path = target_dir / dest_test_name
@@ -1550,7 +1927,11 @@ def _archive_flight_artifacts(
     m = record.measurements
     v = record.verification_outcomes
     tier_val = record.model.get("tier", "?")
-    role_rounds_str = ", ".join(f"{r}: {c}" for r, c in sorted(m.role_rounds.items())) if m.role_rounds else "none"
+    role_rounds_str = (
+        ", ".join(f"{r}: {c}" for r, c in sorted(m.role_rounds.items()))
+        if m.role_rounds
+        else "none"
+    )
     total_rounds = sum(m.role_rounds.values())
     metrics_comment = (
         "# ==============================================================================\n"
@@ -1586,9 +1967,16 @@ def _archive_flight_artifacts(
 
     if target_existing_lib and (not src_lib_files or not src_test_files):
         old_content = target_existing_lib.read_text(encoding="utf-8", errors="replace")
-        header_end = old_content.find("# ==============================================================================\n\n")
+        header_end = old_content.find(
+            "# ==============================================================================\n\n"
+        )
         if header_end != -1:
-            body = old_content[header_end + len("# ==============================================================================\n\n"):]
+            body = old_content[
+                header_end
+                + len(
+                    "# ==============================================================================\n\n"
+                ) :
+            ]
         else:
             body = old_content
         dest_lib_path.write_text(metrics_comment + body, encoding="utf-8")
@@ -1638,22 +2026,28 @@ def _archive_flight_artifacts(
     log_names = app_info.get_log_filenames()
     search_dirs: List[Path] = []
     if flight_scope_dir is not None:
-        search_dirs.extend([
-            flight_scope_dir,
-            flight_scope_dir / "parts",
-        ])
+        search_dirs.extend(
+            [
+                flight_scope_dir,
+                flight_scope_dir / "parts",
+            ]
+        )
     if source_dir is not None:
-        search_dirs.extend([
-            source_dir,
-            source_dir.parent,
-        ])
+        search_dirs.extend(
+            [
+                source_dir,
+                source_dir.parent,
+            ]
+        )
     scope = unit.unit_dir.split("/")[0]
-    search_dirs.extend([
-        unit_full_dir,
-        unit_full_dir.parent,
-        repo_root / scope,
-        repo_root / unit.unit_dir,
-    ])
+    search_dirs.extend(
+        [
+            unit_full_dir,
+            unit_full_dir.parent,
+            repo_root / scope,
+            repo_root / unit.unit_dir,
+        ]
+    )
     for sdir in search_dirs:
         for lname in log_names:
             candidates.append(sdir / lname)
@@ -1688,17 +2082,27 @@ def _execute_flight(
     max_waves: Optional[int] = 100,
     dsh_web: bool = False,
     dsh_desktop: bool = False,
+    experiment: Optional[str] = None,
 ) -> benchmark.FlightRecord:
-    timestamp_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d_%H%M%S")
-    flight_id = f"flight_{timestamp_str}_{model.identifier.replace('.', '_')}_{unit.task_id}"
+    if experiment:
+        os.environ["AUTOFAB_EXPERIMENT"] = experiment
+        experiments.set_active_experiments(experiment)
+    timestamp_str = datetime.datetime.now(datetime.timezone.utc).strftime(
+        "%Y%m%d_%H%M%S"
+    )
+    flight_id = (
+        f"flight_{timestamp_str}_{model.identifier.replace('.', '_')}_{unit.task_id}"
+    )
     iso_timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
     start_wall = time.perf_counter()
     start_epoch = time.time()
     measurements = benchmark.FlightMeasurements()
 
-    effective_method = method if method is not None else ("pretense" if pretense else "standard")
-    is_pretense = (effective_method == "pretense")
+    effective_method = (
+        method if method is not None else ("pretense" if pretense else "standard")
+    )
+    is_pretense = effective_method == "pretense"
 
     resolved_harness = harness if harness != "auto" else model.default_harness
 
@@ -1713,7 +2117,9 @@ def _execute_flight(
         base_in = (unit.spec_loc * 60) if unit.spec_loc > 0 else 18_000
         measurements.inbound_tokens_uncached = int(base_in * 0.3)
         measurements.inbound_tokens_cached = int(base_in * 0.7)
-        measurements.outbound_tokens = (unit.target_lib_loc * 18) if unit.target_lib_loc > 0 else 6_000
+        measurements.outbound_tokens = (
+            (unit.target_lib_loc * 18) if unit.target_lib_loc > 0 else 6_000
+        )
         measurements.step_latencies_seconds = [2.4, 3.1, 2.9, 4.2]
         measurements.wall_clock_seconds = round(time.perf_counter() - start_wall, 2)
         if baseline and effective_method == "combined":
@@ -1735,11 +2141,19 @@ def _execute_flight(
             methodology = app_info.APP_NAME
             flight_id_str = flight_id
 
-        stages = _get_execution_stages(repo_root, methodology, pretense=is_pretense, baseline=baseline, method=effective_method)
+        stages = _get_execution_stages(
+            repo_root,
+            methodology,
+            pretense=is_pretense,
+            baseline=baseline,
+            method=effective_method,
+        )
         measurements.role_rounds = {s: 1 for s in stages}
         measurements.compute_totals(model)
 
-        tests_passed = max(12, unit.target_lib_loc // 20) if unit.target_lib_loc > 0 else 25
+        tests_passed = (
+            max(12, unit.target_lib_loc // 20) if unit.target_lib_loc > 0 else 25
+        )
         outcomes = benchmark.VerificationOutcomes(
             spec_linter_pass=True,
             pyright_errors=0,
@@ -1775,7 +2189,9 @@ def _execute_flight(
             verification_outcomes=outcomes,
         )
     else:
-        if resolved_harness == "antigravity" and not os.environ.get("ANTIGRAVITY_AGENT"):
+        if resolved_harness == "antigravity" and not os.environ.get(
+            "ANTIGRAVITY_AGENT"
+        ):
             raise ValueError(
                 f"Model '{model.identifier}' is configured to use the 'antigravity' harness, "
                 f"which requires running within the Antigravity agentic environment (ANTIGRAVITY_AGENT not detected).\n"
@@ -1793,7 +2209,11 @@ def _execute_flight(
         try:
             # Resolve config profile key from model catalog to pass to autofab clean
             autofab_model_arg = next(
-                (k for k, v in _MODEL_CATALOG.items() if v.identifier == model.identifier and "." not in k),
+                (
+                    k
+                    for k, v in _MODEL_CATALOG.items()
+                    if v.identifier == model.identifier and "." not in k
+                ),
                 model.identifier,
             )
             fused_role_name: Optional[str] = None
@@ -1816,23 +2236,29 @@ def _execute_flight(
             converged = False
             if resolved_harness == "antigravity":
                 # Persist active flight metadata for observability and tooling
-                active_flight_file = Path(app_info.resolve_state_dir(str(repo_root))) / "active_flight.json"
+                active_flight_file = (
+                    Path(app_info.resolve_state_dir(str(repo_root)))
+                    / "active_flight.json"
+                )
                 try:
                     active_flight_file.parent.mkdir(parents=True, exist_ok=True)
                     active_flight_file.write_text(
-                        json.dumps({
-                            "flight_id": flight_id_str,
-                            "flight_scope": flight_scope,
-                            "unit": unit.target_address,
-                            "model": model.identifier,
-                            "harness": resolved_harness,
-                            "baseline": baseline,
-                            "pretense": is_pretense,
-                            "method": effective_method,
-                            "pipeline": effective_method,
-                            "start_time": start_wall,
-                        }, indent=2),
-                        encoding="utf-8"
+                        json.dumps(
+                            {
+                                "flight_id": flight_id_str,
+                                "flight_scope": flight_scope,
+                                "unit": unit.target_address,
+                                "model": model.identifier,
+                                "harness": resolved_harness,
+                                "baseline": baseline,
+                                "pretense": is_pretense,
+                                "method": effective_method,
+                                "pipeline": effective_method,
+                                "start_time": start_wall,
+                            },
+                            indent=2,
+                        ),
+                        encoding="utf-8",
                     )
                 except OSError:
                     pass
@@ -1840,7 +2266,11 @@ def _execute_flight(
             cmd = [
                 sys.executable,
                 "-m",
-                "support.lib.autofab_role_tool" if os.path.isfile(repo_root / "support" / "lib" / "autofab_role_tool.py") else "autofab.support.lib.autofab_role_tool",
+                "support.lib.autofab_role_tool"
+                if os.path.isfile(
+                    repo_root / "support" / "lib" / "autofab_role_tool.py"
+                )
+                else "autofab.support.lib.autofab_role_tool",
                 "clean",
                 flight_unit_rel,
                 "--model",
@@ -1858,19 +2288,36 @@ def _execute_flight(
                 cmd.append("--standard")
             if max_waves is not None:
                 cmd.extend(["--max-waves", str(max_waves)])
+            if experiment:
+                cmd.extend(["--experiment", experiment])
             if resolved_harness == "antigravity" and antigravity_dispatch:
                 cmd.extend(["--antigravity-dispatch", antigravity_dispatch])
             if dsh_desktop or os.environ.get("AUTOFAB_DSH_WEB") == "0":
                 cmd.append("--dsh-desktop")
             elif dsh_web or os.environ.get("AUTOFAB_DSH_WEB") == "1":
                 cmd.append("--dsh-web")
+            default_timeout = model.run_timeout_seconds
+            max_wait = (
+                float("inf")
+                if timeout == 0
+                else (timeout if timeout is not None else default_timeout)
+            )
+
             if resolved_harness != "antigravity":
+                timeout_label = (
+                    "unlimited" if math.isinf(max_wait) else f"{int(max_wait)}s"
+                )
                 sys.stdout.write("\n" + "=" * 72 + "\n")
                 sys.stdout.write("AUTONOMOUS DSH COORDINATION INITIATED:\n")
                 sys.stdout.write(f"Harness: {resolved_harness} (DSH Server Bridge)\n")
                 sys.stdout.write(f"Target Scope: {flight_scope}\n")
-                sys.stdout.write("Status: Dispatching to live DSH Web/Desktop server.\n")
-                sys.stdout.write("Action: None required. Do NOT invoke coordinator or interfere with workspaces.\n")
+                sys.stdout.write(f"Timeout: {timeout_label}\n")
+                sys.stdout.write(
+                    "Status: Dispatching to live DSH Web/Desktop server.\n"
+                )
+                sys.stdout.write(
+                    "Action: None required. Do NOT invoke coordinator or interfere with workspaces.\n"
+                )
                 sys.stdout.write("=" * 72 + "\n\n")
                 sys.stdout.flush()
 
@@ -1883,17 +2330,36 @@ def _execute_flight(
                     bufsize=1,
                 )
                 output_lines: list[str] = []
+                dsh_start = time.time()
+                dsh_timed_out = False
                 if proc.stdout:
                     for line in iter(proc.stdout.readline, ""):
                         sys.stdout.write(line)
                         sys.stdout.flush()
                         output_lines.append(line)
+                        if (
+                            max_wait is not None
+                            and not math.isinf(max_wait)
+                            and (time.time() - dsh_start) > max_wait
+                        ):
+                            dsh_timed_out = True
+                            proc.kill()
+                            break
                     proc.stdout.close()
                 proc.wait()
+                if dsh_timed_out:
+                    timeout_msg = f"\n[DSH Harness] Timeout ({int(max_wait)}s) reached before completion.\n"
+                    sys.stdout.write(timeout_msg)
+                    sys.stdout.flush()
+                    output_lines.append(timeout_msg)
                 output_text = "".join(output_lines)
             else:
-                proc = subprocess.run(cmd, cwd=repo_root, capture_output=True, text=True)
-                output_text = (proc.stdout or "") + ("\n" + proc.stderr if proc.stderr else "")
+                proc = subprocess.run(
+                    cmd, cwd=repo_root, capture_output=True, text=True
+                )
+                output_text = (proc.stdout or "") + (
+                    "\n" + proc.stderr if proc.stderr else ""
+                )
 
             # Write execution log to logs directory
             logs_dir = repo_root / "logs"
@@ -1911,11 +2377,14 @@ def _execute_flight(
                     sys.stdout.flush()
 
                 if wait_for_convergence:
-                    max_wait = float("inf") if timeout == 0 else (timeout if timeout is not None else 7200.0)
                     poll_interval = 5.0
                     poll_start = time.time()
-                    target_role_hint = f" (role: {fused_role_name})" if fused_role_name else ""
-                    timeout_str = "unlimited" if math.isinf(max_wait) else f"{int(max_wait)}s"
+                    target_role_hint = (
+                        f" (role: {fused_role_name})" if fused_role_name else ""
+                    )
+                    timeout_str = (
+                        "unlimited" if math.isinf(max_wait) else f"{int(max_wait)}s"
+                    )
                     sys.stdout.write(
                         f"\n[Antigravity Harness] Directive emitted. Waiting for DAG convergence in scope '{flight_scope}'{target_role_hint} "
                         f"(timeout: {timeout_str})...\n"
@@ -1925,7 +2394,14 @@ def _execute_flight(
                     converged = False
                     while time.time() - poll_start < max_wait:
                         time.sleep(poll_interval)
-                        wq_cmd = ["uv", "run", "autofab", "work-queue", flight_scope, "--json"]
+                        wq_cmd = [
+                            "uv",
+                            "run",
+                            "autofab",
+                            "work-queue",
+                            flight_scope,
+                            "--json",
+                        ]
                         if fused_role_name:
                             wq_cmd.extend(["--role", fused_role_name])
                         if effective_method == "combined":
@@ -1943,14 +2419,22 @@ def _execute_flight(
                         if wq_proc.returncode == 0 and wq_proc.stdout.strip():
                             try:
                                 wq_data = json.loads(wq_proc.stdout)
-                                if wq_data.get("is_clean") is True and _has_materialized_artifacts(flight_unit_dir, use_pretense=is_pretense, method=effective_method):
+                                if wq_data.get(
+                                    "is_clean"
+                                ) is True and _has_materialized_artifacts(
+                                    flight_unit_dir,
+                                    use_pretense=is_pretense,
+                                    method=effective_method,
+                                ):
                                     converged = True
                                     break
                             except json.JSONDecodeError:
                                 pass
 
                     if converged:
-                        sys.stdout.write(f"\n[Antigravity Harness] Scope '{flight_scope}' converged clean! Harvesting metrics...\n")
+                        sys.stdout.write(
+                            f"\n[Antigravity Harness] Scope '{flight_scope}' converged clean! Harvesting metrics...\n"
+                        )
                         sys.stdout.flush()
                     else:
                         sys.stdout.write(
@@ -1964,17 +2448,25 @@ def _execute_flight(
             u_in, c_in, out_tok, lats, r_rounds = 0, 0, 0, [], {}
 
             if resolved_harness == "antigravity":
-                appdata_dir = os.environ.get("ANTIGRAVITY_APP_DATA_DIR") or os.path.expanduser("~/.gemini/antigravity")
+                appdata_dir = os.environ.get(
+                    "ANTIGRAVITY_APP_DATA_DIR"
+                ) or os.path.expanduser("~/.gemini/antigravity")
                 brain_dir = Path(appdata_dir) / "brain"
-                u_in, c_in, out_tok, lats, r_rounds = _LogHarvester.harvest_from_antigravity(
-                    brain_dir, start_epoch, scope=flight_scope, baseline=baseline
+                u_in, c_in, out_tok, lats, r_rounds = (
+                    _LogHarvester.harvest_from_antigravity(
+                        brain_dir, start_epoch, scope=flight_scope, baseline=baseline
+                    )
                 )
 
             if not (u_in or c_in or out_tok or r_rounds):
-                u_in, c_in, out_tok, lats, r_rounds = _LogHarvester.harvest_from_log_files(logs_dir, start_epoch)
+                u_in, c_in, out_tok, lats, r_rounds = (
+                    _LogHarvester.harvest_from_log_files(logs_dir, start_epoch)
+                )
 
             if not (u_in or c_in or out_tok or r_rounds) and output_text.strip():
-                t_u, t_c, t_out, t_lats, t_rounds = _LogHarvester.harvest_from_text(output_text)
+                t_u, t_c, t_out, t_lats, t_rounds = _LogHarvester.harvest_from_text(
+                    output_text
+                )
                 u_in += t_u
                 c_in += t_c
                 out_tok += t_out
@@ -1998,7 +2490,11 @@ def _execute_flight(
                 else (proc.returncode == 0)
             )
 
-            target_role_or_comp = unit.target_address.split("#")[-1] if "#" in unit.target_address else "lib"
+            target_role_or_comp = (
+                unit.target_address.split("#")[-1]
+                if "#" in unit.target_address
+                else "lib"
+            )
             flight_unit_spec = benchmark.BenchmarkUnit(
                 suite=unit.suite,
                 task_id=unit.task_id,
@@ -2010,7 +2506,11 @@ def _execute_flight(
                 description=unit.description,
             )
             outcomes = _VerificationGate.evaluate(
-                repo_root, flight_unit_spec, run_mutation=mutation_testing, use_pretense=is_pretense, method=effective_method
+                repo_root,
+                flight_unit_spec,
+                run_mutation=mutation_testing,
+                use_pretense=is_pretense,
+                method=effective_method,
             )
             outcomes.converged = flight_converged
 
@@ -2022,7 +2522,13 @@ def _execute_flight(
                 methodology = "pretense"
             else:
                 methodology = app_info.APP_NAME
-            stages = _get_execution_stages(repo_root, methodology, pretense=is_pretense, baseline=baseline, method=effective_method)
+            stages = _get_execution_stages(
+                repo_root,
+                methodology,
+                pretense=is_pretense,
+                baseline=baseline,
+                method=effective_method,
+            )
 
             record = benchmark.FlightRecord(
                 flight_id=flight_id_str,
@@ -2070,6 +2576,7 @@ def _execute_flight(
                     flight_scope_dir=flight_scope_dir,
                     use_pretense=is_pretense,
                     method=effective_method,
+                    experiment=experiment,
                 )
                 if archived is not None:
                     flight_success = True
@@ -2080,7 +2587,9 @@ def _execute_flight(
 
             return record
         finally:
-            active_flight_file = Path(app_info.resolve_state_dir(str(repo_root))) / "active_flight.json"
+            active_flight_file = (
+                Path(app_info.resolve_state_dir(str(repo_root))) / "active_flight.json"
+            )
             if active_flight_file.is_file():
                 try:
                     active_flight_file.unlink()
@@ -2089,7 +2598,9 @@ def _execute_flight(
             _teardown_flight_scope(repo_root, flight_scope, success=flight_success)
 
 
-def _generate_markdown_report(records: Sequence[benchmark.FlightRecord], output_path: Optional[Path]) -> str:
+def _generate_markdown_report(
+    records: Sequence[benchmark.FlightRecord], output_path: Optional[Path]
+) -> str:
     lines = [
         f"# {app_info.APP_TITLE} Empirical Benchmark Flight Report",
         "",
@@ -2119,7 +2630,9 @@ def _generate_markdown_report(records: Sequence[benchmark.FlightRecord], output_
         test_str = f"{v.unit_tests_passed}P / {v.unit_tests_failed}F"
         rounds_summary = f"{sum(m.role_rounds.values())}"
         if m.role_rounds:
-            rounds_detail = ", ".join(f"{k}:{v_cnt}" for k, v_cnt in sorted(m.role_rounds.items()))
+            rounds_detail = ", ".join(
+                f"{k}:{v_cnt}" for k, v_cnt in sorted(m.role_rounds.items())
+            )
             rounds_col = f"{rounds_summary} ({rounds_detail})"
         else:
             rounds_col = "0"
@@ -2131,7 +2644,8 @@ def _generate_markdown_report(records: Sequence[benchmark.FlightRecord], output_
         )
 
     failed_flights = [
-        r for r in records
+        r
+        for r in records
         if not (
             r.verification_outcomes is not None
             and getattr(r.verification_outcomes, "converged", True)
@@ -2149,7 +2663,9 @@ def _generate_markdown_report(records: Sequence[benchmark.FlightRecord], output_
             fv = f.verification_outcomes
             reasons = []
             if not getattr(fv, "converged", True):
-                reasons.append(f"{app_info.APP_TITLE} DAG failed to converge (wave limit, deadlock, or runner error)")
+                reasons.append(
+                    f"{app_info.APP_TITLE} DAG failed to converge (wave limit, deadlock, or runner error)"
+                )
             if not fv.spec_linter_pass:
                 reasons.append("spec linters failed")
             if fv.pyright_errors > 0:
@@ -2164,9 +2680,15 @@ def _generate_markdown_report(records: Sequence[benchmark.FlightRecord], output_
     lines.append("")
     lines.append("## Cross-Tier Efficiency Analysis")
     lines.append("")
-    lines.append("- **Local Tier (omlx)** delivers guaranteed **$0.0000** financial cost per benchmark flight.")
-    lines.append("- **Budget API Tier** achieves sub-penny token costs with context caching.")
-    lines.append("- **Mid-Tier & Frontier Ceilings** provide structural validation anchor baselines.")
+    lines.append(
+        "- **Local Tier (omlx)** delivers guaranteed **$0.0000** financial cost per benchmark flight."
+    )
+    lines.append(
+        "- **Budget API Tier** achieves sub-penny token costs with context caching."
+    )
+    lines.append(
+        "- **Mid-Tier & Frontier Ceilings** provide structural validation anchor baselines."
+    )
     lines.append("")
 
     report_str = "\n".join(lines)
@@ -2189,13 +2711,17 @@ def _save_flight_json(record: benchmark.FlightRecord, logs_dir: Path) -> Path:
 # BenchmarkEvaluator Service Implementation
 # ==============================================================================
 
+
 class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
     """System service realizing empirical model evaluation and telemetry reporting."""
+
     tier = system
 
     def __init__(self) -> None:
         bwd = os.environ.get("BUILD_WORKSPACE_DIRECTORY", "")
-        self._repo_root = Path(bwd).resolve() if bwd else Path(__file__).resolve().parents[4]
+        self._repo_root = (
+            Path(bwd).resolve() if bwd else Path(__file__).resolve().parents[4]
+        )
         self._model_catalog = _load_model_catalog(repo_root=self._repo_root)
         self._suite_catalog = _load_suite_catalog(repo_root=self._repo_root)
 
@@ -2224,6 +2750,7 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
         max_waves: Optional[int] = 100,
         dsh_web: bool = False,
         dsh_desktop: bool = False,
+        experiment: Optional[str] = None,
     ) -> benchmark.FlightRecord:
         return _execute_flight(
             repo_root=self._repo_root,
@@ -2244,6 +2771,7 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
             max_waves=max_waves,
             dsh_web=dsh_web,
             dsh_desktop=dsh_desktop,
+            experiment=experiment,
         )
 
     def harvest_flight(
@@ -2279,7 +2807,9 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
                 spec_loc=unit_data.get("spec_loc", 0),
                 target_lib_loc=unit_data.get("target_lib_loc", 0),
                 unit_dir=unit_data.get("unit_dir", f"benchmarks/parts/{task_id}"),
-                target_address=unit_data.get("target_address", f"//benchmarks/parts/{task_id}#lib"),
+                target_address=unit_data.get(
+                    "target_address", f"//benchmarks/parts/{task_id}#lib"
+                ),
                 description=unit_data.get("description", ""),
             )
 
@@ -2295,7 +2825,11 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
                 rate_uncached_in=0.15,
                 rate_cached_in=0.0375,
                 rate_out=0.6,
-                default_harness=model_data.get("harness") or model_data.get("default_harness", "antigravity"),
+                default_harness=model_data.get("harness")
+                or model_data.get("default_harness", "antigravity"),
+                run_timeout_seconds=float(
+                    model_data.get("run_timeout_seconds", 3600.0)
+                ),
             )
 
         timestamp_str = data.get("timestamp", "")
@@ -2305,8 +2839,12 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
             start_epoch = 0.0
 
         scope = data.get("flight_scope") or unit.unit_dir.split("/")[0]
-        is_baseline_flight = ("baseline" in data.get("methodology", "")) or clean_id.endswith("_baseline")
-        appdata_dir = os.environ.get("ANTIGRAVITY_APP_DATA_DIR") or os.path.expanduser("~/.gemini/antigravity")
+        is_baseline_flight = (
+            "baseline" in data.get("methodology", "")
+        ) or clean_id.endswith("_baseline")
+        appdata_dir = os.environ.get("ANTIGRAVITY_APP_DATA_DIR") or os.path.expanduser(
+            "~/.gemini/antigravity"
+        )
         brain_dir = Path(appdata_dir) / "brain"
         u_in, c_in, out_tok, lats, r_rounds = _LogHarvester.harvest_from_antigravity(
             brain_dir, start_epoch, scope=scope, baseline=is_baseline_flight
@@ -2314,21 +2852,37 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
 
         logs_dir = self._repo_root / "logs"
         if not (u_in or c_in or out_tok or r_rounds):
-            u_in, c_in, out_tok, lats, r_rounds = _LogHarvester.harvest_from_log_files(logs_dir, start_epoch)
+            u_in, c_in, out_tok, lats, r_rounds = _LogHarvester.harvest_from_log_files(
+                logs_dir, start_epoch
+            )
 
         measurements = benchmark.FlightMeasurements(
             inbound_tokens_uncached=u_in,
             inbound_tokens_cached=c_in,
             outbound_tokens=out_tok,
             step_latencies_seconds=lats,
-            wall_clock_seconds=data.get("measurements", {}).get("wall_clock_seconds", 0.0),
+            wall_clock_seconds=data.get("measurements", {}).get(
+                "wall_clock_seconds", 0.0
+            ),
             role_rounds=r_rounds,
         )
         measurements.compute_totals(model)
 
-        is_combined_flight = ("combined" in data.get("methodology", "")) or clean_id.endswith("_combined") or "_combined" in clean_id
-        is_pretense_flight = not is_combined_flight and (("pretense" in data.get("methodology", "")) or clean_id.endswith("_pretense") or "_pretense" in clean_id)
-        harvest_method = "combined" if is_combined_flight else ("pretense" if is_pretense_flight else "standard")
+        is_combined_flight = (
+            ("combined" in data.get("methodology", ""))
+            or clean_id.endswith("_combined")
+            or "_combined" in clean_id
+        )
+        is_pretense_flight = not is_combined_flight and (
+            ("pretense" in data.get("methodology", ""))
+            or clean_id.endswith("_pretense")
+            or "_pretense" in clean_id
+        )
+        harvest_method = (
+            "combined"
+            if is_combined_flight
+            else ("pretense" if is_pretense_flight else "standard")
+        )
         outcomes_data = data.get("verification_outcomes")
         if outcomes_data:
             outcomes = benchmark.VerificationOutcomes(
@@ -2342,7 +2896,11 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
             )
         else:
             outcomes = _VerificationGate.evaluate(
-                self._repo_root, unit, run_mutation=mutation_testing, use_pretense=is_pretense_flight, method=harvest_method
+                self._repo_root,
+                unit,
+                run_mutation=mutation_testing,
+                use_pretense=is_pretense_flight,
+                method=harvest_method,
             )
 
         record = benchmark.FlightRecord(
@@ -2358,7 +2916,9 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
         )
 
         self.save_flight_json(record, str(logs_dir))
-        resolved_harness = model_data.get("harness") or model_data.get("default_harness", "antigravity")
+        resolved_harness = model_data.get("harness") or model_data.get(
+            "default_harness", "antigravity"
+        )
         _archive_flight_artifacts(
             self._repo_root,
             record,
@@ -2377,6 +2937,7 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
         unit: benchmark.BenchmarkUnit,
         results_dir: Optional[str] = None,
         method: Optional[str] = None,
+        experiment: Optional[str] = None,
     ) -> Optional[Tuple[str, str]]:
         return _archive_flight_artifacts(
             repo_root=self._repo_root,
@@ -2384,12 +2945,17 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
             unit=unit,
             results_dir=results_dir,
             method=method,
+            experiment=experiment,
         )
 
     def drain_unit_workspace(self, unit: benchmark.BenchmarkUnit) -> None:
         _drain_unit_workspace(repo_root=self._repo_root, unit=unit)
 
-    def generate_report(self, records: Sequence[benchmark.FlightRecord], output_path: Optional[str] = None) -> str:
+    def generate_report(
+        self,
+        records: Sequence[benchmark.FlightRecord],
+        output_path: Optional[str] = None,
+    ) -> str:
         out_p = Path(output_path).resolve() if output_path else None
         return _generate_markdown_report(records, out_p)
 
@@ -2547,9 +3113,63 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
             action="store_true",
             help="Force DeepSeek Harness Desktop RPC execution even when Web mode is the configured default.",
         )
+        parser.add_argument(
+            "--experiment",
+            type=str,
+            default=None,
+            help="Active experiment identifier (e.g. structured_blame).",
+        )
+        parser.add_argument(
+            "--disable_experiment",
+            "--disable-experiment",
+            type=str,
+            default=None,
+            dest="disable_experiment",
+            help="Disable a specific experiment enabled by default (e.g. --disable_experiment structured_blame).",
+        )
+        parser.add_argument(
+            "--no-experiment",
+            action="store_true",
+            help="Explicitly disable active experiments (e.g. for non-baseline flights).",
+        )
 
         args = parser.parse_args(argv)
         root = self._repo_root
+
+        disabled_experiments: Set[str] = set()
+        if args.disable_experiment:
+            for item in args.disable_experiment.split(","):
+                tok = item.strip().lower().replace("-", "_")
+                if tok:
+                    disabled_experiments.add(tok)
+
+        if args.no_experiment or (
+            args.experiment
+            and args.experiment.strip().lower() in ("0", "false", "no", "none", "off")
+        ):
+            args.experiment = None
+            if "AUTOFAB_EXPERIMENT" in os.environ:
+                del os.environ["AUTOFAB_EXPERIMENT"]
+        else:
+            if args.experiment:
+                candidate_exps = [
+                    e.strip().lower().replace("-", "_")
+                    for e in args.experiment.split(",")
+                    if e.strip()
+                ]
+            elif not args.baseline:
+                candidate_exps = ["structured_blame"]
+            else:
+                candidate_exps = []
+
+            active_exps = [e for e in candidate_exps if e not in disabled_experiments]
+            if active_exps:
+                args.experiment = ",".join(active_exps)
+                os.environ["AUTOFAB_EXPERIMENT"] = args.experiment
+            else:
+                args.experiment = None
+                if "AUTOFAB_EXPERIMENT" in os.environ:
+                    del os.environ["AUTOFAB_EXPERIMENT"]
 
         effective_dsh_web = False
         if args.dsh_desktop:
@@ -2595,19 +3215,30 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
         target_name = model_arg.strip()
         catalog = self._model_catalog
         if target_name not in catalog:
-            print(f"[ERROR] Unknown model '{target_name}'; available: {', '.join(sorted(catalog.keys()))}", file=sys.stderr)
+            print(
+                f"[ERROR] Unknown model '{target_name}'; available: {', '.join(sorted(catalog.keys()))}",
+                file=sys.stderr,
+            )
             return 1
 
         spec = catalog[target_name]
         if args.tier != "all":
             tier_val = (
-                1 if args.tier in ("1", "local") else
-                2 if args.tier in ("2", "budget") else
-                3 if args.tier in ("3", "mid") else
-                4 if args.tier in ("4", "frontier") else None
+                1
+                if args.tier in ("1", "local")
+                else 2
+                if args.tier in ("2", "budget")
+                else 3
+                if args.tier in ("3", "mid")
+                else 4
+                if args.tier in ("4", "frontier")
+                else None
             )
             if spec.tier != tier_val:
-                print(f"[ERROR] Model '{target_name}' (tier {spec.tier}) does not match requested tier '{args.tier}'.", file=sys.stderr)
+                print(
+                    f"[ERROR] Model '{target_name}' (tier {spec.tier}) does not match requested tier '{args.tier}'.",
+                    file=sys.stderr,
+                )
                 return 1
 
         selected_models: List[benchmark.ModelSpec] = [spec]
@@ -2625,20 +3256,32 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
             suite_key = args.suite
             if suite_key not in suite_cat and suite_key.replace("-", "_") in suite_cat:
                 suite_key = suite_key.replace("-", "_")
-            elif suite_key not in suite_cat and suite_key.replace("_", "-") in suite_cat:
+            elif (
+                suite_key not in suite_cat and suite_key.replace("_", "-") in suite_cat
+            ):
                 suite_key = suite_key.replace("_", "-")
 
             if suite_key in suite_cat:
                 selected_units = list(suite_cat[suite_key])
             else:
                 avail = ", ".join(sorted(suite_cat.keys()))
-                print(f"[ERROR] Unknown benchmark suite '{args.suite}'. Available suites: {avail}")
+                print(
+                    f"[ERROR] Unknown benchmark suite '{args.suite}'. Available suites: {avail}"
+                )
                 return 1
 
         if args.anchor == "systems":
-            selected_units = [u for u in selected_units if "sql_engine" in u.task_id or "dag_scheduler" in u.task_id]
+            selected_units = [
+                u
+                for u in selected_units
+                if "sql_engine" in u.task_id or "dag_scheduler" in u.task_id
+            ]
         elif args.anchor == "algorithmic":
-            selected_units = [u for u in selected_units if "heapq" in u.task_id or "bisect" in u.task_id]
+            selected_units = [
+                u
+                for u in selected_units
+                if "heapq" in u.task_id or "bisect" in u.task_id
+            ]
 
         selected_units = selected_units[: args.units]
         if not selected_units:
@@ -2679,6 +3322,7 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
                     max_waves=args.max_waves,
                     dsh_web=effective_dsh_web,
                     dsh_desktop=args.dsh_desktop,
+                    experiment=args.experiment,
                 )
                 self.save_flight_json(record, str(logs_dir))
                 records.append(record)
@@ -2709,6 +3353,8 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
                 )
 
         return 1 if has_failures else 0
+
+
 # Contract: __orphan__ - MUST execute the benchmark evaluator command-line runner within the system lifecycle tier.
 def main(argv: Optional[Sequence[str]] = None) -> int:
     __initialize__()
@@ -2722,8 +3368,8 @@ if __name__ == "__main__":
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-19T18:45:00Z
-# LAST_CHANGED: 2026-11-04T11:30:00Z
-# CHANGE: Support --method combined, pretense, standard and combined_baseline fused role
+# LAST_CHANGED: 2026-11-09T23:45:00Z
+# CHANGE: Delete DSH conversations matching scope when provisioning benchmark flight
 # SPEC_QA_AUDIT: 2026-10-19T19:35:00Z
 # --- END CLEANROOM METADATA ---
 

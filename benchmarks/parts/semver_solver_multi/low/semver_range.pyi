@@ -52,16 +52,16 @@ class RangeEngine(Protocol):
             InvalidRangeError: If text contains malformed range syntax.
 
         PRECONDITIONS:
-        - WHEN text supplies bare partial versions lacking wildcard characters across any comparator or hyphen expression (such as '1', '1.2', '>1.2', '^0.0', or '1.2 - 2.3'), MUST raise InvalidRangeError.
-        - WHEN text is empty, contains only whitespace, contains empty union clauses, uses comma delimiters, or violates range syntax, MUST raise InvalidRangeError.
+        - [slug:semver_range.parse_range.bare_partials_prohibited]: WHEN text supplies bare partial versions lacking wildcard characters across any comparator or hyphen expression (such as '1', '1.2', '>1.2', '^0.0', or '1.2 - 2.3'), MUST raise InvalidRangeError.
+        - [slug:semver_range.parse_range.malformed_syntax]: WHEN text is empty, contains only whitespace, contains empty union clauses, uses comma delimiters, or violates range syntax, MUST raise InvalidRangeError.
 
         POSTCONDITIONS:
-        - MUST parse range expression text supporting basic comparators (==, =, !=, <, <=, >, >=), caret ranges (^), and tilde ranges (~) applied to either full semantic versions or wildcard expressions (e.g. '>=1.x', '!=1.x', '>1.*', '^1.x', '~1.2.x', '>=*').
-        - MUST parse hyphen ranges connecting two version bounds ('bound1 - bound2'), where each bound is either a full semantic version or a wildcard expression (e.g. '1.0.0 - 2.x', '1.x - 2.x').
-        - MUST parse union alternatives separated by '||'.
-        - MUST trim surrounding whitespace around range expressions and individual clauses, storing the trimmed range expression in raw_text.
-        - MUST accept optional whitespace between relational/prefix operators and target versions or wildcards (e.g. '>= 1.0.0' is equivalent to '>=1.0.0', '>= 1.x' is equivalent to '>=1.x').
-        - MUST delimit comparators within clauses strictly by whitespace; commas are not permitted.
+        - [slug:semver_range.parse_range.comparators_and_prefixes]: MUST parse range expression text supporting basic comparators (==, =, !=, <, <=, >, >=), caret ranges (^), and tilde ranges (~) applied to either full semantic versions or wildcard expressions (e.g. '>=1.x', '!=1.x', '>1.*', '^1.x', '~1.2.x', '>=*').
+        - [slug:semver_range.parse_range.hyphen_ranges]: MUST parse hyphen ranges connecting two version bounds ('bound1 - bound2'), where each bound is either a full semantic version or a wildcard expression (e.g. '1.0.0 - 2.x', '1.x - 2.x').
+        - [slug:semver_range.parse_range.union_alternatives]: MUST parse union alternatives separated by '||'.
+        - [slug:semver_range.parse_range.whitespace_trimming]: MUST trim surrounding whitespace around range expressions and individual clauses, storing the trimmed range expression in raw_text.
+        - [slug:semver_range.parse_range.operator_whitespace]: MUST accept optional whitespace between relational/prefix operators and target versions or wildcards (e.g. '>= 1.0.0' is equivalent to '>=1.0.0', '>= 1.x' is equivalent to '>=1.x').
+        - [slug:semver_range.parse_range.whitespace_delimited]: MUST delimit comparators within clauses strictly by whitespace; commas are not permitted.
         """
         ...
 
@@ -83,9 +83,9 @@ class RangeEngine(Protocol):
             True if the version satisfies the range, False otherwise.
 
         POSTCONDITIONS:
-        - MUST evaluate to True when version satisfies range_constraint, and False otherwise.
-        - WHEN version is a prerelease and include_prerelease is False, MUST evaluate to False unless range explicitly targets that prerelease by specifying a prerelease identifier sharing the same major, minor, and patch numbers.
-        - WHEN include_prerelease is True, MUST evaluate candidate prerelease version directly against comparator boundary inequalities using precedence ordering without shifting numerical boundaries (e.g. 1.0.0-alpha ranks strictly lower than 1.0.0 and does not satisfy >=1.0.0).
+        - [slug:semver_range.satisfies.boolean_match]: MUST evaluate to True when version satisfies range_constraint, and False otherwise.
+        - [slug:semver_range.satisfies.prerelease_filter]: WHEN version is a prerelease and include_prerelease is False, MUST evaluate to False unless range explicitly targets that prerelease by specifying a prerelease identifier sharing the same major, minor, and patch numbers.
+        - [slug:semver_range.satisfies.prerelease_inequality]: WHEN include_prerelease is True, MUST evaluate candidate prerelease version directly against comparator boundary inequalities using precedence ordering without shifting numerical boundaries (e.g. 1.0.0-alpha ranks strictly lower than 1.0.0 and does not satisfy >=1.0.0).
         """
         ...
 

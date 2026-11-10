@@ -16,6 +16,7 @@ from support.lib.lifecycle import (
 from autofab.parts.agent.lib import file_alias, node_config, agent_session
 from autofab.parts.dag.lib import dag_storage
 from autofab.parts.metadata.lib import src_metadata
+
 try:
     from support.lib import app_info
 except ImportError:
@@ -34,6 +35,7 @@ def _get_role_definitions() -> Dict[str, Any]:
         pass
     try:
         from autofab.parts.workspace.lib import role_registry
+
         reg = get_singleton(role_registry.WorkspaceRegistry)
         return {r.role_name: r for r in reg.list_roles()}
     except Exception:
@@ -96,6 +98,7 @@ def _bound_file_path(bound_file: Any) -> str:
 def _node_display_alias(node: dag_storage.DagNode) -> str:
     try:
         from . import coordinate
+
         coord = get_singleton(coordinate.SessionCoordinator)
         if coord is not None:
             return coord.get_alias_for_node(node)
@@ -105,21 +108,31 @@ def _node_display_alias(node: dag_storage.DagNode) -> str:
     try:
         cfg = get_singleton(node_config.NodeConfig)
         if cfg is not None:
-            if hasattr(cfg, "src_file_alias_by_node") and cfg.src_file_alias_by_node and node in cfg.src_file_alias_by_node:
+            if (
+                hasattr(cfg, "src_file_alias_by_node")
+                and cfg.src_file_alias_by_node
+                and node in cfg.src_file_alias_by_node
+            ):
                 return str(cfg.src_file_alias_by_node[node])
             if hasattr(cfg, "blame_targets_by_node") and cfg.blame_targets_by_node:
                 for bt_set in cfg.blame_targets_by_node.values():
                     for bt in bt_set:
                         if hasattr(bt, "owning_node") and bt.owning_node == node:
-                            return str(bt.relative_path if hasattr(bt, "relative_path") else bt)
+                            return str(
+                                bt.relative_path if hasattr(bt, "relative_path") else bt
+                            )
             if hasattr(cfg, "read_only_files") and cfg.read_only_files:
                 for ro in cfg.read_only_files:
                     if hasattr(ro, "owning_node") and ro.owning_node == node:
-                        return str(ro.relative_path if hasattr(ro, "relative_path") else ro)
+                        return str(
+                            ro.relative_path if hasattr(ro, "relative_path") else ro
+                        )
             if hasattr(cfg, "read_write_files") and cfg.read_write_files:
                 for rw in cfg.read_write_files:
                     if hasattr(rw, "owning_node") and rw.owning_node == node:
-                        return str(rw.relative_path if hasattr(rw, "relative_path") else rw)
+                        return str(
+                            rw.relative_path if hasattr(rw, "relative_path") else rw
+                        )
     except Exception:
         pass
 
@@ -133,14 +146,20 @@ def _node_display_alias(node: dag_storage.DagNode) -> str:
     else:
         pkg, unit_name = "", addr
 
-    role = str(node.role_address).split(":")[-1].strip().lower() if node.role_address else ""
+    role = (
+        str(node.role_address).split(":")[-1].strip().lower()
+        if node.role_address
+        else ""
+    )
     role_defs = _get_role_definitions()
     if role in role_defs:
         src_pat = _role_src_pattern(role_defs[role])
         if src_pat:
-            formatted = src_pat.replace("{unit_dir}", pkg).replace(
-                "{unit_name}", unit_name
-            ).strip("/")
+            formatted = (
+                src_pat.replace("{unit_dir}", pkg)
+                .replace("{unit_name}", unit_name)
+                .strip("/")
+            )
             if formatted:
                 return formatted
 
@@ -157,7 +176,9 @@ def _copy_file_with_perms(
         except OSError:
             pass
     shutil.copy2(src, dst)
-    mode = (0o555 if readonly else 0o755) if executable else (0o444 if readonly else 0o644)
+    mode = (
+        (0o555 if readonly else 0o755) if executable else (0o444 if readonly else 0o644)
+    )
     try:
         os.chmod(dst, mode)
     except OSError:
@@ -272,9 +293,15 @@ class AttributionCoordinator(attribution.AttributionCoordinator):
             alias = get_singleton(file_alias.AliasManager).to_alias(val_str)
         except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
             alias = None
-        alias_path = str(alias.relative_path if hasattr(alias, "relative_path") else "") if alias is not None else ""
+        alias_path = (
+            str(alias.relative_path if hasattr(alias, "relative_path") else "")
+            if alias is not None
+            else ""
+        )
         for bound in targets:
-            bound_path = str(bound.relative_path if hasattr(bound, "relative_path") else "")
+            bound_path = str(
+                bound.relative_path if hasattr(bound, "relative_path") else ""
+            )
             if val is not None and bound == val:
                 return bound
             if alias is not None and bound == alias:
@@ -288,8 +315,17 @@ class AttributionCoordinator(attribution.AttributionCoordinator):
                 bound
                 for bound in targets
                 if (
-                    str(bound.relative_path if hasattr(bound, "relative_path") else "").endswith("/" + norm_v)
-                    or norm_v.endswith("/" + str(bound.relative_path if hasattr(bound, "relative_path") else "").lstrip("/"))
+                    str(
+                        bound.relative_path if hasattr(bound, "relative_path") else ""
+                    ).endswith("/" + norm_v)
+                    or norm_v.endswith(
+                        "/"
+                        + str(
+                            bound.relative_path
+                            if hasattr(bound, "relative_path")
+                            else ""
+                        ).lstrip("/")
+                    )
                 )
             ]
             if len(suffix_matches) == 1:
@@ -297,7 +333,9 @@ class AttributionCoordinator(attribution.AttributionCoordinator):
             base_matches = [
                 bound
                 for bound in targets
-                if os.path.basename(str(bound.relative_path if hasattr(bound, "relative_path") else ""))
+                if os.path.basename(
+                    str(bound.relative_path if hasattr(bound, "relative_path") else "")
+                )
                 == os.path.basename(norm_v)
             ]
             if len(base_matches) == 1:
@@ -318,7 +356,9 @@ class AttributionCoordinator(attribution.AttributionCoordinator):
 
         # 1. Single-paragraph critique sanitization
         if "\n" in explanation or "\r" in explanation:
-            explanation = " ".join(line.strip() for line in explanation.splitlines() if line.strip())
+            explanation = " ".join(
+                line.strip() for line in explanation.splitlines() if line.strip()
+            )
         if not explanation.strip():
             return attribution.AttributionOutcome(
                 accepted=False,
@@ -332,13 +372,22 @@ class AttributionCoordinator(attribution.AttributionCoordinator):
         if blame_target_node not in upstream_nodes:
             try:
                 cfg = get_singleton(node_config.NodeConfig)
-                targets = list(cfg.blame_targets_by_node.get(source_node, set()) if (cfg and hasattr(cfg, "blame_targets_by_node")) else set())
+                targets = list(
+                    cfg.blame_targets_by_node.get(source_node, set())
+                    if (cfg and hasattr(cfg, "blame_targets_by_node"))
+                    else set()
+                )
             except Exception:
                 targets = []
             if targets:
-                allowed = ", ".join(f"`{t.relative_path if hasattr(t, 'relative_path') else t}`" for t in targets)
+                allowed = ", ".join(
+                    f"`{t.relative_path if hasattr(t, 'relative_path') else t}`"
+                    for t in targets
+                )
             else:
-                allowed = ", ".join(f"`{_node_display_alias(n)}`" for n in upstream_nodes)
+                allowed = ", ".join(
+                    f"`{_node_display_alias(n)}`" for n in upstream_nodes
+                )
             return attribution.AttributionOutcome(
                 accepted=False,
                 message=f"Error: Target '{_node_display_alias(blame_target_node)}' is not an upstream dependency. Available: {allowed}",
@@ -352,10 +401,7 @@ class AttributionCoordinator(attribution.AttributionCoordinator):
         if role_defs and src_role in role_defs:
             src_def = role_defs[src_role]
             raw_fb = _role_feedback_deps(src_def)
-            fb_deps = [
-                d.split(":")[-1].strip().lower()
-                for d in (raw_fb or ())
-            ]
+            fb_deps = [d.split(":")[-1].strip().lower() for d in (raw_fb or ())]
             if tgt_role not in fb_deps:
                 return attribution.AttributionOutcome(
                     accepted=False,
@@ -434,7 +480,9 @@ class AttributionCoordinator(attribution.AttributionCoordinator):
     ) -> attribution.AttributionOutcome:
         """Attributes defect blame to an upstream culprit file."""
         if "\n" in critique or "\r" in critique:
-            critique = " ".join(line.strip() for line in critique.splitlines() if line.strip())
+            critique = " ".join(
+                line.strip() for line in critique.splitlines() if line.strip()
+            )
         if not critique.strip():
             return attribution.AttributionOutcome(
                 accepted=False,
@@ -459,6 +507,7 @@ class AttributionCoordinator(attribution.AttributionCoordinator):
         else:
             try:
                 import importlib
+
                 ws_reg_mod = importlib.import_module("role_registry")
                 ws_reg = get_singleton(ws_reg_mod.WorkspaceRegistry)  # type: ignore
                 main_root = os.path.realpath(ws_reg.discover_repository_root(ws_root))
@@ -526,7 +575,9 @@ class AttributionCoordinator(attribution.AttributionCoordinator):
         )
 
         ref_root = main_root if dep_path.startswith(main_root) else ws_root
-        part_dir, unit_name, blamed_role = _parse_unit_from_file_path(dep_path, ref_root)
+        part_dir, unit_name, blamed_role = _parse_unit_from_file_path(
+            dep_path, ref_root
+        )
         main_dep_path = os.path.join(main_root, os.path.relpath(dep_path, ref_root))
 
         # Validate that caller is configured to deliver feedback to blamed_role
@@ -536,10 +587,7 @@ class AttributionCoordinator(attribution.AttributionCoordinator):
         if role_defs and caller_clean in role_defs:
             c_def = role_defs[caller_clean]
             raw_fb = _role_feedback_deps(c_def)
-            fb_deps = [
-                d.split(":")[-1].strip().lower()
-                for d in (raw_fb or ())
-            ]
+            fb_deps = [d.split(":")[-1].strip().lower() for d in (raw_fb or ())]
             if blamed_clean not in fb_deps:
                 return attribution.AttributionOutcome(
                     accepted=False,
@@ -589,6 +637,7 @@ class AttributionCoordinator(attribution.AttributionCoordinator):
         else:
             try:
                 import importlib
+
                 ws_reg_mod = importlib.import_module("role_registry")
                 ws_reg = get_singleton(ws_reg_mod.WorkspaceRegistry)  # type: ignore
                 main_root = os.path.realpath(ws_reg.discover_repository_root(ws_root))
@@ -634,6 +683,8 @@ class AttributionCoordinator(attribution.AttributionCoordinator):
             message=f"Marked failure on {target_to_mutate}: added DIRTY tag and updated LAST_CLEANED.",
             affected_nodes=[],
         )
+
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-30T11:00:00Z
 # LAST_CHANGED: 2026-10-30T11:00:00Z

@@ -50,7 +50,7 @@ When coordinating multi-agent execution:
 
 - When an active worker completes a round without submitting, blaming, or failing its assigned targets, the subagent coordinator tracks the unresolved status and injects an actionable reminder into the subsequent role dispatch directive, reminding the worker that conversational commentary without tools is prohibited and that it must verify targets via check_files and conclude the round via submit, blame, or fail.
 
-- The subagent coordinator emits real-time progress notifications detailing role dispatch, round outcomes, token consumption, and work queue state.
+- The subagent coordinator emits real-time progress notifications detailing role dispatch, round outcomes, token consumption, and work queue state, and publishes authoritative orchestration state snapshots detailing active scopes, execution wave iterations, active running workers, idle completed workers, assigned targets, and convergence outcomes to external coordination storage across role dispatch, round completion, and DAG convergence events.
 
 - The subagent coordinator drives the supervision loop until all units in scope evaluate clean, a role reports failure, or maximum wave limits are reached.
 
@@ -64,7 +64,7 @@ When coordinating multi-agent execution:
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-28T20:20:00Z
-CHANGE: Asynchronous unblocked role dispatch and idle worker reaping
+LAST_CHANGED: 2026-11-09T22:10:00Z
+CHANGE: Authoritative orchestration state snapshot publishing across dispatch, harvest, and convergence events
 SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->

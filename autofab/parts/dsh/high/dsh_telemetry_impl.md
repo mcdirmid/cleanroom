@@ -33,11 +33,17 @@ The dsh telemetry parser:
 
 - Submits role round prompts to the central desktop runtime or Web loopback bridge over the local JSON-RPC bridge, returning active task handles, creating or adopting sessions directly in their physical role workspace directory without workspace folder registration, setting the session title to capture scope and role (e.g. `[<scope>] <role>`), resolving declared model configuration profiles against model configuration definitions discovered in workspace ancestors, working directories, user configuration, or repository hierarchy and mapping local MLX providers to oMLX endpoints. In DeepSeek Harness Web mode, dispatches role rounds as independent top-level sessions with unique task names labeled `[<scope>] <role>` under Ungrouped without container attachment or workspace folder registration, providing direct conversation visibility and manual interactivity without subagent monitor dependencies.
 
-- Polls round execution status and extracts cumulative token counts from JSON-RPC status responses or bridge wait results until round completion, recognizing dictionary outcomes with completed or errored keys alongside terminal string statuses.
+- Renames conversation titles on DeepSeek Harness Web bridge or Desktop RPC.
+
+- Deletes sessions from DeepSeek Harness Web bridge or Desktop RPC.
+
+- Discovers and deletes existing conversations associated with a target directory scope (e.g. deleting all conversations containing `[<scope>]` such as `[benchmark_N]` in their title) across DeepSeek Harness Web bridge or Desktop RPC.
+
+- Polls round execution status and extracts cumulative token counts from JSON-RPC status responses or bridge wait results until round completion, recognizing dictionary outcomes with completed or errored keys alongside terminal string statuses, and marking missing workers completed with error when absent from the active worker registry beyond an initial grace period.
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-11-06T17:48:00Z
-CHANGE: Ensure globally unique task names for Web role round dispatches
+LAST_CHANGED: 2026-11-10T01:30:00Z
+CHANGE: Conclude missing RPC workers as errored completion when absent from registry beyond grace period
 SPEC_QA_AUDIT: 2026-10-19T22:33:00Z
 -->

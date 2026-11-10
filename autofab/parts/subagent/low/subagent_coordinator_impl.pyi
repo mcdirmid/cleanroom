@@ -93,7 +93,7 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
           interrupting idling workers that have resolved assigned targets and hold zero pending items across consecutive intervals past an initialization grace period,
           injecting reminder directives into subsequent role dispatches upon unresolved rounds when assigned targets remain unresolved,
           supervising fused role workers with coordinator verification, delivering diagnostics up to 3 retries on failure, and atomically harvesting targets on success,
-          emitting real-time telemetry and aggregating TokenUsage into OrchestrationSummary.
+          emitting real-time telemetry, updating harness orchestration state across dispatch, harvest, and convergence events, and aggregating TokenUsage into OrchestrationSummary.
         - Upon clean convergence, deletes provisioned role workspace directories for declared roles in scope.
         - When cancelled or interrupted by signals, interrupts active workers via harness.interrupt_role and deletes provisioned role workspace directories in scope.
         """
@@ -137,7 +137,7 @@ def __orphan__() -> None:
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-11-06T02:49:00Z
-# LAST_CHANGED: 2026-11-06T02:49:00Z
-# CHANGE: Scope concurrent downstream role withholding to the active target unit
+# LAST_CHANGED: 2026-11-09T22:10:00Z
+# CHANGE: Authoritative orchestration state updates across role dispatch, round completion, and convergence
 # SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---

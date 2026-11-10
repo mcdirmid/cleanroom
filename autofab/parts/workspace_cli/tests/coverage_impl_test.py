@@ -25,9 +25,7 @@ class ToolCoverageImplTest(unittest.TestCase):
         self.assertEqual(
             self.evaluator.format_ranges([1, 2, 3, 7, 8, 12]), "1-3, 7-8, 12"
         )
-        self.assertEqual(
-            self.evaluator.format_ranges([10, 11, 12, 13]), "10-13"
-        )
+        self.assertEqual(self.evaluator.format_ranges([10, 11, 12, 13]), "10-13")
 
     def test_group_into_spans(self) -> None:
         self.assertEqual(self.evaluator.group_into_spans([]), [])
@@ -39,7 +37,9 @@ class ToolCoverageImplTest(unittest.TestCase):
 
     def test_normalize_target_query(self) -> None:
         self.assertEqual(
-            self.evaluator.normalize_target_query("//parts/tools:tool_coverage_impl_test"),
+            self.evaluator.normalize_target_query(
+                "//parts/tools:tool_coverage_impl_test"
+            ),
             "tool_coverage_impl_test",
         )
         self.assertEqual(
@@ -119,7 +119,9 @@ class ToolCoverageImplTest(unittest.TestCase):
             missing_spans=[],
             test_passed=True,
         )
-        report_perfect = self.evaluator.format_coverage_report(cov_perfect, threshold=100.0)
+        report_perfect = self.evaluator.format_coverage_report(
+            cov_perfect, threshold=100.0
+        )
         self.assertIn("100.0% coverage", report_perfect)
 
         cov_failed = coverage.ModuleCoverage(
@@ -137,7 +139,9 @@ class ToolCoverageImplTest(unittest.TestCase):
             test_passed=False,
             test_error="AssertionError: expected True but got False",
         )
-        report_failed = self.evaluator.format_coverage_report(cov_failed, threshold=100.0)
+        report_failed = self.evaluator.format_coverage_report(
+            cov_failed, threshold=100.0
+        )
         self.assertIn("UNIT TEST FAILURE", report_failed)
         self.assertIn("AssertionError", report_failed)
 
@@ -213,14 +217,18 @@ class ToolCoverageImplTest(unittest.TestCase):
     def test_measure_single_target_coverage_package_resolution(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
-            (root / "pyproject.toml").write_text("[project]\nname='test'\n", encoding="utf-8")
+            (root / "pyproject.toml").write_text(
+                "[project]\nname='test'\n", encoding="utf-8"
+            )
             pkg_dir = root / "parts" / "widget_box"
             (pkg_dir / "lib").mkdir(parents=True)
             (pkg_dir / "tests").mkdir(parents=True)
             (pkg_dir / "__init__.py").write_text("", encoding="utf-8")
             (pkg_dir / "lib" / "__init__.py").write_text("", encoding="utf-8")
             # Same stem in lib as the package name (the shadowing pitfall)
-            (pkg_dir / "lib" / "widget_box.py").write_text("class WidgetBox:\n    pass\n", encoding="utf-8")
+            (pkg_dir / "lib" / "widget_box.py").write_text(
+                "class WidgetBox:\n    pass\n", encoding="utf-8"
+            )
             impl_file = pkg_dir / "lib" / "widget_box_impl.py"
             impl_file.write_text(
                 "from . import widget_box\nclass WidgetBoxImpl(widget_box.WidgetBox):\n    def size(self):\n        return 1\n",
@@ -293,6 +301,7 @@ class ToolCoverageImplTest(unittest.TestCase):
             status_path = td_path / ".coverage_spans.json"
             self.assertTrue(status_path.is_file())
             import json
+
             with open(status_path, "r", encoding="utf-8") as sf:
                 data = json.load(sf)
             self.assertIn("span_classifications", data)
@@ -314,7 +323,9 @@ class ToolCoverageImplTest(unittest.TestCase):
                 encoding="utf-8",
             )
             # Re-classify lines 5-6: now should be test-owned deficit!
-            owner_contracted, disp_contracted = self.evaluator.classify_span(impl_file, 5, 6)
+            owner_contracted, disp_contracted = self.evaluator.classify_span(
+                impl_file, 5, 6
+            )
             self.assertEqual(owner_contracted, "test")
             self.assertIn(
                 "TEST-COVERAGE-DEFICIT: missing contracted error assertion for ServiceConfigError",

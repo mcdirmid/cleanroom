@@ -75,6 +75,7 @@ class WorkspaceChecker(check.WorkspaceChecker):
           enforces an execution timeout on verification commands to prevent blocked sub-processes from stalling the workspace developer loop and reports verification failure with code-defect diagnostic messaging when execution expires,
           executes verification checks from role_registry.RoleDefinition,
           sanitizes verification process output by stripping redundant embedded arbiter reminders before display,
+          formats clean diagnostic outcomes reporting for non-auditor roles that all local verification checks passed and that other checks to verify feedback or changes resolution will be performed after bin/submit is called,
           formats triage summaries extracting author change headers, primary failure diagnostics, and candidate culprits, along with prominent specification grounding reminders upon verification failure when executing in auditor roles directing blame feedback strictly in terms of how the blamed file is not compliant with the common source of truth specification, permitting line numbers only within the blamed file while strictly forbidding exposing details of other files or authoring debug scripts, and instructing the agent when an uncovered line persists across rounds or after test updates to examine the library implementation closely to determine whether the line is structurally or logically unreachable,
           records verification execution records and target file hashes in the workspace, and upon zero verification errors for authoring roles with writable targets,
           records an in-workspace git milestone commit snapshot preserving the verified target state (omitting milestone commits for auditor roles with zero writable targets).
@@ -104,7 +105,7 @@ class WorkspaceChecker(check.WorkspaceChecker):
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-30T11:00:00Z
-# LAST_CHANGED: 2026-11-05T20:03:00Z
-# CHANGE: Set UV_CACHE_DIR in check_impl verification environment for sandbox containment
+# LAST_CHANGED: 2026-11-09T20:05:00Z
+# CHANGE: Format non-auditor check_files success with feedback/changes resolution notice
 # SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---

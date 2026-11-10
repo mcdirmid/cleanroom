@@ -27,7 +27,7 @@ Complex software development methodologies partition work into specialized roles
 - A subagent coordinator tracks consecutive unproductive rounds yielding zero submitted and zero blamed targets, halting orchestration when unproductive rounds on unresolved targets exceed a threshold (defaulting to 5). [detect_unproductive_turn_impasse]
 - A subagent coordinator detects repeated identical blame delivery on unchanged targets, terminating and recommissioning worker workspaces on two consecutive identical blames and injecting a restart advisory into subsequent task prompts, halting orchestration upon exceeding 10 restarts, while clearing consecutive blame tracking when an author role submits modifications to a previously blamed target, and preventing concurrent dispatch of downstream roles while upstream dependency workers are actively executing or scheduled for concurrent dispatch. [detect_repeated_blame_circuit_breaker]
 - A subagent coordinator injects an actionable reminder directive into subsequent role dispatch directives when an active worker completes a round without submitting, blaming, or failing assigned targets, reminding the worker that conversational commentary without tools is prohibited and requiring verification and resolution via submit, blame, or fail. [remind_worker_on_unresolved_round]
-- A subagent coordinator emits real-time progress notifications detailing role dispatch, round outcomes, token consumption, and work queue state. [emit_realtime_orchestration_telemetry]
+- A subagent coordinator emits real-time progress notifications detailing role dispatch, round outcomes, token consumption, and work queue state, and publishes authoritative orchestration state snapshots detailing active scopes, execution wave iterations, active running workers, idle completed workers, assigned targets, and convergence outcomes to external coordination storage across role dispatch, round completion, and DAG convergence events. [emit_realtime_orchestration_telemetry]
 - A subagent coordinator drives the supervision loop until all units in scope evaluate clean, a role reports failure, or maximum wave limits are reached. [orchestrate_pipeline_convergence]
 - A subagent coordinator automatically deletes all provisioned role workspaces in scope upon achieving clean convergence. [delete_role_workspaces_on_convergence]
 - A subagent coordinator interrupts active workers upon receiving cancellation signals. [interrupt_active_workers_on_cancellation]
@@ -56,7 +56,7 @@ Complex software development methodologies partition work into specialized roles
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-18T01:30:00Z
-CHANGE: support restricting work queue evaluation to target units and transitive dependencies
+LAST_CHANGED: 2026-11-09T22:10:00Z
+CHANGE: Authoritative orchestration state snapshot publishing across dispatch, harvest, and convergence events
 SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->

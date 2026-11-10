@@ -15,6 +15,7 @@ from support.lib.lifecycle import (
     get_singleton,
 )
 from autofab.parts.agent.lib import session as agent_session
+
 try:
     from support.lib import app_info
 except Exception:
@@ -64,7 +65,8 @@ def _build_role_definitions(
     auditor_roles = {
         r.split(":")[-1]
         for r, kwargs in raw_roles.items()
-        if not (kwargs.get("src_pattern") or kwargs.get("src_patterns")) or kwargs.get("audit_tag")
+        if not (kwargs.get("src_pattern") or kwargs.get("src_patterns"))
+        or kwargs.get("audit_tag")
     }
 
     role_defs: Dict[str, roles.RoleDefinition] = {}
@@ -125,7 +127,9 @@ def _build_role_definitions(
             )
 
         # Contract: Postcondition - WHEN a dependency is declared as both a role dependency and a silent role dependency, MUST raise ValueError.
-        conflicting_silent = silent_deps_clean & (role_deps_clean | star_deps_clean | fb_deps_clean | star_fb_deps_clean)
+        conflicting_silent = silent_deps_clean & (
+            role_deps_clean | star_deps_clean | fb_deps_clean | star_fb_deps_clean
+        )
         if conflicting_silent:
             raise ValueError(
                 f"Role '{rname}' declares dependency {sorted(conflicting_silent)} as both a role dependency and a silent role dependency."
@@ -177,7 +181,12 @@ def _build_role_definitions(
                 if w_glob not in writable:
                     writable.append(w_glob)
         readonly: List[str] = []
-        deps = list(raw_role_deps) + list(raw_star_deps) + list(raw_fb_deps) + list(raw_star_fb_deps)
+        deps = (
+            list(raw_role_deps)
+            + list(raw_star_deps)
+            + list(raw_fb_deps)
+            + list(raw_star_fb_deps)
+        )
         for dep in deps:
             dname = dep.split(":")[-1]
             dep_kwargs = raw_roles.get(dname, {})
@@ -220,7 +229,9 @@ def _build_role_definitions(
             guide_path=guide_path,
             writable_file_patterns=writable,
             readonly_file_patterns=readonly,
-            feedback_role_deps=[d.split(":")[-1] for d in (rkwargs.get("feedback_role_deps") or [])],
+            feedback_role_deps=[
+                d.split(":")[-1] for d in (rkwargs.get("feedback_role_deps") or [])
+            ],
             src_pattern=pat,
             src_patterns=tuple(pats),
             role_deps=rkwargs.get("role_deps") or [],
@@ -230,7 +241,8 @@ def _build_role_definitions(
             silent_cross_role_deps=rkwargs.get("silent_cross_role_deps") or [],
             active_component_types=rkwargs.get("active_component_types") or [],
             verify_template=rkwargs.get("verify_template") or "",
-            verification_success_message=rkwargs.get("verification_success_message") or "",
+            verification_success_message=rkwargs.get("verification_success_message")
+            or "",
             persona=rkwargs.get("persona") or "",
             workspace_files=rkwargs.get("workspace_files") or [],
             tools=rkwargs.get("tools") or [],
@@ -239,20 +251,30 @@ def _build_role_definitions(
             task_prompt=rkwargs.get("prompt_template") or None,
             template=rkwargs.get("template") or "",
             template_command=rkwargs.get("template_command") or "",
-            pipeline=str(rkwargs["pipeline"]).strip().lower() if rkwargs.get("pipeline") else None,
+            pipeline=str(rkwargs["pipeline"]).strip().lower()
+            if rkwargs.get("pipeline")
+            else None,
             fused_roles=(),
             common_spec_roles=rkwargs.get("common_spec_roles") or (),
-            star_feedback_role_deps=[d.split(":")[-1] for d in (rkwargs.get("star_feedback_role_deps") or [])],
+            star_feedback_role_deps=[
+                d.split(":")[-1] for d in (rkwargs.get("star_feedback_role_deps") or [])
+            ],
         )
 
     # Process fused role definitions
     for fname, fkwargs in fused_candidates.items():
         constituents = fkwargs.get("roles") or fkwargs.get("fused_roles") or []
-        constituents_clean = tuple(c.split(":")[-1].strip().lower() for c in constituents)
+        constituents_clean = tuple(
+            c.split(":")[-1].strip().lower() for c in constituents
+        )
         writable_set: List[str] = []
         readonly_set: List[str] = ["guides/*.md"]
         tools_set: List[str] = []
-        inherited_pipeline = str(fkwargs["pipeline"]).strip().lower() if fkwargs.get("pipeline") else None
+        inherited_pipeline = (
+            str(fkwargs["pipeline"]).strip().lower()
+            if fkwargs.get("pipeline")
+            else None
+        )
 
         for c in constituents_clean:
             c_def = role_defs.get(c)
@@ -355,15 +377,23 @@ def _load_roles_from_zipapp() -> Optional[Dict[str, roles.RoleDefinition]]:
 
     # 1. Try sys.argv[0] if it is a zipapp
     import sys
+
     if sys.argv and sys.argv[0] and os.path.isfile(sys.argv[0]):
         try:
             import zipfile
+
             if zipfile.is_zipfile(sys.argv[0]):
                 with zipfile.ZipFile(sys.argv[0], "r") as zf:
                     cand_names = list(app_info.get_roles_filenames())
-                    cand_names.extend([f"support/{r}" for r in app_info.get_roles_filenames()])
-                    cand_names.extend([f"autofab_py/{r}" for r in app_info.get_roles_filenames()])
-                    cand_names.extend([f"autofab_python/{r}" for r in app_info.get_roles_filenames()])
+                    cand_names.extend(
+                        [f"support/{r}" for r in app_info.get_roles_filenames()]
+                    )
+                    cand_names.extend(
+                        [f"autofab_py/{r}" for r in app_info.get_roles_filenames()]
+                    )
+                    cand_names.extend(
+                        [f"autofab_python/{r}" for r in app_info.get_roles_filenames()]
+                    )
                     for cand in cand_names:
                         if cand in zf.namelist():
                             defs = _load_roles_from_toml_bytes(zf.read(cand))
@@ -375,6 +405,7 @@ def _load_roles_from_zipapp() -> Optional[Dict[str, roles.RoleDefinition]]:
     # 2. Try pkgutil / importlib resources
     try:
         import pkgutil
+
         for rname in app_info.get_roles_filenames():
             for pkg in ("support", "autofab_py", "autofab_python", "autofab"):
                 try:
@@ -395,6 +426,7 @@ def _load_roles_from_zipapp() -> Optional[Dict[str, roles.RoleDefinition]]:
             bin_dir = os.path.join(check_dir, "bin")
             if os.path.isdir(bin_dir):
                 import zipfile
+
                 for tool_name in ("check_files", "submit", "get_work"):
                     tool_p = os.path.join(bin_dir, tool_name)
                     if os.path.isfile(tool_p) and zipfile.is_zipfile(tool_p):
@@ -415,7 +447,9 @@ def _load_roles_from_build_file(
 ) -> Dict[str, roles.RoleDefinition]:
     """Parses role declarations from a repository build file."""
     if not os.path.isfile(build_file_path):
-        raise FileNotFoundError(f"{app_info.APP_TITLE} role definition build file not found: {build_file_path}")
+        raise FileNotFoundError(
+            f"{app_info.APP_TITLE} role definition build file not found: {build_file_path}"
+        )
 
     with open(build_file_path, "r", encoding="utf-8") as f:
         tree = ast.parse(f.read(), filename=build_file_path)
@@ -446,7 +480,9 @@ def _load_roles_from_build_file(
             elif node.id == "None":
                 return None
             raise ValueError(f"Undefined identifier in {build_file_path}: {node.id}")
-        raise ValueError(f"Unsupported AST node type in {build_file_path}: {type(node).__name__}")
+        raise ValueError(
+            f"Unsupported AST node type in {build_file_path}: {type(node).__name__}"
+        )
 
     for stmt in tree.body:
         if isinstance(stmt, ast.Assign):
@@ -456,9 +492,8 @@ def _load_roles_from_build_file(
         elif isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
             func = stmt.value.func
             is_define_role = (
-                (isinstance(func, ast.Name) and func.id == "define_role")
-                or (isinstance(func, ast.Attribute) and func.attr == "define_role")
-            )
+                isinstance(func, ast.Name) and func.id == "define_role"
+            ) or (isinstance(func, ast.Attribute) and func.attr == "define_role")
             if is_define_role:
                 kwargs: Dict[str, Any] = {}
                 for kw in stmt.value.keywords:
@@ -466,7 +501,9 @@ def _load_roles_from_build_file(
                         kwargs[kw.arg] = _eval_node(kw.value)
                 role_name = kwargs.get("name")
                 if not role_name or not isinstance(role_name, str):
-                    raise ValueError(f"define_role in {build_file_path} missing required 'name' argument")
+                    raise ValueError(
+                        f"define_role in {build_file_path} missing required 'name' argument"
+                    )
                 raw_roles[role_name] = kwargs
 
     return _build_role_definitions(raw_roles)
@@ -575,8 +612,13 @@ def _find_pipeline_for_scope(root: str, dir_scope: str) -> Optional[str]:
                 with open(flight_file, "r", encoding="utf-8") as f:
                     fdata = json.load(f)
                 flight_scope = str(fdata.get("flight_scope", "")).strip("/\\")
-                if flight_scope and (flight_scope == scope_rel or flight_scope == os.path.basename(scope_dir)):
-                    if fdata.get("pretense") or "pretense" in str(fdata.get("flight_id", "")):
+                if flight_scope and (
+                    flight_scope == scope_rel
+                    or flight_scope == os.path.basename(scope_dir)
+                ):
+                    if fdata.get("pretense") or "pretense" in str(
+                        fdata.get("flight_id", "")
+                    ):
                         return "pretense"
                     if fdata.get("pipeline"):
                         return str(fdata.get("pipeline")).strip().lower()
@@ -665,6 +707,7 @@ def _load_roles_from_methodology(
         for rname in app_info.get_roles_filenames():
             try:
                 import importlib.resources
+
                 files = importlib.resources.files(pkg_name)
                 cand = str(files.joinpath(rname))
                 if os.path.isfile(cand):
@@ -711,7 +754,9 @@ class RoleResolver(roles.RoleResolver):
                 try:
                     for entry in os.listdir(r):
                         pkg_dir = os.path.join(r, entry)
-                        if os.path.isdir(pkg_dir) and not entry.startswith((".", "bazel-", "venv")):
+                        if os.path.isdir(pkg_dir) and not entry.startswith(
+                            (".", "bazel-", "venv")
+                        ):
                             for rname in app_info.get_roles_filenames():
                                 cand = os.path.join(pkg_dir, rname)
                                 if os.path.isfile(cand):
@@ -738,7 +783,9 @@ class RoleResolver(roles.RoleResolver):
                 try:
                     for entry in os.listdir(r):
                         pkg_dir = os.path.join(r, entry)
-                        if os.path.isdir(pkg_dir) and not entry.startswith((".", "bazel-", "venv")):
+                        if os.path.isdir(pkg_dir) and not entry.startswith(
+                            (".", "bazel-", "venv")
+                        ):
                             cand = os.path.join(pkg_dir, "BUILD.bazel")
                             if os.path.isfile(cand):
                                 try:
@@ -864,16 +911,30 @@ class RoleResolver(roles.RoleResolver):
             active_pipeline = _find_pipeline_for_scope(root, dir_scope) or "standard"
             if active_pipeline == "combined":
                 return [
-                    r for r in resolved_roles
-                    if not r.fused_roles and (r.pipeline is None or r.pipeline == "" or r.pipeline in ("standard", "pretense"))
+                    r
+                    for r in resolved_roles
+                    if not r.fused_roles
+                    and (
+                        r.pipeline is None
+                        or r.pipeline == ""
+                        or r.pipeline in ("standard", "pretense")
+                    )
                 ]
             return [
-                r for r in resolved_roles
-                if not r.fused_roles and (r.pipeline is None or r.pipeline == "" or r.pipeline == active_pipeline)
+                r
+                for r in resolved_roles
+                if not r.fused_roles
+                and (
+                    r.pipeline is None
+                    or r.pipeline == ""
+                    or r.pipeline == active_pipeline
+                )
             ]
 
         all_roles = self._get_roles(repo_root)
         return [r for r in all_roles.values() if not r.fused_roles]
+
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-26T20:38:00Z
 # LAST_CHANGED: 2026-11-04T10:33:00Z

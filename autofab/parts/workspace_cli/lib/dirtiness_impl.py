@@ -45,7 +45,11 @@ def _get_part_units(repo_root: str, part_dir: str) -> Dict[str, List[str]]:
     if os.path.isdir(high_dir):
         units: Dict[str, List[str]] = {}
         for fname in sorted(os.listdir(high_dir)):
-            if not fname.endswith(".md") or fname.startswith(".") or fname == "__init__.md":
+            if (
+                not fname.endswith(".md")
+                or fname.startswith(".")
+                or fname == "__init__.md"
+            ):
                 continue
             unit_name = fname[:-3]
             deps: List[str] = []
@@ -55,7 +59,11 @@ def _get_part_units(repo_root: str, part_dir: str) -> Dict[str, List[str]]:
                         s = line.strip()
                         for pfx in ("imports:", "implements:", "assembles:"):
                             if s.startswith(pfx):
-                                deps.extend(x.strip() for x in s[len(pfx) :].split(",") if x.strip())
+                                deps.extend(
+                                    x.strip()
+                                    for x in s[len(pfx) :].split(",")
+                                    if x.strip()
+                                )
                         if s.startswith("## "):
                             break
             except (OSError, UnicodeDecodeError):
@@ -221,7 +229,6 @@ def _parse_unit_from_file_path(file_path: str, repo_root: str) -> Tuple[str, str
     return os.path.dirname(os.path.dirname(rel)), unit_name, role_name
 
 
-
 # Suffix heuristic stripping '_impl' to expand interface companion contracts for implementation units.
 def _get_unit_contract_files(
     target_file: str,
@@ -263,7 +270,7 @@ def _get_unit_contract_files(
     for up_r in dep_roles:
         up_def = reg.resolve_role_definition(up_r, repo_root=ws_root)
         if up_def.src_pattern:
-            for stem in ([unit_name, interface_stem] if is_impl else [unit_name]):
+            for stem in [unit_name, interface_stem] if is_impl else [unit_name]:
                 c = up_def.src_pattern.format(unit_dir=part_dir, unit_name=stem)
                 if c not in candidates:
                     candidates.append(c)
@@ -285,7 +292,9 @@ def _get_unit_contract_files(
             star_def = reg.resolve_role_definition(star_r, repo_root=ws_root)
             if not star_def.src_pattern:
                 continue
-            stems = [dep_unit, dep_unit[:-5]] if dep_unit.endswith("_impl") else [dep_unit]
+            stems = (
+                [dep_unit, dep_unit[:-5]] if dep_unit.endswith("_impl") else [dep_unit]
+            )
             for s in stems:
                 dep_cand = star_def.src_pattern.format(unit_dir=dep_part, unit_name=s)
                 if dep_cand not in candidates:
@@ -396,19 +405,28 @@ def _eval_unit_dirty_internal(
         contract_dep_roles: List[str] = []
         for d_lbl in list(role_def.role_deps) + list(role_def.star_role_deps):
             clean_d = d_lbl.split(":")[-1]
-            if clean_d not in fb_dep_set and clean_d not in silent_deps and clean_d not in contract_dep_roles:
+            if (
+                clean_d not in fb_dep_set
+                and clean_d not in silent_deps
+                and clean_d not in contract_dep_roles
+            ):
                 contract_dep_roles.append(clean_d)
 
         audited_targets_count = 0
         for fb_role in fb_deps:
             fb_def = reg.resolve_role_definition(fb_role, repo_root=main_root)
-            if fb_def.active_component_types and ctype not in fb_def.active_component_types:
+            if (
+                fb_def.active_component_types
+                and ctype not in fb_def.active_component_types
+            ):
                 continue
             fb_pat = fb_def.src_pattern
             if not fb_pat:
                 continue
             dir_prefix = _parse_pattern_info(fb_pat)[0]
-            if dir_prefix and not os.path.isdir(os.path.join(main_root, part_dir, dir_prefix)):
+            if dir_prefix and not os.path.isdir(
+                os.path.join(main_root, part_dir, dir_prefix)
+            ):
                 if not fb_pat.endswith(".py"):
                     continue
             audited_targets_count += 1
@@ -419,9 +437,7 @@ def _eval_unit_dirty_internal(
                 continue
             fb_meta = src_metadata.extract_metadata(fb_full)
             if fb_meta is None or not fb_meta.last_changed:
-                reasons.append(
-                    f"Audited target {fb_rel} is uninitialized"
-                )
+                reasons.append(f"Audited target {fb_rel} is uninitialized")
                 continue
             if fb_meta.feedback:
                 for fb in fb_meta.feedback:
@@ -438,11 +454,16 @@ def _eval_unit_dirty_internal(
             else:
                 for c_name in contract_dep_roles:
                     c_def = reg.resolve_role_definition(c_name, repo_root=main_root)
-                    if c_def.active_component_types and ctype not in c_def.active_component_types:
+                    if (
+                        c_def.active_component_types
+                        and ctype not in c_def.active_component_types
+                    ):
                         continue
                     if not c_def.src_pattern:
                         continue
-                    c_rel = c_def.src_pattern.format(unit_dir=part_dir, unit_name=unit_name)
+                    c_rel = c_def.src_pattern.format(
+                        unit_dir=part_dir, unit_name=unit_name
+                    )
                     c_full = _resolve_scope_file(c_rel, ws_root, main_root)
                     if c_full:
                         last_ch = _is_modified_after(c_full, audit_ts)
@@ -477,7 +498,9 @@ def _eval_unit_dirty_internal(
         if not cur_meta:
             return {
                 "is_dirty": True,
-                "reasons": [f"Target {target_rel} is uninitialized (initial implementation required)"],
+                "reasons": [
+                    f"Target {target_rel} is uninitialized (initial implementation required)"
+                ],
             }
         if primary_meta is None:
             primary_meta = cur_meta
@@ -492,14 +515,25 @@ def _eval_unit_dirty_internal(
             if os.path.isfile(ws_full):
                 ws_meta = src_metadata.extract_metadata(ws_full)
                 if ws_meta:
-                    if ws_meta.dirty and f"Target explicitly marked DIRTY: {ws_meta.dirty}" not in reasons:
-                        reasons.append(f"Target explicitly marked DIRTY: {ws_meta.dirty}")
+                    if (
+                        ws_meta.dirty
+                        and f"Target explicitly marked DIRTY: {ws_meta.dirty}"
+                        not in reasons
+                    ):
+                        reasons.append(
+                            f"Target explicitly marked DIRTY: {ws_meta.dirty}"
+                        )
                     if ws_meta.feedback:
-                        existing_fb = {re.sub(r"^\[.*?\]:\s*", "", f.strip()) for f in (cur_meta.feedback or [])}
+                        existing_fb = {
+                            re.sub(r"^\[.*?\]:\s*", "", f.strip())
+                            for f in (cur_meta.feedback or [])
+                        }
                         for fb in ws_meta.feedback:
                             clean_fb = re.sub(r"^\[.*?\]:\s*", "", fb.strip())
                             if clean_fb not in existing_fb:
-                                reasons.append(f"Unacted feedback in {target_rel}: {clean_fb}")
+                                reasons.append(
+                                    f"Unacted feedback in {target_rel}: {clean_fb}"
+                                )
 
         if not cur_meta.last_cleaned:
             reasons.append(f"Target has not been cleaned ({target_rel})")
@@ -537,7 +571,10 @@ def _eval_unit_dirty_internal(
             chain = _get_role_upstream_chain(d_name, repo_root=main_root)
             for anc in reversed(chain):
                 anc_def = reg.resolve_role_definition(anc, repo_root=main_root)
-                if not anc_def.active_component_types or ctype in anc_def.active_component_types:
+                if (
+                    not anc_def.active_component_types
+                    or ctype in anc_def.active_component_types
+                ):
                     if anc not in effective_dep_roles:
                         effective_dep_roles.append(anc)
                     break
@@ -588,11 +625,20 @@ def _eval_unit_dirty_internal(
             )
             for star_pat in star_pats:
                 if is_impl:
-                    s_iface_rel = star_pat.format(unit_dir=part_dir, unit_name=interface_stem)
-                    if s_iface_rel not in [p.format(unit_dir=part_dir, unit_name=unit_name) for p in active_pats]:
-                        s_iface_full = _resolve_scope_file(s_iface_rel, ws_root, main_root)
+                    s_iface_rel = star_pat.format(
+                        unit_dir=part_dir, unit_name=interface_stem
+                    )
+                    if s_iface_rel not in [
+                        p.format(unit_dir=part_dir, unit_name=unit_name)
+                        for p in active_pats
+                    ]:
+                        s_iface_full = _resolve_scope_file(
+                            s_iface_rel, ws_root, main_root
+                        )
                         if s_iface_full:
-                            last_ch = _is_modified_after(s_iface_full, meta.last_cleaned)
+                            last_ch = _is_modified_after(
+                                s_iface_full, meta.last_cleaned
+                            )
                             if last_ch:
                                 reason_msg = f"Star dependency {s_iface_rel} modified ({last_ch}) after local LAST_CLEANED ({meta.last_cleaned})"
                                 if reason_msg not in reasons:
@@ -600,11 +646,17 @@ def _eval_unit_dirty_internal(
 
                 for dep in unit_deps:
                     dep_pkg, dep_u = _parse_dependency_label(dep, part_dir)
-                    for cand_u in [dep_u, dep_u[:-5] if dep_u.endswith("_impl") else None]:
+                    for cand_u in [
+                        dep_u,
+                        dep_u[:-5] if dep_u.endswith("_impl") else None,
+                    ]:
                         if not cand_u:
                             continue
                         s_dep_rel = star_pat.format(unit_dir=dep_pkg, unit_name=cand_u)
-                        if s_dep_rel in [p.format(unit_dir=part_dir, unit_name=unit_name) for p in active_pats]:
+                        if s_dep_rel in [
+                            p.format(unit_dir=part_dir, unit_name=unit_name)
+                            for p in active_pats
+                        ]:
                             continue
                         s_dep_full = _resolve_scope_file(s_dep_rel, ws_root, main_root)
                         if s_dep_full:
@@ -646,9 +698,7 @@ class WorkspaceDirtinessEvaluator(dirtiness.WorkspaceDirtinessEvaluator):
         main_root: Optional[str] = None,
         role_name: Optional[str] = None,
     ) -> Sequence[str]:
-        return _get_unit_contract_files(
-            target_file, ws_root, main_root, role_name
-        )
+        return _get_unit_contract_files(target_file, ws_root, main_root, role_name)
 
     # Contract: Resolves declared cross-unit dependencies of a unit to (part_dir, unit_name) pairs.
     def extract_cross_unit_dependencies(
@@ -658,6 +708,8 @@ class WorkspaceDirtinessEvaluator(dirtiness.WorkspaceDirtinessEvaluator):
         unit_name: str,
     ) -> Sequence[Tuple[str, str]]:
         return _cross_unit_dependencies(repo_root, part_dir, unit_name)
+
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-31T20:50:00Z

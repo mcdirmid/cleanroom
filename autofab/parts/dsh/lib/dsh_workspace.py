@@ -41,6 +41,7 @@ class DshWorkspaceConfigurer(Singleton[AgentSessionTier], Protocol):
         """Configures role agent documentation and Cordis overlay patch for DeepSeek Harness."""
         ...
 
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-13T20:00:00Z

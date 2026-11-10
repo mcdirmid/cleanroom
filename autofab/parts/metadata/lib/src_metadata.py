@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Protocol, Tuple
+
 try:
     from support.lib import app_info
 except Exception:
@@ -30,6 +31,7 @@ def _load_role_definitions() -> Dict[str, Any]:
         search_roots.append(cur)
         cur = os.path.dirname(cur)
     import tomllib
+
     roles_fnames = app_info.get_roles_filenames()
     config_fnames = app_info.get_config_filenames()
     merged_roles: Dict[str, Any] = {}
@@ -94,6 +96,7 @@ def is_auditor_role(role_name: str) -> bool:
     try:
         from support.lib.lifecycle import Singleton, SystemTier, get_singleton
         from autofab.parts.workspace.lib import role_registry
+
         reg = get_singleton(role_registry.WorkspaceRegistry)
         r_def = reg.resolve_role_definition(clean)
         return not r_def.writable_file_patterns or bool(r_def.audit_tag)
@@ -102,6 +105,7 @@ def is_auditor_role(role_name: str) -> bool:
     try:
         from support.lib.lifecycle import Singleton, SystemTier, get_singleton
         from autofab.parts.agent.lib import node_config
+
         cfg: Any = get_singleton(node_config.NodeConfig)
         role_defs = cfg.role_definitions if hasattr(cfg, "role_definitions") else {}
         if clean in role_defs:
@@ -112,8 +116,14 @@ def is_auditor_role(role_name: str) -> bool:
                 is_aud = bool(r_def.get("is_auditor", False))
             else:
                 audit_tag = r_def.audit_tag if hasattr(r_def, "audit_tag") else None
-                src_pat = str(r_def.src_pattern or "") if hasattr(r_def, "src_pattern") else ""
-                is_aud = bool(r_def.is_auditor) if hasattr(r_def, "is_auditor") else False
+                src_pat = (
+                    str(r_def.src_pattern or "")
+                    if hasattr(r_def, "src_pattern")
+                    else ""
+                )
+                is_aud = (
+                    bool(r_def.is_auditor) if hasattr(r_def, "is_auditor") else False
+                )
             return bool(is_aud or audit_tag or not src_pat)
     except Exception:
         pass
@@ -256,7 +266,7 @@ class SourceMetadataCoordinator(Singleton[SystemTier], Protocol):
         code_hash: Optional[str] = None,
     ) -> None: ...
 
-    # Contract: Appends unacted feedback item to file metadata block and advances LAST_CLEANED.
+    # Contract: Appends unacted feedback item with sender role attribution to file metadata block and advances LAST_CLEANED.
     def append_feedback(
         self,
         file_path: Path | str,
@@ -298,7 +308,9 @@ def _extract_block_boundaries(
     if is_html:
         for idx, line in enumerate(lines):
             stripped = line.strip()
-            if stripped.startswith("<!--") and ("AUTOFAB METADATA" in stripped or "CLEANROOM METADATA" in stripped):
+            if stripped.startswith("<!--") and (
+                "AUTOFAB METADATA" in stripped or "CLEANROOM METADATA" in stripped
+            ):
                 for i in range(idx, len(lines)):
                     if "-->" in lines[i]:
                         return (idx, i)
@@ -306,9 +318,15 @@ def _extract_block_boundaries(
         return None
 
     for idx, line in enumerate(lines):
-        if line.strip() in ("# --- AUTOFAB METADATA ---", "# --- CLEANROOM METADATA ---"):
+        if line.strip() in (
+            "# --- AUTOFAB METADATA ---",
+            "# --- CLEANROOM METADATA ---",
+        ):
             for i in range(idx + 1, len(lines)):
-                if lines[i].strip() in ("# --- END AUTOFAB METADATA ---", "# --- END CLEANROOM METADATA ---"):
+                if lines[i].strip() in (
+                    "# --- END AUTOFAB METADATA ---",
+                    "# --- END CLEANROOM METADATA ---",
+                ):
                     return (idx, i)
             return None
     return None
@@ -335,7 +353,11 @@ def parse_metadata_content(block_lines: List[str]) -> FileMetadata:
         if raw.startswith("#"):
             raw = raw[1:].strip()
 
-        if not raw or raw.startswith("---") or raw in ("AUTOFAB METADATA", "CLEANROOM METADATA"):
+        if (
+            not raw
+            or raw.startswith("---")
+            or raw in ("AUTOFAB METADATA", "CLEANROOM METADATA")
+        ):
             continue
 
         if raw.startswith("LAST_CLEANED:"):
@@ -436,12 +458,15 @@ def format_metadata_block(meta: FileMetadata, is_html: bool) -> List[str]:
 def _get_coordinator() -> SourceMetadataCoordinator:
     try:
         from support.lib.lifecycle import Singleton, SystemTier, get_singleton
+
         return get_singleton(SourceMetadataCoordinator)
     except Exception:
         from support.lib.lifecycle import Singleton, SystemTier, get_default_registry
+
         desc = get_default_registry().find_descriptor(SourceMetadataCoordinator)
         if desc is None:
             from . import metadata_asm
+
             metadata_asm.__initialize__()
             desc = get_default_registry().find_descriptor(SourceMetadataCoordinator)
         if desc is not None:
@@ -596,9 +621,7 @@ def record_change(
     change_description: str,
     code_hash: Optional[str] = None,
 ) -> None:
-    _get_coordinator().record_change(
-        file_path, change_description, code_hash=code_hash
-    )
+    _get_coordinator().record_change(file_path, change_description, code_hash=code_hash)
 
 
 # Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
@@ -616,6 +639,7 @@ def stamp_audit(file_path: Path | str, role_name: str) -> None:
 # Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
 def clear_audits(file_path: Path | str) -> None:
     _get_coordinator().clear_audits(file_path)
+
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z

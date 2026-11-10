@@ -18,12 +18,15 @@ Harvesting token telemetry requires parsing JSON stream events from headless dsh
 - The telemetry parser realization synchronizes session records titled with scope and role (e.g. `[<scope>] <role>`) into Desktop files and invokes Desktop RPC endpoints without registering role workspace folders. [sync_desktop_sessions]
 - The telemetry parser realization probes local cookie storage in immutable mode, or checks active Web loopback bridge configuration, to determine if the desktop server or Web bridge is reachable. [eval_dsh_server_available]
 - The telemetry parser realization dispatches role rounds by creating or adopting sessions directly within their physical role workspace directory, setting conversation name to capture scope and role (e.g. `[<scope>] <role>`), resolving declared model profile names against model configuration definitions discovered in workspace ancestors, working directories, user configuration, or repository hierarchy and mapping local MLX providers to oMLX endpoints, and enqueueing prompts via session/prompt or bridge tools over the JSON-RPC bridge without registering role workspace folders. In DeepSeek Harness Web mode, dispatches role rounds as independent top-level sessions with unique task names labeled `[<scope>] <role>` under Ungrouped without container attachment or workspace folder registration, providing direct conversation visibility and manual interactivity without subagent monitor dependencies. [dispatch_dsh_round_rpc]
-- The telemetry parser realization polls round execution status and extracts token counts until completion, recognizing dictionary outcomes with completed or errored keys alongside terminal string statuses. [poll_dsh_round_rpc]
+- The telemetry parser realization renames a conversation title on DeepSeek Harness Web bridge or Desktop RPC. [rename_dsh_session]
+- The telemetry parser realization deletes a session from DeepSeek Harness Web bridge or Desktop RPC. [delete_dsh_session]
+- The telemetry parser realization discovers and deletes all existing conversations containing `[<scope>]` in their title from DeepSeek Harness Web bridge or Desktop RPC. [cleanup_scope_dsh_sessions]
+- The telemetry parser realization polls round execution status and extracts token counts until completion, recognizing dictionary outcomes with completed or errored keys alongside terminal string statuses, and marking missing workers completed with error when absent from the active worker registry beyond an initial grace period. [poll_dsh_round_rpc]
 
 ### Woven Contracts
 
 - When parsing session telemetry or recording sessions, the parser extracts metrics from event streams or storage archives, falls back to text logs, applies model pricing, and synchronizes desktop sessions. [query_dsh_telemetry_metrics, parse_log_text_fallback, apply_dsh_pricing_rates, sync_desktop_sessions, dsh_telemetry: [query_dsh_telemetry_metrics, apply_dsh_pricing_rates, parse_log_text_fallback, sync_desktop_sessions]]
-- When coordinating live round execution, the parser probes server reachability, dispatches role rounds over JSON-RPC, and polls round status until completion. [eval_dsh_server_available, dispatch_dsh_round_rpc, poll_dsh_round_rpc, dsh_telemetry: [eval_dsh_server_available, dispatch_dsh_round_rpc, poll_dsh_round_rpc]]
+- When coordinating live round execution, the parser probes server reachability, dispatches role rounds over JSON-RPC, manages session lifecycle via rename and delete, and polls round status until completion. [eval_dsh_server_available, dispatch_dsh_round_rpc, rename_dsh_session, delete_dsh_session, cleanup_scope_dsh_sessions, poll_dsh_round_rpc, dsh_telemetry: [eval_dsh_server_available, dispatch_dsh_round_rpc, rename_dsh_session, delete_dsh_session, cleanup_scope_dsh_sessions, poll_dsh_round_rpc]]
 
 ## Grounding
 
@@ -43,7 +46,7 @@ Harvesting token telemetry requires parsing JSON stream events from headless dsh
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-11-06T17:48:00Z
-CHANGE: Ensure globally unique task names for Web role round dispatches
+LAST_CHANGED: 2026-11-10T01:30:00Z
+CHANGE: Conclude missing RPC workers as errored completion when absent from registry beyond grace period
 SPEC_QA_AUDIT: 2026-10-19T22:33:00Z
 -->

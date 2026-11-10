@@ -8,6 +8,7 @@ from support.lib.lifecycle import (
     get_default_registry,
     get_singleton,
 )
+
 try:
     from support.lib import app_info
 except Exception:
@@ -40,6 +41,7 @@ def _get_role_definitions() -> Dict[str, Any]:
 
     try:
         from autofab.parts.workspace.lib import role_registry
+
         reg = get_singleton(role_registry.WorkspaceRegistry)
         return {r.role_name: r for r in reg.list_roles()}
     except Exception:
@@ -48,6 +50,7 @@ def _get_role_definitions() -> Dict[str, Any]:
     # Direct fallback: discover from methodology roles configuration
     try:
         import tomllib
+
         cur = os.path.abspath(os.getcwd())
         while cur and cur != os.path.dirname(cur):
             for fname in app_info.get_roles_filenames():
@@ -146,7 +149,9 @@ def _normalize_alias(alias: str) -> str:
     except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
         converted = None
     if converted is not None:
-        relative = str(converted.relative_path if hasattr(converted, "relative_path") else "")
+        relative = str(
+            converted.relative_path if hasattr(converted, "relative_path") else ""
+        )
         if relative:
             return relative
     return raw.lstrip("/")
@@ -167,21 +172,31 @@ def _node_display_alias(node: dag_storage.DagNode) -> str:
     try:
         cfg = get_singleton(node_config.NodeConfig)
         if cfg is not None:
-            if hasattr(cfg, "src_file_alias_by_node") and cfg.src_file_alias_by_node and node in cfg.src_file_alias_by_node:
+            if (
+                hasattr(cfg, "src_file_alias_by_node")
+                and cfg.src_file_alias_by_node
+                and node in cfg.src_file_alias_by_node
+            ):
                 return str(cfg.src_file_alias_by_node[node])
             if hasattr(cfg, "blame_targets_by_node") and cfg.blame_targets_by_node:
                 for bt_set in cfg.blame_targets_by_node.values():
                     for bt in bt_set:
                         if hasattr(bt, "owning_node") and bt.owning_node == node:
-                            return str(bt.relative_path if hasattr(bt, "relative_path") else bt)
+                            return str(
+                                bt.relative_path if hasattr(bt, "relative_path") else bt
+                            )
             if hasattr(cfg, "read_only_files") and cfg.read_only_files:
                 for ro in cfg.read_only_files:
                     if hasattr(ro, "owning_node") and ro.owning_node == node:
-                        return str(ro.relative_path if hasattr(ro, "relative_path") else ro)
+                        return str(
+                            ro.relative_path if hasattr(ro, "relative_path") else ro
+                        )
             if hasattr(cfg, "read_write_files") and cfg.read_write_files:
                 for rw in cfg.read_write_files:
                     if hasattr(rw, "owning_node") and rw.owning_node == node:
-                        return str(rw.relative_path if hasattr(rw, "relative_path") else rw)
+                        return str(
+                            rw.relative_path if hasattr(rw, "relative_path") else rw
+                        )
     except Exception:
         pass
 
@@ -195,14 +210,20 @@ def _node_display_alias(node: dag_storage.DagNode) -> str:
     else:
         pkg, unit_name = "", addr
 
-    role = str(node.role_address).split(":")[-1].strip().lower() if node.role_address else ""
+    role = (
+        str(node.role_address).split(":")[-1].strip().lower()
+        if node.role_address
+        else ""
+    )
     role_defs = _get_role_definitions()
     if role in role_defs:
         src_pat = _role_src_pattern(role_defs[role])
         if src_pat:
-            formatted = src_pat.replace("{unit_dir}", pkg).replace(
-                "{unit_name}", unit_name
-            ).strip("/")
+            formatted = (
+                src_pat.replace("{unit_dir}", pkg)
+                .replace("{unit_name}", unit_name)
+                .strip("/")
+            )
             if formatted:
                 return formatted
 
@@ -216,9 +237,7 @@ class SessionCoordinator(coordinate.SessionCoordinator):
 
     def __init__(self) -> None:
         self._nodes: List[dag_storage.DagNode] = []
-        self._node_states: Dict[
-            dag_storage.DagNode, coordinate.TargetState
-        ] = {}
+        self._node_states: Dict[dag_storage.DagNode, coordinate.TargetState] = {}
         self._alias_to_node: Dict[str, dag_storage.DagNode] = {}
         self._node_to_alias: Dict[dag_storage.DagNode, str] = {}
 
@@ -254,10 +273,16 @@ class SessionCoordinator(coordinate.SessionCoordinator):
                 and n in cfg.src_file_alias_by_node
             ):
                 src_alias = cfg.src_file_alias_by_node[n]
-            elif cfg is not None and hasattr(cfg, "read_write_files") and cfg.read_write_files:
+            elif (
+                cfg is not None
+                and hasattr(cfg, "read_write_files")
+                and cfg.read_write_files
+            ):
                 for f in cfg.read_write_files:
                     if hasattr(f, "owning_node") and f.owning_node == n:
-                        src_alias = str(f.relative_path if hasattr(f, "relative_path") else "")
+                        src_alias = str(
+                            f.relative_path if hasattr(f, "relative_path") else ""
+                        )
                         break
 
             display_alias = src_alias or _node_display_alias(n)
@@ -364,7 +389,11 @@ class SessionCoordinator(coordinate.SessionCoordinator):
         role_subdirs = set()
         role_patterns: List[Tuple[str, str, str]] = []
         for r_name, r_cfg in role_defs.items():
-            pat = r_cfg.src_pattern if hasattr(r_cfg, "src_pattern") else r_cfg.get("src_pattern", "")
+            pat = (
+                r_cfg.src_pattern
+                if hasattr(r_cfg, "src_pattern")
+                else r_cfg.get("src_pattern", "")
+            )
             if pat and "/" in pat:
                 p_parts = pat.split("/")
                 subdir = p_parts[-2]
@@ -372,11 +401,7 @@ class SessionCoordinator(coordinate.SessionCoordinator):
                 role_subdirs.add(subdir)
                 role_patterns.append((r_name, subdir, suffix))
 
-        role_dir = (
-            parts.pop()
-            if parts and parts[-1] in role_subdirs
-            else None
-        )
+        role_dir = parts.pop() if parts and parts[-1] in role_subdirs else None
         cand_pkg = "/".join(parts)
 
         expected_role: Optional[str] = None
@@ -385,13 +410,13 @@ class SessionCoordinator(coordinate.SessionCoordinator):
             if role_dir == subdir:
                 expected_role = r_name
                 if suffix and cand_base.endswith(suffix):
-                    cand_unit = cand_base[:-len(suffix)]
+                    cand_unit = cand_base[: -len(suffix)]
                 break
         if not expected_role:
             for r_name, subdir, suffix in role_patterns:
                 if suffix and cand_base.endswith(suffix):
                     expected_role = r_name
-                    cand_unit = cand_base[:-len(suffix)]
+                    cand_unit = cand_base[: -len(suffix)]
                     break
 
         matching_proxy: List[dag_storage.DagNode] = []
@@ -405,7 +430,12 @@ class SessionCoordinator(coordinate.SessionCoordinator):
             if expected_role and node_role != expected_role:
                 continue
             if cand_unit == unit:
-                if not cand_pkg or cand_pkg == pkg or pkg.endswith(cand_pkg) or cand_pkg.endswith(pkg):
+                if (
+                    not cand_pkg
+                    or cand_pkg == pkg
+                    or pkg.endswith(cand_pkg)
+                    or cand_pkg.endswith(pkg)
+                ):
                     matching_proxy.append(node)
 
         if len(matching_proxy) == 1:
@@ -462,7 +492,11 @@ class SessionCoordinator(coordinate.SessionCoordinator):
         rw_files: List[Any] = []
         try:
             cfg = get_singleton(node_config.NodeConfig)
-            rw_files = list(cfg.read_write_files if (cfg and hasattr(cfg, "read_write_files")) else [])
+            rw_files = list(
+                cfg.read_write_files
+                if (cfg and hasattr(cfg, "read_write_files"))
+                else []
+            )
         except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
             pass
 
@@ -548,7 +582,9 @@ class SessionCoordinator(coordinate.SessionCoordinator):
         open_targets = self._open_nodes()
         if not open_targets:
             return evaluator.evaluate_verification(target=None)
-        results = [evaluator.evaluate_verification(target=node) for node in open_targets]
+        results = [
+            evaluator.evaluate_verification(target=node) for node in open_targets
+        ]
         all_passed = all(result.passed for result in results)
         all_cached = all(result.is_cached for result in results)
         diagnostic = "\n".join(
@@ -578,16 +614,19 @@ class SessionCoordinator(coordinate.SessionCoordinator):
             target_node = self._open_nodes()[0]
         if (
             target_node is None
-            or self._get_target_state(target_node)
-            != coordinate.TargetState.OPEN
+            or self._get_target_state(target_node) != coordinate.TargetState.OPEN
         ):
-            open_list = ", ".join(f"`{self.get_alias_for_node(n)}`" for n in self._open_nodes())
+            open_list = ", ".join(
+                f"`{self.get_alias_for_node(n)}`" for n in self._open_nodes()
+            )
             message = (
                 f"Error: Target '{target_alias or ''}' is not an open target. "
                 f"Available: {open_list}"
             )
             return coordinate.ControlDispatchOutcome(
-                success=False, message=message, remaining_open_targets=self._open_nodes()
+                success=False,
+                message=message,
+                remaining_open_targets=self._open_nodes(),
             )
 
         submit_coord = get_singleton(submit.SubmissionCoordinator)
@@ -622,7 +661,9 @@ class SessionCoordinator(coordinate.SessionCoordinator):
         if source_node is None and source_alias and len(self._open_nodes()) == 1:
             source_node = self._open_nodes()[0]
         if source_node is None:
-            open_list = ", ".join(f"`{self.get_alias_for_node(n)}`" for n in self._open_nodes())
+            open_list = ", ".join(
+                f"`{self.get_alias_for_node(n)}`" for n in self._open_nodes()
+            )
             return coordinate.ControlDispatchOutcome(
                 success=False,
                 message=f"Error: No open target found for blame. Available: {open_list}",
@@ -671,14 +712,10 @@ class SessionCoordinator(coordinate.SessionCoordinator):
             in_batch_dependents=self._get_in_batch_dependents(source_node),
         )
         if outcome.accepted:
-            self._set_target_state(
-                source_node, coordinate.TargetState.ATTRIBUTED
-            )
+            self._set_target_state(source_node, coordinate.TargetState.ATTRIBUTED)
             for affected in outcome.affected_nodes:
                 if affected != source_node:
-                    self._set_target_state(
-                        affected, coordinate.TargetState.FAILED
-                    )
+                    self._set_target_state(affected, coordinate.TargetState.FAILED)
         return coordinate.ControlDispatchOutcome(
             success=outcome.accepted,
             message=outcome.message,
@@ -699,7 +736,9 @@ class SessionCoordinator(coordinate.SessionCoordinator):
         if target_node is None and target_alias and len(self._open_nodes()) == 1:
             target_node = self._open_nodes()[0]
         if target_node is None:
-            open_list = ", ".join(f"`{self.get_alias_for_node(n)}`" for n in self._open_nodes())
+            open_list = ", ".join(
+                f"`{self.get_alias_for_node(n)}`" for n in self._open_nodes()
+            )
             return coordinate.ControlDispatchOutcome(
                 success=False,
                 message=f"Error: No open target found to fail. Available: {open_list}",
@@ -719,6 +758,8 @@ class SessionCoordinator(coordinate.SessionCoordinator):
             message=outcome.message,
             remaining_open_targets=self._open_nodes(),
         )
+
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T19:49:56Z
 # LAST_CHANGED: 2026-10-11T05:03:57Z

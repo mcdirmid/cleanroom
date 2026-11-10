@@ -28,7 +28,7 @@ unit gadget is present, and the persistent workspaces registry is empty.
    creation, pattern inspection, writable-file copying, contract copying, and starter skeleton
    synthesis delegated to `scaffold`.
 
-2. The provisioner commissions the alpha workspace for scope_a a second time.
+1. The provisioner commissions the alpha workspace for scope_a a second time.
    Observed: the tree still holds one copy of each file, the read-only files stay read-only, and
    the persistent registry still holds exactly one descriptor for `/ws/alpha_scope_a`.
    Realized by: the component's own repeated copying and skeleton synthesis delegated to
@@ -46,7 +46,7 @@ Given: role alpha is commissioned for scope_a at `/ws/alpha_scope_a` and for sco
    repository root, the role name, and the directory scope, and the component's own writable-file
    copying.
 
-2. The provisioner commissions the alpha workspace for scope_b.
+1. The provisioner commissions the alpha workspace for scope_b.
    Observed: `/ws/alpha_scope_b/alpha/widget.md` exists as a distinct file, and writing to it
    leaves the scope_a target unchanged.
    Realized by: the workspace directory computation of `role_registry`, which confines the
@@ -64,7 +64,7 @@ Given: role alpha is commissioned for scope_a at `/ws/alpha_scope_a` as an autho
    Realized by: runner zipapp deployment delegated to `scaffold`, which embeds a
    self-contained executable wrapper for each subcommand and gives it execution permissions.
 
-2. The provisioner commissions the gamma workspace.
+1. The provisioner commissions the gamma workspace.
    Observed: the workspace `bin/` directory holds runner tools omitting `revert` and `checkpoint`.
    Realized by: runner zipapp deployment delegated to `scaffold`, which excludes rollback runners when the role has no writable file patterns.
 
@@ -87,11 +87,11 @@ Given: role alpha is commissioned for scope_a at `/ws/alpha_scope_a` as an autho
    rules, the contamination tripwire, the rollback and revert instructions, the blame and feedback resolution instructions, and the
    fail-stop reporting protocol into the guide file.
 
-2. The provisioner commissions the gamma workspace.
+1. The provisioner commissions the gamma workspace.
    Observed: the workspace guide for gamma omits workspace undo and rollback instructions, and strictly bars file editing and git commands.
    Realized by: role guide synthesis delegated to `scaffold`, which tailors boundary rules and prohibitions for auditor roles.
 
-3. The agent runs the work runner tool from the workspace `bin/` directory.
+1. The agent runs the work runner tool from the workspace `bin/` directory.
    Observed: the tool runs from the workspace alone and reports alpha work.
    Realized by: runner deployment delegated to `scaffold`, whose wrappers carry their
    dependencies inside the workspace.
@@ -195,8 +195,16 @@ Given: auditor role gamma declaring zero writable targets is commissioned for sc
    Observed: `/ws/gamma_scope_a/.git` does not exist, and git repository initialization is bypassed.
    Realized by: the component's conditional git repository initialization inspecting role writable target patterns.
 
+### Scenario 14 — Markdown conditional preprocessing during file copying
+
+Given: an active experiment is configured in the environment, and a contract or guide markdown file contains experiment conditional blocks.
+
+1. The provisioner copies markdown files into the workspace.
+   Observed: conditional markdown blocks are evaluated against active experiments so only matching branches remain in the copied markdown files in the role workspace.
+   Realized by: the component's markdown conditional preprocessing during file copying.
+
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-30T05:28:00Z
-LAST_CHANGED: 2026-10-30T08:30:00Z
-CHANGE: Omit git repo initialization, revert/checkpoint runners, and undo guidance for auditor roles
+LAST_CHANGED: 2026-11-07T16:00:00Z
+CHANGE: Markdown conditional preprocessing during file copying
 -->

@@ -27,7 +27,9 @@ from autofab_py.support.lib.build_lint_common import (
 
 class BuildLintCommonExceptionEatingTest(unittest.TestCase):
     def _check(self, source: str) -> list[str]:
-        with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=".py", delete=False, encoding="utf-8"
+        ) as f:
             f.write(source)
             f.flush()
             temp_path = f.name
@@ -81,7 +83,9 @@ except (ValueError, Exception):
 """
         errors = self._check(source)
         self.assertEqual(len(errors), 1)
-        self.assertIn("broad exception eating detected: '(ValueError, Exception)'", errors[0])
+        self.assertIn(
+            "broad exception eating detected: '(ValueError, Exception)'", errors[0]
+        )
 
     def test_broad_exception_unused_variable_fails(self) -> None:
         source = """
@@ -266,7 +270,9 @@ class BuildLintCommonSyntaxCheckTest(unittest.TestCase):
 def valid_function(a: int) -> int:
     return a + 1
 """
-        with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=".py", delete=False, encoding="utf-8"
+        ) as f:
             f.write(source)
             temp_path = f.name
         try:
@@ -278,7 +284,9 @@ def valid_function(a: int) -> int:
 
     def test_syntax_error_returns_rich_diagnostic_with_caret(self) -> None:
         source = "def broken():\n    x = (1 + 2))\n    return x\n"
-        with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=".py", delete=False, encoding="utf-8"
+        ) as f:
             f.write(source)
             temp_path = f.name
         try:
@@ -309,7 +317,9 @@ def valid_function(a: int) -> int:
 
 class BuildLintCommonPrivateImportTest(unittest.TestCase):
     def _check(self, source: str) -> list[str]:
-        with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=".py", delete=False, encoding="utf-8"
+        ) as f:
             f.write(source)
             f.flush()
             temp_path = f.name
@@ -327,8 +337,7 @@ class BuildLintCommonPrivateImportTest(unittest.TestCase):
 
     def test_private_import_with_pragma_passes(self) -> None:
         source = (
-            "# cleanroom: allow-private-import\n"
-            "from my_pkg.impl import _private_fn\n"
+            "# cleanroom: allow-private-import\nfrom my_pkg.impl import _private_fn\n"
         )
         errors = self._check(source)
         self.assertEqual(errors, [])
@@ -341,7 +350,9 @@ class BuildLintCommonPrivateImportTest(unittest.TestCase):
 
 class BuildLintCommonTautologicalAssertionTest(unittest.TestCase):
     def _check(self, source: str, check_empty: bool = False) -> list[str]:
-        with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=".py", delete=False, encoding="utf-8"
+        ) as f:
             f.write(source)
             f.flush()
             temp_path = f.name
@@ -402,7 +413,9 @@ class MyTest(unittest.TestCase):
 
 class BuildLintCommonSysModulesTamperingTest(unittest.TestCase):
     def _check(self, source: str) -> list[str]:
-        with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=".py", delete=False, encoding="utf-8"
+        ) as f:
             f.write(source)
             f.flush()
             temp_path = f.name
@@ -432,7 +445,9 @@ class BuildLintCommonSysModulesTamperingTest(unittest.TestCase):
 
 class BuildLintCommonFrozenExceptionsTest(unittest.TestCase):
     def _check(self, source: str) -> list[str]:
-        with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=".py", delete=False, encoding="utf-8"
+        ) as f:
             f.write(source)
             f.flush()
             temp_path = f.name
@@ -479,7 +494,9 @@ class NormalData:
 
 class CheckTypeIgnoreTest(unittest.TestCase):
     def _check(self, source: str) -> list[str]:
-        with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=".py", delete=False, encoding="utf-8"
+        ) as f:
             f.write(source)
             f.flush()
             temp_path = f.name
@@ -568,11 +585,7 @@ class CheckBannedSkipsTest(unittest.TestCase):
         self.assertIn("__unittest_skip__", errors[0])
 
     def test_pytest_skip_call_rejected(self) -> None:
-        source = (
-            "import pytest\n"
-            "def test_bar():\n"
-            "    pytest.skip('reason')\n"
-        )
+        source = "import pytest\ndef test_bar():\n    pytest.skip('reason')\n"
         tree = ast.parse(source)
         errors = check_banned_skips("test.py", tree=tree)
         self.assertEqual(len(errors), 1)
@@ -650,7 +663,9 @@ class BuildLintCommonNoErrorTestingTest(unittest.TestCase):
             "            dag.get_node('missing')\n"
         )
         errors = check_no_error_testing("test.py")  # checks source lines
-        with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=".py", delete=False, encoding="utf-8"
+        ) as f:
             f.write(source)
             f.flush()
             temp_path = f.name
@@ -671,10 +686,7 @@ class BuildLintCommonNoErrorTestingTest(unittest.TestCase):
 
             pyi_path = os.path.join(low_dir, "my_part.pyi")
             with open(pyi_path, "w", encoding="utf-8") as f:
-                f.write(
-                    "class CustomContractedError(Exception):\n"
-                    "    message: str\n"
-                )
+                f.write("class CustomContractedError(Exception):\n    message: str\n")
 
             test_file = os.path.join(tests_dir, "my_part_test.py")
             with open(test_file, "w", encoding="utf-8") as f:
@@ -708,18 +720,15 @@ class BuildLintCommonTopLevelProbesTest(unittest.TestCase):
         self.assertEqual(errors, [])
 
     def test_top_level_try_fails(self) -> None:
-        source = (
-            "import unittest\n"
-            "try:\n"
-            "    x = 1\n"
-            "except Exception:\n"
-            "    pass\n"
-        )
+        source = "import unittest\ntry:\n    x = 1\nexcept Exception:\n    pass\n"
         tree = ast.parse(source)
         errors = check_no_top_level_probes("test.py", tree=tree)
         self.assertEqual(len(errors), 1)
         self.assertIn("Top-level statement 'Try' is prohibited", errors[0])
-        self.assertIn("You are not allowed to execute the test suite or run ad-hoc probes", errors[0])
+        self.assertIn(
+            "You are not allowed to execute the test suite or run ad-hoc probes",
+            errors[0],
+        )
 
     def test_top_level_raise_fails(self) -> None:
         source = "raise RuntimeError('PROBE failed')\n"
@@ -733,14 +742,18 @@ class BuildLintCommonTopLevelProbesTest(unittest.TestCase):
         tree = ast.parse(source)
         errors = check_no_top_level_probes("test.py", tree=tree)
         self.assertEqual(len(errors), 1)
-        self.assertIn("Top-level probe variable '_PROBE_RESULT10' is prohibited", errors[0])
+        self.assertIn(
+            "Top-level probe variable '_PROBE_RESULT10' is prohibited", errors[0]
+        )
 
     def test_top_level_probe_class_fails(self) -> None:
         source = "class _ProbeStateMachine:\n    pass\n"
         tree = ast.parse(source)
         errors = check_no_top_level_probes("test.py", tree=tree)
         self.assertEqual(len(errors), 1)
-        self.assertIn("Top-level probe class '_ProbeStateMachine' is prohibited", errors[0])
+        self.assertIn(
+            "Top-level probe class '_ProbeStateMachine' is prohibited", errors[0]
+        )
 
 
 class BuildLintCommonNoTryExceptInTestsTest(unittest.TestCase):
@@ -812,7 +825,9 @@ class BuildLintCommonNoTryExceptInTestsTest(unittest.TestCase):
             "        except Exception:\n"
             "            pass\n"
         )
-        with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=".py", delete=False, encoding="utf-8"
+        ) as f:
             f.write(source)
             f.flush()
             temp_path = f.name
@@ -845,7 +860,7 @@ class BuildLintCommonNoTryExceptInTestsTest(unittest.TestCase):
             "            cleanup()\n"
             "        except OSError:\n"
             "            pass\n"
-            )
+        )
         tree = ast.parse(source)
         errors = check_no_try_except_in_tests("test.py", tree=tree)
         self.assertEqual(errors, [])
@@ -853,7 +868,9 @@ class BuildLintCommonNoTryExceptInTestsTest(unittest.TestCase):
 
 class BuildLintCommonImplImportsAndSingletonTest(unittest.TestCase):
     def _write_temp(self, source: str) -> str:
-        with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=".py", delete=False, encoding="utf-8"
+        ) as f:
             f.write(source)
             f.flush()
             return f.name
@@ -863,7 +880,12 @@ class BuildLintCommonImplImportsAndSingletonTest(unittest.TestCase):
         path = self._write_temp(source)
         try:
             errors = check_impl_imports(path)
-            self.assertTrue(any("must not access implementation module via sys.modules" in e for e in errors))
+            self.assertTrue(
+                any(
+                    "must not access implementation module via sys.modules" in e
+                    for e in errors
+                )
+            )
         finally:
             os.remove(path)
 
@@ -872,7 +894,12 @@ class BuildLintCommonImplImportsAndSingletonTest(unittest.TestCase):
         path = self._write_temp(source)
         try:
             errors = check_impl_imports(path)
-            self.assertTrue(any("must not access implementation module via sys.modules" in e for e in errors))
+            self.assertTrue(
+                any(
+                    "must not access implementation module via sys.modules" in e
+                    for e in errors
+                )
+            )
         finally:
             os.remove(path)
 
@@ -881,16 +908,23 @@ class BuildLintCommonImplImportsAndSingletonTest(unittest.TestCase):
         path = self._write_temp(source)
         try:
             errors = check_impl_imports(path)
-            self.assertTrue(any("must not assign implementation module to sys.modules" in e for e in errors))
+            self.assertTrue(
+                any(
+                    "must not assign implementation module to sys.modules" in e
+                    for e in errors
+                )
+            )
         finally:
             os.remove(path)
 
     def test_foreign_initialize_call_rejected(self) -> None:
-        source = 'def helper():\n    other_mod.__initialize__()\n'
+        source = "def helper():\n    other_mod.__initialize__()\n"
         path = self._write_temp(source)
         try:
             errors = check_impl_imports(path)
-            self.assertTrue(any("must not invoke foreign '__initialize__'" in e for e in errors))
+            self.assertTrue(
+                any("must not invoke foreign '__initialize__'" in e for e in errors)
+            )
         finally:
             os.remove(path)
 
@@ -899,12 +933,14 @@ class BuildLintCommonImplImportsAndSingletonTest(unittest.TestCase):
         path = self._write_temp(source)
         try:
             errors = check_impl_imports(path)
-            self.assertTrue(any("must not probe for foreign '__initialize__'" in e for e in errors))
+            self.assertTrue(
+                any("must not probe for foreign '__initialize__'" in e for e in errors)
+            )
         finally:
             os.remove(path)
 
     def test_asm_initialize_call_allowed(self) -> None:
-        source = 'def helper():\n    foo_asm.__initialize__()\n'
+        source = "def helper():\n    foo_asm.__initialize__()\n"
         path = self._write_temp(source)
         try:
             errors = check_impl_imports(path)
@@ -920,7 +956,13 @@ class BuildLintCommonImplImportsAndSingletonTest(unittest.TestCase):
         path = self._write_temp(source)
         try:
             errors = check_singleton_registration(path)
-            self.assertTrue(any("must not register singleton 'ForeignClass' not defined in this module" in e for e in errors))
+            self.assertTrue(
+                any(
+                    "must not register singleton 'ForeignClass' not defined in this module"
+                    in e
+                    for e in errors
+                )
+            )
         finally:
             os.remove(path)
 
@@ -932,7 +974,12 @@ class BuildLintCommonImplImportsAndSingletonTest(unittest.TestCase):
         path = self._write_temp(source)
         try:
             errors = check_singleton_registration(path)
-            self.assertTrue(any("must not register foreign singleton 'foreign.MyClass'" in e for e in errors))
+            self.assertTrue(
+                any(
+                    "must not register foreign singleton 'foreign.MyClass'" in e
+                    for e in errors
+                )
+            )
         finally:
             os.remove(path)
 
@@ -945,7 +992,13 @@ class BuildLintCommonImplImportsAndSingletonTest(unittest.TestCase):
         path = self._write_temp(source)
         try:
             errors = check_singleton_registration(path)
-            self.assertTrue(any("must only be called inside the auto-generated '__initialize__' function" in e for e in errors))
+            self.assertTrue(
+                any(
+                    "must only be called inside the auto-generated '__initialize__' function"
+                    in e
+                    for e in errors
+                )
+            )
         finally:
             os.remove(path)
 
@@ -966,21 +1019,25 @@ class BuildLintCommonImplImportsAndSingletonTest(unittest.TestCase):
 
 class BuildLintCommonLifecycleScopeLeakTest(unittest.TestCase):
     def _write_temp(self, content: str) -> str:
-        with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=".py", delete=False, encoding="utf-8"
+        ) as f:
             f.write(content)
             f.flush()
             return f.name
 
     def test_returning_inside_with_enter_phase_fails(self) -> None:
-        source = (
-            "def helper():\n"
-            "    with enter_phase(system):\n"
-            "        return 42\n"
-        )
+        source = "def helper():\n    with enter_phase(system):\n        return 42\n"
         path = self._write_temp(source)
         try:
             errors = check_no_lifecycle_scope_leaks(path)
-            self.assertTrue(any("Returning from inside 'with enter_phase(...)' closes the phase scope upon return" in e for e in errors))
+            self.assertTrue(
+                any(
+                    "Returning from inside 'with enter_phase(...)' closes the phase scope upon return"
+                    in e
+                    for e in errors
+                )
+            )
         finally:
             os.remove(path)
 
@@ -995,7 +1052,13 @@ class BuildLintCommonLifecycleScopeLeakTest(unittest.TestCase):
         path = self._write_temp(source)
         try:
             errors = check_no_lifecycle_scope_leaks(path)
-            self.assertTrue(any("Test helper '_get_engine' opens an ephemeral 'with enter_phase(...)'" in e for e in errors))
+            self.assertTrue(
+                any(
+                    "Test helper '_get_engine' opens an ephemeral 'with enter_phase(...)'"
+                    in e
+                    for e in errors
+                )
+            )
         finally:
             os.remove(path)
 
@@ -1010,7 +1073,13 @@ class BuildLintCommonLifecycleScopeLeakTest(unittest.TestCase):
         path = self._write_temp(source)
         try:
             errors = check_no_lifecycle_scope_leaks(path)
-            self.assertTrue(any("Test helper '_setup_repo' opens an ephemeral 'with enter_phase(...)'" in e for e in errors))
+            self.assertTrue(
+                any(
+                    "Test helper '_setup_repo' opens an ephemeral 'with enter_phase(...)'"
+                    in e
+                    for e in errors
+                )
+            )
         finally:
             os.remove(path)
 

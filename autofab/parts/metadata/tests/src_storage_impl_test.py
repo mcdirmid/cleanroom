@@ -110,7 +110,9 @@ class FakeSourceMetadataCoordinator:
                 elif not is_html and "# --- CLEANROOM METADATA ---" in content:
                     idx = content.find("# --- END CLEANROOM METADATA ---")
                     if idx != -1:
-                        content = content[idx + len("# --- END CLEANROOM METADATA ---") :].lstrip()
+                        content = content[
+                            idx + len("# --- END CLEANROOM METADATA ---") :
+                        ].lstrip()
                 body = content
             except OSError:
                 pass
@@ -119,13 +121,17 @@ class FakeSourceMetadataCoordinator:
         with open(file_path, "w", encoding="utf-8") as f:
             f.write("\n".join(lines) + body)
 
-    def extract_metadata(self, file_path: Path | str) -> Optional[src_metadata.FileMetadata]:
+    def extract_metadata(
+        self, file_path: Path | str
+    ) -> Optional[src_metadata.FileMetadata]:
         p = str(file_path)
         if not os.path.exists(p):
             return None
         return self.metadata.get(p)
 
-    def extract_metadata_from_text(self, content: str, filename_or_ext: str) -> Optional[src_metadata.FileMetadata]:
+    def extract_metadata_from_text(
+        self, content: str, filename_or_ext: str
+    ) -> Optional[src_metadata.FileMetadata]:
         return None
 
     def extract_code_body(self, content: str, filename_or_ext: str) -> str:
@@ -140,7 +146,9 @@ class FakeSourceMetadataCoordinator:
     def is_code_modified(self, file_path: Path | str) -> bool:
         return False
 
-    def rewrite_metadata_in_text(self, content: str, filename_or_ext: str, **kwargs: Any) -> str:
+    def rewrite_metadata_in_text(
+        self, content: str, filename_or_ext: str, **kwargs: Any
+    ) -> str:
         return content
 
     def update_metadata(
@@ -162,8 +170,14 @@ class FakeSourceMetadataCoordinator:
     ) -> None:
         p = str(file_path)
         curr = self.metadata.get(p)
-        new_cleaned = None if clear_last_cleaned else (last_cleaned or (curr.last_cleaned if curr else None))
-        new_changed = last_changed or (curr.last_changed if curr and curr.last_changed else self._now())
+        new_cleaned = (
+            None
+            if clear_last_cleaned
+            else (last_cleaned or (curr.last_cleaned if curr else None))
+        )
+        new_changed = last_changed or (
+            curr.last_changed if curr and curr.last_changed else self._now()
+        )
         new_summary = change_summary or (curr.change_summary if curr else "")
         new_fb = [] if clear_feedback else list(curr.feedback if curr else [])
         if append_feedback:
@@ -179,7 +193,11 @@ class FakeSourceMetadataCoordinator:
             tag = r_up if r_up.endswith("_AUDIT") else f"{r_up}_AUDIT"
             new_audits[tag] = self._now()
         new_dirty = None if clear_dirty else (dirty or (curr.dirty if curr else None))
-        new_hash = None if clear_code_hash else (code_hash or (curr.code_hash if curr else None))
+        new_hash = (
+            None
+            if clear_code_hash
+            else (code_hash or (curr.code_hash if curr else None))
+        )
         new_meta = src_metadata.FileMetadata(
             last_cleaned=new_cleaned,
             last_changed=new_changed,
@@ -200,11 +218,20 @@ class FakeSourceMetadataCoordinator:
         now = self._now()
         self.update_metadata(file_path, dirty=reason, last_cleaned=now)
 
-    def mark_clean(self, file_path: Path | str, default_change: str = "new file") -> None:
+    def mark_clean(
+        self, file_path: Path | str, default_change: str = "new file"
+    ) -> None:
         now = self._now()
-        self.update_metadata(file_path, last_cleaned=now, clear_dirty=True, clear_feedback=True)
+        self.update_metadata(
+            file_path, last_cleaned=now, clear_dirty=True, clear_feedback=True
+        )
 
-    def record_change(self, file_path: Path | str, change_description: str, code_hash: Optional[str] = None) -> None:
+    def record_change(
+        self,
+        file_path: Path | str,
+        change_description: str,
+        code_hash: Optional[str] = None,
+    ) -> None:
         now = self._now()
         self.update_metadata(
             file_path,
@@ -217,7 +244,9 @@ class FakeSourceMetadataCoordinator:
             clear_dirty=True,
         )
 
-    def append_feedback(self, file_path: Path | str, explanation: str, sender: str = "user") -> None:
+    def append_feedback(
+        self, file_path: Path | str, explanation: str, sender: str = "user"
+    ) -> None:
         now = self._now()
         self.update_metadata(file_path, append_feedback=explanation, last_cleaned=now)
 
@@ -325,7 +354,13 @@ class TestSrcStorageImpl(unittest.TestCase):
             self.assertTrue(storage.is_dirty(node))
 
             msgs = storage.get_messages(node)
-            self.assertTrue(any(isinstance(m, FeedbackMessage) and "fix off-by-one error" in str(m.content) for m in msgs))
+            self.assertTrue(
+                any(
+                    isinstance(m, FeedbackMessage)
+                    and "fix off-by-one error" in str(m.content)
+                    for m in msgs
+                )
+            )
 
             # Marking clean clears feedback
             storage.mark_node_clean(node)
@@ -488,10 +523,10 @@ class TestSrcStorageImpl(unittest.TestCase):
         roles_toml = os.path.join(self.test_dir, app_info.DEFAULT_ROLES_FILE)
         with open(roles_toml, "w", encoding="utf-8") as f:
             f.write(
-                '[roles.custom_role]\n'
+                "[roles.custom_role]\n"
                 'name = "custom_role"\n'
                 'src_pattern = "{unit_dir}/{unit_name}.py"\n'
-                'template_command = "python3 -c \\"import sys; open(sys.argv[1], \'w\').write(\'# Custom Scaffolding\\\\n\')\\" {target_file}"\n'
+                "template_command = \"python3 -c \\\"import sys; open(sys.argv[1], 'w').write('# Custom Scaffolding\\\\n')\\\" {target_file}\"\n"
             )
 
         with enter_phase("system", registry=self.registry) as scope:

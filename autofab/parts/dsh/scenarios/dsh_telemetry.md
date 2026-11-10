@@ -34,7 +34,7 @@ Given: an active DeepSeek Harness server or Desktop application listening on a l
 
 1. The telemetry parser evaluates server reachability.
    Observed: reachability is confirmed.
-2. The telemetry parser dispatches a role round with workspace directory, role name, task prompt, and directory scope.
+1. The telemetry parser dispatches a role round with workspace directory, role name, task prompt, and directory scope.
    Observed: the round is accepted by the server over the JSON-RPC bridge with session titled with scope and role directly within the role workspace directory, and a task handle is returned.
 
 ## Scenario 6 — Polling active RPC round status until completion
@@ -44,8 +44,17 @@ Given: a task handle representing an active role round dispatched over the RPC b
 1. The telemetry parser polls round status.
    Observed: a DshRpcRoundStatus record is returned indicating execution state and accumulated token usage.
 
+## Scenario 7 — Renaming, deleting, and cleaning up scope sessions
+
+Given: an active DeepSeek Harness Web bridge or Desktop server with existing sessions.
+
+1. The telemetry parser renames a session by identifier.
+   Observed: the session title is updated to the proposed title.
+1. The telemetry parser cleans up conversations matching a directory scope.
+   Observed: all sessions containing `[<scope>]` in their title are deleted from the server.
+
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-11-02T17:35:00Z
-CHANGE: Name desktop sessions with scope and role directly in role workspace without creating per-role workspace folders
+LAST_CHANGED: 2026-11-09T23:32:00Z
+CHANGE: Add session renaming, deletion, and scope conversation cleanup operations
 -->

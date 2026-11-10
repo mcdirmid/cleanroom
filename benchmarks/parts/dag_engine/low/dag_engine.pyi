@@ -185,8 +185,8 @@ class DAG(Singleton[SystemTier], Protocol):
             retries: Number of permitted retry attempts upon exception.
 
         POSTCONDITIONS:
-        - MUST register the node definition into the graph.
-        - WHEN dependencies are provided, MUST add directed dependency edges from each dependency to node_id.
+        - [slug:dag.dag.add_node.register_definition]: MUST register the node definition into the graph.
+        - [slug:dag.dag.add_node.directed_dependencies]: WHEN dependencies are provided, MUST add directed dependency edges from each dependency to node_id.
         """
         ...
 
@@ -202,10 +202,10 @@ class DAG(Singleton[SystemTier], Protocol):
             NodeNotFoundError: If either node identifier is missing from the graph.
 
         PRECONDITIONS:
-        - WHEN upstream_id or downstream_id does not exist, MUST raise NodeNotFoundError.
+        - [slug:dag.dag.add_edge.nodes_must_exist]: WHEN upstream_id or downstream_id does not exist, MUST raise NodeNotFoundError.
 
         POSTCONDITIONS:
-        - MUST establish a directed dependency edge from upstream_id to downstream_id.
+        - [slug:dag.dag.add_edge.directed_edge]: MUST establish a directed dependency edge from upstream_id to downstream_id.
         """
         ...
 
@@ -220,10 +220,10 @@ class DAG(Singleton[SystemTier], Protocol):
             NodeNotFoundError: If node_id does not exist in the graph.
 
         PRECONDITIONS:
-        - WHEN node_id is absent, MUST raise NodeNotFoundError.
+        - [slug:dag.dag.remove_node.node_must_exist]: WHEN node_id is absent, MUST raise NodeNotFoundError.
 
         POSTCONDITIONS:
-        - MUST remove the node and its incident edges.
+        - [slug:dag.dag.remove_node.purge_incident_edges]: MUST remove the node and its incident edges.
         """
         ...
 
@@ -253,10 +253,10 @@ class DAG(Singleton[SystemTier], Protocol):
             NodeNotFoundError: If node_id is not in the graph.
 
         PRECONDITIONS:
-        - WHEN node_id is absent, MUST raise NodeNotFoundError.
+        - [slug:dag.dag.get_node.node_must_exist]: WHEN node_id is absent, MUST raise NodeNotFoundError.
 
         POSTCONDITIONS:
-        - MUST return the NodeDefinition matching node_id.
+        - [slug:dag.dag.get_node.return_definition]: MUST return the NodeDefinition matching node_id.
         """
         ...
 
@@ -274,10 +274,10 @@ class DAG(Singleton[SystemTier], Protocol):
             NodeNotFoundError: If node_id is not in the graph.
 
         PRECONDITIONS:
-        - WHEN node_id is absent, MUST raise NodeNotFoundError.
+        - [slug:dag.dag.get_dependencies.node_must_exist]: WHEN node_id is absent, MUST raise NodeNotFoundError.
 
         POSTCONDITIONS:
-        - MUST return all direct upstream dependencies.
+        - [slug:dag.dag.get_dependencies.return_upstream]: MUST return all direct upstream dependencies.
         """
         ...
 
@@ -295,10 +295,10 @@ class DAG(Singleton[SystemTier], Protocol):
             NodeNotFoundError: If node_id is not in the graph.
 
         PRECONDITIONS:
-        - WHEN node_id is absent, MUST raise NodeNotFoundError.
+        - [slug:dag.dag.get_dependents.node_must_exist]: WHEN node_id is absent, MUST raise NodeNotFoundError.
 
         POSTCONDITIONS:
-        - MUST return all direct downstream dependents.
+        - [slug:dag.dag.get_dependents.return_downstream]: MUST return all direct downstream dependents.
         """
         ...
 
@@ -320,11 +320,11 @@ class DAG(Singleton[SystemTier], Protocol):
             CycleError: If any directed cycle exists in the graph.
 
         PRECONDITIONS:
-        - WHEN a dependency node is missing, MUST raise NodeNotFoundError.
-        - WHEN a cycle exists, MUST raise CycleError containing the cycle sequence.
+        - [slug:dag.dag.validate.dependencies_exist]: WHEN a dependency node is missing, MUST raise NodeNotFoundError.
+        - [slug:dag.dag.validate.acyclic_graph]: WHEN a cycle exists, MUST raise CycleError containing the cycle sequence.
 
         POSTCONDITIONS:
-        - WHEN all referenced nodes exist and no cycle exists, MUST complete without error.
+        - [slug:dag.dag.validate.complete_valid]: WHEN all referenced nodes exist and no cycle exists, MUST complete without error.
         """
         ...
 
@@ -342,11 +342,11 @@ class DAG(Singleton[SystemTier], Protocol):
             CycleError: If the graph contains a directed cycle.
 
         PRECONDITIONS:
-        - WHEN a cycle exists, MUST raise CycleError.
+        - [slug:dag.dag.topological_sort.acyclic_graph]: WHEN a cycle exists, MUST raise CycleError.
 
         POSTCONDITIONS:
-        - MUST return a valid topological ordering where every prerequisite precedes its dependents.
-        - MUST break ties between concurrent ready nodes using priority descending and name ascending.
+        - [slug:dag.dag.topological_sort.dependency_order]: MUST return a valid topological ordering where every prerequisite precedes its dependents.
+        - [slug:dag.dag.topological_sort.tie_breaking]: MUST break ties between concurrent ready nodes using priority descending and name ascending.
         """
         ...
 
@@ -383,8 +383,8 @@ class DAG(Singleton[SystemTier], Protocol):
             Tuple of (critical path node identifiers, total path weight).
 
         POSTCONDITIONS:
-        - MUST return the sequence of nodes that forms the longest path through the DAG.
-        - MUST return the cumulative weight of that path.
+        - [slug:dag.dag.critical_path.longest_path]: MUST return the sequence of nodes that forms the longest path through the DAG.
+        - [slug:dag.dag.critical_path.cumulative_weight]: MUST return the cumulative weight of that path.
         """
         ...
 
@@ -401,9 +401,9 @@ class WaveScheduler(Singleton[SystemTier], Protocol):
             List of node identifiers ready for concurrent execution, ordered by priority descending.
 
         POSTCONDITIONS:
-        - MUST return all nodes currently in READY state whose upstream dependencies are SUCCEEDED.
-        - MUST order returned nodes by priority descending, then node_id ascending.
-        - WHEN no nodes are ready, MUST return an empty list.
+        - [slug:dag.scheduler.next_wave.ready_nodes]: MUST return all nodes currently in READY state whose upstream dependencies are SUCCEEDED.
+        - [slug:dag.scheduler.next_wave.priority_order]: MUST order returned nodes by priority descending, then node_id ascending.
+        - [slug:dag.scheduler.next_wave.empty_when_no_ready]: WHEN no nodes are ready, MUST return an empty list.
         """
         ...
 
@@ -415,7 +415,7 @@ class WaveScheduler(Singleton[SystemTier], Protocol):
             node_id: Identifier of the executing node.
 
         POSTCONDITIONS:
-        - MUST update the node state to RUNNING.
+        - [slug:dag.scheduler.mark_running.state_transition]: MUST update the node state to RUNNING.
         """
         ...
 
@@ -427,8 +427,8 @@ class WaveScheduler(Singleton[SystemTier], Protocol):
             node_id: Identifier of the completed node.
 
         POSTCONDITIONS:
-        - MUST update the node state to SUCCEEDED.
-        - MUST evaluate downstream dependents and promote newly unblocked nodes to READY.
+        - [slug:dag.scheduler.mark_succeeded.state_transition]: MUST update the node state to SUCCEEDED.
+        - [slug:dag.scheduler.mark_succeeded.promote_dependents]: MUST evaluate downstream dependents and promote newly unblocked nodes to READY.
         """
         ...
 
@@ -445,10 +445,10 @@ class WaveScheduler(Singleton[SystemTier], Protocol):
             failure_policy: Failure policy applied upon failure.
 
         POSTCONDITIONS:
-        - MUST update the node state to FAILED.
-        - WHEN failure_policy is SKIP_DOWNSTREAM, MUST transition all transitive dependents to SKIPPED.
-        - WHEN failure_policy is FAIL_FAST, MUST transition all remaining PENDING nodes to CANCELLED.
-        - WHEN failure_policy is CONTINUE_ON_ERROR, MUST leave unblocked independent nodes eligible for execution.
+        - [slug:dag.scheduler.mark_failed.state_transition]: MUST update the node state to FAILED.
+        - [slug:dag.scheduler.mark_failed.skip_downstream]: WHEN failure_policy is SKIP_DOWNSTREAM, MUST transition all transitive dependents to SKIPPED.
+        - [slug:dag.scheduler.mark_failed.fail_fast]: WHEN failure_policy is FAIL_FAST, MUST transition all remaining PENDING nodes to CANCELLED.
+        - [slug:dag.scheduler.mark_failed.continue_on_error]: WHEN failure_policy is CONTINUE_ON_ERROR, MUST leave unblocked independent nodes eligible for execution.
         """
         ...
 
@@ -460,9 +460,9 @@ class WaveScheduler(Singleton[SystemTier], Protocol):
             True if all nodes in the DAG have reached terminal states.
 
         POSTCONDITIONS:
-        - WHEN all nodes in the DAG have reached terminal states (SUCCEEDED, FAILED, SKIPPED, CANCELLED), MUST return True.
-        - WHEN any node in the DAG is not in a terminal state, MUST return False.
-        - WHEN the DAG contains no nodes, MUST return True.
+        - [slug:dag.scheduler.is_finished.all_terminal]: WHEN all nodes in the DAG have reached terminal states (SUCCEEDED, FAILED, SKIPPED, CANCELLED), MUST return True.
+        - [slug:dag.scheduler.is_finished.non_terminal_remaining]: WHEN any node in the DAG is not in a terminal state, MUST return False.
+        - [slug:dag.scheduler.is_finished.empty_dag]: WHEN the DAG contains no nodes, MUST return True.
         """
         ...
 
@@ -514,14 +514,14 @@ class DAGRunner(Singleton[SystemTier], Protocol):
             DAGCancelledError: If cancel() is invoked during execution.
 
         PRECONDITIONS:
-        - WHEN execution exceeds timeout_seconds, MUST raise DAGTimeoutError.
-        - WHEN cancelled during execution, MUST mark running nodes as CANCELLED and raise DAGCancelledError.
+        - [slug:dag.runner.run.timeout_limit]: WHEN execution exceeds timeout_seconds, MUST raise DAGTimeoutError.
+        - [slug:dag.runner.run.abort_on_cancel]: WHEN cancelled during execution, MUST mark running nodes as CANCELLED and raise DAGCancelledError.
 
         POSTCONDITIONS:
-        - MUST execute ready nodes concurrently up to the configured concurrency limit.
-        - MUST execute retries up to the configured retry count for failed node actions.
-        - MUST apply the specified failure_policy to the scheduler upon node failure.
-        - MUST return a DAGRunReport capturing all node states, execution durations, and critical path.
+        - [slug:dag.runner.run.concurrent_execution]: MUST execute ready nodes concurrently up to the configured concurrency limit.
+        - [slug:dag.runner.run.retry_failures]: MUST execute retries up to the configured retry count for failed node actions.
+        - [slug:dag.runner.run.apply_failure_policy]: MUST apply the specified failure_policy to the scheduler upon node failure.
+        - [slug:dag.runner.run.consolidated_report]: MUST return a DAGRunReport capturing all node states, execution durations, and critical path.
         """
         ...
 
@@ -530,7 +530,7 @@ class DAGRunner(Singleton[SystemTier], Protocol):
         """Signals active execution to abort, cancelling all non-terminal nodes.
 
         POSTCONDITIONS:
-        - MUST set cancellation status and abort subsequent wave execution.
+        - [slug:dag.runner.cancel.abort_execution]: MUST set cancellation status and abort subsequent wave execution.
         """
         ...
 
@@ -543,8 +543,8 @@ class DAGRunner(Singleton[SystemTier], Protocol):
             True if cancellation status has been set, False otherwise.
 
         POSTCONDITIONS:
-        - WHEN cancel() has been called, MUST return True.
-        - WHEN cancel() has not been called, MUST return False.
+        - [slug:dag.runner.is_cancelled.cancelled_status]: WHEN cancel() has been called, MUST return True.
+        - [slug:dag.runner.is_cancelled.active_status]: WHEN cancel() has not been called, MUST return False.
         """
         ...
 

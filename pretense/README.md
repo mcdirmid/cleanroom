@@ -7,6 +7,7 @@ A lightweight stateful property-testing and behavioral contract framework.
 Pretense provides model-based state machine property testing, fuzz generation, and specification parity arbiters.
 
 ### Key Capabilities
+
 - **State Machine Specification**: Declare states, transitions, preconditions, and invariants using `@transition`.
 - **Fuzz Testing**: Deterministic state machine exploration powered by Hypothesis.
 - **Contract Verification**: Parity and behavioral conformance testing between specifications and implementations.
@@ -28,6 +29,7 @@ from pretense import transition, TransitionContext, StateMachine
 ```
 
 Or run test suites directly:
+
 ```bash
 pretense parts/
 ```

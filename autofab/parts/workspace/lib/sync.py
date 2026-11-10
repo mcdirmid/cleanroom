@@ -65,6 +65,7 @@ class WorkspaceSynchronizer(Singleton[AgentSessionTier], Protocol):
         self, workspace_dir: str, main_root: str
     ) -> Sequence[str]: ...
 
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-11T05:04:11Z

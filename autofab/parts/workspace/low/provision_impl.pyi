@@ -43,7 +43,7 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
         """Commissions an isolated role workspace with permission boundaries.
 
         POSTCONDITIONS:
-        - MUST create the role workspace working tree by copying workspace roots, project configurations, and build definitions, resolving the target scope's bound methodology package from autofab_files_ext.AUTOFAB_CONFIG_FILE, and projecting active methodology runtime support libraries directly to ./support/lib and the role's assigned companion guide to ./guides, while strictly avoiding copying templates, unneeded configuration files, or unbound repository root directories.
+        - MUST create the role workspace working tree by copying workspace roots, project configurations, and build definitions, resolving the target scope's bound methodology package from autofab_files_ext.AUTOFAB_CONFIG_FILE, evaluating conditional markdown directives against active experiments when copying markdown files, and projecting active methodology runtime support libraries directly to ./support/lib and the role's assigned companion guide to ./guides, while strictly avoiding copying templates, unneeded configuration files, or unbound repository root directories.
         - MUST configure type-checking to cover the workspace without directory exclusions.
         - MUST strip readme declaration attributes from provisioned pyproject.toml to prevent build backend failures.
         - WHEN the role declares writable target patterns, MUST initialize a local git tracking repository (git init) configured with local committer identity (Autofab Worker <worker@autofab.local>), writing .gitignore and recording an initial commit snapshot (omitting git repository initialization for auditor roles with zero writable targets).
@@ -105,7 +105,8 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
 
         GROUNDING:
         - Realizes permission-enforced file copying (workspace_filesystem_mechanics) applying
-          0o444, 0o644, 0o555, or 0o755 mode flags.
+          0o444, 0o644, 0o555, or 0o755 mode flags, evaluating conditional markdown directives
+          against active experiments when copying markdown files.
         """
         ...
 

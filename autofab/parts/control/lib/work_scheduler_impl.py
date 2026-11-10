@@ -25,6 +25,7 @@ def _get_role_definitions() -> Dict[str, Any]:
         pass
     try:
         from autofab.parts.workspace.lib import role_registry
+
         reg = get_singleton(role_registry.WorkspaceRegistry)
         return {r.role_name: r for r in reg.list_roles()}
     except Exception:
@@ -78,6 +79,7 @@ def _bound_file_path(bound_file: Any) -> str:
 def _node_display_alias(node: dag_storage.DagNode) -> str:
     try:
         from . import coordinate
+
         coord = get_singleton(coordinate.SessionCoordinator)
         if coord is not None:
             return coord.get_alias_for_node(node)
@@ -87,21 +89,31 @@ def _node_display_alias(node: dag_storage.DagNode) -> str:
     try:
         cfg = get_singleton(node_config.NodeConfig)
         if cfg is not None:
-            if hasattr(cfg, "src_file_alias_by_node") and cfg.src_file_alias_by_node and node in cfg.src_file_alias_by_node:
+            if (
+                hasattr(cfg, "src_file_alias_by_node")
+                and cfg.src_file_alias_by_node
+                and node in cfg.src_file_alias_by_node
+            ):
                 return str(cfg.src_file_alias_by_node[node])
             if hasattr(cfg, "blame_targets_by_node") and cfg.blame_targets_by_node:
                 for bt_set in cfg.blame_targets_by_node.values():
                     for bt in bt_set:
                         if hasattr(bt, "owning_node") and bt.owning_node == node:
-                            return str(bt.relative_path if hasattr(bt, "relative_path") else bt)
+                            return str(
+                                bt.relative_path if hasattr(bt, "relative_path") else bt
+                            )
             if hasattr(cfg, "read_only_files") and cfg.read_only_files:
                 for ro in cfg.read_only_files:
                     if hasattr(ro, "owning_node") and ro.owning_node == node:
-                        return str(ro.relative_path if hasattr(ro, "relative_path") else ro)
+                        return str(
+                            ro.relative_path if hasattr(ro, "relative_path") else ro
+                        )
             if hasattr(cfg, "read_write_files") and cfg.read_write_files:
                 for rw in cfg.read_write_files:
                     if hasattr(rw, "owning_node") and rw.owning_node == node:
-                        return str(rw.relative_path if hasattr(rw, "relative_path") else rw)
+                        return str(
+                            rw.relative_path if hasattr(rw, "relative_path") else rw
+                        )
     except Exception:
         pass
 
@@ -115,14 +127,20 @@ def _node_display_alias(node: dag_storage.DagNode) -> str:
     else:
         pkg, unit_name = "", addr
 
-    role = str(node.role_address).split(":")[-1].strip().lower() if node.role_address else ""
+    role = (
+        str(node.role_address).split(":")[-1].strip().lower()
+        if node.role_address
+        else ""
+    )
     role_defs = _get_role_definitions()
     if role in role_defs:
         src_pat = _role_src_pattern(role_defs[role])
         if src_pat:
-            formatted = src_pat.replace("{unit_dir}", pkg).replace(
-                "{unit_name}", unit_name
-            ).strip("/")
+            formatted = (
+                src_pat.replace("{unit_dir}", pkg)
+                .replace("{unit_name}", unit_name)
+                .strip("/")
+            )
             if formatted:
                 return formatted
 
@@ -144,10 +162,15 @@ def _is_auditor_node(node: dag_storage.DagNode) -> bool:
     role_clean = node.role_address.split(":")[-1].strip().lower()
     try:
         from autofab.parts.metadata.lib import src_metadata
+
         return src_metadata.is_auditor_role(role_clean)
     except Exception:
         pass
-    return role_clean.endswith(("_qa", "_coverage", "_audit", "auditor", "audit")) or "qa" in role_clean or "audit" in role_clean
+    return (
+        role_clean.endswith(("_qa", "_coverage", "_audit", "auditor", "audit"))
+        or "qa" in role_clean
+        or "audit" in role_clean
+    )
 
 
 class WorkScheduler(work_scheduler.WorkScheduler):
@@ -201,12 +224,22 @@ class WorkScheduler(work_scheduler.WorkScheduler):
         role_defs = _get_role_definitions()
         for r_name, r_cfg in role_defs.items():
             rd = list(r_cfg.role_deps if hasattr(r_cfg, "role_deps") else ())
-            rd += list(r_cfg.feedback_role_deps if hasattr(r_cfg, "feedback_role_deps") else ())
-            rd += list(r_cfg.star_feedback_role_deps if hasattr(r_cfg, "star_feedback_role_deps") else ())
-            rd += list(r_cfg.silent_role_deps if hasattr(r_cfg, "silent_role_deps") else ())
+            rd += list(
+                r_cfg.feedback_role_deps if hasattr(r_cfg, "feedback_role_deps") else ()
+            )
+            rd += list(
+                r_cfg.star_feedback_role_deps
+                if hasattr(r_cfg, "star_feedback_role_deps")
+                else ()
+            )
+            rd += list(
+                r_cfg.silent_role_deps if hasattr(r_cfg, "silent_role_deps") else ()
+            )
             rd += [
                 s
-                for s in (r_cfg.star_role_deps if hasattr(r_cfg, "star_role_deps") else ())
+                for s in (
+                    r_cfg.star_role_deps if hasattr(r_cfg, "star_role_deps") else ()
+                )
                 if s.split(":")[-1] != r_name
             ]
             role_deps[r_name] = rd
@@ -222,7 +255,8 @@ class WorkScheduler(work_scheduler.WorkScheduler):
         norm_scope = dir_scope.strip().strip("/")
         storage_any: Any = storage
         known_nodes: Set[dag_storage.DagNode] = set(
-            (storage_any.all_nodes if hasattr(storage_any, "all_nodes") else set()) or set()
+            (storage_any.all_nodes if hasattr(storage_any, "all_nodes") else set())
+            or set()
         )
         try:
             known_nodes.update(get_singleton(node_config.RoleConfig).nodes)
@@ -278,10 +312,7 @@ class WorkScheduler(work_scheduler.WorkScheduler):
         tasks: List[work_scheduler.ScheduledTask] = []
         for node in candidate_nodes:
             deps = storage.get_dependencies(node)
-            dep_paths: List[str] = [
-                _node_display_alias(dep.node)
-                for dep in deps
-            ]
+            dep_paths: List[str] = [_node_display_alias(dep.node) for dep in deps]
 
             msgs = storage.get_messages(node)
             feedback_msgs: List[dag_storage.FeedbackMessage] = [
@@ -330,7 +361,11 @@ class WorkScheduler(work_scheduler.WorkScheduler):
                 res += ".pyi"
             return res
 
-        if "tests/" in source_alias or source_alias.endswith("_test.py") or source_alias.endswith("_coverage.py"):
+        if (
+            "tests/" in source_alias
+            or source_alias.endswith("_test.py")
+            or source_alias.endswith("_coverage.py")
+        ):
             base = source_alias.replace("tests/", "low/")
             for sfx in ("_test.py", "_coverage.py", ".py"):
                 if base.endswith(sfx):
@@ -341,7 +376,11 @@ class WorkScheduler(work_scheduler.WorkScheduler):
         n_cfg_any: Any = n_cfg
         is_auditor = bool(
             (n_cfg_any.audit_tag if hasattr(n_cfg_any, "audit_tag") else None)
-            or not (n_cfg_any.source_pattern if hasattr(n_cfg_any, "source_pattern") else None)
+            or not (
+                n_cfg_any.source_pattern
+                if hasattr(n_cfg_any, "source_pattern")
+                else None
+            )
             or not source_alias
         )
         if is_auditor:
@@ -420,13 +459,17 @@ class WorkScheduler(work_scheduler.WorkScheduler):
                         else:
                             mapping_lines.append(bt_path)
                 else:
-                    alias_str = n_cfg.src_file_alias_by_node.get(n) or _node_display_alias(n)
+                    alias_str = n_cfg.src_file_alias_by_node.get(
+                        n
+                    ) or _node_display_alias(n)
                     if grounding_file:
                         mapping_lines.append(f"{alias_str} with {grounding_file}")
                     else:
                         mapping_lines.append(alias_str)
             else:
-                alias_str = n_cfg.src_file_alias_by_node.get(n) or _node_display_alias(n)
+                alias_str = n_cfg.src_file_alias_by_node.get(n) or _node_display_alias(
+                    n
+                )
                 grounding_file = self._resolve_grounding_file(n, alias_str, n_cfg)
                 if grounding_file:
                     mapping_lines.append(f"{alias_str} with {grounding_file}")
@@ -535,6 +578,8 @@ class WorkScheduler(work_scheduler.WorkScheduler):
             )
 
         return "\n\n".join(p for p in parts if p).strip()
+
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-11T05:04:02Z

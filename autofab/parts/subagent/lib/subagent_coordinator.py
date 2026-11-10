@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import os
-from typing import Optional, Protocol, Sequence
+from typing import Mapping, Optional, Protocol, Sequence
 from support.lib.lifecycle import Singleton
+
 try:
     from support.lib import app_info
 except Exception:
@@ -177,6 +178,7 @@ def resolve_log_dir(workspace_dir: str) -> str:
     try:
         from support.lib.lifecycle import Singleton, get_singleton
         import importlib
+
         ws_reg_mod = importlib.import_module("role_registry")
         reg = get_singleton(ws_reg_mod.WorkspaceRegistry)  # type: ignore
         main_root = reg.discover_repository_root(workspace_dir)
@@ -197,11 +199,14 @@ def resolve_log_dir(workspace_dir: str) -> str:
             if main_cand:
                 log_dir = os.path.join(main_cand, "logs")
             else:
-                log_dir = os.path.join(workspace_dir, f".{app_info.get_app_name()}", "logs")
+                log_dir = os.path.join(
+                    workspace_dir, f".{app_info.get_app_name()}", "logs"
+                )
         else:
             log_dir = os.path.join(workspace_dir, f".{app_info.get_app_name()}", "logs")
     os.makedirs(log_dir, exist_ok=True)
     return log_dir
+
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z

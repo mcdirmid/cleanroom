@@ -22,7 +22,7 @@ The source metadata coordinator evaluates whether proposed content changes alter
 
 The source metadata coordinator rewrites metadata comment blocks in content strings and updates files on disk in place. In-band metadata blocks adhere to format-specific commenting conventions positioned at the bottom of the file following source content to preserve code line numbers: Python source files (`.py`, `.pyi`) format metadata as line comments delimited by `# --- CLEANROOM METADATA ---` and `# --- END CLEANROOM METADATA ---` appended at the end of the file; Markdown specifications (`.md`) format metadata as HTML comments delimited by `<!-- CLEANROOM METADATA` and `-->` appended at the end of the document. When extracting metadata, the coordinator detects comment blocks positioned at the bottom or anywhere within the file.
 
-The source metadata coordinator updates lifecycle status by marking files clean, marking files dirty, recording change summaries, appending unacted feedback items, stamping role audits, clearing role audits, and deleting last cleaned timestamps.
+The source metadata coordinator updates lifecycle status by marking files clean, marking files dirty, recording change summaries, appending unacted feedback items with sender role attribution, stamping role audits, clearing role audits, and deleting last cleaned timestamps.
 
 The component also exposes module-level procedural facade functions for metadata extraction, code body isolation, code hashing, modification checks, metadata alteration checks, and lifecycle updates, delegating each operation to the active source metadata coordinator singleton, alongside utilities for role audit tagging, auditor role classification, metadata parsing and formatting, and UTC timestamp generation.
 

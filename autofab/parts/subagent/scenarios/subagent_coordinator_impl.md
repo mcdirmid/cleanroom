@@ -152,8 +152,16 @@ Given: a role worker repeatedly delivers an identical blame signature across con
    Observed: the coordinator and harness consume and clear workspace blame buffers upon reading round outcomes and purge preexisting blame buffers prior to dispatching new rounds.
    Realized by: the component removing workspace blame buffer files at dispatch and consuming them upon round completion.
 
+### Scenario 14 — Publishing authoritative orchestration state updates
+
+Given: multi-agent supervision running in a designated scope with active workers and ready queues.
+
+1. The coordinator dispatches roles, reaps completed workers, or achieves convergence.
+   Observed: authoritative orchestration state snapshots detailing active scopes, current wave counts, active running workers, idle completed workers, assigned targets, and convergence outcomes are published across dispatch, round completion, and DAG convergence events.
+   Realized by: the component invoking `update_orchestration_state` on the execution harness adapter upon dispatch, worker completion, and convergence.
+
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-11-06T02:49:00Z
-LAST_CHANGED: 2026-11-06T02:49:00Z
-CHANGE: Scope concurrent downstream role withholding to the active target unit
+LAST_CHANGED: 2026-11-09T22:10:00Z
+CHANGE: Add scenario for authoritative orchestration state snapshot publishing
 -->

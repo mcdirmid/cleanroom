@@ -32,6 +32,7 @@ class VerificationEvaluator(Singleton[AgentSessionTier], Protocol):
     # Contract: Strips build progress indicators, load banners, and elapsed timing statistics from diagnostic text.
     def clean_diagnostic_noise(self, text: str) -> str: ...
 
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-06T10:45:00Z

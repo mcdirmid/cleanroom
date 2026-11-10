@@ -62,6 +62,15 @@ class FakeWorkspaceCommandHandler:
         self.calls.append(("blame", (culprit_file, critique, repo_root)))
         return 0
 
+    def run_reject(
+        self,
+        file_path: str,
+        reason: str,
+        repo_root: Optional[str] = None,
+    ) -> int:
+        self.calls.append(("reject", (file_path, reason, repo_root)))
+        return 0
+
     def run_fail(
         self,
         file_path: str,
@@ -212,10 +221,17 @@ class WorkspaceToolImplTest(unittest.TestCase):
         self.assertEqual(args[0], "low/foo.pyi")
         self.assertEqual(args[1], "Feedback critique")
 
+    def test_runner_reject(self) -> None:
+        ret = self.runner.execute_command(["reject", "lib/foo.py", "Already compliant"])
+        self.assertEqual(ret, 0)
+        self.assertEqual(len(self.fake_cmds.calls), 1)
+        name, args = self.fake_cmds.calls[0]
+        self.assertEqual(name, "reject")
+        self.assertEqual(args[0], "lib/foo.py")
+        self.assertEqual(args[1], "Already compliant")
+
     def test_runner_fail(self) -> None:
-        ret = self.runner.execute_command(
-            ["fail", "lib/foo.py", "Compilation error"]
-        )
+        ret = self.runner.execute_command(["fail", "lib/foo.py", "Compilation error"])
         self.assertEqual(ret, 0)
         self.assertEqual(len(self.fake_cmds.calls), 1)
         name, args = self.fake_cmds.calls[0]
@@ -296,15 +312,33 @@ class WorkspaceToolImplTest(unittest.TestCase):
 
     def test_runner_revert_and_checkpoint(self) -> None:
         import os, subprocess, tempfile
+
         with tempfile.TemporaryDirectory() as td:
             subprocess.run(["git", "init"], cwd=td, check=True, capture_output=True)
-            subprocess.run(["git", "config", "user.name", "Test Worker"], cwd=td, check=True, capture_output=True)
-            subprocess.run(["git", "config", "user.email", f"test@{app_info.APP_NAME}.local"], cwd=td, check=True, capture_output=True)
+            subprocess.run(
+                ["git", "config", "user.name", "Test Worker"],
+                cwd=td,
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.email", f"test@{app_info.APP_NAME}.local"],
+                cwd=td,
+                check=True,
+                capture_output=True,
+            )
             test_file = os.path.join(td, "sample.txt")
             with open(test_file, "w") as f:
                 f.write("initial content\n")
-            subprocess.run(["git", "add", "-A"], cwd=td, check=True, capture_output=True)
-            subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=td, check=True, capture_output=True)
+            subprocess.run(
+                ["git", "add", "-A"], cwd=td, check=True, capture_output=True
+            )
+            subprocess.run(
+                ["git", "commit", "-m", "Initial commit"],
+                cwd=td,
+                check=True,
+                capture_output=True,
+            )
 
             old_cwd = os.getcwd()
             try:
@@ -333,14 +367,42 @@ class WorkspaceToolImplTest(unittest.TestCase):
             finally:
                 os.chdir(old_cwd)
 
+    def test_blame_cli_structured_options(self) -> None:
+        ret = cli_tool_impl.main(
+            [
+                "blame",
+                "lib/foo.py",
+                "--slug",
+                "semver.range.whitespace",
+                "--viol",
+                "post.wrong_return",
+                "--facet",
+                "embedded operator whitespace",
+                "--lines",
+                "84-88",
+                "--witness",
+                "input='>= 1.0.0'",
+            ]
+        )
+        self.assertEqual(ret, 0)
+        blame_calls = [c for c in self.fake_cmds.calls if c[0] == "blame"]
+        self.assertEqual(len(blame_calls), 1)
+        culprit, critique, _ = blame_calls[0][1]
+        self.assertEqual(culprit, "lib/foo.py")
+        self.assertIn("[slug:semver.range.whitespace]", critique)
+        self.assertIn("[viol:post.wrong_return]", critique)
+        self.assertIn("Facet: embedded operator whitespace", critique)
+        self.assertIn("Lines: 84-88", critique)
+        self.assertIn("Witness: input='>= 1.0.0'", critique)
+
 
 if __name__ == "__main__":
     unittest.main()
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-14T17:50:00Z
-# CHANGE: Test WorkspaceToolRunner CLI parsing and delegation to WorkspaceCommandHandler
+# LAST_CHANGED: 2026-11-07T10:20:00Z
+# CHANGE: Test reject command CLI parsing and delegation
 # COVERAGE_AUDIT: 2026-10-15T17:42:47Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

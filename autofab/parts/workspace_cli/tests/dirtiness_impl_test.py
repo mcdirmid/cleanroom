@@ -14,7 +14,9 @@ from autofab.parts.workspace_cli.lib import (
 
 
 class FakeWorkspaceRegistry:
-    def resolve_role_definition(self, role_name: str, repo_root: str | None = None) -> role_registry.RoleDefinition:
+    def resolve_role_definition(
+        self, role_name: str, repo_root: str | None = None
+    ) -> role_registry.RoleDefinition:
         clean = role_name.split(":")[-1].strip().lower()
         if clean == "lib":
             return role_registry.RoleDefinition(
@@ -54,7 +56,9 @@ class FakeWorkspaceRegistry:
             )
         raise LookupError(f"Role not found: {role_name}")
 
-    def list_roles(self, repo_root: str | None = None) -> list[role_registry.RoleDefinition]:
+    def list_roles(
+        self, repo_root: str | None = None
+    ) -> list[role_registry.RoleDefinition]:
         return [
             self.resolve_role_definition("lib"),
             self.resolve_role_definition("low"),
@@ -112,8 +116,15 @@ class WorkspaceDirtinessImplTest(unittest.TestCase):
             repo_root=self.test_dir,
         )
         self.assertTrue(res.is_dirty)
-        self.assertTrue(any("is uninitialized (initial implementation required)" in r for r in res.dirtiness_reasons))
-        self.assertFalse(any("in-band metadata header" in r for r in res.dirtiness_reasons))
+        self.assertTrue(
+            any(
+                "is uninitialized (initial implementation required)" in r
+                for r in res.dirtiness_reasons
+            )
+        )
+        self.assertFalse(
+            any("in-band metadata header" in r for r in res.dirtiness_reasons)
+        )
 
     def test_evaluate_unit_dirty_metadata_clean(self) -> None:
         part_dir = os.path.join(self.test_dir, "parts", "foo")
@@ -257,10 +268,14 @@ class WorkspaceDirtinessImplTest(unittest.TestCase):
         )
         # Projected target file in role workspace (has CODE_HASH, but NO last_cleaned, NO last_changed)
         with open(ws_target, "w", encoding="utf-8") as f:
-            f.write("# --- CLEANROOM METADATA ---\n# CODE_HASH: 123456\n# --- END CLEANROOM METADATA ---\n")
+            f.write(
+                "# --- CLEANROOM METADATA ---\n# CODE_HASH: 123456\n# --- END CLEANROOM METADATA ---\n"
+            )
         # Projected spec in role workspace
         with open(ws_spec, "w", encoding="utf-8") as f:
-            f.write("# --- CLEANROOM METADATA ---\n# CODE_HASH: abcdef\n# --- END CLEANROOM METADATA ---\n")
+            f.write(
+                "# --- CLEANROOM METADATA ---\n# CODE_HASH: abcdef\n# --- END CLEANROOM METADATA ---\n"
+            )
 
         res = self.evaluator.evaluate_unit_dirty(
             ws_root=role_ws,
@@ -271,6 +286,7 @@ class WorkspaceDirtinessImplTest(unittest.TestCase):
         )
         self.assertFalse(res.is_dirty)
         self.assertEqual(res.dirtiness_reasons, ())
+
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z

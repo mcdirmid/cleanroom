@@ -46,7 +46,6 @@ from build_lint_common import (
     check_test_structure,
     check_type_ignore,
     check_undeclared_imports,
-
     ensure_load,
     ensure_pip_load,
     ensure_target,
@@ -216,10 +215,9 @@ def generate_test_skeleton(
                         dec_name = dec.func.attr
                 if dec_name == "singleton_type":
                     has_singleton = True
-        elif (
-            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-            and not node.name.startswith("_")
-        ):
+        elif isinstance(
+            node, (ast.FunctionDef, ast.AsyncFunctionDef)
+        ) and not node.name.startswith("_"):
             impl_functions.append(node.name)
 
     reqs = extract_requirements_from_pyi(pyi_path)
@@ -236,7 +234,9 @@ def generate_test_skeleton(
     if is_impl or has_singleton:
         lines.append("from support.lib.lifecycle import LifecycleRegistry, enter_phase")
 
-    pkg_prefix = lib_pkg.replace("/", ".").replace("\\", ".").strip(".") if lib_pkg else "lib"
+    pkg_prefix = (
+        lib_pkg.replace("/", ".").replace("\\", ".").strip(".") if lib_pkg else "lib"
+    )
 
     all_symbols = sorted(impl_classes + impl_functions)
     if all_symbols:
@@ -419,9 +419,15 @@ def main() -> int:
                     from autofab_py.support.lib import app_info
                 except Exception:
                     import app_info  # type: ignore
-            markers = getattr(app_info, "get_config_filenames", lambda: ())() + getattr(app_info, "get_roles_filenames", lambda: ())() + ("pyproject.toml",)
+            markers = (
+                getattr(app_info, "get_config_filenames", lambda: ())()
+                + getattr(app_info, "get_roles_filenames", lambda: ())()
+                + ("pyproject.toml",)
+            )
             while curr and curr != os.path.dirname(curr):
-                if any(os.path.isfile(os.path.join(curr, marker)) for marker in markers):
+                if any(
+                    os.path.isfile(os.path.join(curr, marker)) for marker in markers
+                ):
                     repo_root = curr
                     break
                 curr = os.path.dirname(curr)
@@ -720,7 +726,9 @@ def main() -> int:
             + check_no_private_imports(args.module_path)
             + check_tautological_assertions(args.module_path)
             + check_no_sys_modules_tampering(args.module_path)
-            + check_no_top_level_probes(args.module_path, error_code="TEST_LINT_NO_TOP_LEVEL_PROBE")
+            + check_no_top_level_probes(
+                args.module_path, error_code="TEST_LINT_NO_TOP_LEVEL_PROBE"
+            )
             + check_no_error_testing(args.module_path)
             + check_no_try_except_in_tests(args.module_path)
             + check_no_lifecycle_scope_leaks(args.module_path)

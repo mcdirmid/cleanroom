@@ -10,7 +10,7 @@ import re
 import subprocess
 import sys
 import time
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from support.lib.lifecycle import (
     LifecycleRegistry,
@@ -22,11 +22,13 @@ from autofab.parts.agent.lib import session as agent_session
 from autofab.parts.subagent.lib import subagent_coordinator, subagent_harness
 from autofab.parts.workspace_cli.lib import work
 from autofab.parts.workspace.lib import role_registry
+
 try:
     from support.lib import app_info
 except ImportError:
     import app_info  # type: ignore
 from . import dsh_harness, dsh_telemetry, dsh_workspace
+
 try:
     from . import dsh_telemetry_impl
 except ImportError:
@@ -35,9 +37,7 @@ except ImportError:
 
 def _read_blame_buffer(workspace_dir: str) -> List[str]:
     """Reads blamed culprit files from the workspace blame buffer."""
-    candidate_names = (
-        app_info.DEFAULT_BLAME_BUFFER_FILE,
-    )
+    candidate_names = (app_info.DEFAULT_BLAME_BUFFER_FILE,)
     for cand in candidate_names:
         p = os.path.join(workspace_dir, cand)
         if not os.path.isfile(p):
@@ -51,7 +51,11 @@ def _read_blame_buffer(workspace_dir: str) -> List[str]:
                     if isinstance(item, str):
                         res.append(item)
                     elif isinstance(item, dict):
-                        t = item.get("culprit_target") or item.get("target") or item.get("file")
+                        t = (
+                            item.get("culprit_target")
+                            or item.get("target")
+                            or item.get("file")
+                        )
                         if t:
                             res.append(str(t))
                 if res:
@@ -79,7 +83,14 @@ def _discover_logs(workspace_dir: str) -> List[str]:
                 d
                 for d in dirs
                 if not d.startswith(".")
-                and d not in ("venv", "node_modules", "bazel-bin", "bazel-out", "bazel-testlogs")
+                and d
+                not in (
+                    "venv",
+                    "node_modules",
+                    "bazel-bin",
+                    "bazel-out",
+                    "bazel-testlogs",
+                )
             ]
             for f in files:
                 if f in log_filenames:
@@ -111,7 +122,9 @@ def _resolve_default_sessions_dir() -> str:
 
     home = os.path.expanduser("~")
     candidates = [
-        os.path.join(home, "Library", "Application Support", "dsh-desktop", "harness", "sessions"),
+        os.path.join(
+            home, "Library", "Application Support", "dsh-desktop", "harness", "sessions"
+        ),
         os.path.join(home, ".config", "dsh-desktop", "harness", "sessions"),
         os.path.join(home, ".local", "share", "dsh-desktop", "harness", "sessions"),
     ]
@@ -125,9 +138,13 @@ def _resolve_default_sessions_dir() -> str:
 
     # Platform default fallback
     if sys.platform == "darwin":
-        return os.path.join(home, "Library", "Application Support", "dsh-desktop", "harness", "sessions")
+        return os.path.join(
+            home, "Library", "Application Support", "dsh-desktop", "harness", "sessions"
+        )
     elif sys.platform == "win32":
-        return os.path.join(os.environ.get("APPDATA", home), "dsh-desktop", "harness", "sessions")
+        return os.path.join(
+            os.environ.get("APPDATA", home), "dsh-desktop", "harness", "sessions"
+        )
     return os.path.join(home, ".config", "dsh-desktop", "harness", "sessions")
 
 
@@ -160,6 +177,7 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
         sessions_dir: Optional[str] = None,
         simulation_mode: bool = False,
         parser: Optional[dsh_telemetry.DshTelemetryParser] = None,
+        max_rounds_per_worker: int = 4,
     ) -> None:
         self._model_name = model_name
         self._timeout_seconds = timeout_seconds
@@ -168,8 +186,12 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
         self._sessions_dir = sessions_dir or _resolve_default_sessions_dir()
         self._simulation_mode = simulation_mode
         self._parser = parser
+        self._max_rounds_per_worker = max_rounds_per_worker
         self._tasks: Dict[str, _ActiveDshTask] = {}
         self._session_baselines: Dict[str, dsh_telemetry.DshSessionTokenMetrics] = {}
+        self._worker_round_counts: Dict[str, int] = {}
+        self._active_role_sessions: Dict[Tuple[str, str], str] = {}
+        self._dead_role_sessions: Dict[str, List[Dict[str, Any]]] = {}
 
     @property
     def _telemetry_parser(self) -> dsh_telemetry.DshTelemetryParser:
@@ -179,35 +201,18 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
             return get_singleton(dsh_telemetry.DshTelemetryParser)
         except Exception:
             from . import dsh_asm
+
             dsh_asm.__initialize__()
             return get_singleton(dsh_telemetry.DshTelemetryParser)
 
     def _format_task_prompt(self, dispatch: subagent_coordinator.RoleDispatch) -> str:
-        role_label = dispatch.role_name
-        try:
-            reg = get_singleton(role_registry.WorkspaceRegistry)
-            r_def = reg.resolve_role_definition(dispatch.role_name, dir_scope=dispatch.dir_scope)
-            if not r_def.writable_file_patterns:
-                role_label = f"{dispatch.role_name} (Auditor)"
-        except Exception:
-            pass
-
-        reminder_section = (
-            f"\n## Coordinator Directive / Action Required\n{dispatch.task_prompt}\n"
-            if dispatch.task_prompt
-            else ""
-        )
-
-        return (
-            f"# {app_info.APP_TITLE} Role Dispatch\n"
-            f"Role: {role_label}\n"
-            f"Scope: {dispatch.dir_scope}\n"
-            f"Workspace: {dispatch.workspace_dir}\n\n"
-            f"CRITICAL DIRECTIVES:\n"
-            f"1. Read `AGENTS.md` in your workspace root first for your role instructions, boundary constraints, and workflow directives.\n"
-            f"2. Run `bin/get_work` to acquire your assigned pending targets, contract files, companion guide, and actionable next steps.\n"
-            f"{reminder_section}"
-        )
+        lines = [
+            "1. Read `AGENTS.md` if not already in context.",
+            "2. Run `bin/get_work`.",
+        ]
+        if dispatch.task_prompt:
+            lines.extend(["", f"Directive:\n{dispatch.task_prompt}"])
+        return "\n".join(lines) + "\n"
 
     # Contract: Dispatches work directive to a DeepSeek Harness role workspace.
     def dispatch_role(self, dispatch: subagent_coordinator.RoleDispatch) -> str:
@@ -232,10 +237,14 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
         with open(prompt_file, "w", encoding="utf-8") as f:
             f.write(prompt_text)
 
-        log_path = os.path.join(log_dir, f".{app_info.APP_NAME}_round_{task_handle}.log")
+        log_path = os.path.join(
+            log_dir, f".{app_info.APP_NAME}_round_{task_handle}.log"
+        )
 
         # Ensure Cordis overlay patch exists
-        patch_file = os.path.join(app_info.resolve_state_dir(dispatch.workspace_dir), "dsh_patch.yml")
+        patch_file = os.path.join(
+            app_info.resolve_state_dir(dispatch.workspace_dir), "dsh_patch.yml"
+        )
         if not os.path.isfile(patch_file) or self._model_name is not None:
             try:
                 ws_cfg = get_singleton(dsh_workspace.DshWorkspaceConfigurer)
@@ -250,7 +259,9 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
         if self._simulation_mode:
             proc = None
         else:
-            server_available = self._telemetry_parser.is_desktop_server_available(self._sessions_dir)
+            server_available = self._telemetry_parser.is_desktop_server_available(
+                self._sessions_dir
+            )
             if not server_available:
                 if self._custom_cmd:
                     cmd = self._custom_cmd.format(
@@ -262,7 +273,9 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
                     )
                     log_f = open(log_path, "w", encoding="utf-8")
                     env = os.environ.copy()
-                    env["DSH_HOME"] = os.environ.get("DSH_HOME") or os.path.dirname(self._sessions_dir)
+                    env["DSH_HOME"] = os.environ.get("DSH_HOME") or os.path.dirname(
+                        self._sessions_dir
+                    )
                     env["DSH_PERMISSION_MODE"] = "danger-full-access"
                     proc = subprocess.Popen(
                         cmd,
@@ -305,7 +318,9 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
                     )
                     return task_handle
 
-            session_file = os.path.join(app_info.resolve_state_dir(dispatch.workspace_dir), "dsh_session_id.txt")
+            session_file = os.path.join(
+                app_info.resolve_state_dir(dispatch.workspace_dir), "dsh_session_id.txt"
+            )
             saved_sid: Optional[str] = None
             if os.path.isfile(session_file):
                 try:
@@ -355,10 +370,47 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
             if rpc_handle.startswith(("dsh_rpc::", "dsh_rpc_web::")):
                 parts = rpc_handle.split("::")
                 if len(parts) >= 2 and parts[1]:
+                    new_session_id = parts[1]
+                    clean_scope = (
+                        dispatch.dir_scope.strip("/").strip()
+                        if dispatch.dir_scope
+                        else ""
+                    )
+                    role = dispatch.role_name.strip() if dispatch.role_name else ""
+                    role_key = (clean_scope, role)
+                    prev_session_id = (
+                        self._active_role_sessions.get(role_key) or saved_sid
+                    )
+                    if prev_session_id and prev_session_id != new_session_id:
+                        dead_title = (
+                            f"[{clean_scope}] dead - {role}"
+                            if clean_scope
+                            else (f"dead - {role}" if role else "dead")
+                        )
+                        try:
+                            self._telemetry_parser.rename_session(
+                                prev_session_id,
+                                dead_title,
+                                sessions_dir=self._sessions_dir,
+                            )
+                        except Exception:
+                            pass
+                        dead_list = self._dead_role_sessions.setdefault(clean_scope, [])
+                        if not any(
+                            d.get("sessionId") == prev_session_id for d in dead_list
+                        ):
+                            dead_list.append(
+                                {
+                                    "sessionId": prev_session_id,
+                                    "role": role,
+                                    "reason": "superseded",
+                                }
+                            )
+                    self._active_role_sessions[role_key] = new_session_id
                     os.makedirs(os.path.dirname(session_file), exist_ok=True)
                     try:
                         with open(session_file, "w", encoding="utf-8") as sf:
-                            sf.write(parts[1])
+                            sf.write(new_session_id)
                     except OSError:
                         pass
 
@@ -397,17 +449,25 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
         wall_clock = time.time() - task.start_time
 
         if rpc_status and rpc_status.error:
-            session_file = os.path.join(app_info.resolve_state_dir(task.dispatch.workspace_dir, create=False), "dsh_session_id.txt")
+            session_file = os.path.join(
+                app_info.resolve_state_dir(task.dispatch.workspace_dir, create=False),
+                "dsh_session_id.txt",
+            )
             if os.path.isfile(session_file):
                 try:
                     os.remove(session_file)
                 except OSError:
                     pass
             self._session_baselines.pop(task.dispatch.workspace_dir, None)
-            if task.is_rpc and task.rpc_handle and task.rpc_handle.startswith("dsh_rpc::"):
+            if (
+                task.is_rpc
+                and task.rpc_handle
+                and task.rpc_handle.startswith("dsh_rpc::")
+            ):
                 parts = task.rpc_handle.split("::")
                 if len(parts) >= 2 and parts[1]:
                     self._session_baselines.pop(parts[1], None)
+            self._worker_round_counts[task.dispatch.workspace_dir] = 0
             return subagent_coordinator.RoleRoundResult(
                 role=task.dispatch.role_name,
                 status="failed",
@@ -419,7 +479,9 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
             failure_reason = "DeepSeek Harness server is unreachable. Headless execution is strictly banned."
             if os.path.isfile(task.log_file):
                 try:
-                    with open(task.log_file, "r", encoding="utf-8", errors="replace") as lf:
+                    with open(
+                        task.log_file, "r", encoding="utf-8", errors="replace"
+                    ) as lf:
                         for line in lf:
                             line_str = line.strip()
                             if line_str.startswith("{"):
@@ -438,7 +500,9 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
 
         log_file = task.log_file
         if not os.path.isfile(log_file):
-            alt_log = log_file.replace(f".{app_info.APP_NAME}_round_", f".{app_info.APP_NAME}_step_")
+            alt_log = log_file.replace(
+                f".{app_info.APP_NAME}_round_", f".{app_info.APP_NAME}_step_"
+            )
             if os.path.isfile(alt_log):
                 log_file = alt_log
 
@@ -471,7 +535,9 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
                 except OSError:
                     pass
 
-        pending_file = os.path.join(task.dispatch.workspace_dir, app_info.DEFAULT_PENDING_WORK_FILE)
+        pending_file = os.path.join(
+            task.dispatch.workspace_dir, app_info.DEFAULT_PENDING_WORK_FILE
+        )
         has_pending_file_after = os.path.isfile(pending_file)
 
         work_mgr = get_singleton(work.WorkspaceWorkManager)
@@ -512,7 +578,10 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
             status = "unresolved"
 
         # Resolve session identifier
-        session_file = os.path.join(app_info.resolve_state_dir(task.dispatch.workspace_dir, create=False), "dsh_session_id.txt")
+        session_file = os.path.join(
+            app_info.resolve_state_dir(task.dispatch.workspace_dir, create=False),
+            "dsh_session_id.txt",
+        )
         session_id: Optional[str] = None
         if task.is_rpc and task.rpc_handle and task.rpc_handle.startswith("dsh_rpc::"):
             parts = task.rpc_handle.split("::")
@@ -547,11 +616,17 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
             try:
                 with open(log_file, "r", encoding="utf-8", errors="replace") as lf:
                     log_text = lf.read()
-                metrics = self._telemetry_parser.parse_stream_text(stream_text=log_text, model_name=self._model_name)
+                metrics = self._telemetry_parser.parse_stream_text(
+                    stream_text=log_text, model_name=self._model_name
+                )
             except OSError:
                 pass
 
-        if metrics.total_tokens == 0 and self._sessions_dir and os.path.isdir(self._sessions_dir):
+        if (
+            metrics.total_tokens == 0
+            and self._sessions_dir
+            and os.path.isdir(self._sessions_dir)
+        ):
             metrics = self._telemetry_parser.parse_session_storage(
                 sessions_dir=self._sessions_dir,
                 workspace_dir=task.dispatch.workspace_dir,
@@ -564,7 +639,10 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
         if prev_baseline is None and session_id:
             prev_baseline = self._session_baselines.get(task.dispatch.workspace_dir)
 
-        if prev_baseline is not None and metrics.total_tokens >= prev_baseline.total_tokens:
+        if (
+            prev_baseline is not None
+            and metrics.total_tokens >= prev_baseline.total_tokens
+        ):
             delta_input = max(0, metrics.input_tokens - prev_baseline.input_tokens)
             delta_cached = max(0, metrics.cached_tokens - prev_baseline.cached_tokens)
             delta_output = max(0, metrics.output_tokens - prev_baseline.output_tokens)
@@ -585,6 +663,9 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
             cost_usd=delta_cost,
         )
 
+        ws_key = task.dispatch.workspace_dir
+        cur_rounds = self._worker_round_counts.get(ws_key, 0) + 1
+
         if status == "failed":
             # Reset session ID on failed rounds to prevent context contamination loops
             if os.path.isfile(session_file):
@@ -596,7 +677,26 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
             if session_id:
                 self._session_baselines.pop(session_id, None)
             self._session_baselines.pop(task.dispatch.workspace_dir, None)
+            self._worker_round_counts[ws_key] = 0
+        elif cur_rounds >= self._max_rounds_per_worker:
+            # Recycle session after N completed rounds for a clean slate
+            if os.path.isfile(session_file):
+                try:
+                    os.remove(session_file)
+                except OSError:
+                    pass
+            self._session_baselines.pop(sess_key, None)
+            if session_id:
+                self._session_baselines.pop(session_id, None)
+            self._session_baselines.pop(task.dispatch.workspace_dir, None)
+            self._worker_round_counts[ws_key] = 0
+            print(
+                f"[DSH Harness] Worker '{task.dispatch.role_name}' completed {cur_rounds} rounds. "
+                f"Recycling session for a clean slate on next dispatch.",
+                flush=True,
+            )
         else:
+            self._worker_round_counts[ws_key] = cur_rounds
             if session_id and not os.path.isfile(session_file):
                 try:
                     os.makedirs(os.path.dirname(session_file), exist_ok=True)
@@ -644,7 +744,9 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
 
         if task.is_rpc:
             while True:
-                rpc_status = self._telemetry_parser.poll_round_rpc(task.rpc_handle or "", sessions_dir=self._sessions_dir)
+                rpc_status = self._telemetry_parser.poll_round_rpc(
+                    task.rpc_handle or "", sessions_dir=self._sessions_dir
+                )
                 if rpc_status.is_completed:
                     return self._finalize_round(task, rpc_status=rpc_status)
                 if self._timeout_seconds is not None and self._timeout_seconds > 0:
@@ -688,10 +790,16 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
                 try:
                     with open(task.log_file, "r", encoding="utf-8") as lf:
                         for line in lf:
-                            if '"type":"error"' in line and "DeepSeek Harness Desktop RPC is unavailable" in line:
+                            if (
+                                '"type":"error"' in line
+                                and "DeepSeek Harness Desktop RPC is unavailable"
+                                in line
+                            ):
                                 data = json.loads(line)
                                 failure_reason = data.get("message", failure_reason)
-                                self._session_baselines.pop(task.dispatch.workspace_dir, None)
+                                self._session_baselines.pop(
+                                    task.dispatch.workspace_dir, None
+                                )
                                 return subagent_coordinator.RoleRoundResult(
                                     role=task.dispatch.role_name,
                                     status="failed",
@@ -704,7 +812,9 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
         return self._finalize_round(task, rpc_status=None)
 
     # Contract: MUST return role round result when terminated, or None when still running without blocking.
-    def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleRoundResult]:
+    def poll_role(
+        self, task_handle: str
+    ) -> Optional[subagent_coordinator.RoleRoundResult]:
         """Polls DeepSeek Harness subagent round execution without blocking."""
         task = self._tasks.get(task_handle)
         if task is None:
@@ -721,7 +831,9 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
             return self._finalize_round(task, rpc_status=None)
 
         if task.is_rpc:
-            rpc_status = self._telemetry_parser.poll_round_rpc(task.rpc_handle or "", sessions_dir=self._sessions_dir)
+            rpc_status = self._telemetry_parser.poll_round_rpc(
+                task.rpc_handle or "", sessions_dir=self._sessions_dir
+            )
             if rpc_status.is_active:
                 if self._timeout_seconds is not None and self._timeout_seconds > 0:
                     elapsed = time.time() - task.start_time
@@ -771,11 +883,15 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
                 task.process.kill()
             except OSError:
                 pass
+        session_id = ""
         if task.is_rpc and task.rpc_handle:
             try:
                 active_turns = getattr(self._telemetry_parser, "_active_rpc_turns", {})
-                turn_info = active_turns.get(task.rpc_handle) if isinstance(active_turns, dict) else None
-                session_id = ""
+                turn_info = (
+                    active_turns.get(task.rpc_handle)
+                    if isinstance(active_turns, dict)
+                    else None
+                )
                 port = None
                 cookie_name = ""
                 cookie_value = ""
@@ -784,12 +900,25 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
                     port = turn_info.get("port")
                     cookie_name = turn_info.get("cookie_name", "")
                     cookie_value = turn_info.get("cookie_value", "")
-                elif task.rpc_handle.startswith("dsh_rpc::"):
+                elif task.rpc_handle.startswith(("dsh_rpc::", "dsh_rpc_web::")):
                     parts = task.rpc_handle.split("::")
                     if len(parts) >= 2:
                         session_id = parts[1]
+
+                if task.rpc_handle.startswith("dsh_rpc_web::"):
+                    parts = task.rpc_handle.split("::")
+                    actual_sid = parts[1] if len(parts) >= 2 else ""
+                    task_name = parts[2] if len(parts) >= 3 else actual_sid
+                    bridge = dsh_telemetry_impl._discover_web_bridge()
+                    if bridge:
+                        dsh_telemetry_impl._call_web_bridge(
+                            bridge, "dsh_close", {"worker": task_name}, timeout=2.0
+                        )
+
                 if not port:
-                    server_info = dsh_telemetry_impl._discover_desktop_server(self._sessions_dir)
+                    server_info = dsh_telemetry_impl._discover_desktop_server(
+                        self._sessions_dir
+                    )
                     if server_info:
                         port, cookie_name, cookie_value = server_info
                 if port and session_id:
@@ -803,6 +932,80 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
                     )
             except Exception:
                 pass
+
+    # Contract: MUST persist authoritative orchestration state snapshot capturing active scopes, running workers with session IDs, and dead sessions to external coordination storage.
+    def update_orchestration_state(
+        self,
+        dir_scope: str,
+        wave_count: int,
+        active_workers: Mapping[str, str],
+        assigned_targets: Mapping[str, Sequence[str]],
+        all_scope_roles: Sequence[str],
+        converged: bool = False,
+        failed: bool = False,
+    ) -> None:
+        """Persists authoritative orchestration state snapshot to external coordination storage."""
+        clean_scope = dir_scope.strip("/").strip() if dir_scope else ""
+        if not clean_scope:
+            return
+
+        state_file = os.environ.get("AUTOFAB_STATE_FILE")
+        if not state_file:
+            dsh_home = os.environ.get("DSH_HOME") or os.path.expanduser("~/.dsh")
+            state_file = os.path.join(dsh_home, "autofab_state.json")
+
+        existing_data: Dict[str, Any] = {
+            "scopes": {},
+            "activeScope": clean_scope,
+            "updatedAt": time.time(),
+        }
+        if os.path.isfile(state_file):
+            try:
+                with open(state_file, "r", encoding="utf-8") as f:
+                    loaded = json.load(f)
+                    if isinstance(loaded, dict) and "scopes" in loaded:
+                        existing_data = loaded
+            except Exception:
+                pass
+
+        existing_data["activeScope"] = clean_scope
+        existing_data["updatedAt"] = time.time()
+        scopes_map = existing_data.setdefault("scopes", {})
+
+        scope_obj = scopes_map.setdefault(clean_scope, {})
+        scope_obj["scope"] = clean_scope
+        scope_obj["wave"] = wave_count
+        scope_obj["converged"] = converged
+        scope_obj["status"] = (
+            "converged" if converged else ("failed" if failed else "running")
+        )
+
+        roles_dict = scope_obj.setdefault("roles", {})
+        for r_name in all_scope_roles:
+            role_key = (clean_scope, r_name)
+            sid = self._active_role_sessions.get(role_key)
+            is_running = r_name in active_workers
+            status = "running" if is_running else "idle"
+            targets = list(assigned_targets.get(r_name, ()))
+            role_entry = roles_dict.setdefault(r_name, {})
+            role_entry["role"] = r_name
+            if sid:
+                role_entry["sessionId"] = sid
+            role_entry["status"] = status
+            if targets:
+                role_entry["targets"] = targets
+
+        dead_list = self._dead_role_sessions.get(clean_scope, [])
+        scope_obj["deadSessions"] = list(dead_list)
+
+        try:
+            os.makedirs(os.path.dirname(state_file), exist_ok=True)
+            tmp_file = f"{state_file}.tmp.{os.getpid()}"
+            with open(tmp_file, "w", encoding="utf-8") as f:
+                json.dump(existing_data, f, indent=2)
+            os.replace(tmp_file, state_file)
+        except Exception:
+            pass
 
 
 # Contract: Realizes management of DeepSeek Harness execution adapters and telemetry parsing in agent_session tier.
@@ -849,12 +1052,15 @@ class DshHarnessManager(dsh_harness.DshHarnessManager):
             return get_singleton(dsh_telemetry.DshTelemetryParser)
         except Exception:
             from . import dsh_asm
+
             dsh_asm.__initialize__()
             return get_singleton(dsh_telemetry.DshTelemetryParser)
+
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-18T19:13:51Z
-# LAST_CHANGED: 2026-10-20T23:55:00Z
-# CHANGE: Derive pending_before from ready targets or disk, search scoped cleanroom logs, and match change and clean action records
+# LAST_CHANGED: 2026-11-09T19:42:00Z
+# CHANGE: Label old role conversation as dead after replacement is issued
 # COVERAGE_AUDIT: 2026-10-18T19:13:51Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

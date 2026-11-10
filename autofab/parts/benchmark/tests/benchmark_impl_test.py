@@ -11,9 +11,10 @@ import unittest
 from unittest import mock
 from unittest.mock import patch, MagicMock
 from pathlib import Path
+from typing import Any
 
 from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_singleton, system
-from support.lib import app_info
+from support.lib import app_info, experiments
 from autofab.parts.benchmark.lib import benchmark
 from autofab.parts.benchmark.lib.benchmark_impl import (  # cleanroom: allow-private-import
     BenchmarkEvaluator,
@@ -40,7 +41,9 @@ class BenchmarkImplTest(unittest.TestCase):
         # Tier 2 Budget: DeepSeek V4.1 ($0.15 uncached, $0.003 cached, $0.60 out per 1M)
         deepseek = catalog["deepseek-v41-flash"]
         # 1M uncached ($0.15) + 2M cached ($0.006) + 1M out ($0.60) = $0.756
-        cost_ds = deepseek.compute_cost(uncached_in=1000000, cached_in=2000000, out=1000000)
+        cost_ds = deepseek.compute_cost(
+            uncached_in=1000000, cached_in=2000000, out=1000000
+        )
         self.assertAlmostEqual(cost_ds, 0.756, places=4)
 
         # Tier 3 Mid-Tier: o3-mini ($1.10 uncached, $0.55 cached, $4.40 out per 1M)
@@ -95,22 +98,37 @@ class BenchmarkImplTest(unittest.TestCase):
                 self.assertEqual(record.model["identifier"], model.identifier)
                 self.assertEqual(record.benchmark_unit["task_id"], unit.task_id)
                 self.assertEqual(record.measurements.financial_cost_usd, 0.0)
-                self.assertEqual(record.measurements.role_rounds, {"lib": 1, "test": 1, "qa": 1, "coverage": 1})
+                self.assertEqual(
+                    record.measurements.role_rounds,
+                    {"lib": 1, "test": 1, "qa": 1, "coverage": 1},
+                )
                 self.assertTrue(record.verification_outcomes.spec_linter_pass)
                 self.assertGreater(record.verification_outcomes.unit_tests_passed, 0)
 
                 # Test JSON trace serialization
-                json_file_path = evaluator.save_flight_json(record, str(repo_root / "logs"))
+                json_file_path = evaluator.save_flight_json(
+                    record, str(repo_root / "logs")
+                )
                 json_file = Path(json_file_path)
                 self.assertTrue(json_file.is_file())
                 data = json.loads(json_file.read_text(encoding="utf-8"))
                 self.assertEqual(data["flight_id"], record.flight_id)
-                self.assertEqual(data["measurements"]["outbound_tokens"], record.measurements.outbound_tokens)
-                self.assertEqual(data["measurements"]["role_rounds"], {"lib": 1, "test": 1, "qa": 1, "coverage": 1})
+                self.assertEqual(
+                    data["measurements"]["outbound_tokens"],
+                    record.measurements.outbound_tokens,
+                )
+                self.assertEqual(
+                    data["measurements"]["role_rounds"],
+                    {"lib": 1, "test": 1, "qa": 1, "coverage": 1},
+                )
 
                 # Test report generation
-                report_md = evaluator.generate_report([record], output_path=str(repo_root / "reports" / "test.md"))
-                self.assertIn(f"{app_info.APP_TITLE} Empirical Benchmark Flight Report", report_md)
+                report_md = evaluator.generate_report(
+                    [record], output_path=str(repo_root / "reports" / "test.md")
+                )
+                self.assertIn(
+                    f"{app_info.APP_TITLE} Empirical Benchmark Flight Report", report_md
+                )
                 self.assertIn(record.flight_id, report_md)
                 self.assertIn("| Rounds |", report_md)
                 self.assertIn("4 (coverage:1, lib:1, qa:1, test:1)", report_md)
@@ -140,11 +158,20 @@ class BenchmarkImplTest(unittest.TestCase):
                     report = evaluator.generate_report([flight])
                     self.assertIn(model.identifier, report)
 
-                    json_path = evaluator.save_flight_json(flight, str(repo_root / "logs"))
+                    json_path = evaluator.save_flight_json(
+                        flight, str(repo_root / "logs")
+                    )
                     self.assertTrue(os.path.isfile(json_path))
 
                     # Test dry-run CLI execution
-                    exit_code = evaluator.run_cli(["--dry-run", "--suite=cpython", "--models=qwen-moe-q6", "--units=1"])
+                    exit_code = evaluator.run_cli(
+                        [
+                            "--dry-run",
+                            "--suite=cpython",
+                            "--models=qwen-moe-q6",
+                            "--units=1",
+                        ]
+                    )
                     self.assertEqual(exit_code, 0)
 
     def test_main_lifecycle_phase_execution(self) -> None:
@@ -155,7 +182,12 @@ class BenchmarkImplTest(unittest.TestCase):
             try:
                 os.environ["BUILD_WORKSPACE_DIRECTORY"] = str(repo_root)
                 exit_code = main(
-                    argv=["--dry-run", "--suite=cpython", "--models=qwen-moe-q6", "--units=1"],
+                    argv=[
+                        "--dry-run",
+                        "--suite=cpython",
+                        "--models=qwen-moe-q6",
+                        "--units=1",
+                    ],
                 )
                 self.assertEqual(exit_code, 0)
             finally:
@@ -176,8 +208,12 @@ class BenchmarkImplTest(unittest.TestCase):
                 lib_dir.mkdir(parents=True, exist_ok=True)
                 tests_dir.mkdir(parents=True, exist_ok=True)
 
-                (lib_dir / "dag_engine_impl.py").write_text("class DAG: pass\n", encoding="utf-8")
-                (tests_dir / "dag_engine_impl_test.py").write_text("def test_dag(): pass\n", encoding="utf-8")
+                (lib_dir / "dag_engine_impl.py").write_text(
+                    "class DAG: pass\n", encoding="utf-8"
+                )
+                (tests_dir / "dag_engine_impl_test.py").write_text(
+                    "def test_dag(): pass\n", encoding="utf-8"
+                )
 
                 results_dir = repo_root / "benchmarks" / "results"
                 model = evaluator.get_model_catalog()["qwen-moe-q6"]
@@ -226,7 +262,9 @@ class BenchmarkImplTest(unittest.TestCase):
             )
 
             # First run: should produce lib_1.py and test_1.py
-            archived1 = evaluator.archive_flight_artifacts(record1, unit, results_dir=str(results_dir))
+            archived1 = evaluator.archive_flight_artifacts(
+                record1, unit, results_dir=str(results_dir)
+            )
             self.assertIsNotNone(archived1)
             assert archived1 is not None
             lib_p1, test_p1 = archived1
@@ -237,10 +275,15 @@ class BenchmarkImplTest(unittest.TestCase):
 
             # Verify metrics comments in lib_1.py
             lib_content1 = Path(lib_p1).read_text(encoding="utf-8")
-            self.assertIn(f"{app_info.APP_TITLE} Empirical Benchmark Flight Metrics", lib_content1)
+            self.assertIn(
+                f"{app_info.APP_TITLE} Empirical Benchmark Flight Metrics", lib_content1
+            )
             self.assertIn("Run Index: 1", lib_content1)
             self.assertIn("Flight ID: flight_test_001", lib_content1)
-            self.assertIn("Role Execution Rounds:   coverage: 1, lib: 2, qa: 2, test: 1 (Total: 6)", lib_content1)
+            self.assertIn(
+                "Role Execution Rounds:   coverage: 1, lib: 2, qa: 2, test: 1 (Total: 6)",
+                lib_content1,
+            )
             self.assertIn("class DAG: pass", lib_content1)
 
             # Second run: should produce lib_2.py and test_2.py
@@ -255,7 +298,9 @@ class BenchmarkImplTest(unittest.TestCase):
                 measurements=measurements,
                 verification_outcomes=outcomes,
             )
-            archived2 = evaluator.archive_flight_artifacts(record2, unit, results_dir=str(results_dir))
+            archived2 = evaluator.archive_flight_artifacts(
+                record2, unit, results_dir=str(results_dir)
+            )
             self.assertIsNotNone(archived2)
             assert archived2 is not None
             lib_p2, test_p2 = archived2
@@ -297,7 +342,6 @@ class BenchmarkImplTest(unittest.TestCase):
                 else:
                     os.environ["BUILD_WORKSPACE_DIRECTORY"] = old_bwd
 
-
     def test_antigravity_transcript_harvesting(self) -> None:
         """CUJ: Harvesting telemetry and role rounds from Antigravity subagent session transcripts."""
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -310,16 +354,40 @@ class BenchmarkImplTest(unittest.TestCase):
             coord_log_dir.mkdir(parents=True, exist_ok=True)
             coord_transcript = coord_log_dir / "transcript.jsonl"
             coord_lines = [
-                json.dumps({"source": "USER", "type": "USER_INPUT", "content": f"Clean all dirty nodes in benchmarks using {app_info.APP_NAME}_coordinator."}),
-                json.dumps({
-                    "source": "MODEL",
-                    "type": "GENERIC",
-                    "content": json.dumps([
-                        {"role": f"{app_info.APP_TITLE} lib Worker", "conversationId": worker1_id},
-                        {"role": f"{app_info.APP_TITLE} test Worker", "conversationId": worker2_id},
-                    ]),
-                }),
-                json.dumps({"source": "MODEL", "type": "PLANNER_RESPONSE", "input_tokens": 1000, "cache_read_tokens": 5000, "output_tokens": 200}),
+                json.dumps(
+                    {
+                        "source": "USER",
+                        "type": "USER_INPUT",
+                        "content": f"Clean all dirty nodes in benchmarks using {app_info.APP_NAME}_coordinator.",
+                    }
+                ),
+                json.dumps(
+                    {
+                        "source": "MODEL",
+                        "type": "GENERIC",
+                        "content": json.dumps(
+                            [
+                                {
+                                    "role": f"{app_info.APP_TITLE} lib Worker",
+                                    "conversationId": worker1_id,
+                                },
+                                {
+                                    "role": f"{app_info.APP_TITLE} test Worker",
+                                    "conversationId": worker2_id,
+                                },
+                            ]
+                        ),
+                    }
+                ),
+                json.dumps(
+                    {
+                        "source": "MODEL",
+                        "type": "PLANNER_RESPONSE",
+                        "input_tokens": 1000,
+                        "cache_read_tokens": 5000,
+                        "output_tokens": 200,
+                    }
+                ),
             ]
             coord_transcript.write_text("\n".join(coord_lines) + "\n", encoding="utf-8")
 
@@ -327,19 +395,71 @@ class BenchmarkImplTest(unittest.TestCase):
             w1_log_dir.mkdir(parents=True, exist_ok=True)
             # Worker 1 executes 3 PLANNER_RESPONSE steps across 2 dispatch waves (Round 1 and Round 2)
             w1_lines = [
-                json.dumps({"source": "SYSTEM", "type": "SYSTEM_MESSAGE", "content": f"You are an autonomous {app_info.APP_TITLE} 'lib' worker. Immediately run bin/get_work."}),
-                json.dumps({"source": "MODEL", "type": "PLANNER_RESPONSE", "input_tokens": 1000, "cache_read_tokens": 5000, "output_tokens": 250}),
-                json.dumps({"source": "MODEL", "type": "PLANNER_RESPONSE", "input_tokens": 1000, "cache_read_tokens": 5000, "output_tokens": 250}),
-                json.dumps({"source": "SYSTEM", "type": "SYSTEM_MESSAGE", "content": "Ready nodes detected in global DAG. Immediately run bin/get_work."}),
-                json.dumps({"source": "MODEL", "type": "PLANNER_RESPONSE", "input_tokens": 1000, "cache_read_tokens": 5000, "output_tokens": 250}),
+                json.dumps(
+                    {
+                        "source": "SYSTEM",
+                        "type": "SYSTEM_MESSAGE",
+                        "content": f"You are an autonomous {app_info.APP_TITLE} 'lib' worker. Immediately run bin/get_work.",
+                    }
+                ),
+                json.dumps(
+                    {
+                        "source": "MODEL",
+                        "type": "PLANNER_RESPONSE",
+                        "input_tokens": 1000,
+                        "cache_read_tokens": 5000,
+                        "output_tokens": 250,
+                    }
+                ),
+                json.dumps(
+                    {
+                        "source": "MODEL",
+                        "type": "PLANNER_RESPONSE",
+                        "input_tokens": 1000,
+                        "cache_read_tokens": 5000,
+                        "output_tokens": 250,
+                    }
+                ),
+                json.dumps(
+                    {
+                        "source": "SYSTEM",
+                        "type": "SYSTEM_MESSAGE",
+                        "content": "Ready nodes detected in global DAG. Immediately run bin/get_work.",
+                    }
+                ),
+                json.dumps(
+                    {
+                        "source": "MODEL",
+                        "type": "PLANNER_RESPONSE",
+                        "input_tokens": 1000,
+                        "cache_read_tokens": 5000,
+                        "output_tokens": 250,
+                    }
+                ),
             ]
-            (w1_log_dir / "transcript.jsonl").write_text("\n".join(w1_lines) + "\n", encoding="utf-8")
+            (w1_log_dir / "transcript.jsonl").write_text(
+                "\n".join(w1_lines) + "\n", encoding="utf-8"
+            )
 
             w2_log_dir = brain_dir / worker2_id / ".system_generated" / "logs"
             w2_log_dir.mkdir(parents=True, exist_ok=True)
             w2_lines = [
-                json.dumps({"source": "SYSTEM", "type": "SYSTEM_MESSAGE", "content": f"You are an autonomous {app_info.APP_TITLE} 'test' worker for scope 'benchmarks'. Immediately run bin/get_work."}),
-                json.dumps({"source": "MODEL", "type": "PLANNER_RESPONSE", "input_tokens": 1500, "cache_read_tokens": 8000, "output_tokens": 300}),
+                json.dumps(
+                    {
+                        "source": "SYSTEM",
+                        "type": "SYSTEM_MESSAGE",
+                        "content": f"You are an autonomous {app_info.APP_TITLE} 'test' worker for scope 'benchmarks'. Immediately run bin/get_work.",
+                    }
+                ),
+                json.dumps(
+                    {
+                        "source": "MODEL",
+                        "type": "PLANNER_RESPONSE",
+                        "input_tokens": 1500,
+                        "cache_read_tokens": 8000,
+                        "output_tokens": 300,
+                    }
+                ),
             ]
             w2_transcript = w2_log_dir / "transcript.jsonl"
             w2_transcript.write_text("\n".join(w2_lines) + "\n", encoding="utf-8")
@@ -352,10 +472,26 @@ class BenchmarkImplTest(unittest.TestCase):
             parent_log_dir.mkdir(parents=True, exist_ok=True)
             parent_transcript = parent_log_dir / "transcript.jsonl"
             parent_lines = [
-                json.dumps({"source": "SYSTEM", "type": "SYSTEM_MESSAGE", "content": f"AUTONOMOUS ANTIGRAVITY COORDINATION DIRECTIVE for scope 'benchmarks': Clean all dirty nodes in benchmarks using {app_info.APP_NAME}_coordinator."}),
-                json.dumps({"source": "MODEL", "type": "PLANNER_RESPONSE", "input_tokens": 99999, "cache_read_tokens": 99999, "output_tokens": 99999}),
+                json.dumps(
+                    {
+                        "source": "SYSTEM",
+                        "type": "SYSTEM_MESSAGE",
+                        "content": f"AUTONOMOUS ANTIGRAVITY COORDINATION DIRECTIVE for scope 'benchmarks': Clean all dirty nodes in benchmarks using {app_info.APP_NAME}_coordinator.",
+                    }
+                ),
+                json.dumps(
+                    {
+                        "source": "MODEL",
+                        "type": "PLANNER_RESPONSE",
+                        "input_tokens": 99999,
+                        "cache_read_tokens": 99999,
+                        "output_tokens": 99999,
+                    }
+                ),
             ]
-            parent_transcript.write_text("\n".join(parent_lines) + "\n", encoding="utf-8")
+            parent_transcript.write_text(
+                "\n".join(parent_lines) + "\n", encoding="utf-8"
+            )
             os.utime(parent_transcript, (time.time() + 20.0, time.time() + 20.0))
 
             repo_root = Path(tmp_dir) / "repo"
@@ -366,7 +502,12 @@ class BenchmarkImplTest(unittest.TestCase):
                 "flight_id": flight_id,
                 "timestamp": "2026-10-20T20:00:00+00:00",
                 "rq": "RQ1",
-                "model": {"identifier": "qwen-moe-q6", "tier": 1, "provider": "ollama", "default_harness": "antigravity"},
+                "model": {
+                    "identifier": "qwen-moe-q6",
+                    "tier": 1,
+                    "provider": "ollama",
+                    "default_harness": "antigravity",
+                },
                 "benchmark_unit": {
                     "suite": "test",
                     "task_id": "cpython_datetime",
@@ -380,12 +521,22 @@ class BenchmarkImplTest(unittest.TestCase):
                 "measurements": {"wall_clock_seconds": 12.0},
                 "verification_outcomes": {},
             }
-            (logs_dir / f"{flight_id}.json").write_text(json.dumps(flight_json), encoding="utf-8")
+            (logs_dir / f"{flight_id}.json").write_text(
+                json.dumps(flight_json), encoding="utf-8"
+            )
 
-            with patch.dict(os.environ, {
-                "BUILD_WORKSPACE_DIRECTORY": str(repo_root),
-                "ANTIGRAVITY_APP_DATA_DIR": str(tmp_dir),
-            }), patch("autofab.parts.benchmark.lib.benchmark_impl.subprocess.run") as mock_run:
+            with (
+                patch.dict(
+                    os.environ,
+                    {
+                        "BUILD_WORKSPACE_DIRECTORY": str(repo_root),
+                        "ANTIGRAVITY_APP_DATA_DIR": str(tmp_dir),
+                    },
+                ),
+                patch(
+                    "autofab.parts.benchmark.lib.benchmark_impl.subprocess.run"
+                ) as mock_run,
+            ):
                 mock_run.return_value.returncode = 0
                 mock_run.return_value.stdout = "0 errors, 0 warnings"
                 evaluator = BenchmarkEvaluator()
@@ -448,7 +599,9 @@ class BenchmarkImplTest(unittest.TestCase):
                         "unit_tests_failed": 0,
                     },
                 }
-                (logs_dir / f"{flight_id}.json").write_text(json.dumps(initial_json), encoding="utf-8")
+                (logs_dir / f"{flight_id}.json").write_text(
+                    json.dumps(initial_json), encoding="utf-8"
+                )
 
                 record = evaluator.harvest_flight(flight_id)
                 self.assertIsNotNone(record)
@@ -462,7 +615,9 @@ class BenchmarkImplTest(unittest.TestCase):
             unit_dir = root / "parts" / "sample"
             lib_dir = unit_dir / "lib"
             lib_dir.mkdir(parents=True)
-            (lib_dir / "sample.py").write_text("def sample_func() -> int:\n    return 42\n", encoding="utf-8")
+            (lib_dir / "sample.py").write_text(
+                "def sample_func() -> int:\n    return 42\n", encoding="utf-8"
+            )
 
             # Create a mock support directory under a constituent package
             sup_dir = root / "mock_pkg" / "support" / "lib"
@@ -487,7 +642,12 @@ class BenchmarkImplTest(unittest.TestCase):
                 "flight_id": flight_id,
                 "timestamp": "2026-10-20T20:00:00+00:00",
                 "rq": "RQ1",
-                "model": {"identifier": "qwen-moe-q6", "tier": 1, "provider": "ollama", "default_harness": "loop"},
+                "model": {
+                    "identifier": "qwen-moe-q6",
+                    "tier": 1,
+                    "provider": "ollama",
+                    "default_harness": "loop",
+                },
                 "benchmark_unit": {
                     "suite": unit.suite,
                     "task_id": unit.task_id,
@@ -501,10 +661,14 @@ class BenchmarkImplTest(unittest.TestCase):
                 "measurements": {"wall_clock_seconds": 5.0},
                 "verification_outcomes": {},
             }
-            (logs_dir / f"{flight_id}.json").write_text(json.dumps(flight_json), encoding="utf-8")
+            (logs_dir / f"{flight_id}.json").write_text(
+                json.dumps(flight_json), encoding="utf-8"
+            )
 
             with patch.dict(os.environ, {"BUILD_WORKSPACE_DIRECTORY": str(root)}):
-                with patch("autofab.parts.benchmark.lib.benchmark_impl.subprocess.run") as mock_run:
+                with patch(
+                    "autofab.parts.benchmark.lib.benchmark_impl.subprocess.run"
+                ) as mock_run:
                     mock_run.return_value.returncode = 0
                     mock_run.return_value.stdout = "0 errors, 0 warnings"
                     evaluator = BenchmarkEvaluator()
@@ -525,7 +689,9 @@ class BenchmarkImplTest(unittest.TestCase):
             repo_root = Path(tmp_dir)
             orig_scope_dir = repo_root / "benchmarks" / "parts"
             orig_scope_dir.mkdir(parents=True, exist_ok=True)
-            (orig_scope_dir / app_info.DEFAULT_CONFIG_FILE).write_text('methodology = "//autofab_py"\n', encoding="utf-8")
+            (orig_scope_dir / app_info.DEFAULT_CONFIG_FILE).write_text(
+                'methodology = "//autofab_py"\n', encoding="utf-8"
+            )
             (repo_root / "benchmarks" / "__init__.py").write_text("", encoding="utf-8")
 
             unit_dir = orig_scope_dir / "sample_part"
@@ -534,7 +700,9 @@ class BenchmarkImplTest(unittest.TestCase):
             (unit_dir / "lib").mkdir(parents=True, exist_ok=True)
             (unit_dir / "lib" / "sample.py").write_text("old code", encoding="utf-8")
             (unit_dir / "tests").mkdir(parents=True, exist_ok=True)
-            (unit_dir / "tests" / "sample_test.py").write_text("old test", encoding="utf-8")
+            (unit_dir / "tests" / "sample_test.py").write_text(
+                "old test", encoding="utf-8"
+            )
 
             unit = benchmark.BenchmarkUnit(
                 suite="benchmarks",
@@ -552,7 +720,9 @@ class BenchmarkImplTest(unittest.TestCase):
                 "import benchmarks.parts.foo\nfrom parts.foo import bar\n",
                 encoding="utf-8",
             )
-            flight_scope, flight_unit_dir = _provision_flight_scope(repo_root, unit, flight_id)
+            flight_scope, flight_unit_dir = _provision_flight_scope(
+                repo_root, unit, flight_id
+            )
 
             self.assertEqual(flight_scope, "benchmark_1")
             self.assertTrue(flight_unit_dir.is_dir())
@@ -560,9 +730,15 @@ class BenchmarkImplTest(unittest.TestCase):
             env_text = (repo_root / flight_scope / ".env").read_text(encoding="utf-8")
             self.assertIn("PYTHONFAULTHANDLER=1", env_text)
             self.assertIn("PRETENSE_TIMEOUT=90.0", env_text)
-            self.assertTrue((repo_root / flight_scope / "parts" / app_info.DEFAULT_CONFIG_FILE).is_file())
+            self.assertTrue(
+                (
+                    repo_root / flight_scope / "parts" / app_info.DEFAULT_CONFIG_FILE
+                ).is_file()
+            )
             self.assertTrue((flight_unit_dir / "high" / "sample.md").is_file())
-            rewritten_md = (flight_unit_dir / "high" / "sample.md").read_text(encoding="utf-8")
+            rewritten_md = (flight_unit_dir / "high" / "sample.md").read_text(
+                encoding="utf-8"
+            )
             self.assertIn("import benchmark_1.parts.foo", rewritten_md)
             self.assertIn("from benchmark_1.parts.foo import bar", rewritten_md)
             self.assertNotIn("benchmarks.", rewritten_md)
@@ -580,7 +756,11 @@ class BenchmarkImplTest(unittest.TestCase):
             self.assertTrue((unit_dir / "tests" / "sample_test.py").is_file())
 
             # Mock role workspace for this flight scope
-            role_ws = repo_root / app_info.DEFAULT_ROLE_WORKSPACES_CONTAINER / f"{app_info.APP_NAME}_lib_{flight_scope}"
+            role_ws = (
+                repo_root
+                / app_info.DEFAULT_ROLE_WORKSPACES_CONTAINER
+                / f"{app_info.APP_NAME}_lib_{flight_scope}"
+            )
             role_ws.mkdir(parents=True, exist_ok=True)
             (role_ws / "dummy.txt").write_text("dummy", encoding="utf-8")
 
@@ -595,7 +775,9 @@ class BenchmarkImplTest(unittest.TestCase):
             orig_no_cfg = repo_root / "unconfigured_scope" / "parts" / "sample"
             orig_no_cfg.mkdir(parents=True, exist_ok=True)
             (orig_no_cfg / "high").mkdir(parents=True, exist_ok=True)
-            (orig_no_cfg / "high" / "sample.md").write_text("# sample", encoding="utf-8")
+            (orig_no_cfg / "high" / "sample.md").write_text(
+                "# sample", encoding="utf-8"
+            )
             unit_no_cfg = benchmark.BenchmarkUnit(
                 suite="unconfigured_scope",
                 task_id="sample",
@@ -606,9 +788,15 @@ class BenchmarkImplTest(unittest.TestCase):
                 target_address="//unconfigured_scope/parts/sample#sample",
                 description="Unit with no prior config",
             )
-            scope3, _ = _provision_flight_scope(repo_root, unit_no_cfg, "flight_3", pretense=False)
-            self.assertTrue((repo_root / scope3 / app_info.DEFAULT_CONFIG_FILE).is_file())
-            self.assertTrue((repo_root / scope3 / "parts" / app_info.DEFAULT_CONFIG_FILE).is_file())
+            scope3, _ = _provision_flight_scope(
+                repo_root, unit_no_cfg, "flight_3", pretense=False
+            )
+            self.assertTrue(
+                (repo_root / scope3 / app_info.DEFAULT_CONFIG_FILE).is_file()
+            )
+            self.assertTrue(
+                (repo_root / scope3 / "parts" / app_info.DEFAULT_CONFIG_FILE).is_file()
+            )
             _teardown_flight_scope(repo_root, scope3)
 
     def test_flight_scope_teardown_on_failure(self) -> None:
@@ -618,17 +806,29 @@ class BenchmarkImplTest(unittest.TestCase):
             flight_scope = "benchmark_1"
             flight_scope_dir = repo_root / flight_scope
             flight_scope_dir.mkdir(parents=True, exist_ok=True)
-            (flight_scope_dir / "dirty_code.py").write_text("print('failed')", encoding="utf-8")
+            (flight_scope_dir / "dirty_code.py").write_text(
+                "print('failed')", encoding="utf-8"
+            )
 
             # Mock role workspace in repo_root / DEFAULT_ROLE_WORKSPACES_CONTAINER
-            role_ws = repo_root / app_info.DEFAULT_ROLE_WORKSPACES_CONTAINER / f"{app_info.APP_NAME}_lib_{flight_scope}"
+            role_ws = (
+                repo_root
+                / app_info.DEFAULT_ROLE_WORKSPACES_CONTAINER
+                / f"{app_info.APP_NAME}_lib_{flight_scope}"
+            )
             role_ws.mkdir(parents=True, exist_ok=True)
             (role_ws / "worker.log").write_text("traceback...", encoding="utf-8")
 
             # Mock role workspace in repo_root.parent / DEFAULT_ROLE_WORKSPACES_CONTAINER
-            parent_role_ws = repo_root.parent / app_info.DEFAULT_ROLE_WORKSPACES_CONTAINER / f"{app_info.APP_NAME}_pretense_{flight_scope}"
+            parent_role_ws = (
+                repo_root.parent
+                / app_info.DEFAULT_ROLE_WORKSPACES_CONTAINER
+                / f"{app_info.APP_NAME}_pretense_{flight_scope}"
+            )
             parent_role_ws.mkdir(parents=True, exist_ok=True)
-            (parent_role_ws / "pretense_worker.log").write_text("pretense error...", encoding="utf-8")
+            (parent_role_ws / "pretense_worker.log").write_text(
+                "pretense error...", encoding="utf-8"
+            )
 
             try:
                 # Teardown with failure
@@ -641,11 +841,19 @@ class BenchmarkImplTest(unittest.TestCase):
                 self.assertTrue((failed_dir / "dirty_code.py").is_file())
 
                 # Role workspaces must be relocated under failed_dir / DEFAULT_ROLE_WORKSPACES_CONTAINER, NOT deleted
-                failed_ws = failed_dir / app_info.DEFAULT_ROLE_WORKSPACES_CONTAINER / f"{app_info.APP_NAME}_lib_{flight_scope}"
+                failed_ws = (
+                    failed_dir
+                    / app_info.DEFAULT_ROLE_WORKSPACES_CONTAINER
+                    / f"{app_info.APP_NAME}_lib_{flight_scope}"
+                )
                 self.assertTrue(failed_ws.is_dir())
                 self.assertTrue((failed_ws / "worker.log").is_file())
 
-                parent_failed_ws = failed_dir / app_info.DEFAULT_ROLE_WORKSPACES_CONTAINER / f"{app_info.APP_NAME}_pretense_{flight_scope}"
+                parent_failed_ws = (
+                    failed_dir
+                    / app_info.DEFAULT_ROLE_WORKSPACES_CONTAINER
+                    / f"{app_info.APP_NAME}_pretense_{flight_scope}"
+                )
                 self.assertTrue(parent_failed_ws.is_dir())
                 self.assertTrue((parent_failed_ws / "pretense_worker.log").is_file())
             finally:
@@ -658,7 +866,9 @@ class BenchmarkImplTest(unittest.TestCase):
             repo_root = Path(tmp_dir)
             orig_scope_dir = repo_root / "benchmarks" / "parts"
             orig_scope_dir.mkdir(parents=True, exist_ok=True)
-            (orig_scope_dir / app_info.DEFAULT_CONFIG_FILE).write_text('methodology = "//autofab_py"\n', encoding="utf-8")
+            (orig_scope_dir / app_info.DEFAULT_CONFIG_FILE).write_text(
+                'methodology = "//autofab_py"\n', encoding="utf-8"
+            )
 
             unit_dir = orig_scope_dir / "sample_part"
             (unit_dir / "high").mkdir(parents=True, exist_ok=True)
@@ -677,7 +887,9 @@ class BenchmarkImplTest(unittest.TestCase):
 
             with patch("subprocess.run") as mock_run:
                 flight_id = "flight_20261021_sample_part"
-                flight_scope, flight_unit_dir = _provision_flight_scope(repo_root, unit, flight_id)
+                flight_scope, flight_unit_dir = _provision_flight_scope(
+                    repo_root, unit, flight_id
+                )
                 mock_run.assert_called_once()
                 args, kwargs = mock_run.call_args
                 cmd = args[0]
@@ -697,11 +909,17 @@ class BenchmarkImplTest(unittest.TestCase):
                 tests_dir = unit_dir / "tests"
                 lib_dir.mkdir(parents=True, exist_ok=True)
                 tests_dir.mkdir(parents=True, exist_ok=True)
-                (lib_dir / "dag_engine.py").write_text("class DAG: pass\n", encoding="utf-8")
-                (tests_dir / "dag_engine_test.py").write_text("def test_dag(): pass\n", encoding="utf-8")
+                (lib_dir / "dag_engine.py").write_text(
+                    "class DAG: pass\n", encoding="utf-8"
+                )
+                (tests_dir / "dag_engine_test.py").write_text(
+                    "def test_dag(): pass\n", encoding="utf-8"
+                )
 
                 # Create event log in the unit parent (parts directory)
-                (repo_root / "benchmarks" / app_info.DEFAULT_LOG_FILE).write_text("[CHANGE] lib/dag_engine.py: Implemented DAG\n", encoding="utf-8")
+                (repo_root / "benchmarks" / app_info.DEFAULT_LOG_FILE).write_text(
+                    "[CHANGE] lib/dag_engine.py: Implemented DAG\n", encoding="utf-8"
+                )
 
                 results_dir = repo_root / "benchmarks" / "results"
                 model = evaluator.get_model_catalog()["qwen-moe-q6"]
@@ -719,7 +937,12 @@ class BenchmarkImplTest(unittest.TestCase):
                     flight_id="flight_test_log_archive",
                     timestamp="2026-10-21T21:00:00Z",
                     rq="RQ1",
-                    model={"identifier": model.identifier, "tier": model.tier, "provider": model.provider, "default_harness": "loop"},
+                    model={
+                        "identifier": model.identifier,
+                        "tier": model.tier,
+                        "provider": model.provider,
+                        "default_harness": "loop",
+                    },
                     benchmark_unit={"task_id": unit.task_id, "suite": unit.suite},
                     methodology=app_info.APP_NAME,
                     stages_executed=["lib", "test"],
@@ -732,9 +955,16 @@ class BenchmarkImplTest(unittest.TestCase):
                     ),
                 )
 
-                archived = evaluator.archive_flight_artifacts(record, unit, results_dir=str(results_dir))
+                archived = evaluator.archive_flight_artifacts(
+                    record, unit, results_dir=str(results_dir)
+                )
                 self.assertIsNotNone(archived)
-                log_archive = results_dir / unit.task_id / f"{model.identifier.replace('/', '_')}" / f"{app_info.APP_NAME}_1.log"
+                log_archive = (
+                    results_dir
+                    / unit.task_id
+                    / f"{model.identifier.replace('/', '_')}"
+                    / f"{app_info.APP_NAME}_1.log"
+                )
                 self.assertTrue(log_archive.is_file())
                 self.assertIn("[CHANGE]", log_archive.read_text(encoding="utf-8"))
 
@@ -761,7 +991,11 @@ class BenchmarkImplTest(unittest.TestCase):
                     flight_id="flight_fail_1",
                     timestamp="2026-10-21T21:00:00Z",
                     rq="RQ1",
-                    model={"identifier": "test-model", "tier": 1, "default_harness": "loop"},
+                    model={
+                        "identifier": "test-model",
+                        "tier": 1,
+                        "default_harness": "loop",
+                    },
                     benchmark_unit={"task_id": unit.task_id, "suite": unit.suite},
                     methodology=app_info.APP_NAME,
                     stages_executed=["lib", "test"],
@@ -773,7 +1007,11 @@ class BenchmarkImplTest(unittest.TestCase):
                         pyright_errors=0,
                     ),
                 )
-                self.assertIsNone(evaluator.archive_flight_artifacts(record, unit, results_dir=str(results_dir)))
+                self.assertIsNone(
+                    evaluator.archive_flight_artifacts(
+                        record, unit, results_dir=str(results_dir)
+                    )
+                )
                 self.assertFalse(results_dir.exists())
 
                 # Populate source files
@@ -782,36 +1020,68 @@ class BenchmarkImplTest(unittest.TestCase):
                 lib_dir.mkdir(parents=True, exist_ok=True)
                 tests_dir.mkdir(parents=True, exist_ok=True)
                 (lib_dir / "dag_engine.py").write_text("# lib", encoding="utf-8")
-                (tests_dir / "dag_engine_test.py").write_text("# test", encoding="utf-8")
+                (tests_dir / "dag_engine_test.py").write_text(
+                    "# test", encoding="utf-8"
+                )
 
                 # Case 2: Unit tests failed
                 record.verification_outcomes.unit_tests_failed = 1
-                self.assertIsNone(evaluator.archive_flight_artifacts(record, unit, results_dir=str(results_dir)))
+                self.assertIsNone(
+                    evaluator.archive_flight_artifacts(
+                        record, unit, results_dir=str(results_dir)
+                    )
+                )
                 self.assertFalse(results_dir.exists())
 
                 # Case 3: Pyright errors
                 record.verification_outcomes.unit_tests_failed = 0
                 record.verification_outcomes.pyright_errors = 2
-                self.assertIsNone(evaluator.archive_flight_artifacts(record, unit, results_dir=str(results_dir)))
+                self.assertIsNone(
+                    evaluator.archive_flight_artifacts(
+                        record, unit, results_dir=str(results_dir)
+                    )
+                )
                 self.assertFalse(results_dir.exists())
 
                 # Case 4: Zero passing unit tests
                 record.verification_outcomes.pyright_errors = 0
                 record.verification_outcomes.unit_tests_passed = 0
-                self.assertIsNone(evaluator.archive_flight_artifacts(record, unit, results_dir=str(results_dir)))
+                self.assertIsNone(
+                    evaluator.archive_flight_artifacts(
+                        record, unit, results_dir=str(results_dir)
+                    )
+                )
                 self.assertFalse(results_dir.exists())
 
     def test_antigravity_flight_active_flight_and_dispatch(self) -> None:
         """Verifies Antigravity flight passes --antigravity-dispatch and manages active_flight.json."""
         from unittest.mock import patch, MagicMock
+
         with tempfile.TemporaryDirectory() as tmp_dir:
             repo_root = Path(tmp_dir)
-            (repo_root / "parts" / app_info.DEFAULT_CONFIG_FILE).parent.mkdir(parents=True, exist_ok=True)
-            (repo_root / "parts" / app_info.DEFAULT_CONFIG_FILE).write_text(f'methodology = "{app_info.APP_NAME}"\n', encoding="utf-8")
-            (repo_root / "autofab" / "parts" / "dag_engine" / "high").mkdir(parents=True, exist_ok=True)
-            (repo_root / "autofab" / "parts" / "dag_engine" / "lib").mkdir(parents=True, exist_ok=True)
-            (repo_root / "autofab" / "parts" / "dag_engine" / "tests").mkdir(parents=True, exist_ok=True)
-            (repo_root / "autofab" / "parts" / "dag_engine" / "high" / "dag_engine.md").write_text("# Spec\n", encoding="utf-8")
+            (repo_root / "parts" / app_info.DEFAULT_CONFIG_FILE).parent.mkdir(
+                parents=True, exist_ok=True
+            )
+            (repo_root / "parts" / app_info.DEFAULT_CONFIG_FILE).write_text(
+                f'methodology = "{app_info.APP_NAME}"\n', encoding="utf-8"
+            )
+            (repo_root / "autofab" / "parts" / "dag_engine" / "high").mkdir(
+                parents=True, exist_ok=True
+            )
+            (repo_root / "autofab" / "parts" / "dag_engine" / "lib").mkdir(
+                parents=True, exist_ok=True
+            )
+            (repo_root / "autofab" / "parts" / "dag_engine" / "tests").mkdir(
+                parents=True, exist_ok=True
+            )
+            (
+                repo_root
+                / "autofab"
+                / "parts"
+                / "dag_engine"
+                / "high"
+                / "dag_engine.md"
+            ).write_text("# Spec\n", encoding="utf-8")
 
             evaluator = BenchmarkEvaluator()
             evaluator._repo_root = repo_root
@@ -829,9 +1099,14 @@ class BenchmarkImplTest(unittest.TestCase):
             )
 
             dispatched_cmds = []
+
             def fake_subprocess_run(cmd, *args, **kwargs):
                 dispatched_cmds.append(cmd)
-                return MagicMock(returncode=0, stdout="AUTONOMOUS ANTIGRAVITY COORDINATION DIRECTIVE\n", stderr="")
+                return MagicMock(
+                    returncode=0,
+                    stdout="AUTONOMOUS ANTIGRAVITY COORDINATION DIRECTIVE\n",
+                    stderr="",
+                )
 
             with patch("subprocess.run", side_effect=fake_subprocess_run):
                 record = evaluator.execute_flight(
@@ -843,12 +1118,19 @@ class BenchmarkImplTest(unittest.TestCase):
                     antigravity_dispatch="message",
                 )
                 self.assertIsNotNone(record)
-                clean_cmd = next((c for c in dispatched_cmds if len(c) > 1 and "clean" in c), None)
+                clean_cmd = next(
+                    (c for c in dispatched_cmds if len(c) > 1 and "clean" in c), None
+                )
                 self.assertIsNotNone(clean_cmd)
                 assert clean_cmd is not None
                 self.assertIn("--antigravity-dispatch", clean_cmd)
                 self.assertIn("message", clean_cmd)
-                self.assertFalse((Path(app_info.resolve_state_dir(str(repo_root))) / "active_flight.json").exists())
+                self.assertFalse(
+                    (
+                        Path(app_info.resolve_state_dir(str(repo_root)))
+                        / "active_flight.json"
+                    ).exists()
+                )
 
     def test_baseline_flight_simulation(self) -> None:
         """CUJ: Executing a simulated baseline flight and validating single-round metadata."""
@@ -903,14 +1185,16 @@ class BenchmarkImplTest(unittest.TestCase):
     def test_baseline_cli_successful_simulation(self) -> None:
         """CUJ: CLI dispatches simulated baseline flight with autonomous harness."""
         evaluator = BenchmarkEvaluator()
-        ret = evaluator.run_cli([
-            "--baseline",
-            "--suite=dag_engine",
-            "--models=gemini-flash",
-            "--harness=antigravity",
-            "--simulation",
-            "--units=1",
-        ])
+        ret = evaluator.run_cli(
+            [
+                "--baseline",
+                "--suite=dag_engine",
+                "--models=gemini-flash",
+                "--harness=antigravity",
+                "--simulation",
+                "--units=1",
+            ]
+        )
         self.assertEqual(ret, 0)
 
     def test_baseline_artifact_archival_directory(self) -> None:
@@ -934,8 +1218,12 @@ class BenchmarkImplTest(unittest.TestCase):
             tests_dir = unit_full / "tests"
             lib_dir.mkdir(parents=True, exist_ok=True)
             tests_dir.mkdir(parents=True, exist_ok=True)
-            (lib_dir / "dag_engine.py").write_text("class DAG: pass\n", encoding="utf-8")
-            (tests_dir / "dag_engine_test.py").write_text("def test_dag(): pass\n", encoding="utf-8")
+            (lib_dir / "dag_engine.py").write_text(
+                "class DAG: pass\n", encoding="utf-8"
+            )
+            (tests_dir / "dag_engine_test.py").write_text(
+                "def test_dag(): pass\n", encoding="utf-8"
+            )
 
             measurements = benchmark.FlightMeasurements(
                 inbound_tokens_uncached=1000,
@@ -958,7 +1246,11 @@ class BenchmarkImplTest(unittest.TestCase):
                 flight_id="flight_test_baseline_001",
                 timestamp="2026-10-23T11:00:00Z",
                 rq="RQ1",
-                model={"identifier": model.identifier, "tier": model.tier, "default_harness": "antigravity"},
+                model={
+                    "identifier": model.identifier,
+                    "tier": model.tier,
+                    "default_harness": "antigravity",
+                },
                 benchmark_unit={"task_id": unit.task_id, "suite": unit.suite},
                 methodology="baseline",
                 stages_executed=["baseline"],
@@ -973,7 +1265,9 @@ class BenchmarkImplTest(unittest.TestCase):
             self.assertIn("gemini-flash-baseline", lib_dest)
             lib_content = Path(lib_dest).read_text(encoding="utf-8")
             self.assertIn("Methodology: baseline", lib_content)
-            self.assertIn("Role Execution Rounds:   baseline: 1 (Total: 1)", lib_content)
+            self.assertIn(
+                "Role Execution Rounds:   baseline: 1 (Total: 1)", lib_content
+            )
 
     def test_baseline_flight_prompt_includes_low_spec(self) -> None:
         """CUJ: Baseline flight dispatches unified clean command targeting the baseline fused role."""
@@ -994,18 +1288,35 @@ class BenchmarkImplTest(unittest.TestCase):
             unit_full = repo_root / "parts" / "dag_engine"
             low_dir = unit_full / "low"
             low_dir.mkdir(parents=True, exist_ok=True)
-            (low_dir / "dag_engine.pyi").write_text("class DAG: ...\n", encoding="utf-8")
+            (low_dir / "dag_engine.pyi").write_text(
+                "class DAG: ...\n", encoding="utf-8"
+            )
 
             dispatched_cmds = []
+
             def fake_subprocess_run(cmd, *args, **kwargs):
                 dispatched_cmds.append(cmd)
-                return MagicMock(returncode=0, stdout="AUTONOMOUS ANTIGRAVITY COORDINATION DIRECTIVE\n", stderr="")
+                return MagicMock(
+                    returncode=0,
+                    stdout="AUTONOMOUS ANTIGRAVITY COORDINATION DIRECTIVE\n",
+                    stderr="",
+                )
 
-            with mock.patch("subprocess.run", side_effect=fake_subprocess_run), \
-                 mock.patch("autofab.parts.benchmark.lib.benchmark_impl._VerificationGate.evaluate") as mock_gate, \
-                 mock.patch("autofab.parts.benchmark.lib.benchmark_impl._LogHarvester.harvest_from_antigravity", return_value=(100, 200, 50, [1.0], {"baseline": 1})):
+            with (
+                mock.patch("subprocess.run", side_effect=fake_subprocess_run),
+                mock.patch(
+                    "autofab.parts.benchmark.lib.benchmark_impl._VerificationGate.evaluate"
+                ) as mock_gate,
+                mock.patch(
+                    "autofab.parts.benchmark.lib.benchmark_impl._LogHarvester.harvest_from_antigravity",
+                    return_value=(100, 200, 50, [1.0], {"baseline": 1}),
+                ),
+            ):
                 mock_gate.return_value = benchmark.VerificationOutcomes(
-                    spec_linter_pass=True, pyright_errors=0, unit_tests_passed=5, unit_tests_failed=0
+                    spec_linter_pass=True,
+                    pyright_errors=0,
+                    unit_tests_passed=5,
+                    unit_tests_failed=0,
                 )
                 record = evaluator.execute_flight(
                     model=model,
@@ -1017,7 +1328,9 @@ class BenchmarkImplTest(unittest.TestCase):
                     antigravity_dispatch="none",
                 )
 
-            clean_cmd = next((c for c in dispatched_cmds if len(c) > 1 and "clean" in c), None)
+            clean_cmd = next(
+                (c for c in dispatched_cmds if len(c) > 1 and "clean" in c), None
+            )
             self.assertIsNotNone(clean_cmd)
             assert clean_cmd is not None
             self.assertIn("--role", clean_cmd)
@@ -1031,6 +1344,7 @@ class BenchmarkImplTest(unittest.TestCase):
         from autofab.parts.benchmark.lib.benchmark_impl import (  # cleanroom: allow-private-import
             _LogHarvester,
         )
+
         with tempfile.TemporaryDirectory() as tmp_dir:
             brain_dir = Path(tmp_dir) / "brain"
             parent_id = "00000000-0000-0000-0000-000000000001"
@@ -1040,8 +1354,23 @@ class BenchmarkImplTest(unittest.TestCase):
             w_log_dir.mkdir(parents=True, exist_ok=True)
             w_transcript = w_log_dir / "transcript.jsonl"
             w_lines = [
-                json.dumps({"source": "SYSTEM", "type": "SYSTEM_MESSAGE", "content": "You are an autonomous software developer working in scope 'benchmark_1'."}),
-                json.dumps({"source": "MODEL", "type": "PLANNER_RESPONSE", "input_tokens": 2000, "cache_read_tokens": 10000, "output_tokens": 500, "duration_ms": 1500}),
+                json.dumps(
+                    {
+                        "source": "SYSTEM",
+                        "type": "SYSTEM_MESSAGE",
+                        "content": "You are an autonomous software developer working in scope 'benchmark_1'.",
+                    }
+                ),
+                json.dumps(
+                    {
+                        "source": "MODEL",
+                        "type": "PLANNER_RESPONSE",
+                        "input_tokens": 2000,
+                        "cache_read_tokens": 10000,
+                        "output_tokens": 500,
+                        "duration_ms": 1500,
+                    }
+                ),
             ]
             w_transcript.write_text("\n".join(w_lines) + "\n", encoding="utf-8")
 
@@ -1049,8 +1378,22 @@ class BenchmarkImplTest(unittest.TestCase):
             p_log_dir.mkdir(parents=True, exist_ok=True)
             p_transcript = p_log_dir / "transcript.jsonl"
             p_lines = [
-                json.dumps({"source": "SYSTEM", "type": "SYSTEM_MESSAGE", "content": f"AUTONOMOUS ANTIGRAVITY BASELINE DIRECTIVE for benchmark_1: Invoke {app_info.APP_NAME}_baseline_worker."}),
-                json.dumps({"source": "MODEL", "type": "PLANNER_RESPONSE", "input_tokens": 50000, "cache_read_tokens": 50000, "output_tokens": 5000}),
+                json.dumps(
+                    {
+                        "source": "SYSTEM",
+                        "type": "SYSTEM_MESSAGE",
+                        "content": f"AUTONOMOUS ANTIGRAVITY BASELINE DIRECTIVE for benchmark_1: Invoke {app_info.APP_NAME}_baseline_worker.",
+                    }
+                ),
+                json.dumps(
+                    {
+                        "source": "MODEL",
+                        "type": "PLANNER_RESPONSE",
+                        "input_tokens": 50000,
+                        "cache_read_tokens": 50000,
+                        "output_tokens": 5000,
+                    }
+                ),
             ]
             p_transcript.write_text("\n".join(p_lines) + "\n", encoding="utf-8")
             os.utime(p_transcript, (time.time() + 10.0, time.time() + 10.0))
@@ -1063,13 +1406,18 @@ class BenchmarkImplTest(unittest.TestCase):
             self.assertEqual(out_tok, 500)
             self.assertEqual(lats, [1.5])
             self.assertEqual(rounds, {"baseline": 1})
-            self.assertTrue(_LogHarvester._is_antigravity_baseline_complete(brain_dir, 0.0, scope="benchmark_1"))
+            self.assertTrue(
+                _LogHarvester._is_antigravity_baseline_complete(
+                    brain_dir, 0.0, scope="benchmark_1"
+                )
+            )
 
     def test_antigravity_coordinator_and_workers_harvesting(self) -> None:
         """CUJ: Harvesting telemetry across coordinator and role worker subagent transcripts."""
         from autofab.parts.benchmark.lib.benchmark_impl import (  # cleanroom: allow-private-import
             _LogHarvester,
         )
+
         with tempfile.TemporaryDirectory() as tmp_dir:
             brain_dir = Path(tmp_dir) / "brain"
             coord_id = "00000000-0000-0000-0000-000000000010"
@@ -1081,10 +1429,50 @@ class BenchmarkImplTest(unittest.TestCase):
             c_log_dir.mkdir(parents=True, exist_ok=True)
             c_transcript = c_log_dir / "transcript.jsonl"
             c_lines = [
-                json.dumps({"step_index": 0, "source": "SYSTEM", "type": "SYSTEM_MESSAGE", "content": f"Clean all dirty nodes in benchmark_1 using {app_info.APP_NAME}_coordinator."}),
-                json.dumps({"step_index": 1, "source": "MODEL", "type": "PLANNER_RESPONSE", "input_tokens": 1000, "cache_read_tokens": 2000, "output_tokens": 100}),
-                json.dumps({"step_index": 2, "source": "MODEL", "type": "GENERIC", "content": f'Created the following subagents:\n{{"conversationId": "{worker1_id}"}}\n{{"conversationId": "{worker2_id}"}}'}),
-                json.dumps({"step_index": 3, "source": "MODEL", "type": "PLANNER_RESPONSE", "input_tokens": 500, "cache_read_tokens": 1000, "output_tokens": 50, "tool_calls": [{"name": "invoke_subagent", "args": {"Prompt": f"You are an autonomous {app_info.APP_TITLE} 'lib' worker for scope 'benchmark_1'."}}]}),
+                json.dumps(
+                    {
+                        "step_index": 0,
+                        "source": "SYSTEM",
+                        "type": "SYSTEM_MESSAGE",
+                        "content": f"Clean all dirty nodes in benchmark_1 using {app_info.APP_NAME}_coordinator.",
+                    }
+                ),
+                json.dumps(
+                    {
+                        "step_index": 1,
+                        "source": "MODEL",
+                        "type": "PLANNER_RESPONSE",
+                        "input_tokens": 1000,
+                        "cache_read_tokens": 2000,
+                        "output_tokens": 100,
+                    }
+                ),
+                json.dumps(
+                    {
+                        "step_index": 2,
+                        "source": "MODEL",
+                        "type": "GENERIC",
+                        "content": f'Created the following subagents:\n{{"conversationId": "{worker1_id}"}}\n{{"conversationId": "{worker2_id}"}}',
+                    }
+                ),
+                json.dumps(
+                    {
+                        "step_index": 3,
+                        "source": "MODEL",
+                        "type": "PLANNER_RESPONSE",
+                        "input_tokens": 500,
+                        "cache_read_tokens": 1000,
+                        "output_tokens": 50,
+                        "tool_calls": [
+                            {
+                                "name": "invoke_subagent",
+                                "args": {
+                                    "Prompt": f"You are an autonomous {app_info.APP_TITLE} 'lib' worker for scope 'benchmark_1'."
+                                },
+                            }
+                        ],
+                    }
+                ),
             ]
             c_transcript.write_text("\n".join(c_lines) + "\n", encoding="utf-8")
 
@@ -1093,8 +1481,24 @@ class BenchmarkImplTest(unittest.TestCase):
             w1_log_dir.mkdir(parents=True, exist_ok=True)
             w1_transcript = w1_log_dir / "transcript.jsonl"
             w1_lines = [
-                json.dumps({"step_index": 0, "source": "SYSTEM", "type": "SYSTEM_MESSAGE", "content": f"You are an autonomous {app_info.APP_TITLE} 'lib' worker for scope 'benchmark_1'."}),
-                json.dumps({"step_index": 1, "source": "MODEL", "type": "PLANNER_RESPONSE", "input_tokens": 4000, "cache_read_tokens": 8000, "output_tokens": 300}),
+                json.dumps(
+                    {
+                        "step_index": 0,
+                        "source": "SYSTEM",
+                        "type": "SYSTEM_MESSAGE",
+                        "content": f"You are an autonomous {app_info.APP_TITLE} 'lib' worker for scope 'benchmark_1'.",
+                    }
+                ),
+                json.dumps(
+                    {
+                        "step_index": 1,
+                        "source": "MODEL",
+                        "type": "PLANNER_RESPONSE",
+                        "input_tokens": 4000,
+                        "cache_read_tokens": 8000,
+                        "output_tokens": 300,
+                    }
+                ),
             ]
             w1_transcript.write_text("\n".join(w1_lines) + "\n", encoding="utf-8")
 
@@ -1103,8 +1507,24 @@ class BenchmarkImplTest(unittest.TestCase):
             w2_log_dir.mkdir(parents=True, exist_ok=True)
             w2_transcript = w2_log_dir / "transcript.jsonl"
             w2_lines = [
-                json.dumps({"step_index": 0, "source": "SYSTEM", "type": "SYSTEM_MESSAGE", "content": f"You are an autonomous {app_info.APP_TITLE} 'pretense' worker for scope 'benchmark_1'."}),
-                json.dumps({"step_index": 1, "source": "MODEL", "type": "PLANNER_RESPONSE", "input_tokens": 3000, "cache_read_tokens": 6000, "output_tokens": 200}),
+                json.dumps(
+                    {
+                        "step_index": 0,
+                        "source": "SYSTEM",
+                        "type": "SYSTEM_MESSAGE",
+                        "content": f"You are an autonomous {app_info.APP_TITLE} 'pretense' worker for scope 'benchmark_1'.",
+                    }
+                ),
+                json.dumps(
+                    {
+                        "step_index": 1,
+                        "source": "MODEL",
+                        "type": "PLANNER_RESPONSE",
+                        "input_tokens": 3000,
+                        "cache_read_tokens": 6000,
+                        "output_tokens": 200,
+                    }
+                ),
             ]
             w2_transcript.write_text("\n".join(w2_lines) + "\n", encoding="utf-8")
 
@@ -1163,8 +1583,12 @@ class BenchmarkImplTest(unittest.TestCase):
             pretense_dir = unit_full / "pretense"
             lib_dir.mkdir(parents=True, exist_ok=True)
             pretense_dir.mkdir(parents=True, exist_ok=True)
-            (lib_dir / "dag_engine.py").write_text("class DAG: pass\n", encoding="utf-8")
-            (pretense_dir / "dag_engine_impl_pretense.py").write_text("class TestDAGUnit: pass\n", encoding="utf-8")
+            (lib_dir / "dag_engine.py").write_text(
+                "class DAG: pass\n", encoding="utf-8"
+            )
+            (pretense_dir / "dag_engine_impl_pretense.py").write_text(
+                "class TestDAGUnit: pass\n", encoding="utf-8"
+            )
 
             measurements = benchmark.FlightMeasurements(
                 inbound_tokens_uncached=1000,
@@ -1187,7 +1611,11 @@ class BenchmarkImplTest(unittest.TestCase):
                 flight_id="flight_test_pretense_baseline_001",
                 timestamp="2026-10-25T11:00:00Z",
                 rq="RQ1",
-                model={"identifier": model.identifier, "tier": model.tier, "default_harness": "antigravity"},
+                model={
+                    "identifier": model.identifier,
+                    "tier": model.tier,
+                    "default_harness": "antigravity",
+                },
                 benchmark_unit={"task_id": unit.task_id, "suite": unit.suite},
                 methodology="pretense_baseline",
                 stages_executed=["baseline"],
@@ -1203,7 +1631,9 @@ class BenchmarkImplTest(unittest.TestCase):
             self.assertTrue(test_dest.endswith("pretense_1.py"))
             lib_content = Path(lib_dest).read_text(encoding="utf-8")
             self.assertIn("Methodology: pretense_baseline", lib_content)
-            self.assertIn("Role Execution Rounds:   baseline: 1 (Total: 1)", lib_content)
+            self.assertIn(
+                "Role Execution Rounds:   baseline: 1 (Total: 1)", lib_content
+            )
 
     def test_baseline_pretense_workspace_setup_and_scaffolding(self) -> None:
         """CUJ: Baseline pretense flight dispatches unified clean command targeting pretense_baseline fused role."""
@@ -1224,27 +1654,48 @@ class BenchmarkImplTest(unittest.TestCase):
             unit_full = repo_root / "parts" / "dag_engine"
             low_dir = unit_full / "low"
             low_dir.mkdir(parents=True, exist_ok=True)
-            (low_dir / "dag_engine.pyi").write_text("class DAG: ...\n", encoding="utf-8")
+            (low_dir / "dag_engine.pyi").write_text(
+                "class DAG: ...\n", encoding="utf-8"
+            )
 
             # Provision guides in repo_root
             guides_dir = repo_root / "autofab_py" / "guides"
             guides_dir.mkdir(parents=True, exist_ok=True)
-            (guides_dir / "pretense.md").write_text("# Pretense Guide\n", encoding="utf-8")
-            (guides_dir / "low_to_lib.md").write_text("# Low to Lib Guide\n", encoding="utf-8")
+            (guides_dir / "pretense.md").write_text(
+                "# Pretense Guide\n", encoding="utf-8"
+            )
+            (guides_dir / "low_to_lib.md").write_text(
+                "# Low to Lib Guide\n", encoding="utf-8"
+            )
 
             # Provision pretense runtime dir in repo_root
             (repo_root / "pretense").mkdir(parents=True, exist_ok=True)
 
             dispatched_cmds = []
+
             def fake_subprocess_run(cmd, *args, **kwargs):
                 dispatched_cmds.append(cmd)
-                return MagicMock(returncode=0, stdout="AUTONOMOUS ANTIGRAVITY COORDINATION DIRECTIVE\n", stderr="")
+                return MagicMock(
+                    returncode=0,
+                    stdout="AUTONOMOUS ANTIGRAVITY COORDINATION DIRECTIVE\n",
+                    stderr="",
+                )
 
-            with mock.patch("subprocess.run", side_effect=fake_subprocess_run), \
-                 mock.patch("autofab.parts.benchmark.lib.benchmark_impl._VerificationGate.evaluate") as mock_gate, \
-                 mock.patch("autofab.parts.benchmark.lib.benchmark_impl._LogHarvester.harvest_from_antigravity", return_value=(100, 200, 50, [1.0], {"baseline": 1})):
+            with (
+                mock.patch("subprocess.run", side_effect=fake_subprocess_run),
+                mock.patch(
+                    "autofab.parts.benchmark.lib.benchmark_impl._VerificationGate.evaluate"
+                ) as mock_gate,
+                mock.patch(
+                    "autofab.parts.benchmark.lib.benchmark_impl._LogHarvester.harvest_from_antigravity",
+                    return_value=(100, 200, 50, [1.0], {"baseline": 1}),
+                ),
+            ):
                 mock_gate.return_value = benchmark.VerificationOutcomes(
-                    spec_linter_pass=True, pyright_errors=0, unit_tests_passed=5, unit_tests_failed=0
+                    spec_linter_pass=True,
+                    pyright_errors=0,
+                    unit_tests_passed=5,
+                    unit_tests_failed=0,
                 )
                 record = evaluator.execute_flight(
                     model=model,
@@ -1257,7 +1708,9 @@ class BenchmarkImplTest(unittest.TestCase):
                     antigravity_dispatch="none",
                 )
 
-            clean_cmd = next((c for c in dispatched_cmds if len(c) > 1 and "clean" in c), None)
+            clean_cmd = next(
+                (c for c in dispatched_cmds if len(c) > 1 and "clean" in c), None
+            )
             self.assertIsNotNone(clean_cmd)
             assert clean_cmd is not None
             self.assertIn("--role", clean_cmd)
@@ -1272,30 +1725,58 @@ class BenchmarkImplTest(unittest.TestCase):
         from autofab.parts.benchmark.lib.benchmark_impl import (  # cleanroom: allow-private-import
             _LogHarvester,
         )
+
         with tempfile.TemporaryDirectory() as tmp_dir:
             brain = Path(tmp_dir)
             t_start = 1000.0
 
             # 1. Empty brain dir -> False (worker hasn't started)
-            self.assertFalse(_LogHarvester._is_antigravity_baseline_complete(brain, t_start, scope="flight_1"))
+            self.assertFalse(
+                _LogHarvester._is_antigravity_baseline_complete(
+                    brain, t_start, scope="flight_1"
+                )
+            )
 
             # 2. Worker session started, but still running (tool_calls present)
             worker_dir = brain / "worker_conv_1" / ".system_generated" / "logs"
             worker_dir.mkdir(parents=True, exist_ok=True)
             t_file = worker_dir / "transcript.jsonl"
             t_file.write_text(
-                json.dumps({"type": "USER_INPUT", "content": "You are an autonomous software developer working in scope 'flight_1'"}) + "\n"
-                + json.dumps({"type": "PLANNER_RESPONSE", "tool_calls": [{"name": "run_command"}]}) + "\n",
+                json.dumps(
+                    {
+                        "type": "USER_INPUT",
+                        "content": "You are an autonomous software developer working in scope 'flight_1'",
+                    }
+                )
+                + "\n"
+                + json.dumps(
+                    {
+                        "type": "PLANNER_RESPONSE",
+                        "tool_calls": [{"name": "run_command"}],
+                    }
+                )
+                + "\n",
                 encoding="utf-8",
             )
             os.utime(t_file, (1050.0, 1050.0))
-            self.assertFalse(_LogHarvester._is_antigravity_baseline_complete(brain, t_start, scope="flight_1"))
+            self.assertFalse(
+                _LogHarvester._is_antigravity_baseline_complete(
+                    brain, t_start, scope="flight_1"
+                )
+            )
 
             # 3. Worker session completed (final PLANNER_RESPONSE without tool calls)
             with open(t_file, "a", encoding="utf-8") as f:
-                f.write(json.dumps({"type": "PLANNER_RESPONSE", "content": "Work complete"}) + "\n")
+                f.write(
+                    json.dumps({"type": "PLANNER_RESPONSE", "content": "Work complete"})
+                    + "\n"
+                )
             os.utime(t_file, (1060.0, 1060.0))
-            self.assertTrue(_LogHarvester._is_antigravity_baseline_complete(brain, t_start, scope="flight_1"))
+            self.assertTrue(
+                _LogHarvester._is_antigravity_baseline_complete(
+                    brain, t_start, scope="flight_1"
+                )
+            )
 
     def test_dsh_baseline_workspace_configuration(self) -> None:
         """Verifies that DSH baseline workspace configuration creates dsh_patch.yml and AGENTS.md under agent_session."""
@@ -1401,13 +1882,17 @@ class BenchmarkImplTest(unittest.TestCase):
             )
 
             with patch.object(evaluator, "execute_flight", return_value=failing_flight):
-                ret = evaluator.run_cli(["--suite=dag_engine", "--models=qwen-moe-q6", "--units=1"])
+                ret = evaluator.run_cli(
+                    ["--suite=dag_engine", "--models=qwen-moe-q6", "--units=1"]
+                )
                 self.assertEqual(ret, 1)
 
     def test_run_cli_rejects_comma_separated_models(self) -> None:
         """Scenario 17: run_cli strictly rejects comma-separated model lists."""
         evaluator = BenchmarkEvaluator()
-        ret_models = evaluator.run_cli(["--dry-run", "--models=deepseek-flash,qwen-moe"])
+        ret_models = evaluator.run_cli(
+            ["--dry-run", "--models=deepseek-flash,qwen-moe"]
+        )
         self.assertEqual(ret_models, 1)
 
         ret_model = evaluator.run_cli(["--dry-run", "--model=deepseek-flash,qwen-moe"])
@@ -1416,10 +1901,14 @@ class BenchmarkImplTest(unittest.TestCase):
     def test_run_cli_accepts_single_model_via_model_flag(self) -> None:
         """Scenario 17: run_cli accepts single model target via --model or --models."""
         evaluator = BenchmarkEvaluator()
-        ret_model = evaluator.run_cli(["--dry-run", "--suite=cpython", "--model=deepseek-flash", "--units=1"])
+        ret_model = evaluator.run_cli(
+            ["--dry-run", "--suite=cpython", "--model=deepseek-flash", "--units=1"]
+        )
         self.assertEqual(ret_model, 0)
 
-        ret_models = evaluator.run_cli(["--dry-run", "--suite=cpython", "--models=deepseek-flash", "--units=1"])
+        ret_models = evaluator.run_cli(
+            ["--dry-run", "--suite=cpython", "--models=deepseek-flash", "--units=1"]
+        )
         self.assertEqual(ret_models, 0)
 
     def test_baseline_combined_simulation(self) -> None:
@@ -1493,9 +1982,15 @@ class BenchmarkImplTest(unittest.TestCase):
             lib_dir.mkdir(parents=True, exist_ok=True)
             tests_dir.mkdir(parents=True, exist_ok=True)
             pretense_dir.mkdir(parents=True, exist_ok=True)
-            (lib_dir / "dag_engine.py").write_text("class DAG: pass\n", encoding="utf-8")
-            (tests_dir / "dag_engine_test.py").write_text("def test_dag(): pass\n", encoding="utf-8")
-            (pretense_dir / "dag_engine_impl_pretense.py").write_text("class TestDAGUnit: pass\n", encoding="utf-8")
+            (lib_dir / "dag_engine.py").write_text(
+                "class DAG: pass\n", encoding="utf-8"
+            )
+            (tests_dir / "dag_engine_test.py").write_text(
+                "def test_dag(): pass\n", encoding="utf-8"
+            )
+            (pretense_dir / "dag_engine_impl_pretense.py").write_text(
+                "class TestDAGUnit: pass\n", encoding="utf-8"
+            )
 
             measurements = benchmark.FlightMeasurements(
                 inbound_tokens_uncached=1000,
@@ -1518,7 +2013,11 @@ class BenchmarkImplTest(unittest.TestCase):
                 flight_id="flight_test_combined_baseline_001",
                 timestamp="2026-10-25T11:00:00Z",
                 rq="RQ1",
-                model={"identifier": model.identifier, "tier": model.tier, "default_harness": "antigravity"},
+                model={
+                    "identifier": model.identifier,
+                    "tier": model.tier,
+                    "default_harness": "antigravity",
+                },
                 benchmark_unit={"task_id": unit.task_id, "suite": unit.suite},
                 methodology="combined_baseline",
                 stages_executed=["combined_baseline"],
@@ -1541,13 +2040,31 @@ class BenchmarkImplTest(unittest.TestCase):
         """Scenario 18: run_cli accepts --method {standard, pretense, combined} and --standard, --pretense, --combined aliases."""
         evaluator = BenchmarkEvaluator()
         # --method options
-        for flag in ["--method=standard", "--method=pretense", "--method=combined", "--standard", "--pretense", "--combined"]:
-            ret = evaluator.run_cli(["--dry-run", "--suite=cpython", "--model=deepseek-flash", "--units=1", flag])
+        for flag in [
+            "--method=standard",
+            "--method=pretense",
+            "--method=combined",
+            "--standard",
+            "--pretense",
+            "--combined",
+        ]:
+            ret = evaluator.run_cli(
+                [
+                    "--dry-run",
+                    "--suite=cpython",
+                    "--model=deepseek-flash",
+                    "--units=1",
+                    flag,
+                ]
+            )
             self.assertEqual(ret, 0, f"Failed for flag: {flag}")
 
     def test_has_materialized_artifacts_combined(self) -> None:
         """Verifies _has_materialized_artifacts requires lib, test, and pretense when method is combined."""
-        from autofab.parts.benchmark.lib.benchmark_impl import _has_materialized_artifacts
+        from autofab.parts.benchmark.lib.benchmark_impl import (
+            _has_materialized_artifacts,
+        )
+
         with tempfile.TemporaryDirectory() as td:
             u_dir = Path(td)
             (u_dir / "lib").mkdir()
@@ -1560,7 +2077,9 @@ class BenchmarkImplTest(unittest.TestCase):
             self.assertTrue(_has_materialized_artifacts(u_dir, method="standard"))
 
             (u_dir / "pretense").mkdir()
-            (u_dir / "pretense" / "foo_pretense.py").write_text("class FooPretense: pass\n")
+            (u_dir / "pretense" / "foo_pretense.py").write_text(
+                "class FooPretense: pass\n"
+            )
             self.assertTrue(_has_materialized_artifacts(u_dir, method="combined"))
             self.assertTrue(_has_materialized_artifacts(u_dir, method="pretense"))
 
@@ -1571,7 +2090,15 @@ class BenchmarkImplTest(unittest.TestCase):
         try:
             if "AUTOFAB_DSH_WEB" in os.environ:
                 del os.environ["AUTOFAB_DSH_WEB"]
-            ret = evaluator.run_cli(["--dry-run", "--suite=cpython", "--model=deepseek-flash", "--units=1", "--dsh-web"])
+            ret = evaluator.run_cli(
+                [
+                    "--dry-run",
+                    "--suite=cpython",
+                    "--model=deepseek-flash",
+                    "--units=1",
+                    "--dsh-web",
+                ]
+            )
             self.assertEqual(ret, 0)
             self.assertEqual(os.environ.get("AUTOFAB_DSH_WEB"), "1")
         finally:
@@ -1586,7 +2113,15 @@ class BenchmarkImplTest(unittest.TestCase):
         orig_env = os.environ.get("AUTOFAB_DSH_WEB")
         try:
             os.environ["AUTOFAB_DSH_WEB"] = "1"
-            ret = evaluator.run_cli(["--dry-run", "--suite=cpython", "--model=deepseek-flash", "--units=1", "--dsh-desktop"])
+            ret = evaluator.run_cli(
+                [
+                    "--dry-run",
+                    "--suite=cpython",
+                    "--model=deepseek-flash",
+                    "--units=1",
+                    "--dsh-desktop",
+                ]
+            )
             self.assertEqual(ret, 0)
             self.assertEqual(os.environ.get("AUTOFAB_DSH_WEB"), "0")
         finally:
@@ -1595,13 +2130,130 @@ class BenchmarkImplTest(unittest.TestCase):
             elif "AUTOFAB_DSH_WEB" in os.environ:
                 del os.environ["AUTOFAB_DSH_WEB"]
 
+    def test_run_cli_default_experiment_on_non_baseline(self) -> None:
+        """Scenario 20: run_cli defaults active experiment to structured_blame for non-baseline flights."""
+        evaluator = BenchmarkEvaluator()
+        orig_env = os.environ.get("AUTOFAB_EXPERIMENT")
+        try:
+            if "AUTOFAB_EXPERIMENT" in os.environ:
+                del os.environ["AUTOFAB_EXPERIMENT"]
+            ret = evaluator.run_cli(
+                ["--dry-run", "--suite=cpython", "--model=deepseek-flash", "--units=1"]
+            )
+            self.assertEqual(ret, 0)
+            self.assertEqual(os.environ.get("AUTOFAB_EXPERIMENT"), "structured_blame")
+        finally:
+            experiments.clear_active_experiments()
+            if orig_env is not None:
+                os.environ["AUTOFAB_EXPERIMENT"] = orig_env
+            elif "AUTOFAB_EXPERIMENT" in os.environ:
+                del os.environ["AUTOFAB_EXPERIMENT"]
+
+    def test_run_cli_no_experiment_flag(self) -> None:
+        """Scenario 20: run_cli accepts --no-experiment to disable default experiment."""
+        evaluator = BenchmarkEvaluator()
+        orig_env = os.environ.get("AUTOFAB_EXPERIMENT")
+        try:
+            os.environ["AUTOFAB_EXPERIMENT"] = "structured_blame"
+            ret = evaluator.run_cli(
+                [
+                    "--dry-run",
+                    "--suite=cpython",
+                    "--model=deepseek-flash",
+                    "--units=1",
+                    "--no-experiment",
+                ]
+            )
+            self.assertEqual(ret, 0)
+            self.assertNotIn("AUTOFAB_EXPERIMENT", os.environ)
+        finally:
+            experiments.clear_active_experiments()
+            if orig_env is not None:
+                os.environ["AUTOFAB_EXPERIMENT"] = orig_env
+            elif "AUTOFAB_EXPERIMENT" in os.environ:
+                del os.environ["AUTOFAB_EXPERIMENT"]
+
+    def test_run_cli_baseline_does_not_default_experiment(self) -> None:
+        """Scenario 20: run_cli does not default active experiment when --baseline is passed."""
+        evaluator = BenchmarkEvaluator()
+        orig_env = os.environ.get("AUTOFAB_EXPERIMENT")
+        try:
+            if "AUTOFAB_EXPERIMENT" in os.environ:
+                del os.environ["AUTOFAB_EXPERIMENT"]
+            ret = evaluator.run_cli(
+                [
+                    "--dry-run",
+                    "--suite=cpython",
+                    "--model=deepseek-flash",
+                    "--units=1",
+                    "--baseline",
+                    "--harness=simulation",
+                ]
+            )
+            self.assertEqual(ret, 0)
+            self.assertNotIn("AUTOFAB_EXPERIMENT", os.environ)
+        finally:
+            experiments.clear_active_experiments()
+            if orig_env is not None:
+                os.environ["AUTOFAB_EXPERIMENT"] = orig_env
+            elif "AUTOFAB_EXPERIMENT" in os.environ:
+                del os.environ["AUTOFAB_EXPERIMENT"]
+
+    def test_run_cli_disable_experiment_flag(self) -> None:
+        """Scenario 20: run_cli accepts --disable_experiment to disable a specific default experiment."""
+        evaluator = BenchmarkEvaluator()
+        orig_env = os.environ.get("AUTOFAB_EXPERIMENT")
+        try:
+            ret = evaluator.run_cli(
+                [
+                    "--dry-run",
+                    "--suite=cpython",
+                    "--model=deepseek-flash",
+                    "--units=1",
+                    "--disable_experiment=structured_blame",
+                ]
+            )
+            self.assertEqual(ret, 0)
+            self.assertNotIn("AUTOFAB_EXPERIMENT", os.environ)
+        finally:
+            experiments.clear_active_experiments()
+            if orig_env is not None:
+                os.environ["AUTOFAB_EXPERIMENT"] = orig_env
+            elif "AUTOFAB_EXPERIMENT" in os.environ:
+                del os.environ["AUTOFAB_EXPERIMENT"]
+
+    @patch(
+        "autofab.parts.benchmark.lib.benchmark_impl._cleanup_dsh_scope_conversations"
+    )
+    def test_flight_scope_provision_cleans_dsh_conversations(
+        self, mock_cleanup: Any
+    ) -> None:
+        """Requirement: MUST delete existing DSH conversations matching scope when provisioning flight scope."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            orig_scope_dir = repo_root / "benchmarks" / "parts"
+            orig_scope_dir.mkdir(parents=True, exist_ok=True)
+            unit_dir = orig_scope_dir / "sample"
+            (unit_dir / "high").mkdir(parents=True, exist_ok=True)
+            (unit_dir / "high" / "sample.md").write_text("# Spec", encoding="utf-8")
+            unit = benchmark.BenchmarkUnit(
+                suite="sample_suite",
+                task_id="sample_task",
+                unit_dir="benchmarks/parts/sample",
+                target_address="//benchmarks/parts/sample#sample",
+                description="Sample unit for flight scope cleanup test",
+            )
+            scope, _ = _provision_flight_scope(repo_root, unit, "flight_cleanup_test")
+            self.assertEqual(scope, "benchmark_1")
+            mock_cleanup.assert_called_with("benchmark_1")
+
 
 if __name__ == "__main__":
     unittest.main()
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-19T18:45:00Z
-# LAST_CHANGED: 2026-11-06T12:15:00Z
-# CHANGE: Support --dsh-desktop to force DeepSeek Harness Desktop RPC execution
+# LAST_CHANGED: 2026-11-09T23:45:00Z
+# CHANGE: Test DSH conversation cleanup on flight scope provisioning
 # SPEC_QA_AUDIT: 2026-10-19T19:35:00Z
 # --- END CLEANROOM METADATA ---

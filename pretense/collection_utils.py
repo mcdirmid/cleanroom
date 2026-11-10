@@ -14,9 +14,10 @@ V = TypeVar("V")
 
 def make_tup(*choosers: Callable[..., Any]) -> Callable[..., Optional[Tuple[Any, ...]]]:
     """Compose multiple argument recognizers/generators into a single joint tuple chooser.
-    
+
     If any individual chooser returns None, the combined chooser returns None (rejection).
     """
+
     def combined(state: Any, this: Any, *args: Any) -> Optional[Tuple[Any, ...]]:
         res: List[Any] = []
         for chooser, arg in zip(choosers, args):
@@ -25,12 +26,13 @@ def make_tup(*choosers: Callable[..., Any]) -> Callable[..., Optional[Tuple[Any,
                 return None
             res.append(val)
         return tuple(res)
+
     return combined
 
 
 def choose_weighted(*weighted_options: Tuple[float, Callable[[Any], Any]]) -> Any:
     """Statistical selection across weighted alternatives.
-    
+
     Under Hypothesis, uses st.frequency() to allow full byte-stream shrinking.
     Outside Hypothesis, falls back to random.choices.
     """
@@ -38,6 +40,7 @@ def choose_weighted(*weighted_options: Tuple[float, Callable[[Any], Any]]) -> An
     if draw is not None:
         try:
             import hypothesis.strategies as st
+
             st_mod: Any = st
             freq_strategies = []
             for weight, builder in weighted_options:
@@ -86,19 +89,23 @@ class PretenseSet(Set[T]):
             if draw is not None:
                 try:
                     import hypothesis.strategies as st
+
                     return draw(st.sampled_from(list(self)))
                 except ImportError:
                     pass
             return next(iter(self))
         return val if val in self else None
 
-    def get_not_in(self, val: Union[T, NotBoundType], prefix: str = "item_") -> Optional[T]:
+    def get_not_in(
+        self, val: Union[T, NotBoundType], prefix: str = "item_"
+    ) -> Optional[T]:
         """Recognize non-membership or generate an absent element across 4 tiers."""
         if isinstance(val, NotBoundType):
             draw = get_current_draw()
             if draw is not None:
                 try:
                     import hypothesis.strategies as st
+
                     # Tier 1: The Graveyard (Tombstone History) - 40% probability if available
                     if self._tombstones and draw(st.booleans()) and draw(st.booleans()):
                         candidate = draw(st.sampled_from(list(self._tombstones)))
@@ -106,11 +113,17 @@ class PretenseSet(Set[T]):
                             return candidate
 
                     # Tier 2: Near-Miss Mutations - 30% probability if string elements exist
-                    if self and all(isinstance(x, str) for x in self) and draw(st.booleans()):
+                    if (
+                        self
+                        and all(isinstance(x, str) for x in self)
+                        and draw(st.booleans())
+                    ):
                         base = str(draw(st.sampled_from(list(self))))
                         mutation_type = draw(st.integers(0, 3))
                         if mutation_type == 0:
-                            candidate_str = base.upper() if base.islower() else base.lower()
+                            candidate_str = (
+                                base.upper() if base.islower() else base.lower()
+                            )
                         elif mutation_type == 1:
                             candidate_str = base + " "
                         elif mutation_type == 2:
@@ -122,7 +135,11 @@ class PretenseSet(Set[T]):
 
                     # Tier 3: Open Universe Fuzzing
                     if not self or all(isinstance(x, str) for x in self):
-                        fresh_str = draw(st.text(min_size=1, max_size=10).filter(lambda s: s not in self))
+                        fresh_str = draw(
+                            st.text(min_size=1, max_size=10).filter(
+                                lambda s: s not in self
+                            )
+                        )
                         return fresh_str  # type: ignore
                 except ImportError:
                     pass
@@ -144,7 +161,12 @@ class PretenseSet(Set[T]):
             if draw is not None:
                 try:
                     import hypothesis.strategies as st
-                    return set(draw(st.lists(st.sampled_from(list(self)), unique=True))) if self else set()
+
+                    return (
+                        set(draw(st.lists(st.sampled_from(list(self)), unique=True)))
+                        if self
+                        else set()
+                    )
                 except ImportError:
                     pass
             return set()
@@ -176,25 +198,33 @@ class PretenseDict(Dict[K, V]):
             if draw is not None:
                 try:
                     import hypothesis.strategies as st
+
                     return draw(st.sampled_from(list(self.keys())))
                 except ImportError:
                     pass
             return next(iter(self.keys()))
         return key if key in self else None
 
-    def get_key_not_in(self, key: Union[K, NotBoundType], prefix: str = "key_") -> Optional[K]:
+    def get_key_not_in(
+        self, key: Union[K, NotBoundType], prefix: str = "key_"
+    ) -> Optional[K]:
         """Recognize key absence or generate an absent key."""
         if isinstance(key, NotBoundType):
             draw = get_current_draw()
             if draw is not None:
                 try:
                     import hypothesis.strategies as st
+
                     if self._tombstones and draw(st.booleans()):
                         cand = draw(st.sampled_from(list(self._tombstones)))
                         if cand not in self:
                             return cand
                     if not self or all(isinstance(k, str) for k in self.keys()):
-                        return draw(st.text(min_size=1, max_size=10).filter(lambda s: s not in self))  # type: ignore
+                        return draw(
+                            st.text(min_size=1, max_size=10).filter(
+                                lambda s: s not in self
+                            )
+                        )  # type: ignore
                 except ImportError:
                     pass
             idx = len(self)

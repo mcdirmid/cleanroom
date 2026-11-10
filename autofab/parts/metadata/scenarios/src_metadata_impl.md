@@ -26,12 +26,12 @@ code hash `a1b2c3d4e5f6`; the code body of that file is `widget contract body`.
    comment delimiters, header placement, and field grammar supplied by `src_metadata_ext`, and the
    `src_metadata` interface exposed within the active `system` tier.
 
-2. The caller asks for the code body of the file.
+1. The caller asks for the code body of the file.
    Observed: `widget contract body`, with the metadata comment block absent from it.
    Realized by: the component's own extraction of the lines outside the located metadata comment
    boundaries, joined with whitespace stripped.
 
-3. The caller asks whether the file has code modifications.
+1. The caller asks whether the file has code modifications.
    Observed: no code modifications, because the code body on disk still hashes to `a1b2c3d4e5f6`,
    the code hash recorded in the file's metadata.
    Realized by: the component's own establishment of file existence on disk and its comparison of
@@ -50,13 +50,13 @@ recording last cleaned `2026-01-02T03:04:05Z` and no dirty reason; the current U
    block with the dirty reason and without a last cleaned timestamp, and its in-place file
    mutation, writing UTF-8 encoded text through the comment mechanics of `src_metadata_ext`.
 
-2. The caller records the change summary `renamed the widget field` on the file.
+1. The caller records the change summary `renamed the widget field` on the file.
    Observed: the file on disk records the change summary `renamed the widget field` and, being a
    modified file, a last changed timestamp of `2026-01-05T06:07:08Z`.
    Realized by: the component's own in-place header rewrite, which advances the last changed
    timestamp to the current UTC timestamp and writes the change summary into the block.
 
-3. The caller marks the file clean.
+1. The caller marks the file clean.
    Observed: the file on disk records last cleaned `2026-01-05T06:07:08Z` and no dirty reason.
    Realized by: the component's own in-place header rewrite, which advances the last cleaned
    timestamp to the current UTC timestamp and clears the dirty reason.
@@ -64,8 +64,7 @@ recording last cleaned `2026-01-02T03:04:05Z` and no dirty reason; the current U
 ### Scenario 3 — Appending unacted feedback and stamping and clearing a role audit
 
 Given: the workspace file `/ws/alpha_scope_a/parts/widget/widget_spec.md` is dirty with the reason
-`the beta contract changed`; its metadata records the unacted feedback items `the beta contract
-changed` and `the gamma contract changed`, and a role audit timestamp `2026-01-04T00:00:00Z` for
+`the beta contract changed`; its metadata records the unacted feedback items `the beta contract changed` and `the gamma contract changed`, and a role audit timestamp `2026-01-04T00:00:00Z` for
 role beta; the current UTC timestamp is `2026-01-06T00:00:00Z`.
 
 1. The caller appends an unacted feedback item carrying the explanation
@@ -75,13 +74,17 @@ role beta; the current UTC timestamp is `2026-01-06T00:00:00Z`.
    Realized by: the component's own in-place header rewrite, which appends the entry to the
    unacted feedback list under the feedback grammar of `src_metadata_ext`.
 
-2. The caller stamps a role audit for role alpha.
+1. The caller appends an unacted feedback item carrying the explanation `missing branch` with sender role `pretense_coverage`.
+   Observed: the file on disk records `[from:pretense_coverage] missing branch` in its unacted feedback items.
+   Realized by: the component's own sender attribution formatting, prefixing the clean explanation with `[from:<sender>]`.
+
+1. The caller stamps a role audit for role alpha.
    Observed: the file on disk records a role audit timestamp `2026-01-06T00:00:00Z` for role
    alpha, alongside the role beta audit at `2026-01-04T00:00:00Z`.
    Realized by: the component's own role audit stamping inside the rewritten comment block,
    writing the current UTC timestamp against the named role.
 
-3. The caller clears the role audit for role alpha.
+1. The caller clears the role audit for role alpha.
    Observed: the file on disk records no role audit timestamp for role alpha and still records the
    role beta audit at `2026-01-04T00:00:00Z`.
    Realized by: the component's own removal of that role's audit timestamp from the rewritten
@@ -100,13 +103,13 @@ string.
    Realized by: the component's own serialization over the supplied content string, which replaces
    the located comment block slice with the updated block.
 
-2. The caller asks for the metadata of the file on disk.
+1. The caller asks for the metadata of the file on disk.
    Observed: still last cleaned `2026-01-02T03:04:05Z` and no dirty reason, because no file on
    disk was updated.
    Realized by: the component's own separation of content-string rewriting from in-place file
    mutation, so that only the latter reaches disk.
 
-3. The caller asks for the content string rewritten with the last cleaned timestamp deleted.
+1. The caller asks for the content string rewritten with the last cleaned timestamp deleted.
    Observed: the returned content string records no last cleaned timestamp, while the file on disk
    still records last cleaned `2026-01-02T03:04:05Z`.
    Realized by: the component's own serialization of a block that omits the last cleaned field,
@@ -124,7 +127,7 @@ comment block, and the current UTC timestamp is `2026-01-07T08:09:10Z`.
    Realized by: the component's own boundary location, which finds no metadata comment markers and
    yields a record whose every attribute is unset.
 
-2. The caller marks the file clean.
+1. The caller marks the file clean.
    Observed: the file on disk now records last cleaned `2026-01-07T08:09:10Z` and no dirty reason.
    Realized by: the component's own insertion of a new metadata comment block at the placement the
    format conventions of `src_metadata_ext` require, followed by its in-place file mutation.
@@ -141,12 +144,12 @@ file records code hash `a1b2c3d4e5f6`.
    Realized by: the component's own code body extraction, which strips whitespace from the lines
    outside the comment boundaries, and its hashing of that body, which depends on nothing else.
 
-2. The caller changes the code body of the widget file to `widget contract statement` and asks for
+1. The caller changes the code body of the widget file to `widget contract statement` and asks for
    its code hash again.
    Observed: a code hash that differs from the code hash of the gadget file.
    Realized by: the same extraction and hashing path over the new body.
 
-3. The caller asks whether the widget file has code modifications.
+1. The caller asks whether the widget file has code modifications.
    Observed: code modifications, because the code body `widget contract statement` no longer hashes
    to `a1b2c3d4e5f6`.
    Realized by: the component's own comparison of the recomputed code hash against the recorded
@@ -167,7 +170,7 @@ surrounding whitespace.
    Realized by: the component's own whitespace stripping of the extracted code body followed by
    its SHA-256 digest, of which only the leading twelve hexadecimal characters are recorded.
 
-2. The caller asks for the code hash of a file whose code body is `widget contract statement`.
+1. The caller asks for the code hash of a file whose code body is `widget contract statement`.
    Observed: a different twelve-character hexadecimal code hash.
    Realized by: the same stripping and digesting path over the changed body.
 
@@ -198,7 +201,7 @@ Given: no file exists at `/ws/alpha_scope_a/parts/sprocket/sprocket_spec.md`, an
    Realized by: the component's own in-place mutation, which reads the absent content as empty,
    creates the missing parent directory, and writes the UTF-8 encoded text.
 
-2. The caller asks for the code body of the file.
+1. The caller asks for the code body of the file.
    Observed: empty, because the file holds nothing outside its metadata comment block.
    Realized by: the component's own code body extraction over a file with no lines outside the
    block.
@@ -218,7 +221,7 @@ current UTC timestamp is `2026-01-10T00:00:00Z`.
    Realized by: the component's own serialization, which appends the new block at the bottom of the
    content as the placement rules of `src_metadata_ext` require.
 
-2. The caller asks for the Markdown content string rewritten with the file marked clean.
+1. The caller asks for the Markdown content string rewritten with the file marked clean.
    Observed: the returned string keeps the frontmatter delimiter and the line `widget contract body`,
    followed by a blank line and the metadata comment block recording last cleaned
    `2026-01-10T00:00:00Z` at the bottom of the content string.
@@ -240,7 +243,7 @@ Given: the workspace file `/ws/alpha_scope_a/parts/widget/widget_spec.md` is dir
    Realized by: the component's own in-place header rewrite, which appends to the existing
    feedback list without disturbing the remaining fields.
 
-2. The caller marks the file clean.
+1. The caller marks the file clean.
    Observed: the file on disk records last cleaned `2026-01-11T00:00:00Z` and no dirty reason.
    Realized by: the component's own in-place header rewrite, advancing the last cleaned timestamp
    to the current UTC timestamp and clearing the dirty reason.

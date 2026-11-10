@@ -15,6 +15,7 @@ from support.lib.lifecycle import (
 from autofab.parts.agent.lib import file_alias, node_config, agent_session
 from autofab.parts.dag.lib import dag_storage
 from autofab.parts.metadata.lib import src_metadata
+
 try:
     from support.lib import app_info
 except ImportError:
@@ -33,6 +34,7 @@ def _get_role_definitions() -> Dict[str, Any]:
         pass
     try:
         from autofab.parts.workspace.lib import role_registry
+
         reg = get_singleton(role_registry.WorkspaceRegistry)
         return {r.role_name: r for r in reg.list_roles()}
     except Exception:
@@ -95,6 +97,7 @@ def _bound_file_path(bound_file: Any) -> str:
 def _node_display_alias(node: dag_storage.DagNode) -> str:
     try:
         from . import coordinate
+
         coord = get_singleton(coordinate.SessionCoordinator)
         if coord is not None:
             return coord.get_alias_for_node(node)
@@ -104,21 +107,31 @@ def _node_display_alias(node: dag_storage.DagNode) -> str:
     try:
         cfg = get_singleton(node_config.NodeConfig)
         if cfg is not None:
-            if hasattr(cfg, "src_file_alias_by_node") and cfg.src_file_alias_by_node and node in cfg.src_file_alias_by_node:
+            if (
+                hasattr(cfg, "src_file_alias_by_node")
+                and cfg.src_file_alias_by_node
+                and node in cfg.src_file_alias_by_node
+            ):
                 return str(cfg.src_file_alias_by_node[node])
             if hasattr(cfg, "blame_targets_by_node") and cfg.blame_targets_by_node:
                 for bt_set in cfg.blame_targets_by_node.values():
                     for bt in bt_set:
                         if hasattr(bt, "owning_node") and bt.owning_node == node:
-                            return str(bt.relative_path if hasattr(bt, "relative_path") else bt)
+                            return str(
+                                bt.relative_path if hasattr(bt, "relative_path") else bt
+                            )
             if hasattr(cfg, "read_only_files") and cfg.read_only_files:
                 for ro in cfg.read_only_files:
                     if hasattr(ro, "owning_node") and ro.owning_node == node:
-                        return str(ro.relative_path if hasattr(ro, "relative_path") else ro)
+                        return str(
+                            ro.relative_path if hasattr(ro, "relative_path") else ro
+                        )
             if hasattr(cfg, "read_write_files") and cfg.read_write_files:
                 for rw in cfg.read_write_files:
                     if hasattr(rw, "owning_node") and rw.owning_node == node:
-                        return str(rw.relative_path if hasattr(rw, "relative_path") else rw)
+                        return str(
+                            rw.relative_path if hasattr(rw, "relative_path") else rw
+                        )
     except Exception:
         pass
 
@@ -132,14 +145,20 @@ def _node_display_alias(node: dag_storage.DagNode) -> str:
     else:
         pkg, unit_name = "", addr
 
-    role = str(node.role_address).split(":")[-1].strip().lower() if node.role_address else ""
+    role = (
+        str(node.role_address).split(":")[-1].strip().lower()
+        if node.role_address
+        else ""
+    )
     role_defs = _get_role_definitions()
     if role in role_defs:
         src_pat = _role_src_pattern(role_defs[role])
         if src_pat:
-            formatted = src_pat.replace("{unit_dir}", pkg).replace(
-                "{unit_name}", unit_name
-            ).strip("/")
+            formatted = (
+                src_pat.replace("{unit_dir}", pkg)
+                .replace("{unit_name}", unit_name)
+                .strip("/")
+            )
             if formatted:
                 return formatted
 
@@ -154,7 +173,10 @@ def _alias_manager_workspace_root() -> Optional[str]:
         return None
     if workspace_root is None:
         return None
-    return str(workspace_root.path if hasattr(workspace_root, "path") else workspace_root) or None
+    return (
+        str(workspace_root.path if hasattr(workspace_root, "path") else workspace_root)
+        or None
+    )
 
 
 def _alias_manager_bound_path(target: str) -> Optional[str]:
@@ -183,7 +205,9 @@ def _copy_file_with_perms(
         except OSError:
             pass
     shutil.copy2(src, dst)
-    mode = (0o555 if readonly else 0o755) if executable else (0o444 if readonly else 0o644)
+    mode = (
+        (0o555 if readonly else 0o755) if executable else (0o444 if readonly else 0o644)
+    )
     try:
         os.chmod(dst, mode)
     except OSError:
@@ -201,7 +225,9 @@ def _write_file_with_perms(
             pass
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)
-    mode = (0o555 if readonly else 0o755) if executable else (0o444 if readonly else 0o644)
+    mode = (
+        (0o555 if readonly else 0o755) if executable else (0o444 if readonly else 0o644)
+    )
     try:
         os.chmod(path, mode)
     except OSError:
@@ -233,7 +259,9 @@ def _copy_projected_file(src: str, dst: str, is_writable: bool) -> None:
     try:
         with open(src, "r", encoding="utf-8") as f:
             content = f.read()
-        projected = _project_for_role_workspace(content, os.path.basename(src), is_writable=is_writable)
+        projected = _project_for_role_workspace(
+            content, os.path.basename(src), is_writable=is_writable
+        )
         _write_file_with_perms(dst, projected, readonly=not is_writable)
     except (UnicodeDecodeError, OSError):
         _copy_file_with_perms(src, dst, readonly=not is_writable)
@@ -241,6 +269,7 @@ def _copy_projected_file(src: str, dst: str, is_writable: bool) -> None:
 
 def _file_sha256(path: str) -> Optional[str]:
     import hashlib
+
     try:
         with open(path, "rb") as f:
             return hashlib.sha256(f.read()).hexdigest()
@@ -248,7 +277,9 @@ def _file_sha256(path: str) -> Optional[str]:
         return None
 
 
-def _update_pull_manifest(workspace_dir: str, rel_path: str, main_file: str, ws_file: str) -> None:
+def _update_pull_manifest(
+    workspace_dir: str, rel_path: str, main_file: str, ws_file: str
+) -> None:
     try:
         state_dir = app_info.resolve_state_dir(workspace_dir)
         manifest_path = os.path.join(state_dir, "pull_manifest.json")
@@ -314,8 +345,14 @@ def _parse_pattern_info(src_pattern: str) -> Tuple[str, str, str]:
     return dir_name, prefix, suffix
 
 
-def _check_readonly_integrity(ws_root: str, main_root: str, dir_scope: str = "") -> Optional[str]:
-    if not ws_root or not main_root or os.path.realpath(ws_root) == os.path.realpath(main_root):
+def _check_readonly_integrity(
+    ws_root: str, main_root: str, dir_scope: str = ""
+) -> Optional[str]:
+    if (
+        not ws_root
+        or not main_root
+        or os.path.realpath(ws_root) == os.path.realpath(main_root)
+    ):
         return None
     scan_root = (
         os.path.join(ws_root, dir_scope)
@@ -324,8 +361,20 @@ def _check_readonly_integrity(ws_root: str, main_root: str, dir_scope: str = "")
     )
     for root, dirs, files in os.walk(scan_root):
         dirs[:] = [
-            d for d in dirs
-            if d not in ("support", ".git", ".venv", "__pycache__", ".antigravity", "bin", ".bazel", "staging_tests", "guides")
+            d
+            for d in dirs
+            if d
+            not in (
+                "support",
+                ".git",
+                ".venv",
+                "__pycache__",
+                ".antigravity",
+                "bin",
+                ".bazel",
+                "staging_tests",
+                "guides",
+            )
         ]
         if "__init__.py" in files:
             init_ws = os.path.join(root, "__init__.py")
@@ -335,14 +384,18 @@ def _check_readonly_integrity(ws_root: str, main_root: str, dir_scope: str = "")
                 try:
                     with open(init_ws, "rb") as f_ws, open(main_init, "rb") as f_main:
                         if f_ws.read() != f_main.read():
-                            return f"Read-only package file '{rel_p}' has been modified."
+                            return (
+                                f"Read-only package file '{rel_p}' has been modified."
+                            )
                 except OSError:
                     pass
             else:
                 try:
                     with open(init_ws, "r", encoding="utf-8", errors="replace") as f_ws:
                         if f_ws.read().strip():
-                            return f"Read-only package file '{rel_p}' has been populated."
+                            return (
+                                f"Read-only package file '{rel_p}' has been populated."
+                            )
                 except OSError:
                     pass
     return None
@@ -562,7 +615,9 @@ class SubmissionCoordinator(submit.SubmissionCoordinator):
                 )
 
         # 5. Commit clean state with change description
-        change_desc = dag_storage.ChangeDescription(summary_str) if summary_str else None
+        change_desc = (
+            dag_storage.ChangeDescription(summary_str) if summary_str else None
+        )
         storage.mark_node_clean(target_node, change_desc)
 
         return submit.SubmissionOutcome(
@@ -594,7 +649,11 @@ class SubmissionCoordinator(submit.SubmissionCoordinator):
                 except (json.JSONDecodeError, OSError):
                     pass
 
-        r_name = role_name or (meta.get("role_name") or meta.get("role") if meta else "") or ""
+        r_name = (
+            role_name
+            or (meta.get("role_name") or meta.get("role") if meta else "")
+            or ""
+        )
         clean_role = r_name.split(":")[-1].strip().lower()
         d_scope = (meta.get("dir_scope") or meta.get("parts_dir", "")) if meta else ""
 
@@ -603,13 +662,16 @@ class SubmissionCoordinator(submit.SubmissionCoordinator):
         else:
             try:
                 import importlib
+
                 ws_reg_mod = importlib.import_module("role_registry")
                 ws_reg = get_singleton(ws_reg_mod.WorkspaceRegistry)  # type: ignore
                 main_root = os.path.realpath(ws_reg.discover_repository_root(ws_root))
             except Exception:
                 main_root = os.path.realpath(ws_root)
 
-        integrity_violation = _check_readonly_integrity(ws_root, main_root, dir_scope=d_scope)
+        integrity_violation = _check_readonly_integrity(
+            ws_root, main_root, dir_scope=d_scope
+        )
         if integrity_violation:
             return submit.SubmissionOutcome(
                 accepted=False,
@@ -622,7 +684,9 @@ class SubmissionCoordinator(submit.SubmissionCoordinator):
         role_defs = _get_role_definitions()
         role_def = role_defs.get(clean_role)
         if role_def is None:
-            raise KeyError(f"Role '{clean_role}' not found in NodeConfig.role_definitions")
+            raise KeyError(
+                f"Role '{clean_role}' not found in NodeConfig.role_definitions"
+            )
         src_pat = _role_src_pattern(role_def)
         role_audit_tag = _role_audit_tag(role_def)
         is_auditor = bool(role_audit_tag or not src_pat)
@@ -639,9 +703,13 @@ class SubmissionCoordinator(submit.SubmissionCoordinator):
                     ),
                 )
 
-        target_path, unit_name = _resolve_submit_target(target, ws_root, clean_role, d_scope)
+        target_path, unit_name = _resolve_submit_target(
+            target, ws_root, clean_role, d_scope
+        )
         if not target_path or not os.path.isfile(target_path):
-            target_path, unit_name = _resolve_submit_target(target, main_root, clean_role, d_scope)
+            target_path, unit_name = _resolve_submit_target(
+                target, main_root, clean_role, d_scope
+            )
 
         if not target_path or not os.path.isfile(target_path):
             bound_path = _alias_manager_bound_path(target)
@@ -649,7 +717,8 @@ class SubmissionCoordinator(submit.SubmissionCoordinator):
                 target_path = bound_path
                 try:
                     _, unit_name, _ = _parse_unit_from_file_path(
-                        bound_path, main_root if bound_path.startswith(main_root) else ws_root
+                        bound_path,
+                        main_root if bound_path.startswith(main_root) else ws_root,
                     )
                 except (KeyError, ValueError, OSError):
                     pass
@@ -755,7 +824,7 @@ class SubmissionCoordinator(submit.SubmissionCoordinator):
                 accepted=False,
                 message=(
                     f"Error: Target '{target}' has been modified (CODE_HASH differs), but no change summary was provided.\n"
-                    f"Usage: bin/submit {target} \"<concise change summary>\""
+                    f'Usage: bin/submit {target} "<concise change summary>"'
                 ),
             )
 
@@ -816,6 +885,8 @@ class SubmissionCoordinator(submit.SubmissionCoordinator):
                         _update_pull_manifest(ws_root, comp_rel, main_comp, ws_comp)
 
         return submit.SubmissionOutcome(accepted=True, message=msg)
+
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-31T22:35:00Z

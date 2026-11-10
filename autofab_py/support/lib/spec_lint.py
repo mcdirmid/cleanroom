@@ -74,6 +74,7 @@ def find_all_parts_dirs() -> list[Path]:
                             pass
     return dirs
 
+
 CANONICAL_SECTIONS = [
     "## Intent",
     "## Factored Contracts",
@@ -162,7 +163,9 @@ class ComponentIndex:
             self.comp_contracts[stem] = c_slugs
 
             p_slugs: set[str] = set()
-            p_m = re.search(r"### Knowledge Provisions\n(.*?)(?=\n###|\n##|$)", content, re.DOTALL)
+            p_m = re.search(
+                r"### Knowledge Provisions\n(.*?)(?=\n###|\n##|$)", content, re.DOTALL
+            )
             if p_m:
                 for line in p_m.group(1).splitlines():
                     m = CONTRACT_BULLET_RE.match(line.strip())
@@ -223,7 +226,9 @@ def find_interface_deferred_requirements(interface_path: Path) -> list[str]:
     return deferred
 
 
-def lint_planning_file(file_path: Path, index: ComponentIndex | None = None) -> list[str]:
+def lint_planning_file(
+    file_path: Path, index: ComponentIndex | None = None
+) -> list[str]:
     errors: list[str] = []
     fname = file_path.name
     stem = file_path.stem
@@ -250,7 +255,10 @@ def lint_planning_file(file_path: Path, index: ComponentIndex | None = None) -> 
     start_idx = 0
     while start_idx < len(lines) and not lines[start_idx].strip():
         start_idx += 1
-    if start_idx < len(lines) and lines[start_idx].strip() in ("<!-- CLEANROOM METADATA", "<!-- AUTOFAB METADATA"):
+    if start_idx < len(lines) and lines[start_idx].strip() in (
+        "<!-- CLEANROOM METADATA",
+        "<!-- AUTOFAB METADATA",
+    ):
         while start_idx < len(lines) and lines[start_idx].strip() != "-->":
             start_idx += 1
         if start_idx < len(lines) and lines[start_idx].strip() == "-->":
@@ -271,7 +279,9 @@ def lint_planning_file(file_path: Path, index: ComponentIndex | None = None) -> 
 
     # 1. Header Check
     header_line = lines[start_idx].strip()
-    expected_type = "implementation" if is_impl else ("assembly" if is_asm else "interface")
+    expected_type = (
+        "implementation" if is_impl else ("assembly" if is_asm else "interface")
+    )
     expected_header = f"# {stem} {expected_type} component"
     if header_line != expected_header:
         errors.append(
@@ -297,9 +307,13 @@ def lint_planning_file(file_path: Path, index: ComponentIndex | None = None) -> 
                 f"{fname}:{idx + 1}: error: planning specification must not declare 'implements:' front-matter; implemented interface is specified in high-level specification"
             )
         elif line.startswith("types from "):
-            errors.append(f"{fname}:{idx + 1}: error: planning specification must not declare 'types from'")
+            errors.append(
+                f"{fname}:{idx + 1}: error: planning specification must not declare 'types from'"
+            )
         else:
-            errors.append(f"{fname}:{idx + 1}: error: unrecognized front-matter line: '{line}'")
+            errors.append(
+                f"{fname}:{idx + 1}: error: unrecognized front-matter line: '{line}'"
+            )
         idx += 1
 
     # 2b. Extract declared_imports and implements_targets from corresponding High-Level Specification
@@ -326,11 +340,15 @@ def lint_planning_file(file_path: Path, index: ComponentIndex | None = None) -> 
                 if h_stripped.startswith("imports:"):
                     h_raw = h_stripped[len("imports:") :].strip()
                     if h_raw:
-                        declared_imports.extend(i.strip() for i in h_raw.split(",") if i.strip())
+                        declared_imports.extend(
+                            i.strip() for i in h_raw.split(",") if i.strip()
+                        )
                 elif h_stripped.startswith("implements:"):
                     h_raw = h_stripped[len("implements:") :].strip()
                     if h_raw:
-                        implements_targets.extend(i.strip() for i in h_raw.split(",") if i.strip())
+                        implements_targets.extend(
+                            i.strip() for i in h_raw.split(",") if i.strip()
+                        )
         except OSError:
             pass
 
@@ -351,13 +369,17 @@ def lint_planning_file(file_path: Path, index: ComponentIndex | None = None) -> 
             subheaders[current_section] = []
         elif line.startswith("### "):
             if current_section is None:
-                errors.append(f"{fname}:{l_num}: error: subheader '{line}' appears before any section")
+                errors.append(
+                    f"{fname}:{l_num}: error: subheader '{line}' appears before any section"
+                )
             else:
                 subheaders[current_section].append((line, l_num))
 
         # Check for prohibited markdown tables
         if "|" in line and not line.startswith("```"):
-            errors.append(f"{fname}:{l_num}: error: markdown table syntax '|' prohibited in planning canvas: '{line}'")
+            errors.append(
+                f"{fname}:{l_num}: error: markdown table syntax '|' prohibited in planning canvas: '{line}'"
+            )
 
     # Verify canonical ## sections
     actual_sec_names = [s[0] for s in section_order]
@@ -370,40 +392,64 @@ def lint_planning_file(file_path: Path, index: ComponentIndex | None = None) -> 
     # Verify subheaders under ## Intent (must be none)
     if "## Intent" in subheaders and subheaders["## Intent"]:
         for sh, l_num in subheaders["## Intent"]:
-            errors.append(f"{fname}:{l_num}: error: subheader '{sh}' prohibited under '## Intent'")
+            errors.append(
+                f"{fname}:{l_num}: error: subheader '{sh}' prohibited under '## Intent'"
+            )
 
     # Verify subheaders under ## Factored Contracts
     if "## Factored Contracts" in subheaders:
         if is_ext:
-            errors.append(f"{fname}:1: error: '## Factored Contracts' prohibited in external specifications (_ext.md)")
+            errors.append(
+                f"{fname}:1: error: '## Factored Contracts' prohibited in external specifications (_ext.md)"
+            )
         factored_subs = [sh[0] for sh in subheaders["## Factored Contracts"]]
-        expected_factored_order = [s for s in ALLOWED_FACTORED_SUBHEADERS if s in factored_subs]
+        expected_factored_order = [
+            s for s in ALLOWED_FACTORED_SUBHEADERS if s in factored_subs
+        ]
         if factored_subs != expected_factored_order:
             errors.append(
                 f"{fname}:1: error: subheaders under '## Factored Contracts' invalid or out of order: {factored_subs}"
             )
         if "### Contracts" not in factored_subs:
-            errors.append(f"{fname}:1: error: '## Factored Contracts' missing required '### Contracts'")
+            errors.append(
+                f"{fname}:1: error: '## Factored Contracts' missing required '### Contracts'"
+            )
 
     # Verify subheaders under ## Grounding
     allowed_grounding_subs = (
         ALLOWED_GROUNDING_SUBHEADERS_EXT
         if is_ext
-        else (ALLOWED_GROUNDING_SUBHEADERS_IMPL if is_impl else ALLOWED_GROUNDING_SUBHEADERS_INTERFACE)
+        else (
+            ALLOWED_GROUNDING_SUBHEADERS_IMPL
+            if is_impl
+            else ALLOWED_GROUNDING_SUBHEADERS_INTERFACE
+        )
     )
     if "## Grounding" in subheaders:
         grounding_subs = [sh[0] for sh in subheaders["## Grounding"]]
-        expected_grounding_order = [s for s in allowed_grounding_subs if s in grounding_subs]
+        expected_grounding_order = [
+            s for s in allowed_grounding_subs if s in grounding_subs
+        ]
         if grounding_subs != expected_grounding_order:
             errors.append(
                 f"{fname}:1: error: subheaders under '## Grounding' invalid or out of order: {grounding_subs} (expected subset of {allowed_grounding_subs})"
             )
         if "### Knowledge Provisions" not in grounding_subs:
-            errors.append(f"{fname}:1: error: '## Grounding' missing required '### Knowledge Provisions'")
+            errors.append(
+                f"{fname}:1: error: '## Grounding' missing required '### Knowledge Provisions'"
+            )
         if is_ext and "### Knowledge Requirements" in grounding_subs:
-            errors.append(f"{fname}:1: error: '### Knowledge Requirements' prohibited in external specifications (_ext.md)")
-        if not is_ext and not is_impl and "### Knowledge Requirements" not in grounding_subs:
-            errors.append(f"{fname}:1: error: '## Grounding' missing required '### Knowledge Requirements'")
+            errors.append(
+                f"{fname}:1: error: '### Knowledge Requirements' prohibited in external specifications (_ext.md)"
+            )
+        if (
+            not is_ext
+            and not is_impl
+            and "### Knowledge Requirements" not in grounding_subs
+        ):
+            errors.append(
+                f"{fname}:1: error: '## Grounding' missing required '### Knowledge Requirements'"
+            )
     else:
         errors.append(f"{fname}:1: error: missing '## Grounding' section")
 
@@ -411,8 +457,12 @@ def lint_planning_file(file_path: Path, index: ComponentIndex | None = None) -> 
     contract_slugs: set[str] = set()
     provision_slugs: set[str] = set()
     inherited_deferred: list[str] = []
-    inherited_resolutions: dict[str, tuple[str, str, int]] = {}  # req -> (kind, target, l_num)
-    local_resolutions: dict[str, tuple[str, str, int]] = {}      # req -> (kind, target, l_num)
+    inherited_resolutions: dict[
+        str, tuple[str, str, int]
+    ] = {}  # req -> (kind, target, l_num)
+    local_resolutions: dict[
+        str, tuple[str, str, int]
+    ] = {}  # req -> (kind, target, l_num)
 
     current_sub: str | None = None
     last_req_text: str | None = None
@@ -428,14 +478,18 @@ def lint_planning_file(file_path: Path, index: ComponentIndex | None = None) -> 
             current_section = line
             current_sub = None
             if last_req_text and not req_had_subbullet:
-                errors.append(f"{fname}:{last_req_lineno}: error: requirement missing indented sub-bullet (- Grounded: or - Deferred:)")
+                errors.append(
+                    f"{fname}:{last_req_lineno}: error: requirement missing indented sub-bullet (- Grounded: or - Deferred:)"
+                )
             last_req_text = None
             continue
 
         if line.startswith("### "):
             current_sub = line
             if last_req_text and not req_had_subbullet:
-                errors.append(f"{fname}:{last_req_lineno}: error: requirement missing indented sub-bullet (- Grounded: or - Deferred:)")
+                errors.append(
+                    f"{fname}:{last_req_lineno}: error: requirement missing indented sub-bullet (- Grounded: or - Deferred:)"
+                )
             last_req_text = None
             continue
 
@@ -443,9 +497,13 @@ def lint_planning_file(file_path: Path, index: ComponentIndex | None = None) -> 
         if current_sub == "### Typing":
             if line.startswith("- "):
                 if not line.endswith("."):
-                    errors.append(f"{fname}:{l_num}: error: typing bullet must end with a period: '{line}'")
+                    errors.append(
+                        f"{fname}:{l_num}: error: typing bullet must end with a period: '{line}'"
+                    )
                 if re.search(r"\[[a-z0-9_]+\]$", line):
-                    errors.append(f"{fname}:{l_num}: error: typing bullet must not end with a bracketed slug: '{line}'")
+                    errors.append(
+                        f"{fname}:{l_num}: error: typing bullet must not end with a bracketed slug: '{line}'"
+                    )
 
         # Factored Contracts -> Contracts
         elif current_sub == "### Contracts":
@@ -458,7 +516,9 @@ def lint_planning_file(file_path: Path, index: ComponentIndex | None = None) -> 
                 else:
                     sentence, slug = m.group(1), m.group(2)
                     if slug in contract_slugs:
-                        errors.append(f"{fname}:{l_num}: error: duplicate contract slug '[{slug}]'")
+                        errors.append(
+                            f"{fname}:{l_num}: error: duplicate contract slug '[{slug}]'"
+                        )
                     contract_slugs.add(slug)
 
         # Factored Contracts -> Woven Contracts
@@ -473,7 +533,11 @@ def lint_planning_file(file_path: Path, index: ComponentIndex | None = None) -> 
                     woven_citations = parse_grounding_citations(m.group(1))
                     for comp, slug in woven_citations:
                         if comp:
-                            if comp not in declared_imports and comp not in implements_targets and comp != stem:
+                            if (
+                                comp not in declared_imports
+                                and comp not in implements_targets
+                                and comp != stem
+                            ):
                                 errors.append(
                                     f"{fname}:{l_num}: error: woven contract citation references undeclared component '{comp}'"
                                 )
@@ -481,7 +545,9 @@ def lint_planning_file(file_path: Path, index: ComponentIndex | None = None) -> 
                                 errors.append(
                                     f"{fname}:{l_num}: error: external component '{comp}' cannot be cited in woven contracts. External components provide knowledge provisions for grounding, not behavioral contracts for weaving."
                                 )
-                            elif slug in index.comp_provisions.get(comp, set()) and slug not in index.comp_contracts.get(comp, set()):
+                            elif slug in index.comp_provisions.get(
+                                comp, set()
+                            ) and slug not in index.comp_contracts.get(comp, set()):
                                 errors.append(
                                     f"{fname}:{l_num}: error: woven contract citation '[{slug}]' in '{comp}' is a knowledge provision slug, NOT a factored contract slug. Woven contracts must cite factored contracts (under '### Contracts')."
                                 )
@@ -510,56 +576,92 @@ def lint_planning_file(file_path: Path, index: ComponentIndex | None = None) -> 
                 else:
                     _, slug = m.group(1), m.group(2)
                     if slug in provision_slugs:
-                        errors.append(f"{fname}:{l_num}: error: duplicate provision slug '[{slug}]'")
+                        errors.append(
+                            f"{fname}:{l_num}: error: duplicate provision slug '[{slug}]'"
+                        )
                     provision_slugs.add(slug)
 
         # Grounding -> Inherited Deferred Requirements (in _impl.md)
         elif current_sub == "### Inherited Deferred Requirements":
             if raw_line.startswith("- "):
                 if last_req_text and not req_had_subbullet:
-                    errors.append(f"{fname}:{last_req_lineno}: error: inherited requirement missing indented Grounded: sub-bullet")
+                    errors.append(
+                        f"{fname}:{last_req_lineno}: error: inherited requirement missing indented Grounded: sub-bullet"
+                    )
                 if not line.endswith("."):
-                    errors.append(f"{fname}:{l_num}: error: inherited requirement bullet must end with a period: '{line}'")
+                    errors.append(
+                        f"{fname}:{l_num}: error: inherited requirement bullet must end with a period: '{line}'"
+                    )
                 if re.search(r"\[[a-z0-9_]+\]$", line):
-                    errors.append(f"{fname}:{l_num}: error: requirement bullet must not have a slug: '{line}'")
+                    errors.append(
+                        f"{fname}:{l_num}: error: requirement bullet must not have a slug: '{line}'"
+                    )
                 last_req_text = line[2:].strip()
                 last_req_lineno = l_num
                 req_had_subbullet = False
                 inherited_deferred.append(last_req_text)
-            elif raw_line.startswith("  - ") or raw_line.startswith("    - ") or raw_line.startswith("\t- "):
+            elif (
+                raw_line.startswith("  - ")
+                or raw_line.startswith("    - ")
+                or raw_line.startswith("\t- ")
+            ):
                 gm = GROUNDED_SUBBULLET_RE.match(raw_line)
                 dm = DEFERRED_SUBBULLET_RE.match(raw_line)
                 if dm:
-                    errors.append(f"{fname}:{l_num}: error: 'Deferred:' prohibited in implementation specifications (Zero-Deferred Invariant)")
+                    errors.append(
+                        f"{fname}:{l_num}: error: 'Deferred:' prohibited in implementation specifications (Zero-Deferred Invariant)"
+                    )
                     req_had_subbullet = True
                 elif gm:
                     cit_str = gm.group(1)
                     if last_req_text:
-                        inherited_resolutions[last_req_text] = ("grounded", cit_str, l_num)
+                        inherited_resolutions[last_req_text] = (
+                            "grounded",
+                            cit_str,
+                            l_num,
+                        )
                     req_had_subbullet = True
                 else:
-                    errors.append(f"{fname}:{l_num}: error: invalid sub-bullet format: '{raw_line}'")
+                    errors.append(
+                        f"{fname}:{l_num}: error: invalid sub-bullet format: '{raw_line}'"
+                    )
 
         # Grounding -> Knowledge Requirements
         elif current_sub == "### Knowledge Requirements":
             if raw_line.startswith("- "):
                 if last_req_text and not req_had_subbullet:
-                    errors.append(f"{fname}:{last_req_lineno}: error: requirement missing indented sub-bullet (- Grounded: or - Deferred:)")
+                    errors.append(
+                        f"{fname}:{last_req_lineno}: error: requirement missing indented sub-bullet (- Grounded: or - Deferred:)"
+                    )
                 if not line.endswith("."):
-                    errors.append(f"{fname}:{l_num}: error: knowledge requirement bullet must end with a period: '{line}'")
+                    errors.append(
+                        f"{fname}:{l_num}: error: knowledge requirement bullet must end with a period: '{line}'"
+                    )
                 if re.search(r"\[[a-z0-9_]+\]$", line):
-                    errors.append(f"{fname}:{l_num}: error: requirement bullet must not have a slug: '{line}'")
+                    errors.append(
+                        f"{fname}:{l_num}: error: requirement bullet must not have a slug: '{line}'"
+                    )
                 last_req_text = line[2:].strip()
                 last_req_lineno = l_num
                 req_had_subbullet = False
-            elif raw_line.startswith("  - ") or raw_line.startswith("    - ") or raw_line.startswith("\t- "):
+            elif (
+                raw_line.startswith("  - ")
+                or raw_line.startswith("    - ")
+                or raw_line.startswith("\t- ")
+            ):
                 gm = GROUNDED_SUBBULLET_RE.match(raw_line)
                 dm = DEFERRED_SUBBULLET_RE.match(raw_line)
                 if dm:
                     if is_impl:
-                        errors.append(f"{fname}:{l_num}: error: 'Deferred:' prohibited in implementation specifications (Zero-Deferred Invariant)")
+                        errors.append(
+                            f"{fname}:{l_num}: error: 'Deferred:' prohibited in implementation specifications (Zero-Deferred Invariant)"
+                        )
                     if last_req_text:
-                        local_resolutions[last_req_text] = ("deferred", dm.group(1), l_num)
+                        local_resolutions[last_req_text] = (
+                            "deferred",
+                            dm.group(1),
+                            l_num,
+                        )
                     req_had_subbullet = True
                 elif gm:
                     cit_str = gm.group(1)
@@ -567,10 +669,14 @@ def lint_planning_file(file_path: Path, index: ComponentIndex | None = None) -> 
                         local_resolutions[last_req_text] = ("grounded", cit_str, l_num)
                     req_had_subbullet = True
                 else:
-                    errors.append(f"{fname}:{l_num}: error: invalid sub-bullet under requirement: '{raw_line}'")
+                    errors.append(
+                        f"{fname}:{l_num}: error: invalid sub-bullet under requirement: '{raw_line}'"
+                    )
 
     if last_req_text and not req_had_subbullet:
-        errors.append(f"{fname}:{last_req_lineno}: error: requirement missing indented sub-bullet (- Grounded: or - Deferred:)")
+        errors.append(
+            f"{fname}:{last_req_lineno}: error: requirement missing indented sub-bullet (- Grounded: or - Deferred:)"
+        )
 
     # 5. Interface Deferral Parity Audit (for _impl.md)
     if is_impl and implements_targets:
@@ -585,7 +691,9 @@ def lint_planning_file(file_path: Path, index: ComponentIndex | None = None) -> 
                         break
 
             if interface_planning_path.exists():
-                all_expected_deferred.extend(find_interface_deferred_requirements(interface_planning_path))
+                all_expected_deferred.extend(
+                    find_interface_deferred_requirements(interface_planning_path)
+                )
 
         for exp in all_expected_deferred:
             if exp not in inherited_deferred:
@@ -606,7 +714,9 @@ def lint_planning_file(file_path: Path, index: ComponentIndex | None = None) -> 
             valid_provision_count = 0
             for comp, slug in citations:
                 if comp is not None:
-                    if comp.endswith("_ext") or slug in index.comp_provisions.get(comp, set()):
+                    if comp.endswith("_ext") or slug in index.comp_provisions.get(
+                        comp, set()
+                    ):
                         valid_provision_count += 1
                 else:
                     if slug in provision_slugs:
@@ -637,7 +747,11 @@ def lint_planning_file(file_path: Path, index: ComponentIndex | None = None) -> 
                     continue
 
                 if comp is not None:
-                    if comp not in declared_imports and comp not in implements_targets and comp != stem:
+                    if (
+                        comp not in declared_imports
+                        and comp not in implements_targets
+                        and comp != stem
+                    ):
                         errors.append(
                             f"{fname}:{l_num}: error: grounding citation references undeclared component '{comp}'"
                         )
@@ -645,7 +759,9 @@ def lint_planning_file(file_path: Path, index: ComponentIndex | None = None) -> 
                         errors.append(
                             f"{fname}:{l_num}: error: grounding citation '[{slug}]' in '{comp}' is a factored contract slug, NOT a knowledge provision slug. Knowledge requirements must be grounded by knowledge provisions (under '### Knowledge Provisions'), not factored contracts."
                         )
-                    elif comp.endswith("_ext") or slug in index.comp_provisions.get(comp, set()):
+                    elif comp.endswith("_ext") or slug in index.comp_provisions.get(
+                        comp, set()
+                    ):
                         # Valid qualified imported provision (external boundary or indexed provision)
                         pass
                     else:
@@ -734,7 +850,9 @@ def main() -> int:
         )
         return 1
 
-    print(f"[OK] {len(expanded_targets)} planning specifications passed structural & epistemic lint.")
+    print(
+        f"[OK] {len(expanded_targets)} planning specifications passed structural & epistemic lint."
+    )
     return 0
 
 

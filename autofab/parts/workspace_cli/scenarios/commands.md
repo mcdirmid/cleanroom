@@ -7,7 +7,7 @@ Given: an active role workspace with no dirty pending work and one ready target.
 1. The caller executes `run_get_work` for the active role.
    Observed: the handler presents the ready target, records it into pending work, formats actionable guidance, and returns exit code 0.
 
-2. The caller executes `run_get_work` again while the assigned target remains dirty.
+1. The caller executes `run_get_work` again while the assigned target remains dirty.
    Observed: the handler rejects execution, reporting that pending targets remain dirty, and returns exit code 1.
 
 ## Scenario 2 — Executing check_files command
@@ -24,10 +24,16 @@ Given: an active role workspace with a modified target passing verification.
 1. The caller executes `run_submit` with a producer change summary.
    Observed: the handler validates the submission, appends a record to the event log in both the canonical repository and local workspace, clears the target from pending work, and returns exit code 0.
 
-2. The caller executes `run_submit` when verification checks fail.
+1. The caller executes `run_submit` when verification checks fail and no blame is staged.
    Observed: the handler rejects submission and returns a non-zero exit code.
 
-3. The caller executes `run_submit` on a modified target before running `run_check_files`.
+1. The caller executes `run_submit` in an auditor role without having staged preceding blame.
+   Observed: the handler rejects submission, reporting that blame must be staged or fail invoked, and returns exit code 1.
+
+1. The caller executes `run_submit` after staging blame via `run_blame` for a failing target.
+   Observed: the handler commits staged blame to culprit metadata, marks culprits dirty, records blame in the blame buffer and event log, clears the target from pending work, and returns exit code 0.
+
+1. The caller executes `run_submit` on a modified target before running `run_check_files`.
    Observed: the handler rejects submission, reports that `check_files` must be run on the modified target, and returns exit code 1.
 
 ## Scenario 4 — Executing blame and fail commands
@@ -35,13 +41,16 @@ Given: an active role workspace with a modified target passing verification.
 Given: an active role workspace with a pending culprit target.
 
 1. The caller executes `run_blame` with a valid single-paragraph critique.
-   Observed: the handler delegates blame attribution, appends a blame record to the event log in both the canonical repository and local workspace, clears pending work, and returns exit code 0.
+   Observed: the handler stages the blame critique into the workspace staged blame buffer, prompts the caller to stage additional blame or commit via `bin/submit`, and returns exit code 0.
 
-2. The caller executes `run_fail` with a failure diagnostic.
+1. The caller executes `run_fail` with a failure diagnostic.
    Observed: the handler records the failure diagnostic, clears pending work, and returns exit code 0.
 
-3. The caller executes `run_blame` or `run_fail` while workspace target files remain modified without having been checked via `run_check_files`.
+1. The caller executes `run_blame` or `run_fail` while workspace target files remain modified without having been checked via `run_check_files`.
    Observed: the handler rejects the operation, reporting that `check_files` must be run on the modified target files, and returns exit code 1.
+
+1. The caller executes `run_blame` while the structured blame experiment is active.
+   Observed: the handler validates the structured blame tuple against low-level specifications, taxonomy, noun phrase facet constraints, and symbol embargo rules, staging compliant blame or rejecting malformed blame with exit code 1.
 
 ## Scenario 5 — Executing coverage command
 
@@ -57,11 +66,21 @@ Given: an active Autofab repository directory.
 1. The caller executes `run_commission` for a declared role.
    Observed: the handler provisions the isolated role workspace, copies required contracts, and returns exit code 0.
 
-2. The caller executes `run_refresh_sys`.
+1. The caller executes `run_refresh_sys`.
    Observed: the handler recopies system configuration files, bin utilities, and companion guides into active role workspaces, returning exit code 0.
+
+## Scenario 7 — Executing reject command
+
+Given: an active role workspace with an assigned target carrying active feedback.
+
+1. The caller executes `run_reject` while the target file has been modified.
+   Observed: the handler rejects the operation, reporting that modified files must be submitted with `submit`, and returns exit code 1.
+
+1. The caller executes `run_reject` on an unmodified target file carrying active feedback.
+   Observed: the handler scrubs the feedback header block from the target file, records the rejection rationale in the blame buffer and event log, clears the target from pending work, and returns exit code 0.
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-14T17:50:00Z
-CHANGE: Define commands interface scenarios
+LAST_CHANGED: 2026-11-07T10:20:00Z
+CHANGE: Add reject command scenarios and update submit and blame staging scenarios
 -->

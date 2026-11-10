@@ -10,6 +10,7 @@ from autofab.parts.dag.lib import dag_storage
 from autofab.parts.agent.lib import file_alias, agent_config, node_config
 from autofab.parts.agent.lib.session import session as agent_session
 from autofab.parts.core.lib import file_paths
+
 try:
     from support.lib import app_info
 except ImportError:
@@ -51,8 +52,13 @@ class CommandVerificationCheck(node_config.VerificationCheck):
             env["PYTHONPATH"] = os.pathsep.join(pypaths)
         try:
             res = subprocess.run(
-                self._command, shell=True, capture_output=True, text=True,
-                cwd=self._cwd, env=env, stdin=subprocess.DEVNULL,
+                self._command,
+                shell=True,
+                capture_output=True,
+                text=True,
+                cwd=self._cwd,
+                env=env,
+                stdin=subprocess.DEVNULL,
             )
             out = res.stdout
             if res.stderr:
@@ -73,7 +79,13 @@ def _workspace_path(relative: str) -> file_paths.WorkspacePath:
 def _safe_get_singleton(cls: Any) -> Any:
     try:
         return get_singleton(cls)
-    except (LifecycleResolutionError, KeyError, RuntimeError, ValueError, AttributeError):
+    except (
+        LifecycleResolutionError,
+        KeyError,
+        RuntimeError,
+        ValueError,
+        AttributeError,
+    ):
         return None
 
 
@@ -94,11 +106,13 @@ def _parse_guide_markdown(content: str) -> node_config.NodeGuide:
         elif t.startswith("verification failure"):
             vf_lines = list(sec)
         elif not t.startswith("lint checks"):
-            sections.append(node_config.StepSection(
-                index=node_config.StepIndex(len(sections)),
-                title=node_config.StepTitle(title),
-                content=node_config.StepContent("\n".join(sec).strip()),
-            ))
+            sections.append(
+                node_config.StepSection(
+                    index=node_config.StepIndex(len(sections)),
+                    title=node_config.StepTitle(title),
+                    content=node_config.StepContent("\n".join(sec).strip()),
+                )
+            )
 
     for line in lines:
         if line.startswith("## "):
@@ -109,9 +123,15 @@ def _parse_guide_markdown(content: str) -> node_config.NodeGuide:
     flush(curr_title, curr_sec)
 
     clean_preamble = [l for l in preamble_lines if not l.startswith("# ")]
-    combined = (clean_preamble if any(l.strip() for l in clean_preamble) else []) + summary_lines
+    combined = (
+        clean_preamble if any(l.strip() for l in clean_preamble) else []
+    ) + summary_lines
     summary = "\n".join(combined or preamble_lines).strip()
-    vf = node_config.VerificationFailureInstructions("\n".join(vf_lines).strip()) if vf_lines is not None else None
+    vf = (
+        node_config.VerificationFailureInstructions("\n".join(vf_lines).strip())
+        if vf_lines is not None
+        else None
+    )
     return node_config.NodeGuide(
         summary=node_config.GuideSummary(summary),
         sections=sections,
@@ -143,7 +163,8 @@ def _search_paths(rel_paths: Sequence[str], pkg_path: str = "") -> List[str]:
 
     def add(p: str) -> None:
         if p and p not in seen:
-            seen.add(p); res.append(p)
+            seen.add(p)
+            res.append(p)
 
     for rp in rel_paths:
         if not rp:
@@ -163,15 +184,22 @@ def _search_paths(rel_paths: Sequence[str], pkg_path: str = "") -> List[str]:
             if pv:
                 for c in [os.path.join(pv, rp), os.path.join(pv, "guides", bfn)]:
                     add(c)
-                    if ws_root: add(os.path.join(ws_root, c))
+                    if ws_root:
+                        add(os.path.join(ws_root, c))
     return res
 
 
 def _norm_node(target_str: str) -> dag_storage.DagNode:
     if "#" in target_str:
         u, r = target_str.split("#", 1)
-        return dag_storage.DagNode(unit_address=dag_storage.UnitAddress(u), role_address=dag_storage.RoleAddress(r))
-    return dag_storage.DagNode(unit_address=dag_storage.UnitAddress(target_str), role_address=dag_storage.RoleAddress(""))
+        return dag_storage.DagNode(
+            unit_address=dag_storage.UnitAddress(u),
+            role_address=dag_storage.RoleAddress(r),
+        )
+    return dag_storage.DagNode(
+        unit_address=dag_storage.UnitAddress(target_str),
+        role_address=dag_storage.RoleAddress(""),
+    )
 
 
 def _extract_pkg(n: dag_storage.DagNode) -> str:
@@ -192,7 +220,11 @@ def _get_manifest(n: dag_storage.DagNode) -> Optional[Any]:
 
 
 def _make_bound(pkg: str, s: str, cls: Any, owner: dag_storage.DagNode) -> Any:
-    norm_rel = os.path.normpath(s.lstrip("/") if (s.startswith(pkg + "/") or (pkg and s.startswith("/" + pkg + "/"))) else os.path.join(pkg, s))
+    norm_rel = os.path.normpath(
+        s.lstrip("/")
+        if (s.startswith(pkg + "/") or (pkg and s.startswith("/" + pkg + "/")))
+        else os.path.join(pkg, s)
+    )
     return cls(
         relative_path=file_alias.RelativePath(norm_rel),
         workspace_path=_workspace_path(norm_rel),
@@ -222,7 +254,8 @@ def _load_per_node_info(n: dag_storage.DagNode) -> node_config.PerNodeInfo:
     msgs = storage.get_messages(n) if storage else ()
     feedback = tuple(
         node_config.NodeFeedback(m.content)
-        for m in msgs if isinstance(m, dag_storage.FeedbackMessage) and m.content
+        for m in msgs
+        if isinstance(m, dag_storage.FeedbackMessage) and m.content
     )
     manifest = _get_manifest(n)
     pkg_path = _extract_pkg(n)
@@ -230,10 +263,12 @@ def _load_per_node_info(n: dag_storage.DagNode) -> node_config.PerNodeInfo:
     rw_files: Set[file_alias.ReadWriteFile] = set()
     src_alias: Optional[file_alias.RelativePath] = None
     if manifest and manifest.source_file:
-        rw = _make_bound(pkg_path, str(manifest.source_file), file_alias.ReadWriteFile, n)
+        rw = _make_bound(
+            pkg_path, str(manifest.source_file), file_alias.ReadWriteFile, n
+        )
         rw_files.add(rw)
         src_alias = rw.relative_path
-    for s_src in (manifest.silent_source_files if manifest else ()):
+    for s_src in manifest.silent_source_files if manifest else ():
         rw_files.add(_make_bound(pkg_path, str(s_src), file_alias.ReadWriteFile, n))
 
     templates: Dict[file_alias.BoundFile, file_alias.FileContent] = {}
@@ -242,18 +277,29 @@ def _load_per_node_info(n: dag_storage.DagNode) -> node_config.PerNodeInfo:
         if t_content is not None:
             c_obj = file_alias.FileContent(t_content)
             for rw in rw_files:
-                if rw.owning_node == n: templates[rw] = c_obj
+                if rw.owning_node == n:
+                    templates[rw] = c_obj
 
-    unit_name = n.unit_address.split(":")[-1] if ":" in n.unit_address else os.path.basename(n.unit_address)
+    unit_name = (
+        n.unit_address.split(":")[-1]
+        if ":" in n.unit_address
+        else os.path.basename(n.unit_address)
+    )
     template_parameters: Dict[node_config.TemplateParamKey, Any] = {
         node_config.TemplateParamKey("unit_name"): unit_name,
         node_config.TemplateParamKey("unit_dir"): pkg_path,
         node_config.TemplateParamKey("name"): unit_name,
         node_config.TemplateParamKey("dir"): pkg_path,
     }
-    allows_step_mode = manifest.allows_step_mode if manifest and manifest.allows_step_mode is not None else True
+    allows_step_mode = (
+        manifest.allows_step_mode
+        if manifest and manifest.allows_step_mode is not None
+        else True
+    )
 
-    guide_target = str(manifest.guide_target) if manifest and manifest.guide_target else None
+    guide_target = (
+        str(manifest.guide_target) if manifest and manifest.guide_target else None
+    )
     guide_file: Optional[file_alias.UnboundFile] = None
     guide: Optional[node_config.NodeGuide] = None
     resolved_guide_path: Optional[str] = None
@@ -262,17 +308,31 @@ def _load_per_node_info(n: dag_storage.DagNode) -> node_config.PerNodeInfo:
         guide_manifest = _get_manifest(_norm_node(guide_target))
         if guide_manifest is not None and guide_manifest.source_file:
             guide_paths.append(str(guide_manifest.source_file))
-        g_fn = guide_target.split(":")[-1] if ":" in guide_target else os.path.basename(guide_target)
-        if not g_fn.endswith(".md"): g_fn += ".md"
+        g_fn = (
+            guide_target.split(":")[-1]
+            if ":" in guide_target
+            else os.path.basename(guide_target)
+        )
+        if not g_fn.endswith(".md"):
+            g_fn += ".md"
         guide_file = file_alias.UnboundFile(relative_path=file_alias.RelativePath(g_fn))
-        guide_paths.extend([g_fn, guide_target, f"{guide_target}.md", os.path.basename(guide_target), f"{os.path.basename(guide_target)}.md"])
+        guide_paths.extend(
+            [
+                g_fn,
+                guide_target,
+                f"{guide_target}.md",
+                os.path.basename(guide_target),
+                f"{os.path.basename(guide_target)}.md",
+            ]
+        )
         cands = _search_paths(guide_paths, pkg_path)
         for c in cands:
             if c and os.path.isfile(c):
                 resolved_guide_path = c
                 break
         g_text = _read_cand_file(cands)
-        if g_text is not None: guide = _parse_guide_markdown(g_text)
+        if g_text is not None:
+            guide = _parse_guide_markdown(g_text)
 
     deps = list(manifest.dependencies) if manifest else []
     star_deps = list(manifest.star_dependencies) if manifest else []
@@ -284,7 +344,11 @@ def _load_per_node_info(n: dag_storage.DagNode) -> node_config.PerNodeInfo:
     read_only_files: Set[file_alias.ReadOnlyFile] = set()
     if resolved_guide_path:
         ws_root = os.environ.get("BUILD_WORKSPACE_DIRECTORY", "") or os.getcwd()
-        g_rel = os.path.relpath(resolved_guide_path, ws_root) if os.path.isabs(resolved_guide_path) else resolved_guide_path
+        g_rel = (
+            os.path.relpath(resolved_guide_path, ws_root)
+            if os.path.isabs(resolved_guide_path)
+            else resolved_guide_path
+        )
         read_only_files.add(
             file_alias.ReadOnlyFile(
                 relative_path=file_alias.RelativePath(g_rel),
@@ -293,21 +357,27 @@ def _load_per_node_info(n: dag_storage.DagNode) -> node_config.PerNodeInfo:
             )
         )
     rw_paths = {rw.workspace_path.path for rw in rw_files}
-    referenced_deps = list(dict.fromkeys(deps + [sd for sd in star_deps if sd not in deps] + feedback_deps))
+    referenced_deps = list(
+        dict.fromkeys(deps + [sd for sd in star_deps if sd not in deps] + feedback_deps)
+    )
     for dep_label in referenced_deps:
         dep_str = str(dep_label)
-        if dep_str in silent_deps: continue
+        if dep_str in silent_deps:
+            continue
         dep_node = _norm_node(dep_str)
         dep_m = _get_manifest(dep_node)
         dep_pkg = _extract_pkg(dep_node)
         for ds in _dependency_source_paths(dep_str, dep_m):
             bf = _make_bound(dep_pkg, ds, file_alias.ReadOnlyFile, dep_node)
-            if bf.workspace_path.path not in rw_paths: read_only_files.add(bf)
-            if dep_str in feedback_labels: blame_targets.add(bf)
+            if bf.workspace_path.path not in rw_paths:
+                read_only_files.add(bf)
+            if dep_str in feedback_labels:
+                blame_targets.add(bf)
 
     for fb_label in feedback_deps:
         fb_str = str(fb_label)
-        if fb_str not in silent_deps: continue
+        if fb_str not in silent_deps:
+            continue
         fb_node = _norm_node(fb_str)
         fb_m = _get_manifest(fb_node)
         for ds in _dependency_source_paths(fb_str, fb_m):
@@ -316,7 +386,11 @@ def _load_per_node_info(n: dag_storage.DagNode) -> node_config.PerNodeInfo:
             )
 
     ws_dir = os.environ.get("BUILD_WORKSPACE_DIRECTORY") or os.getcwd()
-    v_cmd = str(manifest.verification_check).strip() if manifest and manifest.verification_check else ""
+    v_cmd = (
+        str(manifest.verification_check).strip()
+        if manifest and manifest.verification_check
+        else ""
+    )
     v_checks = (_CommandVerificationCheck(command=v_cmd, cwd=ws_dir),) if v_cmd else ()
 
     v_success_msg = None
@@ -326,11 +400,18 @@ def _load_per_node_info(n: dag_storage.DagNode) -> node_config.PerNodeInfo:
         )
 
     return node_config.PerNodeInfo(
-        read_only_files=read_only_files, read_write_files=rw_files, templates=templates,
-        template_parameters=template_parameters, allows_step_mode=allows_step_mode,
-        guide_file=guide_file, guide=guide, blame_targets=blame_targets,
-        verification_checks=v_checks, src_file_alias=src_alias,
-        verification_success_message=v_success_msg, feedback=feedback,
+        read_only_files=read_only_files,
+        read_write_files=rw_files,
+        templates=templates,
+        template_parameters=template_parameters,
+        allows_step_mode=allows_step_mode,
+        guide_file=guide_file,
+        guide=guide,
+        blame_targets=blame_targets,
+        verification_checks=v_checks,
+        src_file_alias=src_alias,
+        verification_success_message=v_success_msg,
+        feedback=feedback,
     )
 
 
@@ -343,101 +424,171 @@ class NodeConfig(node_config.NodeConfig):
 
     def _sync_cache(self) -> None:
         role_cfg = _safe_get_singleton(node_config.RoleConfig)
-        if not role_cfg or role_cfg.version == self._cached_version: return
+        if not role_cfg or role_cfg.version == self._cached_version:
+            return
         active = set(role_cfg.nodes)
         for n in list(self._per_node_cache.keys()):
-            if n not in active: del self._per_node_cache[n]
+            if n not in active:
+                del self._per_node_cache[n]
         for n in role_cfg.nodes:
-            if n not in self._per_node_cache: self._per_node_cache[n] = _load_per_node_info(n)
+            if n not in self._per_node_cache:
+                self._per_node_cache[n] = _load_per_node_info(n)
         self._cached_version = role_cfg.version
 
     def _active_per_node_infos(self) -> List[node_config.PerNodeInfo]:
         role_cfg = _safe_get_singleton(node_config.RoleConfig)
-        return [self._per_node_cache[n] for n in role_cfg.nodes if n in self._per_node_cache] if role_cfg else list(self._per_node_cache.values())
+        return (
+            [
+                self._per_node_cache[n]
+                for n in role_cfg.nodes
+                if n in self._per_node_cache
+            ]
+            if role_cfg
+            else list(self._per_node_cache.values())
+        )
 
     # Contract: mapping each active node to its per node info
     @property
-    def per_node_info_by_node(self) -> Mapping[dag_storage.DagNode, node_config.PerNodeInfo]:
-        self._sync_cache(); return dict(self._per_node_cache)
+    def per_node_info_by_node(
+        self,
+    ) -> Mapping[dag_storage.DagNode, node_config.PerNodeInfo]:
+        self._sync_cache()
+        return dict(self._per_node_cache)
 
     # Contract: aggregate read-only files across active nodes, excluding read-write files
     @property
     def read_only_files(self) -> Set[file_alias.ReadOnlyFile]:
-        self._sync_cache(); rw_paths = {rw.workspace_path.path for rw in self.read_write_files}
-        return {ro for pni in self._active_per_node_infos() for ro in pni.read_only_files
-                if ro.workspace_path.path not in rw_paths and not (self.is_step_mode and self.guide_file and ro.relative_path == self.guide_file.relative_path)}
+        self._sync_cache()
+        rw_paths = {rw.workspace_path.path for rw in self.read_write_files}
+        return {
+            ro
+            for pni in self._active_per_node_infos()
+            for ro in pni.read_only_files
+            if ro.workspace_path.path not in rw_paths
+            and not (
+                self.is_step_mode
+                and self.guide_file
+                and ro.relative_path == self.guide_file.relative_path
+            )
+        }
 
     # Contract: aggregate read-write files and templates across active nodes
     @property
     def read_write_files(self) -> Set[file_alias.ReadWriteFile]:
-        self._sync_cache(); return {f for pni in self._active_per_node_infos() for f in pni.read_write_files}
+        self._sync_cache()
+        return {
+            f for pni in self._active_per_node_infos() for f in pni.read_write_files
+        }
 
     # Contract: check step mode eligibility on the single active node manifest
     @property
     def allows_step_mode(self) -> bool:
-        self._sync_cache(); infos = self._active_per_node_infos()
-        return infos[0].allows_step_mode if len(infos) == 1 else (True if not infos else False)
+        self._sync_cache()
+        infos = self._active_per_node_infos()
+        return (
+            infos[0].allows_step_mode
+            if len(infos) == 1
+            else (True if not infos else False)
+        )
 
     # Contract: activate step mode when permitted by agent config with single-node session lacking feedback
     @property
     def is_step_mode(self) -> bool:
-        self._sync_cache(); infos = self._active_per_node_infos()
-        if len(infos) != 1: return False
+        self._sync_cache()
+        infos = self._active_per_node_infos()
+        if len(infos) != 1:
+            return False
         m_cfg = _safe_get_singleton(agent_config.AgentConfig)
-        return bool(m_cfg and m_cfg.is_step_mode and self.allows_step_mode and not self.feedback)
+        return bool(
+            m_cfg and m_cfg.is_step_mode and self.allows_step_mode and not self.feedback
+        )
 
     # Contract: unbound guide file configured when guide step mode is active
     @property
     def guide_file(self) -> Optional[file_alias.UnboundFile]:
-        self._sync_cache(); infos = self._active_per_node_infos()
+        self._sync_cache()
+        infos = self._active_per_node_infos()
         return infos[0].guide_file if len(infos) == 1 else None
 
     # Contract: templates mapping read-write files to initial file content across active nodes
     @property
     def templates(self) -> Mapping[file_alias.BoundFile, file_alias.FileContent]:
-        self._sync_cache(); return {k: v for pni in self._active_per_node_infos() for k, v in pni.templates.items()}
+        self._sync_cache()
+        return {
+            k: v
+            for pni in self._active_per_node_infos()
+            for k, v in pni.templates.items()
+        }
 
     # Contract: parameter bindings for template evaluation across active nodes
     @property
     def template_parameters(self) -> Mapping[node_config.TemplateParamKey, Any]:
-        self._sync_cache(); return {k: v for pni in self._active_per_node_infos() for k, v in pni.template_parameters.items()}
+        self._sync_cache()
+        return {
+            k: v
+            for pni in self._active_per_node_infos()
+            for k, v in pni.template_parameters.items()
+        }
 
     # Contract: structured instructional text for guide step mode
     @property
     def guide(self) -> Optional[node_config.NodeGuide]:
-        self._sync_cache(); infos = self._active_per_node_infos()
+        self._sync_cache()
+        infos = self._active_per_node_infos()
         return infos[0].guide if len(infos) == 1 else None
 
     # Contract: bound files owned by upstream dependency nodes mapped by session node
     @property
-    def blame_targets_by_node(self) -> Mapping[dag_storage.DagNode, Set[file_alias.BoundFile]]:
-        self._sync_cache(); return {n: set(pni.blame_targets) for n, pni in self._per_node_cache.items()}
+    def blame_targets_by_node(
+        self,
+    ) -> Mapping[dag_storage.DagNode, Set[file_alias.BoundFile]]:
+        self._sync_cache()
+        return {n: set(pni.blame_targets) for n, pni in self._per_node_cache.items()}
 
     # Contract: aggregate verification checks across active nodes
     @property
     def verification_checks(self) -> Sequence[node_config.VerificationCheck]:
-        self._sync_cache(); return [c for pni in self._active_per_node_infos() for c in pni.verification_checks]
+        self._sync_cache()
+        return [
+            c for pni in self._active_per_node_infos() for c in pni.verification_checks
+        ]
 
     # Contract: session verification checks mapped by session node
     @property
-    def verification_checks_by_node(self) -> Mapping[dag_storage.DagNode, Sequence[node_config.VerificationCheck]]:
-        self._sync_cache(); return {n: tuple(pni.verification_checks) for n, pni in self._per_node_cache.items()}
+    def verification_checks_by_node(
+        self,
+    ) -> Mapping[dag_storage.DagNode, Sequence[node_config.VerificationCheck]]:
+        self._sync_cache()
+        return {
+            n: tuple(pni.verification_checks) for n, pni in self._per_node_cache.items()
+        }
 
     # Contract: relative path of declared source file alias mapped by session node
     @property
-    def src_file_alias_by_node(self) -> Mapping[dag_storage.DagNode, file_alias.RelativePath]:
-        self._sync_cache(); return {n: pni.src_file_alias for n, pni in self._per_node_cache.items() if pni.src_file_alias is not None}
+    def src_file_alias_by_node(
+        self,
+    ) -> Mapping[dag_storage.DagNode, file_alias.RelativePath]:
+        self._sync_cache()
+        return {
+            n: pni.src_file_alias
+            for n, pni in self._per_node_cache.items()
+            if pni.src_file_alias is not None
+        }
 
     # Contract: informative verification feedback when configured
     @property
-    def verification_success_message(self) -> Optional[node_config.VerificationSuccessMessage]:
-        self._sync_cache(); infos = self._active_per_node_infos()
+    def verification_success_message(
+        self,
+    ) -> Optional[node_config.VerificationSuccessMessage]:
+        self._sync_cache()
+        infos = self._active_per_node_infos()
         return infos[0].verification_success_message if len(infos) == 1 else None
 
     # Contract: combine feedback messages from graph storage across active nodes
     @property
     def feedback(self) -> Sequence[node_config.NodeFeedback]:
-        self._sync_cache(); return tuple(fb for pni in self._active_per_node_infos() for fb in pni.feedback)
+        self._sync_cache()
+        return tuple(fb for pni in self._active_per_node_infos() for fb in pni.feedback)
 
 
 _EXECROOT_PATTERN: re.Pattern[str] = re.compile(
@@ -458,50 +609,92 @@ class AliasManager(file_alias.AliasManager):
         self._masking_patterns: List[Tuple[re.Pattern[str], str]] = []
         self._cached_version: Optional[int] = None
         fp_mgr = _safe_get_singleton(file_paths.FilePathManager)
-        root = fp_mgr.get_workspace_root().path if fp_mgr and hasattr(fp_mgr, "get_workspace_root") else (os.environ.get("BUILD_WORKSPACE_DIRECTORY") or os.getcwd())
+        root = (
+            fp_mgr.get_workspace_root().path
+            if fp_mgr and hasattr(fp_mgr, "get_workspace_root")
+            else (os.environ.get("BUILD_WORKSPACE_DIRECTORY") or os.getcwd())
+        )
         self._workspace_root: file_paths.WorkspaceRoot = file_paths.WorkspaceRoot(
             path=file_paths.PathString(os.path.normpath(str(root)))
         )
 
     def _sync_cache(self) -> None:
-        role_cfg, n_cfg = _safe_get_singleton(node_config.RoleConfig), _safe_get_singleton(node_config.NodeConfig)
-        if not role_cfg or not n_cfg or role_cfg.version == self._cached_version: return
-        self._aliases.clear(); self._paths.clear(); self._short_name_to_aliases.clear(); self._masking_patterns.clear()
+        role_cfg, n_cfg = (
+            _safe_get_singleton(node_config.RoleConfig),
+            _safe_get_singleton(node_config.NodeConfig),
+        )
+        if not role_cfg or not n_cfg or role_cfg.version == self._cached_version:
+            return
+        self._aliases.clear()
+        self._paths.clear()
+        self._short_name_to_aliases.clear()
+        self._masking_patterns.clear()
         declared = n_cfg.read_write_files | n_cfg.read_only_files
-        for f in sorted(declared, key=lambda x: len(x.workspace_path.path), reverse=True):
+        for f in sorted(
+            declared, key=lambda x: len(x.workspace_path.path), reverse=True
+        ):
             self._aliases[f.relative_path] = f
             norm_ws = os.path.normpath(f.workspace_path.path)
             abs_p = os.path.normpath(os.path.join(self._workspace_root.path, norm_ws))
             self._paths[abs_p] = self._paths[norm_ws] = f.relative_path
-            self._masking_patterns.append((re.compile(r"/?(?:[^\s:;\"\'`()<>{}\[\]/]+/)*" + re.escape(norm_ws) + r"(?=[:\s;\"\'`()<>{}\[\]]|$)"), f.relative_path))
+            self._masking_patterns.append(
+                (
+                    re.compile(
+                        r"/?(?:[^\s:;\"\'`()<>{}\[\]/]+/)*"
+                        + re.escape(norm_ws)
+                        + r"(?=[:\s;\"\'`()<>{}\[\]]|$)"
+                    ),
+                    f.relative_path,
+                )
+            )
         for f in declared:
-            self._short_name_to_aliases.setdefault(os.path.basename(f.relative_path), []).append(f)
+            self._short_name_to_aliases.setdefault(
+                os.path.basename(f.relative_path), []
+            ).append(f)
         if n_cfg.guide_file is not None:
             self._aliases[n_cfg.guide_file.relative_path] = n_cfg.guide_file
         self._cached_version = role_cfg.version
 
     # Contract: convert path string to file alias (BoundFile if matched, UnboundFile otherwise)
     def to_alias(self, path: str) -> file_alias.FileAlias:
-        self._sync_cache(); s = str(path)
-        if s in self._aliases: return self._aliases[s]
+        self._sync_cache()
+        s = str(path)
+        if s in self._aliases:
+            return self._aliases[s]
         matches = self._short_name_to_aliases.get(s)
-        return matches[0] if matches and len(matches) == 1 else file_alias.UnboundFile(relative_path=file_alias.RelativePath(s))
+        return (
+            matches[0]
+            if matches and len(matches) == 1
+            else file_alias.UnboundFile(relative_path=file_alias.RelativePath(s))
+        )
 
     # Contract: sanitize output text by masking paths with relative aliases
-    def sanitize_text(self, text: file_alias.UnsanitizedText) -> file_alias.SanitizedText:
-        self._sync_cache(); res = str(text)
-        for pat, rel in self._masking_patterns: res = pat.sub(rel, res)
+    def sanitize_text(
+        self, text: file_alias.UnsanitizedText
+    ) -> file_alias.SanitizedText:
+        self._sync_cache()
+        res = str(text)
+        for pat, rel in self._masking_patterns:
+            res = pat.sub(rel, res)
         for hp, rel in self._paths.items():
-            if hp in res: res = res.replace(hp, rel)
+            if hp in res:
+                res = res.replace(hp, rel)
         if self._workspace_root and self._workspace_root.path:
             ws_slash = self._workspace_root.path.rstrip("/") + "/"
-            if ws_slash in res: res = res.replace(ws_slash, "")
-            if self._workspace_root.path in res: res = res.replace(self._workspace_root.path, "")
-        return file_alias.SanitizedText(_EXECROOT_PATTERN.sub("", _WORKSPACE_PATTERN.sub("", res)))
+            if ws_slash in res:
+                res = res.replace(ws_slash, "")
+            if self._workspace_root.path in res:
+                res = res.replace(self._workspace_root.path, "")
+        return file_alias.SanitizedText(
+            _EXECROOT_PATTERN.sub("", _WORKSPACE_PATTERN.sub("", res))
+        )
 
     # Contract: configured absolute workspace root path
     @property
-    def workspace_root(self) -> file_paths.WorkspaceRoot: return self._workspace_root
+    def workspace_root(self) -> file_paths.WorkspaceRoot:
+        return self._workspace_root
+
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-11T05:10:00Z

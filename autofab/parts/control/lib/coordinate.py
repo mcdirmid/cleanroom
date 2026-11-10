@@ -102,6 +102,7 @@ class SessionCoordinator(Singleton[AgentSessionTier], Protocol):
         explanation: str = "",
     ) -> ControlDispatchOutcome: ...
 
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-11T05:03:56Z

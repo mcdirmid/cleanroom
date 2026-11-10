@@ -10,6 +10,7 @@ from support.lib.lifecycle import (
     get_default_registry,
     get_singleton,
 )
+
 try:
     from support.lib import app_info
 except Exception:
@@ -35,8 +36,8 @@ def _format_agents_md(
             "You MUST read the local files in your workspace (low/*.pyi, tests/*_test.py, and lib/*.py) using your native tools or shell commands (cat, grep, etc.) to inspect contracts, examine test assertions, review the author's '# CHANGE:' header, and locate defects before blaming.\n"
             "Your role verifies targets using bin/check_files and resolves each target using either:\n"
             "- bin/submit <target> (if checks pass)\n"
-            "- bin/blame <culprit_file> \"<actionable critique>\" (if checks fail)\n"
-            "- bin/fail <target> \"<reason>\" (if an impasse is reached)\n\n"
+            '- bin/blame <culprit_file> "<actionable critique>" (if checks fail)\n'
+            '- bin/fail <target> "<reason>" (if an impasse is reached)\n\n'
         )
     constrained_directive = ""
     if is_constrained:
@@ -58,7 +59,9 @@ def _format_agents_md(
         workflow_binaries += "- bin/blame\n"
     workflow_binaries += "- bin/fail\n\n"
 
-    res_tools = "bin/submit, bin/blame, or bin/fail" if can_blame else "bin/submit or bin/fail"
+    res_tools = (
+        "bin/submit, bin/blame, or bin/fail" if can_blame else "bin/submit or bin/fail"
+    )
 
     if is_auditor:
         git_rule = "All files in this workspace are read-only contracts and fixtures. You are strictly forbidden from modifying files or executing git commands.\n\n"
@@ -124,7 +127,10 @@ def _find_model_configs_file(workspace_dir: Optional[str] = None) -> Optional[st
     while cur and cur != os.path.dirname(cur):
         candidates.append(cur)
         cur = os.path.dirname(cur)
-    cfg_names = ("model_configs.toml", f"{app_info.APP_NAME}_models.toml") + app_info.get_config_filenames()
+    cfg_names = (
+        "model_configs.toml",
+        f"{app_info.APP_NAME}_models.toml",
+    ) + app_info.get_config_filenames()
     for c in candidates:
         for fname in cfg_names:
             p = os.path.join(c, fname)
@@ -161,14 +167,16 @@ def _resolve_model_from_configs(
         clean = model_name.strip()
         for prefix in ("dsh ", "antigravity ", "models."):
             if clean.startswith(prefix):
-                clean = clean[len(prefix):].strip()
+                clean = clean[len(prefix) :].strip()
         target_cfg = None
         if isinstance(models_sec, dict):
             if clean in models_sec:
                 target_cfg = models_sec[clean]
             else:
                 for k, v in models_sec.items():
-                    if isinstance(v, dict) and (v.get("model") == clean or k.lower() == clean.lower()):
+                    if isinstance(v, dict) and (
+                        v.get("model") == clean or k.lower() == clean.lower()
+                    ):
                         target_cfg = v
                         break
         if target_cfg and isinstance(target_cfg, dict):
@@ -195,7 +203,7 @@ def _is_constrained_output_model(
     clean_m = (model_name or "").strip().lower()
     for prefix in ("dsh ", "antigravity ", "models."):
         if clean_m.startswith(prefix):
-            clean_m = clean_m[len(prefix):].strip()
+            clean_m = clean_m[len(prefix) :].strip()
 
     cfg_file = _find_model_configs_file(workspace_dir)
     target_cfg = None
@@ -213,7 +221,10 @@ def _is_constrained_output_model(
                     target_cfg = models_sec[clean_m]
                 else:
                     for k, v in models_sec.items():
-                        if isinstance(v, dict) and (str(v.get("model", "")).lower() == clean_m or k.lower() == clean_m):
+                        if isinstance(v, dict) and (
+                            str(v.get("model", "")).lower() == clean_m
+                            or k.lower() == clean_m
+                        ):
                             target_cfg = v
                             break
         except Exception:
@@ -230,7 +241,11 @@ def _is_constrained_output_model(
         if "localhost" in base_url or "127.0.0.1" in base_url:
             return True
         max_tok = target_cfg.get("max_tokens")
-        if max_tok is not None and isinstance(max_tok, (int, float)) and max_tok <= 8192:
+        if (
+            max_tok is not None
+            and isinstance(max_tok, (int, float))
+            and max_tok <= 8192
+        ):
             if p not in ("google", "openai", "anthropic", "deepseek"):
                 return True
 
@@ -260,7 +275,7 @@ def _format_dsh_patch_yml(
     if resolved_prov == "omlx":
         provider_block = (
             "- id: llm-pi-ai\n"
-            "  name: \"@deepseek-ai/dsh-llm-pi-ai\"\n"
+            '  name: "@deepseek-ai/dsh-llm-pi-ai"\n'
             "  config:\n"
             "    providers:\n"
             "      omlx:\n"
@@ -288,11 +303,11 @@ def _format_dsh_patch_yml(
     else:
         hooks_block = (
             "- id: hooks\n"
-            "  name: \"@deepseek-ai/dsh-hooks\"\n"
+            '  name: "@deepseek-ai/dsh-hooks"\n'
             "  config:\n"
             "    pre_tool:\n"
-            "      matcher: \"edit|write|write_file|edit_file\"\n"
-            "      command: \"./bin/checkpoint pre-edit\"\n"
+            '      matcher: "edit|write|write_file|edit_file"\n'
+            '      command: "./bin/checkpoint pre-edit"\n'
         )
         file_policy_line = ""
 
@@ -300,7 +315,7 @@ def _format_dsh_patch_yml(
     return (
         f"# Cordis patch layer generated by {app_info.APP_TITLE} for DeepSeek Harness\n"
         "- id: permission\n"
-        "  name: \"@deepseek-ai/dsh-permission-presets\"\n"
+        '  name: "@deepseek-ai/dsh-permission-presets"\n'
         "  config:\n"
         "    presets:\n"
         "      danger-full-access:\n"
@@ -309,7 +324,7 @@ def _format_dsh_patch_yml(
         f"{file_policy_line}"
         "    defaultPreset: danger-full-access\n"
         "- id: approval\n"
-        "  name: \"@deepseek-ai/dsh-user-approval\"\n"
+        '  name: "@deepseek-ai/dsh-user-approval"\n'
         "  config:\n"
         "    policy: never\n"
         f"{hooks_block}"
@@ -347,7 +362,7 @@ def _format_dsh_patch_yml(
         "  disabled: true\n"
         f"{provider_block}"
         "- id: agent-default-model\n"
-        "  name: \"@deepseek-ai/dsh-agent-default-model\"\n"
+        '  name: "@deepseek-ai/dsh-agent-default-model"\n'
         "  config:\n"
         f"    provider: {resolved_prov}\n"
         f"    model: {resolved_model}\n"
@@ -377,11 +392,19 @@ class DshWorkspaceConfigurer(dsh_workspace.DshWorkspaceConfigurer):
             reg = get_singleton(role_registry.WorkspaceRegistry)
             r_def = reg.resolve_role_definition(role_name)
             is_auditor = not r_def.writable_file_patterns
-            can_blame = bool(r_def.feedback_role_deps or r_def.audit_tag or not r_def.writable_file_patterns)
+            can_blame = bool(
+                r_def.feedback_role_deps
+                or r_def.audit_tag
+                or not r_def.writable_file_patterns
+            )
         except Exception:
             pass
 
-        if not is_auditor and ("qa" in role_name.lower() or "coverage" in role_name.lower() or "audit" in role_name.lower()):
+        if not is_auditor and (
+            "qa" in role_name.lower()
+            or "coverage" in role_name.lower()
+            or "audit" in role_name.lower()
+        ):
             is_auditor = True
 
         agents_path = os.path.join(workspace_dir, "AGENTS.md")
@@ -416,6 +439,8 @@ class DshWorkspaceConfigurer(dsh_workspace.DshWorkspaceConfigurer):
             configured_files=(agents_path, patch_path),
             status="configured",
         )
+
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-11-02T20:38:00Z

@@ -635,7 +635,9 @@ def check_syntax(file_path: str) -> list[str]:
                 content = f.read()
         except OSError:
             return errors
-    elif "\n" in file_path or file_path.strip().startswith(("import ", "from ", "def ", "class ", "#")):
+    elif "\n" in file_path or file_path.strip().startswith(
+        ("import ", "from ", "def ", "class ", "#")
+    ):
         content = file_path
         file_path = "<string>"
     else:
@@ -648,6 +650,14 @@ def check_syntax(file_path: str) -> list[str]:
         errors.append(format_syntax_error(file_path, e, content))
     except OSError:
         return errors
+
+    # Strict plane separation: prohibit specification slugs in code artifacts
+    try:
+        from . import slug_lint
+    except ImportError:
+        import slug_lint  # type: ignore
+    errors.extend(slug_lint.check_no_slug_references(content, file_path))
+
     return errors
 
 
@@ -752,11 +762,17 @@ def check_cross_part_imports(modules_dir: str, file_path: str) -> list[str]:
         return errors
 
     stdlib = getattr(sys, "stdlib_module_names", set()) | {
-        "framework", "support", "lifecycle", "typing_extensions", "pytest"
+        "framework",
+        "support",
+        "lifecycle",
+        "typing_extensions",
+        "pytest",
     }
 
     build_path = os.path.join(modules_dir, "BUILD.bazel")
-    import_map, _, sibling_stems = build_module_resolution_map(build_path, modules_dir, [])
+    import_map, _, sibling_stems = build_module_resolution_map(
+        build_path, modules_dir, []
+    )
 
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
@@ -771,7 +787,9 @@ def check_cross_part_imports(modules_dir: str, file_path: str) -> list[str]:
                     continue
                 if root_stem in import_map:
                     canonical_path = import_map[root_stem]
-                    if ".parts." in canonical_path and not mod_name.startswith(canonical_path.rsplit(".", 1)[0]):
+                    if ".parts." in canonical_path and not mod_name.startswith(
+                        canonical_path.rsplit(".", 1)[0]
+                    ):
                         errors.append(
                             f"{file_path}:{node.lineno}: error: bare import of cross-part module '{mod_name}' is not allowed; must use full package path 'import {canonical_path}'"
                         )
@@ -786,7 +804,9 @@ def check_cross_part_imports(modules_dir: str, file_path: str) -> list[str]:
                     continue
                 if root_stem in import_map:
                     canonical_path = import_map[root_stem]
-                    if ".parts." in canonical_path and not node.module.startswith(canonical_path.rsplit(".", 1)[0]):
+                    if ".parts." in canonical_path and not node.module.startswith(
+                        canonical_path.rsplit(".", 1)[0]
+                    ):
                         errors.append(
                             f"{file_path}:{node.lineno}: error: bare import of cross-part module '{node.module}' is not allowed; must use full package path 'from {canonical_path} import ...'"
                         )
@@ -842,29 +862,45 @@ def check_impl_imports(file_path: str) -> list[str]:
             if is_import_call and node.args:
                 arg0 = node.args[0]
                 if isinstance(arg0, ast.Constant) and isinstance(arg0.value, str):
-                    if any(p.endswith("_impl") for p in arg0.value.split(".")) or arg0.value.endswith("Impl"):
+                    if any(
+                        p.endswith("_impl") for p in arg0.value.split(".")
+                    ) or arg0.value.endswith("Impl"):
                         errors.append(
                             f"{file_path}:{node.lineno}: error: non-assembly module must not dynamically import implementation module '{arg0.value}'"
                         )
             if isinstance(func, ast.Attribute):
-                if func.attr in ("SourceFileLoader", "spec_from_file_location", "spec_from_loader"):
+                if func.attr in (
+                    "SourceFileLoader",
+                    "spec_from_file_location",
+                    "spec_from_loader",
+                ):
                     if node.args:
                         arg0 = node.args[0]
-                        if isinstance(arg0, ast.Constant) and isinstance(arg0.value, str):
-                            if any(p.endswith("_impl") for p in arg0.value.split(".")) or arg0.value.endswith("Impl"):
+                        if isinstance(arg0, ast.Constant) and isinstance(
+                            arg0.value, str
+                        ):
+                            if any(
+                                p.endswith("_impl") for p in arg0.value.split(".")
+                            ) or arg0.value.endswith("Impl"):
                                 errors.append(
                                     f"{file_path}:{node.lineno}: error: non-assembly module must not dynamically load implementation module '{arg0.value}'"
                                 )
                 elif func.attr == "get":
                     val = func.value
                     is_sys_mod = (
-                        (isinstance(val, ast.Attribute) and val.attr == "modules" and isinstance(val.value, ast.Name) and val.value.id == "sys")
-                        or (isinstance(val, ast.Name) and val.id == "modules")
-                    )
+                        isinstance(val, ast.Attribute)
+                        and val.attr == "modules"
+                        and isinstance(val.value, ast.Name)
+                        and val.value.id == "sys"
+                    ) or (isinstance(val, ast.Name) and val.id == "modules")
                     if is_sys_mod and node.args:
                         arg0 = node.args[0]
-                        if isinstance(arg0, ast.Constant) and isinstance(arg0.value, str):
-                            if any(p.endswith("_impl") for p in arg0.value.split(".")) or arg0.value.endswith("Impl"):
+                        if isinstance(arg0, ast.Constant) and isinstance(
+                            arg0.value, str
+                        ):
+                            if any(
+                                p.endswith("_impl") for p in arg0.value.split(".")
+                            ) or arg0.value.endswith("Impl"):
                                 errors.append(
                                     f"{file_path}:{node.lineno}: error: non-assembly module must not access implementation module via sys.modules '{arg0.value}'"
                                 )
@@ -875,24 +911,36 @@ def check_impl_imports(file_path: str) -> list[str]:
                         errors.append(
                             f"{file_path}:{node.lineno}: error: non-assembly module must not invoke foreign '__initialize__'; only assembly modules (*_asm.py) may initialize constituents"
                         )
-            elif isinstance(func, ast.Name) and func.id == "hasattr" and len(node.args) >= 2:
+            elif (
+                isinstance(func, ast.Name)
+                and func.id == "hasattr"
+                and len(node.args) >= 2
+            ):
                 arg0 = node.args[0]
                 arg1 = node.args[1]
                 target_name = getattr(arg0, "id", getattr(arg0, "attr", ""))
-                if isinstance(arg1, ast.Constant) and arg1.value == "__initialize__" and not target_name.endswith("_asm"):
+                if (
+                    isinstance(arg1, ast.Constant)
+                    and arg1.value == "__initialize__"
+                    and not target_name.endswith("_asm")
+                ):
                     errors.append(
                         f"{file_path}:{node.lineno}: error: non-assembly module must not probe for foreign '__initialize__'"
                     )
         elif isinstance(node, ast.Subscript):
             val = node.value
             is_sys_mod = (
-                (isinstance(val, ast.Attribute) and val.attr == "modules" and isinstance(val.value, ast.Name) and val.value.id == "sys")
-                or (isinstance(val, ast.Name) and val.id == "modules")
-            )
+                isinstance(val, ast.Attribute)
+                and val.attr == "modules"
+                and isinstance(val.value, ast.Name)
+                and val.value.id == "sys"
+            ) or (isinstance(val, ast.Name) and val.id == "modules")
             if is_sys_mod:
                 sl = node.slice
                 if isinstance(sl, ast.Constant) and isinstance(sl.value, str):
-                    if any(p.endswith("_impl") for p in sl.value.split(".")) or sl.value.endswith("Impl"):
+                    if any(
+                        p.endswith("_impl") for p in sl.value.split(".")
+                    ) or sl.value.endswith("Impl"):
                         errors.append(
                             f"{file_path}:{node.lineno}: error: non-assembly module must not access implementation module via sys.modules '{sl.value}'"
                         )
@@ -901,13 +949,17 @@ def check_impl_imports(file_path: str) -> list[str]:
                 if isinstance(target, ast.Subscript):
                     val = target.value
                     is_sys_mod = (
-                        (isinstance(val, ast.Attribute) and val.attr == "modules" and isinstance(val.value, ast.Name) and val.value.id == "sys")
-                        or (isinstance(val, ast.Name) and val.id == "modules")
-                    )
+                        isinstance(val, ast.Attribute)
+                        and val.attr == "modules"
+                        and isinstance(val.value, ast.Name)
+                        and val.value.id == "sys"
+                    ) or (isinstance(val, ast.Name) and val.id == "modules")
                     if is_sys_mod:
                         sl = target.slice
                         if isinstance(sl, ast.Constant) and isinstance(sl.value, str):
-                            if any(p.endswith("_impl") for p in sl.value.split(".")) or sl.value.endswith("Impl"):
+                            if any(
+                                p.endswith("_impl") for p in sl.value.split(".")
+                            ) or sl.value.endswith("Impl"):
                                 errors.append(
                                     f"{file_path}:{node.lineno}: error: non-assembly module must not assign implementation module to sys.modules '{sl.value}'"
                                 )
@@ -964,7 +1016,6 @@ def check_singleton_registration(file_path: str) -> list[str]:
     return errors
 
 
-
 def check_lib_structure(file_path: str) -> list[str]:
     """Check that library modules do not contain test runner boilerplate."""
     errors: list[str] = []
@@ -992,8 +1043,16 @@ def check_lib_structure(file_path: str) -> list[str]:
                         for b in node.bases
                     )
                     or any(
-                        (isinstance(item, ast.Assign) and any(getattr(t, "id", "") == "tier" for t in item.targets))
-                        or (isinstance(item, ast.AnnAssign) and getattr(item.target, "id", "") == "tier")
+                        (
+                            isinstance(item, ast.Assign)
+                            and any(
+                                getattr(t, "id", "") == "tier" for t in item.targets
+                            )
+                        )
+                        or (
+                            isinstance(item, ast.AnnAssign)
+                            and getattr(item.target, "id", "") == "tier"
+                        )
                         for item in node.body
                     )
                 )
@@ -1065,7 +1124,9 @@ def check_asm_structure(module_path: str, spec_file: Optional[str] = None) -> li
                 if isinstance(t, ast.Name) and t.id == "CONSTITUENTS":
                     if isinstance(node.value, (ast.Tuple, ast.List)):
                         actual_constituents = [
-                            elt.id for elt in node.value.elts if isinstance(elt, ast.Name)
+                            elt.id
+                            for elt in node.value.elts
+                            if isinstance(elt, ast.Name)
                         ]
         elif (
             isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
@@ -1074,12 +1135,16 @@ def check_asm_structure(module_path: str, spec_file: Optional[str] = None) -> li
             has_initialize = True
 
     if actual_constituents is None:
-        errors.append(f"{module_path}: error: assembly module must define 'CONSTITUENTS'")
+        errors.append(
+            f"{module_path}: error: assembly module must define 'CONSTITUENTS'"
+        )
     elif not actual_constituents:
         errors.append(f"{module_path}: error: assembly CONSTITUENTS must not be empty")
 
     if not has_initialize:
-        errors.append(f"{module_path}: error: assembly module must define '__initialize__'")
+        errors.append(
+            f"{module_path}: error: assembly module must define '__initialize__'"
+        )
 
     if spec_file and os.path.isfile(spec_file) and actual_constituents is not None:
         expected = extract_asm_constituents(spec_file)
@@ -1090,7 +1155,6 @@ def check_asm_structure(module_path: str, spec_file: Optional[str] = None) -> li
                 f"{module_path}: error: assembly CONSTITUENTS is missing declared constituent(s): {msg}"
             )
     return errors
-
 
 
 FRAMEWORK_DECORATORS = {
@@ -1235,9 +1299,8 @@ def check_no_frozen_exceptions(file_path: str) -> list[str]:
             for dec in node.decorator_list:
                 if isinstance(dec, ast.Call):
                     func = dec.func
-                    is_dc = (
-                        (isinstance(func, ast.Name) and func.id == "dataclass")
-                        or (isinstance(func, ast.Attribute) and func.attr == "dataclass")
+                    is_dc = (isinstance(func, ast.Name) and func.id == "dataclass") or (
+                        isinstance(func, ast.Attribute) and func.attr == "dataclass"
                     )
                     if is_dc:
                         for kw in dec.keywords:
@@ -1388,7 +1451,9 @@ def _get_broad_exception_pragma_lines(source: str) -> set[int]:
     try:
         tokens = tokenize.tokenize(io.BytesIO(source.encode("utf-8")).readline)
         for tok in tokens:
-            if tok.type == tokenize.COMMENT and _PRAGMA_BROAD_EXCEPTION.search(tok.string):
+            if tok.type == tokenize.COMMENT and _PRAGMA_BROAD_EXCEPTION.search(
+                tok.string
+            ):
                 lines.add(tok.start[0])
     except (tokenize.TokenError, OSError, SyntaxError):
         for idx, line in enumerate(source.splitlines(), start=1):
@@ -1442,7 +1507,11 @@ def _is_handler_reified(h: ast.ExceptHandler) -> bool:
     for stmt in ast.walk(h):
         if isinstance(stmt, ast.Assign):
             for t in stmt.targets:
-                if isinstance(t, ast.Name) and stmt.value and _references_tracked(stmt.value):
+                if (
+                    isinstance(t, ast.Name)
+                    and stmt.value
+                    and _references_tracked(stmt.value)
+                ):
                     tracked_names.add(t.id)
 
     # Walk handler body to check for structured capture
@@ -1628,7 +1697,6 @@ def check_test_impl_imports(lib_pkg: str, file_path: str) -> list[str]:
                             errors.append(
                                 f"{file_path}:{node.lineno}: error: test module must only import target implementation module '{target_stem}', but dynamically imports '{arg0.value}'"
                             )
-
 
     if module_imported:
         for node in ast.walk(tree):
@@ -1850,8 +1918,12 @@ def check_tautological_assertions(
             if not is_test_class:
                 continue
             for item in node.body:
-                if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) and item.name.startswith("test_"):
-                    is_skipped = any("skip" in ast.unparse(d).lower() for d in item.decorator_list)
+                if isinstance(
+                    item, (ast.FunctionDef, ast.AsyncFunctionDef)
+                ) and item.name.startswith("test_"):
+                    is_skipped = any(
+                        "skip" in ast.unparse(d).lower() for d in item.decorator_list
+                    )
                     if not is_skipped:
                         real_stmts = [
                             s
@@ -1879,7 +1951,8 @@ def check_tautological_assertions(
         elif isinstance(node, ast.Call):
             lineno = getattr(node, "lineno", 1)
             line_has_pragma = any(
-                0 <= check_idx < len(lines) and ALLOW_TAUTOLOGY_RE.search(lines[check_idx])
+                0 <= check_idx < len(lines)
+                and ALLOW_TAUTOLOGY_RE.search(lines[check_idx])
                 for check_idx in (lineno - 1, lineno - 2)
             )
             if line_has_pragma:
@@ -1902,9 +1975,16 @@ def check_tautological_assertions(
                     errors.append(
                         f"{file_path}:{lineno}: error: tautological assertion '{fn_name}({arg.value!r})'; tests must assert on actual behavior."
                     )
-            elif fn_name in ("assertEqual", "assert_equal", "assertIs", "assert_is") and len(node.args) >= 2:
+            elif (
+                fn_name in ("assertEqual", "assert_equal", "assertIs", "assert_is")
+                and len(node.args) >= 2
+            ):
                 arg1, arg2 = node.args[0], node.args[1]
-                if isinstance(arg1, ast.Constant) and isinstance(arg2, ast.Constant) and arg1.value == arg2.value:
+                if (
+                    isinstance(arg1, ast.Constant)
+                    and isinstance(arg2, ast.Constant)
+                    and arg1.value == arg2.value
+                ):
                     errors.append(
                         f"{file_path}:{lineno}: error: tautological assertion '{fn_name}({arg1.value!r}, {arg2.value!r})'; tests must assert on actual behavior."
                     )
@@ -1912,7 +1992,8 @@ def check_tautological_assertions(
         elif isinstance(node, ast.Assert):
             lineno = getattr(node, "lineno", 1)
             line_has_pragma = any(
-                0 <= check_idx < len(lines) and ALLOW_TAUTOLOGY_RE.search(lines[check_idx])
+                0 <= check_idx < len(lines)
+                and ALLOW_TAUTOLOGY_RE.search(lines[check_idx])
                 for check_idx in (lineno - 1, lineno - 2)
             )
             if line_has_pragma:
@@ -1967,7 +2048,9 @@ def _find_contracted_spec_errors(file_path: str) -> set[str]:
                         tree = ast.parse(pyi_content, filename=p)
                     for node in ast.walk(tree):
                         if isinstance(node, ast.ClassDef):
-                            is_exc = node.name.endswith("Error") or node.name.endswith("Exception")
+                            is_exc = node.name.endswith("Error") or node.name.endswith(
+                                "Exception"
+                            )
                             for b in node.bases:
                                 b_id = getattr(b, "id", "") or getattr(b, "attr", "")
                                 if "Exception" in b_id or "Error" in b_id:
@@ -1975,9 +2058,9 @@ def _find_contracted_spec_errors(file_path: str) -> set[str]:
                             if is_exc:
                                 declared.add(node.name)
                         elif (
-                            (isinstance(node, ast.FunctionDef) and ast.get_docstring(node))
-                            or (isinstance(node, ast.Module) and ast.get_docstring(node))
-                        ):
+                            isinstance(node, ast.FunctionDef)
+                            and ast.get_docstring(node)
+                        ) or (isinstance(node, ast.Module) and ast.get_docstring(node)):
                             doc = ast.get_docstring(node) or ""
                             if "Raises:" in doc or "raises:" in doc:
                                 for line in doc.splitlines():
@@ -1990,9 +2073,7 @@ def _find_contracted_spec_errors(file_path: str) -> set[str]:
     return declared
 
 
-def check_no_error_testing(
-    file_path: str, tree: Optional[ast.AST] = None
-) -> list[str]:
+def check_no_error_testing(file_path: str, tree: Optional[ast.AST] = None) -> list[str]:
     """Check that test methods do not assert or catch contract violation errors (*Error)."""
     errors: list[str] = []
     if not os.path.exists(file_path) and tree is None:
@@ -2045,7 +2126,10 @@ def check_no_error_testing(
         elif isinstance(call_node.func, ast.Name):
             fn_name = call_node.func.id
 
-        if fn_name in ("assertRaises", "assert_raises", "raises") and call_node.args:
+        if (
+            fn_name in ("assertRaises", "assert_raises", "raises", "violating")
+            and call_node.args
+        ):
             err_names = _extract_error_names(call_node.args[0])
             for err_name in err_names:
                 if err_name in contracted_errors:
@@ -2066,7 +2150,7 @@ def check_no_try_except_in_tests(
     file_path: str, tree: Optional[ast.AST] = None
 ) -> list[str]:
     """Check that test methods and scenarios do not use try/except blocks.
-    
+
     Exception testing must use 'with self.assertRaises(...):' or 'with pytest.raises(...):'
     for fail-closed assertion semantics.
     """
@@ -2101,7 +2185,12 @@ def check_no_try_except_in_tests(
             )
             for item in node.body:
                 if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    if item.name in ("setUp", "tearDown", "setUpClass", "tearDownClass"):
+                    if item.name in (
+                        "setUp",
+                        "tearDown",
+                        "setUpClass",
+                        "tearDownClass",
+                    ):
                         continue
                     if is_test_class or item.name.startswith("test_"):
                         test_methods.add(id(item))
@@ -2113,11 +2202,28 @@ def check_no_try_except_in_tests(
                 or node.name.startswith("test_")
                 or any(
                     (isinstance(dec, ast.Name) and dec.id in ("scenario", "transition"))
-                    or (isinstance(dec, ast.Call) and getattr(dec.func, "id", "") in ("scenario", "transition"))
-                    or (isinstance(dec, ast.Call) and getattr(getattr(dec.func, "value", None), "id", "") == "transition")
+                    or (
+                        isinstance(dec, ast.Call)
+                        and getattr(dec.func, "id", "") in ("scenario", "transition")
+                    )
+                    or (
+                        isinstance(dec, ast.Call)
+                        and getattr(getattr(dec.func, "value", None), "id", "")
+                        == "transition"
+                    )
                     for dec in node.decorator_list
                 )
-                or any(term in node.name.lower() for term in ("raise", "error", "reject", "failure", "fail", "except"))
+                or any(
+                    term in node.name.lower()
+                    for term in (
+                        "raise",
+                        "error",
+                        "reject",
+                        "failure",
+                        "fail",
+                        "except",
+                    )
+                )
             )
             if not is_test_func:
                 continue
@@ -2125,7 +2231,8 @@ def check_no_try_except_in_tests(
                 if isinstance(inner, ast.Try) and inner.handlers:
                     lineno = getattr(inner, "lineno", 1)
                     line_has_pragma = any(
-                        0 <= check_idx < len(lines) and ALLOW_TRY_EXCEPT_RE.search(lines[check_idx])
+                        0 <= check_idx < len(lines)
+                        and ALLOW_TRY_EXCEPT_RE.search(lines[check_idx])
                         for check_idx in (lineno - 1, lineno - 2)
                     )
                     if line_has_pragma:
@@ -2169,7 +2276,8 @@ def check_no_sys_modules_tampering(
     for node in ast.walk(tree):
         lineno = getattr(node, "lineno", 1)
         line_has_pragma = any(
-            0 <= check_idx < len(lines) and ALLOW_SYS_MODULES_RE.search(lines[check_idx])
+            0 <= check_idx < len(lines)
+            and ALLOW_SYS_MODULES_RE.search(lines[check_idx])
             for check_idx in (lineno - 1, lineno - 2)
         )
         if line_has_pragma:
@@ -2183,7 +2291,10 @@ def check_no_sys_modules_tampering(
                         f"Module unloading/deletion corrupts Python runtime and dataclass caches."
                     )
         elif isinstance(node, ast.Call):
-            if isinstance(node.func, ast.Attribute) and node.func.attr in ("pop", "clear"):
+            if isinstance(node.func, ast.Attribute) and node.func.attr in (
+                "pop",
+                "clear",
+            ):
                 if is_sys_modules(node.func.value):
                     errors.append(
                         f"{file_path}:{lineno}: error: prohibited sys.modules.{node.func.attr}() call in test module. "
@@ -2265,7 +2376,9 @@ def check_no_lifecycle_scope_leaks(
         stack: list[ast.AST] = list(body)
         while stack:
             curr = stack.pop()
-            if isinstance(curr, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
+            if isinstance(
+                curr, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
+            ):
                 continue
             if isinstance(curr, ast.Return):
                 returns.append(curr)
@@ -2295,7 +2408,8 @@ def check_no_lifecycle_scope_leaks(
             fn_lineno = getattr(fn_node, "lineno", 1)
             is_test_func = (
                 fn_node.name.startswith("test_")
-                or fn_node.name in (
+                or fn_node.name
+                in (
                     "setUp",
                     "tearDown",
                     "setUpClass",
@@ -2305,29 +2419,37 @@ def check_no_lifecycle_scope_leaks(
                 )
                 or any(
                     (isinstance(dec, ast.Name) and dec.id in ("scenario", "transition"))
-                    or (isinstance(dec, ast.Call) and getattr(dec.func, "id", "") in ("scenario", "transition"))
-                    or (isinstance(dec, ast.Call) and getattr(getattr(dec.func, "value", None), "id", "") == "transition")
-                    for dec in fn_node.decorator_list
-                )
-            )
-            is_context_mgr = (
-                any(
-                    "contextmanager"
-                    in (
-                        getattr(dec, "id", "")
-                        or getattr(getattr(dec, "value", None), "id", "")
-                        or getattr(dec, "attr", "")
+                    or (
+                        isinstance(dec, ast.Call)
+                        and getattr(dec.func, "id", "") in ("scenario", "transition")
+                    )
+                    or (
+                        isinstance(dec, ast.Call)
+                        and getattr(getattr(dec.func, "value", None), "id", "")
+                        == "transition"
                     )
                     for dec in fn_node.decorator_list
                 )
-                or any(isinstance(n, (ast.Yield, ast.YieldFrom)) for n in ast.walk(fn_node))
+            )
+            is_context_mgr = any(
+                "contextmanager"
+                in (
+                    getattr(dec, "id", "")
+                    or getattr(getattr(dec, "value", None), "id", "")
+                    or getattr(dec, "attr", "")
+                )
+                for dec in fn_node.decorator_list
+            ) or any(
+                isinstance(n, (ast.Yield, ast.YieldFrom)) for n in ast.walk(fn_node)
             )
 
             if not is_test_func and not is_context_mgr:
                 stack: list[ast.AST] = list(fn_node.body)
                 while stack:
                     curr = stack.pop()
-                    if isinstance(curr, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                    if isinstance(
+                        curr, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+                    ):
                         continue
                     if _with_has_enter_phase(curr):
                         with_lineno = getattr(curr, "lineno", 1)
@@ -2379,12 +2501,20 @@ def check_no_top_level_probes(
     for node in tree.body:
         lineno = getattr(node, "lineno", 1)
         # Allow module docstring or top-level string constant
-        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+        if (
+            isinstance(node, ast.Expr)
+            and isinstance(node.value, ast.Constant)
+            and isinstance(node.value.value, str)
+        ):
             continue
         # Allow sys.path modifications or basic logging setup
         if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
             func = node.value.func
-            if isinstance(func, ast.Attribute) and func.attr in ("insert", "append", "basicConfig"):
+            if isinstance(func, ast.Attribute) and func.attr in (
+                "insert",
+                "append",
+                "basicConfig",
+            ):
                 continue
         # Allow `if __name__ == "__main__":` or `if TYPE_CHECKING:`
         if isinstance(node, ast.If):
@@ -2409,7 +2539,10 @@ def check_no_top_level_probes(
                     target_names.append(node.target.id)
             has_probe = False
             for tname in target_names:
-                if tname.upper().startswith(("_PROBE", "PROBE")) or "probe" in tname.lower():
+                if (
+                    tname.upper().startswith(("_PROBE", "PROBE"))
+                    or "probe" in tname.lower()
+                ):
                     errors.append(
                         f"{file_path}:{lineno}: error: Top-level probe variable '{tname}' is prohibited. "
                         "You are not allowed to execute the test suite or run ad-hoc probes. "
@@ -2422,7 +2555,10 @@ def check_no_top_level_probes(
             continue
 
         if isinstance(node, ast.ClassDef):
-            if node.name.upper().startswith(("_PROBE", "PROBE")) or "probe" in node.name.lower():
+            if (
+                node.name.upper().startswith(("_PROBE", "PROBE"))
+                or "probe" in node.name.lower()
+            ):
                 errors.append(
                     f"{file_path}:{lineno}: error: Top-level probe class '{node.name}' is prohibited. "
                     "You are not allowed to execute the test suite or run ad-hoc probes. "
@@ -2432,7 +2568,10 @@ def check_no_top_level_probes(
             continue
 
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            if node.name.upper().startswith(("_PROBE", "PROBE")) or "probe" in node.name.lower():
+            if (
+                node.name.upper().startswith(("_PROBE", "PROBE"))
+                or "probe" in node.name.lower()
+            ):
                 errors.append(
                     f"{file_path}:{lineno}: error: Top-level probe function '{node.name}' is prohibited. "
                     "You are not allowed to execute the test suite or run ad-hoc probes. "
@@ -2469,7 +2608,13 @@ def check_test_imports(lib_pkg: str, file_path: str) -> list[str]:
         while curr and curr != os.path.dirname(curr):
             if any(
                 os.path.isfile(os.path.join(curr, m))
-                for m in ("autofab.toml", "autofab_roles.toml", "cleanroom.toml", "cleanroom_roles.toml", "pyproject.toml")
+                for m in (
+                    "autofab.toml",
+                    "autofab_roles.toml",
+                    "cleanroom.toml",
+                    "cleanroom_roles.toml",
+                    "pyproject.toml",
+                )
             ) or os.path.isdir(os.path.join(curr, "parts")):
                 cand_root = curr
                 break
@@ -2500,7 +2645,13 @@ def check_test_imports(lib_pkg: str, file_path: str) -> list[str]:
             while curr and curr != os.path.dirname(curr):
                 if any(
                     os.path.isfile(os.path.join(curr, m))
-                    for m in ("autofab.toml", "autofab_roles.toml", "cleanroom.toml", "cleanroom_roles.toml", "pyproject.toml")
+                    for m in (
+                        "autofab.toml",
+                        "autofab_roles.toml",
+                        "cleanroom.toml",
+                        "cleanroom_roles.toml",
+                        "pyproject.toml",
+                    )
                 ) or os.path.isdir(os.path.join(curr, "parts")):
                     cand_root = curr
                     break
@@ -2733,9 +2884,7 @@ def check_test_getattr(file_path: str) -> list[str]:
             fn_name = None
             if isinstance(node.func, ast.Name):
                 fn_name = node.func.id
-            elif (
-                isinstance(node.func, ast.Attribute)
-            ):
+            elif isinstance(node.func, ast.Attribute):
                 fn_name = node.func.attr
             if fn_name in ("getattr", "setattr", "hasattr"):
                 errors.append(
@@ -2763,7 +2912,10 @@ def check_test_getattr(file_path: str) -> list[str]:
                 node.attr.startswith("__") and node.attr.endswith("__")
             ):
                 is_self_or_cls = False
-                if isinstance(node.value, ast.Name) and node.value.id in ("self", "cls"):
+                if isinstance(node.value, ast.Name) and node.value.id in (
+                    "self",
+                    "cls",
+                ):
                     is_self_or_cls = True
                 if not is_self_or_cls:
                     errors.append(
@@ -2771,9 +2923,11 @@ def check_test_getattr(file_path: str) -> list[str]:
                         "tests must adhere strictly to public contracts in low/*.pyi"
                     )
     errors.sort(
-        key=lambda s: int(s.split(":")[1])
-        if len(s.split(":")) > 1 and s.split(":")[1].isdigit()
-        else 0
+        key=lambda s: (
+            int(s.split(":")[1])
+            if len(s.split(":")) > 1 and s.split(":")[1].isdigit()
+            else 0
+        )
     )
     return errors
 
@@ -2795,9 +2949,14 @@ def check_banned_skips(
             return errors
 
     banned_decorators = {
-        "skip", "skipIf", "skipUnless",
-        "unittest.skip", "unittest.skipIf", "unittest.skipUnless",
-        "pytest.mark.skip", "pytest.mark.skipif",
+        "skip",
+        "skipIf",
+        "skipUnless",
+        "unittest.skip",
+        "unittest.skipIf",
+        "unittest.skipUnless",
+        "pytest.mark.skip",
+        "pytest.mark.skipif",
     }
 
     def _get_call_name(node: ast.AST) -> str:
@@ -2813,7 +2972,9 @@ def check_banned_skips(
             for dec in node.decorator_list:
                 dec_func = dec.func if isinstance(dec, ast.Call) else dec
                 name = _get_call_name(dec_func)
-                if name in banned_decorators or name.endswith((".skip", ".skipIf", ".skipUnless")):
+                if name in banned_decorators or name.endswith(
+                    (".skip", ".skipIf", ".skipUnless")
+                ):
                     errors.append(
                         f"{file_path}:{dec.lineno}: error [{error_code}]: "
                         f"Skipping tests via '@{name}' is strictly prohibited. "
@@ -2822,7 +2983,9 @@ def check_banned_skips(
         elif isinstance(node, ast.Call):
             call_name = _get_call_name(node.func)
             if call_name == "setattr" and len(node.args) >= 2:
-                if isinstance(node.args[1], ast.Constant) and str(node.args[1].value) in ("__unittest_skip__", "__unittest_skip_why__"):
+                if isinstance(node.args[1], ast.Constant) and str(
+                    node.args[1].value
+                ) in ("__unittest_skip__", "__unittest_skip_why__"):
                     errors.append(
                         f"{file_path}:{node.lineno}: error [{error_code}]: "
                         "Manipulating '__unittest_skip__' is strictly prohibited. "
@@ -2836,13 +2999,19 @@ def check_banned_skips(
                 )
         elif isinstance(node, ast.Assign):
             for target in node.targets:
-                if isinstance(target, ast.Attribute) and target.attr in ("__unittest_skip__", "__unittest_skip_why__"):
+                if isinstance(target, ast.Attribute) and target.attr in (
+                    "__unittest_skip__",
+                    "__unittest_skip_why__",
+                ):
                     errors.append(
                         f"{file_path}:{node.lineno}: error [{error_code}]: "
                         f"Assigning to '{target.attr}' is strictly prohibited. "
                         "All tests must execute unconditionally against concrete contracts or fakes."
                     )
-                elif isinstance(target, ast.Name) and target.id in ("__unittest_skip__", "__unittest_skip_why__"):
+                elif isinstance(target, ast.Name) and target.id in (
+                    "__unittest_skip__",
+                    "__unittest_skip_why__",
+                ):
                     errors.append(
                         f"{file_path}:{node.lineno}: error [{error_code}]: "
                         f"Assigning to '{target.id}' is strictly prohibited. "
@@ -2876,10 +3045,12 @@ def check_test_dry_run(lib_pkg: str, module_path: str) -> list[str]:
 
     try:
         from support.lib import app_info
+
         descriptors = app_info.get_role_descriptors()
     except Exception:
         try:
             from autofab_py.support.lib import app_info
+
             descriptors = app_info.get_role_descriptors()
         except Exception:
             descriptors = (".autofab_role.json", ".cleanroom_role.json")
@@ -2902,7 +3073,9 @@ def check_test_dry_run(lib_pkg: str, module_path: str) -> list[str]:
             if cand_p.name in ("site-packages", "dist-packages", ".venv", "venv"):
                 cand_p = cand_p.parent
                 continue
-            if (cand_p / ".git").is_dir() or any((cand_p / m).is_file() for m in ("autofab.toml", "cleanroom.toml")):
+            if (cand_p / ".git").is_dir() or any(
+                (cand_p / m).is_file() for m in ("autofab.toml", "cleanroom.toml")
+            ):
                 repo_root = str(cand_p)
                 break
             cand_p = cand_p.parent
@@ -2925,7 +3098,9 @@ def check_test_dry_run(lib_pkg: str, module_path: str) -> list[str]:
     if os.path.isdir(ws_root):
         for entry in os.listdir(ws_root):
             cand = os.path.join(ws_root, entry)
-            if os.path.isdir(cand) and not entry.startswith((".", "bazel-", "venv", "__pycache__")):
+            if os.path.isdir(cand) and not entry.startswith(
+                (".", "bazel-", "venv", "__pycache__")
+            ):
                 if cand not in prioritized_dirs:
                     prioritized_dirs.append(cand)
                 parts_dir = os.path.join(cand, "parts")
@@ -2936,13 +3111,20 @@ def check_test_dry_run(lib_pkg: str, module_path: str) -> list[str]:
                     prioritized_dirs.append(sup)
 
     # Append fallback paths from canonical repository root only when NOT in an isolated role workspace
-    if not is_role_ws and repo_root and os.path.isdir(repo_root) and repo_root != ws_root:
+    if (
+        not is_role_ws
+        and repo_root
+        and os.path.isdir(repo_root)
+        and repo_root != ws_root
+    ):
         if repo_root not in prioritized_dirs:
             prioritized_dirs.append(repo_root)
         try:
             for entry in os.listdir(repo_root):
                 cand = os.path.join(repo_root, entry)
-                if os.path.isdir(cand) and not entry.startswith((".", "bazel-", "venv", "__pycache__")):
+                if os.path.isdir(cand) and not entry.startswith(
+                    (".", "bazel-", "venv", "__pycache__")
+                ):
                     has_parts = os.path.isdir(os.path.join(cand, "parts"))
                     sup = os.path.join(cand, "support", "lib")
                     has_sup = os.path.isdir(sup)
@@ -3102,7 +3284,6 @@ def find_spec_pyi(
     return None
 
 
-
 def check_public_types(
     module_path: str,
     pyi_path: Optional[str] = None,
@@ -3160,7 +3341,11 @@ def check_public_functions(
     are defined in the library code."""
     errors: list[str] = []
     base = os.path.basename(module_path)
-    if not base.endswith(".py") or base.endswith("_asm.py") or base.endswith("_impl.py"):
+    if (
+        not base.endswith(".py")
+        or base.endswith("_asm.py")
+        or base.endswith("_impl.py")
+    ):
         return errors
     if not os.path.exists(module_path):
         return errors
@@ -3436,12 +3621,20 @@ def _get_hierarchy_contract_members(
                 base_name = base.value.id
             elif isinstance(base.value, ast.Attribute):
                 base_name = base.value.attr
-        if not base_name or base_name in ("Protocol", "Generic", "Singleton", "InTier", "object"):
+        if not base_name or base_name in (
+            "Protocol",
+            "Generic",
+            "Singleton",
+            "InTier",
+            "object",
+        ):
             continue
         for tree in dep_trees:
             for n in getattr(tree, "body", []):
                 if isinstance(n, ast.ClassDef) and n.name == base_name:
-                    b_meths, b_fields = _get_hierarchy_contract_members(n, dep_trees, visited)
+                    b_meths, b_fields = _get_hierarchy_contract_members(
+                        n, dep_trees, visited
+                    )
                     methods.update(b_meths)
                     fields.update(b_fields)
     return methods, fields
@@ -3484,7 +3677,11 @@ def check_signature_alignment(
     cand_pyi_paths: list[str] = list(pyi_deps)
     if os.path.isdir(spec_dir):
         cand_pyi_paths.extend(
-            [os.path.join(spec_dir, f) for f in os.listdir(spec_dir) if f.endswith(".pyi")]
+            [
+                os.path.join(spec_dir, f)
+                for f in os.listdir(spec_dir)
+                if f.endswith(".pyi")
+            ]
         )
     for p in cand_pyi_paths:
         abs_p = os.path.abspath(p)
@@ -3518,8 +3715,12 @@ def check_signature_alignment(
         p_bases = [ast.unparse(b) for b in p_cls.bases]
         norm_s_bases = [b.replace("InTier[", "Singleton[") for b in s_bases]
         norm_p_bases = [b.replace("InTier[", "Singleton[") for b in p_bases]
-        missing_bases = [b for b, nb in zip(s_bases, norm_s_bases) if nb not in norm_p_bases]
-        extra_bases = [b for b, nb in zip(p_bases, norm_p_bases) if nb not in norm_s_bases]
+        missing_bases = [
+            b for b, nb in zip(s_bases, norm_s_bases) if nb not in norm_p_bases
+        ]
+        extra_bases = [
+            b for b, nb in zip(p_bases, norm_p_bases) if nb not in norm_s_bases
+        ]
         if missing_bases or extra_bases:
             diag_parts = []
             if missing_bases:
@@ -3530,11 +3731,16 @@ def check_signature_alignment(
                 f"{module_path}:{p_cls.lineno}: error: class '{cname}' inheritance hierarchy does not match specification '{spec_display}': {'; '.join(diag_parts)}"
             )
 
-        contract_methods, contract_fields = _get_hierarchy_contract_members(s_cls, dep_trees)
+        contract_methods, contract_fields = _get_hierarchy_contract_members(
+            s_cls, dep_trees
+        )
         for item in p_cls.body:
             if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 if not item.name.startswith("_") and item.name != "initialize":
-                    if item.name not in contract_methods and item.name not in contract_fields:
+                    if (
+                        item.name not in contract_methods
+                        and item.name not in contract_fields
+                    ):
                         errors.append(
                             f"{module_path}:{item.lineno}: error: class '{cname}' defines uncontracted public method '{item.name}()' not declared in specification '{spec_display}'"
                         )
@@ -3741,7 +3947,11 @@ def build_module_resolution_map(
             while curr and curr != os.path.dirname(curr):
                 if any(
                     os.path.isfile(os.path.join(curr, marker))
-                    for marker in ("cleanroom.toml", "pyproject.toml", "cleanroom_roles.toml")
+                    for marker in (
+                        "cleanroom.toml",
+                        "pyproject.toml",
+                        "cleanroom_roles.toml",
+                    )
                 ):
                     modules_dir = os.path.relpath(modules_dir, curr).replace("\\", "/")
                     break
@@ -4373,19 +4583,26 @@ def parse_pyi_dependencies(
                         if isinstance(dec, ast.Call):
                             func = dec.func
                             is_singleton = (
-                                (isinstance(func, ast.Name) and func.id == "singleton_type")
-                                or (isinstance(func, ast.Attribute) and func.attr == "singleton_type")
+                                isinstance(func, ast.Name)
+                                and func.id == "singleton_type"
+                            ) or (
+                                isinstance(func, ast.Attribute)
+                                and func.attr == "singleton_type"
                             )
                             if is_singleton and dec.args:
                                 first_arg = dec.args[0]
-                                if isinstance(first_arg, ast.Constant) and isinstance(first_arg.value, str):
+                                if isinstance(first_arg, ast.Constant) and isinstance(
+                                    first_arg.value, str
+                                ):
                                     tier_name = first_arg.value
                                 elif isinstance(first_arg, ast.Name):
                                     tier_name = first_arg.id
                             elif is_singleton:
                                 for kw in dec.keywords:
                                     if kw.arg in ("tier", "name"):
-                                        if isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, str):
+                                        if isinstance(
+                                            kw.value, ast.Constant
+                                        ) and isinstance(kw.value.value, str):
                                             tier_name = kw.value.value
                                         elif isinstance(kw.value, ast.Name):
                                             tier_name = kw.value.id
@@ -4489,10 +4706,17 @@ def compute_allowed_spec_deps(
                                 allowed.add(c)
                                 if c.endswith("_impl"):
                                     allowed.add(c[:-5])
-                                cand = find_spec_pyi(os.path.join(os.path.dirname(p), f"{c}.py"), pyi_path=os.path.join(os.path.dirname(p), f"{c}.pyi"))
+                                cand = find_spec_pyi(
+                                    os.path.join(os.path.dirname(p), f"{c}.py"),
+                                    pyi_path=os.path.join(
+                                        os.path.dirname(p), f"{c}.pyi"
+                                    ),
+                                )
                                 if cand and os.path.isfile(cand):
                                     next_visit.append(cand)
-                            elif line.strip().endswith(":") and not line.strip().startswith("-"):
+                            elif line.strip().endswith(
+                                ":"
+                            ) and not line.strip().startswith("-"):
                                 in_c = False
             except OSError:
                 pass
@@ -4500,7 +4724,10 @@ def compute_allowed_spec_deps(
             if depth < max_depth:
                 p_dir = os.path.dirname(p)
                 for d in d_list:
-                    cand = find_spec_pyi(os.path.join(p_dir, f"{d}.py"), pyi_path=os.path.join(p_dir, f"{d}.pyi"))
+                    cand = find_spec_pyi(
+                        os.path.join(p_dir, f"{d}.py"),
+                        pyi_path=os.path.join(p_dir, f"{d}.pyi"),
+                    )
                     if cand and os.path.isfile(cand):
                         next_visit.append(cand)
         to_visit = next_visit
@@ -4776,9 +5003,7 @@ AUTO_INIT_START = "# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---"
 AUTO_INIT_END = "# --- END CLEANROOM AUTO-GENERATED ---"
 
 
-def maintain_impl_lifecycle(
-    module_path: str, spec_file: Optional[str] = None
-) -> bool:
+def maintain_impl_lifecycle(module_path: str, spec_file: Optional[str] = None) -> bool:
     """Maintains the auto-generated __initialize__ lifecycle registration block for implementation modules.
 
     1. Checks if module_path is an implementation module (*_impl.py) and exists.
@@ -4799,9 +5024,15 @@ def maintain_impl_lifecycle(
     singleton_nodes: list[ast.ClassDef] = []
     existing_regs: dict[str, tuple[list[str], str]] = {}
     for node in tree.body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "__initialize__":
+        if (
+            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name == "__initialize__"
+        ):
             for call in ast.walk(node):
-                if isinstance(call, ast.Call) and getattr(call.func, "attr", "") == "register_singleton":
+                if (
+                    isinstance(call, ast.Call)
+                    and getattr(call.func, "attr", "") == "register_singleton"
+                ):
                     if call.args:
                         cls_name = ast.unparse(call.args[0])
                         keys_kw = [k.value for k in call.keywords if k.arg == "keys"]
@@ -4818,8 +5049,14 @@ def maintain_impl_lifecycle(
     for node in tree.body:
         if isinstance(node, ast.ClassDef):
             has_tier = any(
-                (isinstance(item, ast.Assign) and any(getattr(t, "id", "") == "tier" for t in item.targets))
-                or (isinstance(item, ast.AnnAssign) and getattr(item.target, "id", "") == "tier")
+                (
+                    isinstance(item, ast.Assign)
+                    and any(getattr(t, "id", "") == "tier" for t in item.targets)
+                )
+                or (
+                    isinstance(item, ast.AnnAssign)
+                    and getattr(item.target, "id", "") == "tier"
+                )
                 for item in node.body
             )
             is_singleton = (
@@ -4842,8 +5079,16 @@ def maintain_impl_lifecycle(
                     s_bases = [
                         ast.unparse(b)
                         for b in node.bases
-                        if not ast.unparse(b).startswith(("InTier", "Singleton[", "lifecycle.Singleton["))
-                        and ast.unparse(b) not in ("Singleton", "lifecycle.Singleton", "object", "Protocol")
+                        if not ast.unparse(b).startswith(
+                            ("InTier", "Singleton[", "lifecycle.Singleton[")
+                        )
+                        and ast.unparse(b)
+                        not in (
+                            "Singleton",
+                            "lifecycle.Singleton",
+                            "object",
+                            "Protocol",
+                        )
                     ]
                     spec_bases_by_cls[node.name] = s_bases
         except Exception:
@@ -4853,7 +5098,9 @@ def maintain_impl_lifecycle(
     if AUTO_INIT_START in new_content and AUTO_INIT_END in new_content:
         start_idx = new_content.find(AUTO_INIT_START)
         end_idx = new_content.find(AUTO_INIT_END) + len(AUTO_INIT_END)
-        new_content = new_content[:start_idx].rstrip() + "\n" + new_content[end_idx:].lstrip()
+        new_content = (
+            new_content[:start_idx].rstrip() + "\n" + new_content[end_idx:].lstrip()
+        )
 
     try:
         cur_tree = ast.parse(new_content, filename=module_path)
@@ -4863,8 +5110,14 @@ def maintain_impl_lifecycle(
     init_nodes = [
         n
         for n in cur_tree.body
-        if (isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == "__initialize__")
-        or (isinstance(n, ast.Assign) and any(getattr(t, "id", "") == "_initialize_" for t in n.targets))
+        if (
+            isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and n.name == "__initialize__"
+        )
+        or (
+            isinstance(n, ast.Assign)
+            and any(getattr(t, "id", "") == "_initialize_" for t in n.targets)
+        )
     ]
     if init_nodes:
         lines = new_content.splitlines(keepends=True)
@@ -4890,8 +5143,11 @@ def maintain_impl_lifecycle(
         raw_bases = [
             ast.unparse(b)
             for b in node.bases
-            if not ast.unparse(b).startswith(("InTier", "Singleton[", "lifecycle.Singleton["))
-            and ast.unparse(b) not in ("Singleton", "lifecycle.Singleton", "object", "Protocol")
+            if not ast.unparse(b).startswith(
+                ("InTier", "Singleton[", "lifecycle.Singleton[")
+            )
+            and ast.unparse(b)
+            not in ("Singleton", "lifecycle.Singleton", "object", "Protocol")
         ]
         candidate_bases = spec_bases_by_cls.get(cls_name, raw_bases)
         computed_keys = [cls_name] + [b for b in candidate_bases if b != cls_name]
@@ -5099,9 +5355,8 @@ def extract_imported_stems(file_path: str) -> list[tuple[int, str]]:
                 mod = node.module
                 if "support" in mod.split("."):
                     continue
-                if (
-                    mod in ("lib", "tests", "low", "grounding")
-                    or mod.endswith((".lib", ".tests", ".low", ".grounding"))
+                if mod in ("lib", "tests", "low", "grounding") or mod.endswith(
+                    (".lib", ".tests", ".low", ".grounding")
                 ):
                     for alias in node.names:
                         results.append((node.lineno, alias.name))
@@ -5159,7 +5414,9 @@ def check_undeclared_imports(
 
     cand_lib = lib_pkg
     if not cand_lib:
-        sibling = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(file_path))), "lib")
+        sibling = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(file_path))), "lib"
+        )
         if os.path.isdir(sibling):
             cand_lib = sibling
 
@@ -5740,7 +5997,6 @@ def check_lib_targets(
     return errors
 
 
-
 def generate_lib_build_content(
     build_file: str,
     parent_build_file: str,
@@ -5868,7 +6124,9 @@ def check_test_targets(
     # 1. Existence checks: only _impl units require tests; _asm units may optionally have tests.
     expected_test_stems = {u for u in units.keys() if u.endswith("_impl")}
     expected_test_names = {f"{stem}_test" for stem in expected_test_stems}
-    allowed_test_stems = {u for u in units.keys() if u.endswith("_impl") or u.endswith("_asm")}
+    allowed_test_stems = {
+        u for u in units.keys() if u.endswith("_impl") or u.endswith("_asm")
+    }
     allowed_test_names = {f"{stem}_test" for stem in allowed_test_stems}
 
     missing_tests = expected_test_names - set(actual_targets.keys())
@@ -5933,7 +6191,6 @@ def check_test_targets(
                 errors.extend(check_test_impl_imports(lib_pkg, py_path))
 
     return errors
-
 
 
 def generate_test_build_content(
@@ -6047,4 +6304,3 @@ def ensure_or_update_test_build(
     except OSError:
         pass
     return True
-

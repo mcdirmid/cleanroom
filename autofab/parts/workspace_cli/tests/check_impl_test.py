@@ -133,7 +133,11 @@ class FakeWorkspacePendingManager:
         main_root: Optional[str] = None,
         role_name: str = "",
     ) -> Sequence[str]:
-        return [f"Unacted feedback in {target}: Test feedback"] if target in self.pending else ()
+        return (
+            [f"Unacted feedback in {target}: Test feedback"]
+            if target in self.pending
+            else ()
+        )
 
 
 class FakeWorkspaceSynchronizer:
@@ -225,7 +229,11 @@ class WorkspaceCheckImplTest(unittest.TestCase):
         self.old_cwd = os.getcwd()
         os.chdir(self.test_dir)
 
-        with open(os.path.join(self.test_dir, app_info.DEFAULT_ROLE_DESCRIPTOR), "w", encoding="utf-8") as f:
+        with open(
+            os.path.join(self.test_dir, app_info.DEFAULT_ROLE_DESCRIPTOR),
+            "w",
+            encoding="utf-8",
+        ) as f:
             json.dump({"role_name": "lib", "dir_scope": "pkg", "parts_dir": "pkg"}, f)
 
         self.role_lib = role_registry.RoleDefinition(
@@ -248,15 +256,43 @@ class WorkspaceCheckImplTest(unittest.TestCase):
         self.fake_submit = FakeSubmissionCoordinator()
         self.fake_prov = FakeWorkspaceProvisioner()
 
-        self.registry.register_instance(self.fake_reg, keys=[role_registry.WorkspaceRegistry], tier=agent_session.agent_session)
-        self.registry.register_instance(self.fake_work, keys=[work.WorkspaceWorkManager], tier=agent_session.agent_session)
-        self.registry.register_instance(self.fake_pending, keys=[pending.WorkspacePendingManager], tier=agent_session.agent_session)
-        self.registry.register_instance(self.fake_sync, keys=[sync.WorkspaceSynchronizer], tier=agent_session.agent_session)
-        self.registry.register_instance(self.fake_submit, keys=[submit.SubmissionCoordinator], tier=agent_session.agent_session)
-        self.registry.register_instance(self.fake_prov, keys=[provision.WorkspaceProvisioner], tier=agent_session.agent_session)
+        self.registry.register_instance(
+            self.fake_reg,
+            keys=[role_registry.WorkspaceRegistry],
+            tier=agent_session.agent_session,
+        )
+        self.registry.register_instance(
+            self.fake_work,
+            keys=[work.WorkspaceWorkManager],
+            tier=agent_session.agent_session,
+        )
+        self.registry.register_instance(
+            self.fake_pending,
+            keys=[pending.WorkspacePendingManager],
+            tier=agent_session.agent_session,
+        )
+        self.registry.register_instance(
+            self.fake_sync,
+            keys=[sync.WorkspaceSynchronizer],
+            tier=agent_session.agent_session,
+        )
+        self.registry.register_instance(
+            self.fake_submit,
+            keys=[submit.SubmissionCoordinator],
+            tier=agent_session.agent_session,
+        )
+        self.registry.register_instance(
+            self.fake_prov,
+            keys=[provision.WorkspaceProvisioner],
+            tier=agent_session.agent_session,
+        )
 
         self.checker = check_impl.WorkspaceChecker()
-        self.registry.register_instance(self.checker, keys=[check.WorkspaceChecker], tier=agent_session.agent_session)
+        self.registry.register_instance(
+            self.checker,
+            keys=[check.WorkspaceChecker],
+            tier=agent_session.agent_session,
+        )
 
     def tearDown(self) -> None:
         os.chdir(self.old_cwd)
@@ -266,6 +302,7 @@ class WorkspaceCheckImplTest(unittest.TestCase):
     def test_run_get_work_clean(self) -> None:
         import io
         from unittest.mock import patch
+
         with patch("sys.stdout", new_callable=io.StringIO) as mock_out:
             ret = self.checker.run_get_work(dir_scope="pkg")
             out = mock_out.getvalue()
@@ -284,6 +321,7 @@ class WorkspaceCheckImplTest(unittest.TestCase):
         ]
         import io
         from unittest.mock import patch
+
         with patch("sys.stdout", new_callable=io.StringIO) as mock_out:
             ret = self.checker.run_get_work(dir_scope="pkg")
             out = mock_out.getvalue()
@@ -296,6 +334,7 @@ class WorkspaceCheckImplTest(unittest.TestCase):
         self.fake_pending.pending = ["pkg/parts/foo/lib/foo.py"]
         import io
         from unittest.mock import patch
+
         with patch("sys.stdout", new_callable=io.StringIO) as mock_out:
             ret = self.checker.run_get_work(dir_scope="pkg")
             out = mock_out.getvalue()
@@ -303,12 +342,15 @@ class WorkspaceCheckImplTest(unittest.TestCase):
         self.assertIn("READY FOR EXECUTION (Prerequisites satisfied):", out)
         self.assertIn("pkg/parts/foo/lib/foo.py", out)
         self.assertIn("Dirty Reasons:", out)
-        self.assertIn("Unacted feedback in pkg/parts/foo/lib/foo.py: Test feedback", out)
+        self.assertIn(
+            "Unacted feedback in pkg/parts/foo/lib/foo.py: Test feedback", out
+        )
         self.assertIn("ACTIONABLE NEXT STEP:", out)
         self.assertNotIn("Error: Cannot call get_work", out)
 
     def test_extract_unacted_feedback_autofab_metadata(self) -> None:
         from autofab.parts.workspace_cli.lib.check_impl import _extract_unacted_feedback
+
         test_file = os.path.join(self.test_dir, "autofab_meta.py")
         with open(test_file, "w", encoding="utf-8") as f:
             f.write(
@@ -334,6 +376,7 @@ class WorkspaceCheckImplTest(unittest.TestCase):
         ]
         import io
         from unittest.mock import patch
+
         with patch("sys.stdout", new_callable=io.StringIO) as mock_out:
             ret = self.checker.run_get_work(dir_scope="pkg")
             out = mock_out.getvalue()
@@ -346,8 +389,12 @@ class WorkspaceCheckImplTest(unittest.TestCase):
         ret = self.checker.run_check_files()
         self.assertEqual(ret, 0)
 
-    def test_run_check_files_rejected_when_no_pending_work_and_empty_queue(self) -> None:
-        unowned_file = os.path.join(self.test_dir, "pkg", "parts", "foo", "tests", "foo_test.py")
+    def test_run_check_files_rejected_when_no_pending_work_and_empty_queue(
+        self,
+    ) -> None:
+        unowned_file = os.path.join(
+            self.test_dir, "pkg", "parts", "foo", "tests", "foo_test.py"
+        )
         os.makedirs(os.path.dirname(unowned_file), exist_ok=True)
         with open(unowned_file, "w", encoding="utf-8") as f:
             f.write("# sample test\n")
@@ -362,7 +409,9 @@ class WorkspaceCheckImplTest(unittest.TestCase):
         self.assertEqual(ret, 1)
 
     def test_run_check_files_with_target(self) -> None:
-        target_file = os.path.join(self.test_dir, "pkg", "parts", "foo", "lib", "foo.py")
+        target_file = os.path.join(
+            self.test_dir, "pkg", "parts", "foo", "lib", "foo.py"
+        )
         os.makedirs(os.path.dirname(target_file), exist_ok=True)
         with open(target_file, "w", encoding="utf-8") as f:
             f.write("# sample implementation\n")
@@ -370,10 +419,80 @@ class WorkspaceCheckImplTest(unittest.TestCase):
         self.fake_pending.pending = [target_file]
         ret = self.checker.run_check_files(target=target_file)
         self.assertEqual(ret, 0)
-        self.assertTrue(self.checker.is_checked_since_modification(self.test_dir, target_file))
+        self.assertTrue(
+            self.checker.is_checked_since_modification(self.test_dir, target_file)
+        )
+
+    def test_run_check_files_omits_redundant_feedback_on_pass(self) -> None:
+        """Requirement: MUST omit repeating feedback on check_files when checks pass."""
+        import io
+        from contextlib import redirect_stdout
+
+        target_file = os.path.join(
+            self.test_dir, "pkg", "parts", "foo", "lib", "foo.py"
+        )
+        os.makedirs(os.path.dirname(target_file), exist_ok=True)
+        with open(target_file, "w", encoding="utf-8") as f:
+            f.write(
+                "# --- AUTOFAB METADATA ---\n"
+                "# FEEDBACK:\n"
+                "# - [qa]: Fix edge case in cycle check\n"
+                "# --- END AUTOFAB METADATA ---\n"
+                "def test_fn(): pass\n"
+            )
+        self.fake_pending.pending = [target_file]
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            ret = self.checker.run_check_files(target=target_file)
+        out = buf.getvalue()
+        self.assertEqual(ret, 0)
+        self.assertIn("[PASSED] All local verification checks passed", out)
+        self.assertIn(
+            "Other checks to verify feedback or changes resolution will be performed after bin/submit is called.",
+            out,
+        )
+        self.assertNotIn("[ATTENTION]", out)
+        self.assertNotIn("pending feedback item", out)
+        self.assertNotIn("Fix edge case in cycle check", out)
+
+    def test_run_check_files_auditor_omits_post_submit_notice(self) -> None:
+        """Requirement: Auditor roles MUST omit the post-submit checks notice upon check_files pass."""
+        import io
+        from contextlib import redirect_stdout
+
+        self.fake_reg.roles.append(
+            role_registry.RoleDefinition(
+                role_name="qa",
+                guide_path="guides/qa.md",
+                writable_file_patterns=[],
+                readonly_file_patterns=[],
+                feedback_role_deps=[],
+                audit_tag="QA_AUDIT",
+                verify_template="echo 'OK'",
+                src_pattern="",
+            )
+        )
+        meta_file = os.path.join(self.test_dir, ".autofab_role.json")
+        with open(meta_file, "w", encoding="utf-8") as f:
+            json.dump({"role": "qa", "parts_dir": "parts/test_pkg"}, f)
+
+        target_file = os.path.join(self.test_dir, "parts", "test_pkg", "lib", "foo.py")
+        os.makedirs(os.path.dirname(target_file), exist_ok=True)
+        with open(target_file, "w", encoding="utf-8") as f:
+            f.write("# sample file\n")
+        self.fake_pending.pending = [target_file]
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            ret = self.checker.run_check_files(target=target_file)
+        out = buf.getvalue()
+        self.assertEqual(ret, 0)
+        self.assertIn("[PASSED] All verification checks passed", out)
+        self.assertNotIn("Other checks to verify feedback or changes resolution", out)
 
     def test_run_check_files_rejected_when_target_not_pending_and_unowned(self) -> None:
-        unowned_file = os.path.join(self.test_dir, "pkg", "parts", "foo", "tests", "foo_test.py")
+        unowned_file = os.path.join(
+            self.test_dir, "pkg", "parts", "foo", "tests", "foo_test.py"
+        )
         os.makedirs(os.path.dirname(unowned_file), exist_ok=True)
         with open(unowned_file, "w", encoding="utf-8") as f:
             f.write("# sample test\n")
@@ -381,8 +500,12 @@ class WorkspaceCheckImplTest(unittest.TestCase):
         ret = self.checker.run_check_files(target=unowned_file)
         self.assertEqual(ret, 1)
 
-    def test_run_check_files_accepted_when_unassigned_target_owned_by_role(self) -> None:
-        target_file = os.path.join(self.test_dir, "pkg", "parts", "foo", "lib", "foo.py")
+    def test_run_check_files_accepted_when_unassigned_target_owned_by_role(
+        self,
+    ) -> None:
+        target_file = os.path.join(
+            self.test_dir, "pkg", "parts", "foo", "lib", "foo.py"
+        )
         os.makedirs(os.path.dirname(target_file), exist_ok=True)
         with open(target_file, "w", encoding="utf-8") as f:
             f.write("# sample implementation\n")
@@ -390,7 +513,9 @@ class WorkspaceCheckImplTest(unittest.TestCase):
         self.fake_pending.pending = ["pkg/parts/other/lib/other.py"]
         ret = self.checker.run_check_files(target=target_file)
         self.assertEqual(ret, 0)
-        self.assertTrue(self.checker.is_checked_since_modification(self.test_dir, target_file))
+        self.assertTrue(
+            self.checker.is_checked_since_modification(self.test_dir, target_file)
+        )
 
         # Target accepted even when queue is empty and .no_pending_work is set
         self.fake_pending.pending = []
@@ -402,7 +527,9 @@ class WorkspaceCheckImplTest(unittest.TestCase):
     def test_run_check_files_pulls_before_check(self) -> None:
         main_repo = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, main_repo)
-        target_file = os.path.join(self.test_dir, "pkg", "parts", "foo", "lib", "foo.py")
+        target_file = os.path.join(
+            self.test_dir, "pkg", "parts", "foo", "lib", "foo.py"
+        )
         os.makedirs(os.path.dirname(target_file), exist_ok=True)
         with open(target_file, "w", encoding="utf-8") as f:
             f.write("# sample implementation\n")
@@ -412,7 +539,9 @@ class WorkspaceCheckImplTest(unittest.TestCase):
         self.assertTrue(len(self.fake_sync.pulled) > 0)
 
     def test_run_check_files_prioritizes_workspace_pythonpath(self) -> None:
-        target_file = os.path.join(self.test_dir, "pkg", "parts", "foo", "lib", "foo.py")
+        target_file = os.path.join(
+            self.test_dir, "pkg", "parts", "foo", "lib", "foo.py"
+        )
         os.makedirs(os.path.dirname(target_file), exist_ok=True)
         with open(target_file, "w", encoding="utf-8") as f:
             f.write("# sample implementation\n")
@@ -445,19 +574,24 @@ class WorkspaceCheckImplTest(unittest.TestCase):
             return original_run("echo OK", shell=True, capture_output=True, text=True)
 
         from unittest.mock import patch
+
         with patch("subprocess.run", side_effect=mock_run):
             ret = self.checker.run_check_files(target=target_file)
 
         self.assertEqual(ret, 0)
         self.assertIn("PYTHONPATH", captured_env)
-        pypaths = [os.path.realpath(p) for p in captured_env["PYTHONPATH"].split(os.pathsep)]
+        pypaths = [
+            os.path.realpath(p) for p in captured_env["PYTHONPATH"].split(os.pathsep)
+        ]
         ws_real = os.path.realpath(self.test_dir)
         main_real = os.path.realpath(fake_main_root)
         self.assertIn(ws_real, pypaths)
         self.assertNotIn(main_real, pypaths)
 
     def test_run_check_files_propagates_max_failures_for_local_model(self) -> None:
-        target_file = os.path.join(self.test_dir, "pkg", "parts", "foo", "lib", "foo.py")
+        target_file = os.path.join(
+            self.test_dir, "pkg", "parts", "foo", "lib", "foo.py"
+        )
         os.makedirs(os.path.dirname(target_file), exist_ok=True)
         with open(target_file, "w", encoding="utf-8") as f:
             f.write("# sample implementation\n")
@@ -467,10 +601,10 @@ class WorkspaceCheckImplTest(unittest.TestCase):
         with open(cfg_path, "w", encoding="utf-8") as f:
             f.write(
                 'default = "qwen-moe-q6"\n'
-                '[models.qwen-moe-q6]\n'
+                "[models.qwen-moe-q6]\n"
                 'model = "Qwen3.6-35B-A3B-oQ6-mtp"\n'
-                'tier = 1\n'
-                'max_failures = 5\n'
+                "tier = 1\n"
+                "max_failures = 5\n"
             )
 
         role_lib = role_registry.RoleDefinition(
@@ -496,6 +630,7 @@ class WorkspaceCheckImplTest(unittest.TestCase):
             return original_run("echo OK", shell=True, capture_output=True, text=True)
 
         from unittest.mock import patch
+
         with patch("subprocess.run", side_effect=mock_run):
             ret = self.checker.run_check_files(target=target_file)
 
@@ -504,7 +639,9 @@ class WorkspaceCheckImplTest(unittest.TestCase):
         self.assertIn("--maxfail=5", captured_env["PYTEST_ADDOPTS"])
 
     def test_run_check_files_defaults_max_failures_for_cloud_model(self) -> None:
-        target_file = os.path.join(self.test_dir, "pkg", "parts", "foo", "lib", "foo.py")
+        target_file = os.path.join(
+            self.test_dir, "pkg", "parts", "foo", "lib", "foo.py"
+        )
         os.makedirs(os.path.dirname(target_file), exist_ok=True)
         with open(target_file, "w", encoding="utf-8") as f:
             f.write("# sample implementation\n")
@@ -514,9 +651,9 @@ class WorkspaceCheckImplTest(unittest.TestCase):
         with open(cfg_path, "w", encoding="utf-8") as f:
             f.write(
                 'default = "cloud-model"\n'
-                '[models.cloud-model]\n'
+                "[models.cloud-model]\n"
                 'model = "cloud-model"\n'
-                'tier = 2\n'
+                "tier = 2\n"
             )
 
         role_lib = role_registry.RoleDefinition(
@@ -542,6 +679,7 @@ class WorkspaceCheckImplTest(unittest.TestCase):
             return original_run("echo OK", shell=True, capture_output=True, text=True)
 
         from unittest.mock import patch
+
         with patch("subprocess.run", side_effect=mock_run):
             ret = self.checker.run_check_files(target=target_file)
 
@@ -551,7 +689,9 @@ class WorkspaceCheckImplTest(unittest.TestCase):
 
     def test_run_check_files_times_out(self) -> None:
         """CUJ: Check files handles verification command timeout gracefully."""
-        target_file = os.path.join(self.test_dir, "pkg", "parts", "foo", "lib", "foo.py")
+        target_file = os.path.join(
+            self.test_dir, "pkg", "parts", "foo", "lib", "foo.py"
+        )
         os.makedirs(os.path.dirname(target_file), exist_ok=True)
         with open(target_file, "w", encoding="utf-8") as f:
             f.write("# sample implementation\n")
@@ -572,6 +712,7 @@ class WorkspaceCheckImplTest(unittest.TestCase):
         self.fake_reg.roles = [role_lib]
 
         from unittest.mock import patch
+
         def mock_timeout(cmd: Any, **kwargs: Any) -> Any:
             raise subprocess.TimeoutExpired(cmd=cmd, timeout=1.0)
 
@@ -579,7 +720,9 @@ class WorkspaceCheckImplTest(unittest.TestCase):
             ret = self.checker.run_check_files(target=target_file)
 
         self.assertEqual(ret, 1)
-        rec_file = os.path.join(self.test_dir, app_info.DEFAULT_STATE_DIR, ".last_check_files.json")
+        rec_file = os.path.join(
+            self.test_dir, app_info.DEFAULT_STATE_DIR, ".last_check_files.json"
+        )
         self.assertTrue(os.path.isfile(rec_file))
         with open(rec_file, "r", encoding="utf-8") as f:
             records = json.load(f)
@@ -605,6 +748,7 @@ class WorkspaceCheckImplTest(unittest.TestCase):
         ]
         import io
         from unittest.mock import patch
+
         with patch("sys.stdout", new_callable=io.StringIO) as mock_out:
             ret = self.checker.run_get_work(dir_scope="pkg")
             out = mock_out.getvalue()
@@ -612,8 +756,14 @@ class WorkspaceCheckImplTest(unittest.TestCase):
         self.assertIn("guides/lib.md", out)
         self.assertNotIn("autofab_py/guides/lib.md", out)
 
-    def test_run_get_work_fails_when_gemini_argon_mismatched_in_antigravity(self) -> None:
-        with open(os.path.join(self.test_dir, app_info.DEFAULT_ROLE_DESCRIPTOR), "w", encoding="utf-8") as f:
+    def test_run_get_work_fails_when_gemini_argon_mismatched_in_antigravity(
+        self,
+    ) -> None:
+        with open(
+            os.path.join(self.test_dir, app_info.DEFAULT_ROLE_DESCRIPTOR),
+            "w",
+            encoding="utf-8",
+        ) as f:
             json.dump(
                 {
                     "role": "lib",
@@ -630,22 +780,37 @@ class WorkspaceCheckImplTest(unittest.TestCase):
         conv_dir = os.path.join(ag_root, "conversations")
         os.makedirs(logs_dir, exist_ok=True)
         os.makedirs(conv_dir, exist_ok=True)
-        with open(os.path.join(logs_dir, "transcript.jsonl"), "w", encoding="utf-8") as f:
-            f.write(json.dumps({"content": f"assigned role workspace directory is '{self.test_dir}'"}) + "\n")
+        with open(
+            os.path.join(logs_dir, "transcript.jsonl"), "w", encoding="utf-8"
+        ) as f:
+            f.write(
+                json.dumps(
+                    {
+                        "content": f"assigned role workspace directory is '{self.test_dir}'"
+                    }
+                )
+                + "\n"
+            )
 
         import sqlite3
+
         db_path = os.path.join(conv_dir, f"{cid}.db")
         conn = sqlite3.connect(db_path)
         conn.execute("CREATE TABLE gen_metadata (idx INTEGER PRIMARY KEY, data BLOB)")
-        conn.execute("INSERT INTO gen_metadata (idx, data) VALUES (1, ?)", (b"model: gemini-3.8-flash",))
+        conn.execute(
+            "INSERT INTO gen_metadata (idx, data) VALUES (1, ?)",
+            (b"model: gemini-3.8-flash",),
+        )
         conn.commit()
         conn.close()
 
         import io
         from unittest.mock import patch
-        with patch.dict(os.environ, {"ANTIGRAVITY_BRAIN_DIR": ag_root}), patch(
-            "sys.stdout", new_callable=io.StringIO
-        ) as mock_out:
+
+        with (
+            patch.dict(os.environ, {"ANTIGRAVITY_BRAIN_DIR": ag_root}),
+            patch("sys.stdout", new_callable=io.StringIO) as mock_out,
+        ):
             ret = self.checker.run_get_work(dir_scope="pkg")
             out = mock_out.getvalue()
 
@@ -724,8 +889,12 @@ class WorkspaceCheckImplTest(unittest.TestCase):
         )
         self.fake_reg.roles = [self.role_lib, role_pretense, role_pretense_qa]
 
-        lib_file = os.path.join(self.test_dir, "pkg", "parts", "foo", "lib", "foo_impl.py")
-        pretense_file = os.path.join(self.test_dir, "pkg", "parts", "foo", "pretense", "foo_impl_pretense.py")
+        lib_file = os.path.join(
+            self.test_dir, "pkg", "parts", "foo", "lib", "foo_impl.py"
+        )
+        pretense_file = os.path.join(
+            self.test_dir, "pkg", "parts", "foo", "pretense", "foo_impl_pretense.py"
+        )
         os.makedirs(os.path.dirname(lib_file), exist_ok=True)
         os.makedirs(os.path.dirname(pretense_file), exist_ok=True)
         with open(lib_file, "w") as f:
@@ -773,7 +942,11 @@ class WorkspaceCheckImplTest(unittest.TestCase):
         )
         self.fake_reg.roles = [self.role_lib, role_low, role_qa]
 
-        with open(os.path.join(self.test_dir, app_info.DEFAULT_ROLE_DESCRIPTOR), "w", encoding="utf-8") as f:
+        with open(
+            os.path.join(self.test_dir, app_info.DEFAULT_ROLE_DESCRIPTOR),
+            "w",
+            encoding="utf-8",
+        ) as f:
             json.dump(
                 {
                     "role_name": "qa",
@@ -789,7 +962,9 @@ class WorkspaceCheckImplTest(unittest.TestCase):
         with open(spec_file, "w", encoding="utf-8") as f:
             f.write("# low spec\n")
 
-        target_file = os.path.join(self.test_dir, "pkg", "parts", "foo", "lib", "foo.py")
+        target_file = os.path.join(
+            self.test_dir, "pkg", "parts", "foo", "lib", "foo.py"
+        )
         os.makedirs(os.path.dirname(target_file), exist_ok=True)
         with open(target_file, "w", encoding="utf-8") as f:
             f.write("# target file\n# CHANGE: Add base calculation logic\n")
@@ -797,6 +972,7 @@ class WorkspaceCheckImplTest(unittest.TestCase):
 
         import io
         from unittest.mock import patch
+
         with patch("sys.stdout", new_callable=io.StringIO) as mock_out:
             ret = self.checker.run_check_files(target=target_file)
             out = mock_out.getvalue()
@@ -806,9 +982,22 @@ class WorkspaceCheckImplTest(unittest.TestCase):
         self.assertIn('Author\'s Latest # CHANGE: "Add base calculation logic"', out)
         self.assertIn("Primary Failure: Assertion failed: expected 42 got 0", out)
         self.assertIn("ACTION REQUIRED:", out)
-        self.assertIn("You are an AUDITOR, not an author. Do NOT write debug scripts.", out)
-        self.assertIn("After blaming, run 'bin/get_work' to inspect remaining units and conclude.", out)
-        self.assertIn("[QA ARBITER REMINDER - EXPLAIN DEFECTS IN TERMS OF SPECIFICATION]", out)
+        self.assertIn(
+            "You are an AUDITOR, not an author. Do NOT write debug scripts.", out
+        )
+        self.assertIn(
+            'Stage blame attribution via: bin/blame <culprit_file> "<critique>"', out
+        )
+        self.assertIn(
+            "Commit blame and conclude the target via: bin/submit <target>", out
+        )
+        self.assertIn(
+            "After submitting, run 'bin/get_work' to inspect remaining units and conclude.",
+            out,
+        )
+        self.assertIn(
+            "[QA ARBITER REMINDER - EXPLAIN DEFECTS IN TERMS OF SPECIFICATION]", out
+        )
         self.assertIn("parts/test_pkg/low/foo.pyi", out)
         self.assertIn(
             "Blame feedback MUST be provided in terms of how the file being blamed is not compliant with the common source of truth specification",
@@ -827,6 +1016,7 @@ class WorkspaceCheckImplTest(unittest.TestCase):
 
     def test_run_check_files_milestone_git_checkpoint(self) -> None:
         import subprocess
+
         role_low = role_registry.RoleDefinition(
             role_name="low",
             guide_path="guides/low.md",
@@ -846,11 +1036,30 @@ class WorkspaceCheckImplTest(unittest.TestCase):
         with open(target_file, "w") as f:
             f.write("# low spec\n")
 
-        subprocess.run(["git", "init"], cwd=self.test_dir, check=True, capture_output=True)
-        subprocess.run(["git", "config", "user.name", "Test Worker"], cwd=self.test_dir, check=True, capture_output=True)
-        subprocess.run(["git", "config", "user.email", f"test@{app_info.APP_NAME}.local"], cwd=self.test_dir, check=True, capture_output=True)
-        subprocess.run(["git", "add", "-A"], cwd=self.test_dir, check=True, capture_output=True)
-        subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=self.test_dir, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "init"], cwd=self.test_dir, check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Test Worker"],
+            cwd=self.test_dir,
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.email", f"test@{app_info.APP_NAME}.local"],
+            cwd=self.test_dir,
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "add", "-A"], cwd=self.test_dir, check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "commit", "-m", "Initial commit"],
+            cwd=self.test_dir,
+            check=True,
+            capture_output=True,
+        )
 
         with open(target_file, "a") as f:
             f.write("# verified modification\n")
@@ -859,11 +1068,18 @@ class WorkspaceCheckImplTest(unittest.TestCase):
         ret = self.checker.run_check_files(target=target_file)
         self.assertEqual(ret, 0)
 
-        git_log = subprocess.run(["git", "log", "-1", "--format=%s"], cwd=self.test_dir, check=True, capture_output=True, text=True)
+        git_log = subprocess.run(
+            ["git", "log", "-1", "--format=%s"],
+            cwd=self.test_dir,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
         self.assertIn("Checkpoint: verified", git_log.stdout)
 
     def test_run_check_files_auditor_omits_git_checkpoint(self) -> None:
         import subprocess
+
         role_qa = role_registry.RoleDefinition(
             role_name="qa",
             guide_path="guides/qa.md",
@@ -878,19 +1094,44 @@ class WorkspaceCheckImplTest(unittest.TestCase):
             active_component_types=["interface", "implementation"],
         )
         self.fake_reg.roles.append(role_qa)
-        with open(os.path.join(self.test_dir, app_info.DEFAULT_ROLE_DESCRIPTOR), "w", encoding="utf-8") as f:
-            json.dump({"role_name": "qa", "dir_scope": "pkg", "parts_dir": "pkg/parts"}, f)
+        with open(
+            os.path.join(self.test_dir, app_info.DEFAULT_ROLE_DESCRIPTOR),
+            "w",
+            encoding="utf-8",
+        ) as f:
+            json.dump(
+                {"role_name": "qa", "dir_scope": "pkg", "parts_dir": "pkg/parts"}, f
+            )
 
         target_file = os.path.join(self.test_dir, "parts", "test_pkg", "low", "foo.pyi")
         os.makedirs(os.path.dirname(target_file), exist_ok=True)
         with open(target_file, "w") as f:
             f.write("# low spec\n")
 
-        subprocess.run(["git", "init"], cwd=self.test_dir, check=True, capture_output=True)
-        subprocess.run(["git", "config", "user.name", "Test Worker"], cwd=self.test_dir, check=True, capture_output=True)
-        subprocess.run(["git", "config", "user.email", f"test@{app_info.APP_NAME}.local"], cwd=self.test_dir, check=True, capture_output=True)
-        subprocess.run(["git", "add", "-A"], cwd=self.test_dir, check=True, capture_output=True)
-        subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=self.test_dir, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "init"], cwd=self.test_dir, check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Test Worker"],
+            cwd=self.test_dir,
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.email", f"test@{app_info.APP_NAME}.local"],
+            cwd=self.test_dir,
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "add", "-A"], cwd=self.test_dir, check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "commit", "-m", "Initial commit"],
+            cwd=self.test_dir,
+            check=True,
+            capture_output=True,
+        )
 
         with open(target_file, "a") as f:
             f.write("# some uncommitted edit\n")
@@ -899,7 +1140,13 @@ class WorkspaceCheckImplTest(unittest.TestCase):
         ret = self.checker.run_check_files(target=target_file)
         self.assertEqual(ret, 0)
 
-        git_log = subprocess.run(["git", "log", "-1", "--format=%s"], cwd=self.test_dir, check=True, capture_output=True, text=True)
+        git_log = subprocess.run(
+            ["git", "log", "-1", "--format=%s"],
+            cwd=self.test_dir,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
         self.assertEqual("Initial commit", git_log.stdout.strip())
 
     def test_run_check_files_fails_and_reverts_when_init_py_modified(self) -> None:
@@ -931,16 +1178,18 @@ class WorkspaceCheckImplTest(unittest.TestCase):
         self.assertEqual(reverted_content, "# canonical empty init\n")
 
     def test_check_files_deduplicates_arbiter_reminders(self) -> None:
-        self.fake_reg.roles.append(role_registry.RoleDefinition(
-            role_name="qa",
-            guide_path="guides/qa.md",
-            writable_file_patterns=[],
-            readonly_file_patterns=[],
-            feedback_role_deps=[],
-            verify_template="echo '[QA ARBITER REMINDER - EXPLAIN DEFECTS IN TERMS OF SPECIFICATION]\n• Blame feedback MUST be provided\nAssertionError: failed' && exit 1",
-            audit_tag="QA_AUDIT",
-            src_pattern="",
-        ))
+        self.fake_reg.roles.append(
+            role_registry.RoleDefinition(
+                role_name="qa",
+                guide_path="guides/qa.md",
+                writable_file_patterns=[],
+                readonly_file_patterns=[],
+                feedback_role_deps=[],
+                verify_template="echo '[QA ARBITER REMINDER - EXPLAIN DEFECTS IN TERMS OF SPECIFICATION]\n• Blame feedback MUST be provided\nAssertionError: failed' && exit 1",
+                audit_tag="QA_AUDIT",
+                src_pattern="",
+            )
+        )
         meta_file = os.path.join(self.test_dir, ".autofab_role.json")
         with open(meta_file, "w", encoding="utf-8") as f:
             json.dump({"role": "qa", "parts_dir": "parts/test_pkg"}, f)
@@ -953,30 +1202,37 @@ class WorkspaceCheckImplTest(unittest.TestCase):
 
         import io
         from unittest.mock import patch
+
         with patch("sys.stdout", new_callable=io.StringIO) as mock_out:
             ret = self.checker.run_check_files(target=target_file)
             out = mock_out.getvalue()
         self.assertEqual(ret, 1)
         # The reminder should appear exactly once, not twice
-        reminder_count = out.count("[QA ARBITER REMINDER - EXPLAIN DEFECTS IN TERMS OF SPECIFICATION]")
+        reminder_count = out.count(
+            "[QA ARBITER REMINDER - EXPLAIN DEFECTS IN TERMS OF SPECIFICATION]"
+        )
         self.assertEqual(reminder_count, 1)
 
     def test_check_files_pretense_qa_reminder_and_deduplication(self) -> None:
-        self.fake_reg.roles.append(role_registry.RoleDefinition(
-            role_name="pretense_qa",
-            guide_path="guides/pretense_qa.md",
-            writable_file_patterns=[],
-            readonly_file_patterns=[],
-            feedback_role_deps=[],
-            verify_template="echo '[PRETENSE QA ARBITER REMINDER - RULES ON ERRORS AND PRECONDITIONS]\n• Blame feedback MUST be provided\nAssertionError: failed' && exit 1",
-            audit_tag="PRETENSE_QA_AUDIT",
-            src_pattern="",
-        ))
+        self.fake_reg.roles.append(
+            role_registry.RoleDefinition(
+                role_name="pretense_qa",
+                guide_path="guides/pretense_qa.md",
+                writable_file_patterns=[],
+                readonly_file_patterns=[],
+                feedback_role_deps=[],
+                verify_template="echo '[PRETENSE QA ARBITER REMINDER - RULES ON ERRORS AND PRECONDITIONS]\n• Blame feedback MUST be provided\nAssertionError: failed' && exit 1",
+                audit_tag="PRETENSE_QA_AUDIT",
+                src_pattern="",
+            )
+        )
         meta_file = os.path.join(self.test_dir, ".autofab_role.json")
         with open(meta_file, "w", encoding="utf-8") as f:
             json.dump({"role": "pretense_qa", "parts_dir": "parts/test_pkg"}, f)
 
-        target_file = os.path.join(self.test_dir, "parts", "test_pkg", "lib", "foo_impl.py")
+        target_file = os.path.join(
+            self.test_dir, "parts", "test_pkg", "lib", "foo_impl.py"
+        )
         os.makedirs(os.path.dirname(target_file), exist_ok=True)
         with open(target_file, "w", encoding="utf-8") as f:
             f.write("# impl\n")
@@ -984,29 +1240,40 @@ class WorkspaceCheckImplTest(unittest.TestCase):
 
         import io
         from unittest.mock import patch
+
         with patch("sys.stdout", new_callable=io.StringIO) as mock_out:
             ret = self.checker.run_check_files(target=target_file)
             out = mock_out.getvalue()
         self.assertEqual(ret, 1)
-        reminder_count = out.count("[PRETENSE QA ARBITER REMINDER - RULES ON ERRORS AND PRECONDITIONS]")
+        reminder_count = out.count(
+            "[PRETENSE QA ARBITER REMINDER - RULES ON ERRORS AND PRECONDITIONS]"
+        )
         self.assertEqual(reminder_count, 1)
         self.assertIn("An unhandled *Error or test failure can indicate:", out)
         self.assertIn("Candidate Culprit:", out)
         self.assertIn("Candidate Files That Can Receive Feedback:", out)
-        self.assertIn("BLAME ROUTING (DETERMINE CULPRIT FROM SPECIFICATION & FEEDBACK TARGET SOURCE CODE):", out)
-        self.assertIn("Look at the specification contracts and the source code of the candidate feedback files above.", out)
+        self.assertIn(
+            "BLAME ROUTING (DETERMINE CULPRIT FROM SPECIFICATION & FEEDBACK TARGET SOURCE CODE):",
+            out,
+        )
+        self.assertIn(
+            "Look at the specification contracts and the source code of the candidate feedback files above.",
+            out,
+        )
 
     def test_run_get_work_auditor_auto_submits_passing_targets(self) -> None:
-        self.fake_reg.roles.append(role_registry.RoleDefinition(
-            role_name="qa",
-            guide_path="guides/qa.md",
-            writable_file_patterns=[],
-            readonly_file_patterns=[],
-            feedback_role_deps=[],
-            verify_template="echo 'OK'",
-            audit_tag="QA_AUDIT",
-            src_pattern="",
-        ))
+        self.fake_reg.roles.append(
+            role_registry.RoleDefinition(
+                role_name="qa",
+                guide_path="guides/qa.md",
+                writable_file_patterns=[],
+                readonly_file_patterns=[],
+                feedback_role_deps=[],
+                verify_template="echo 'OK'",
+                audit_tag="QA_AUDIT",
+                src_pattern="",
+            )
+        )
         meta_file = os.path.join(self.test_dir, ".autofab_role.json")
         with open(meta_file, "w", encoding="utf-8") as f:
             json.dump({"role": "qa", "parts_dir": "parts/test_pkg"}, f)
@@ -1027,6 +1294,7 @@ class WorkspaceCheckImplTest(unittest.TestCase):
 
         import io
         from unittest.mock import patch
+
         with patch("sys.stdout", new_callable=io.StringIO) as mock_out:
             ret = self.checker.run_get_work(dir_scope="test_pkg")
             out = mock_out.getvalue()
@@ -1038,16 +1306,18 @@ class WorkspaceCheckImplTest(unittest.TestCase):
         self.assertEqual(len(self.fake_pending.pending), 0)
 
     def test_run_get_work_auditor_presents_failing_targets(self) -> None:
-        self.fake_reg.roles.append(role_registry.RoleDefinition(
-            role_name="qa",
-            guide_path="guides/qa.md",
-            writable_file_patterns=[],
-            readonly_file_patterns=[],
-            feedback_role_deps=[],
-            verify_template="echo 'AssertionError: test failure' && exit 1",
-            audit_tag="QA_AUDIT",
-            src_pattern="",
-        ))
+        self.fake_reg.roles.append(
+            role_registry.RoleDefinition(
+                role_name="qa",
+                guide_path="guides/qa.md",
+                writable_file_patterns=[],
+                readonly_file_patterns=[],
+                feedback_role_deps=[],
+                verify_template="echo 'AssertionError: test failure' && exit 1",
+                audit_tag="QA_AUDIT",
+                src_pattern="",
+            )
+        )
         meta_file = os.path.join(self.test_dir, ".autofab_role.json")
         with open(meta_file, "w", encoding="utf-8") as f:
             json.dump({"role": "qa", "parts_dir": "parts/test_pkg"}, f)
@@ -1068,6 +1338,7 @@ class WorkspaceCheckImplTest(unittest.TestCase):
 
         import io
         from unittest.mock import patch
+
         with patch("sys.stdout", new_callable=io.StringIO) as mock_out:
             ret = self.checker.run_get_work(dir_scope="test_pkg")
             out = mock_out.getvalue()
@@ -1084,8 +1355,8 @@ if __name__ == "__main__":
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-30T11:00:00Z
-# LAST_CHANGED: 2026-11-01T17:15:00Z
-# CHANGE: Test read-only init.py modification detection and reversion in check_files
+# LAST_CHANGED: 2026-11-09T19:56:00Z
+# CHANGE: Test reporting local checks passed and noting other checks occur after submit
 # COVERAGE_AUDIT: 2026-10-18T19:13:51Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

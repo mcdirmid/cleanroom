@@ -135,9 +135,7 @@ class FilePathManager(Singleton[SystemTier], Protocol):
         ...
 
     # Contract: Resolves a workspace path into an absolute path given the absolute path of a workspace root.
-    def resolve_path(
-        self, root: AbsolutePath, relative: WorkspacePath
-    ) -> AbsolutePath:
+    def resolve_path(self, root: AbsolutePath, relative: WorkspacePath) -> AbsolutePath:
         """Resolves a workspace path into an absolute path given the absolute path of a workspace root.
 
         Args:
@@ -155,6 +153,7 @@ class FilePathManager(Singleton[SystemTier], Protocol):
         - MUST produce the combined absolute path formed by joining the workspace root absolute path with the workspace path.
         """
         ...
+
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z

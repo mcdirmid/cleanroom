@@ -73,16 +73,24 @@ def _find_metadata_bounds(lines: List[str], is_html: bool) -> Optional[tuple[int
     if is_html:
         for idx, line in enumerate(lines):
             stripped = line.strip()
-            if stripped.startswith("<!--") and ("CLEANROOM METADATA" in stripped or "AUTOFAB METADATA" in stripped):
+            if stripped.startswith("<!--") and (
+                "CLEANROOM METADATA" in stripped or "AUTOFAB METADATA" in stripped
+            ):
                 for i in range(idx, len(lines)):
                     if "-->" in lines[i]:
                         return (idx, i)
                 return None
         return None
     for idx, line in enumerate(lines):
-        if line.strip() in ("# --- CLEANROOM METADATA ---", "# --- AUTOFAB METADATA ---"):
+        if line.strip() in (
+            "# --- CLEANROOM METADATA ---",
+            "# --- AUTOFAB METADATA ---",
+        ):
             for i in range(idx + 1, len(lines)):
-                if lines[i].strip() in ("# --- END CLEANROOM METADATA ---", "# --- END AUTOFAB METADATA ---"):
+                if lines[i].strip() in (
+                    "# --- END CLEANROOM METADATA ---",
+                    "# --- END AUTOFAB METADATA ---",
+                ):
                     return (idx, i)
             return None
     return None
@@ -159,7 +167,9 @@ class FakeSourceMetadataCoordinator:
         if orig_bounds is not None:
             if new_bounds is None:
                 return True
-            orig_meta = original_content.splitlines()[orig_bounds[0] : orig_bounds[1] + 1]
+            orig_meta = original_content.splitlines()[
+                orig_bounds[0] : orig_bounds[1] + 1
+            ]
             new_meta = new_content.splitlines()[new_bounds[0] : new_bounds[1] + 1]
             return orig_meta != new_meta
         return new_bounds is not None
@@ -301,21 +311,26 @@ class FakeSourceMetadataCoordinator:
         dirty: Optional[str] = None,
         clear_dirty: bool = False,
     ) -> None:
-        self.updated.append((str(file_path), {
-            "last_cleaned": last_cleaned,
-            "clear_last_cleaned": clear_last_cleaned,
-            "last_changed": last_changed,
-            "change_summary": change_summary,
-            "code_hash": code_hash,
-            "clear_code_hash": clear_code_hash,
-            "clear_feedback": clear_feedback,
-            "append_feedback": append_feedback,
-            "audits": audits,
-            "clear_audits": clear_audits,
-            "stamp_audit": stamp_audit,
-            "dirty": dirty,
-            "clear_dirty": clear_dirty,
-        }))
+        self.updated.append(
+            (
+                str(file_path),
+                {
+                    "last_cleaned": last_cleaned,
+                    "clear_last_cleaned": clear_last_cleaned,
+                    "last_changed": last_changed,
+                    "change_summary": change_summary,
+                    "code_hash": code_hash,
+                    "clear_code_hash": clear_code_hash,
+                    "clear_feedback": clear_feedback,
+                    "append_feedback": append_feedback,
+                    "audits": audits,
+                    "clear_audits": clear_audits,
+                    "stamp_audit": stamp_audit,
+                    "dirty": dirty,
+                    "clear_dirty": clear_dirty,
+                },
+            )
+        )
         p = Path(file_path)
         if p.is_file():
             content = p.read_text(encoding="utf-8")
@@ -429,7 +444,6 @@ class FakeWorkspaceRegistry:
     def discover_repository_root(self, start_dir=None) -> str:
         return start_dir or self.default_root
 
-
     def resolve_role_definition(
         self, role_name_or_address, repo_root=None, dir_scope=None
     ) -> role_registry.RoleDefinition:
@@ -482,7 +496,11 @@ class FakeWorkspaceProvisioner:
             except OSError:
                 pass
         shutil.copy2(src, dst)
-        mode = (0o555 if readonly else 0o755) if executable else (0o444 if readonly else 0o644)
+        mode = (
+            (0o555 if readonly else 0o755)
+            if executable
+            else (0o444 if readonly else 0o644)
+        )
         try:
             os.chmod(dst, mode)
         except OSError:
@@ -509,7 +527,11 @@ class FakeWorkspaceProvisioner:
         os.makedirs(bin_dir, exist_ok=True)
 
     def write_role_agents_guide(
-        self, workspace_dir: str, role_name: str, dir_scope: str, repo_root: Optional[str] = None
+        self,
+        workspace_dir: str,
+        role_name: str,
+        dir_scope: str,
+        repo_root: Optional[str] = None,
     ) -> None:
         agents_f = os.path.join(workspace_dir, "AGENTS.md")
         content = (
@@ -531,7 +553,11 @@ class FakeWorkspaceProvisioner:
         self.write_file_with_permissions(agents_f, content)
 
     def sync_test_stubs(
-        self, workspace_dir: str, role_name: str, dir_scope: str, repo_root: Optional[str] = None
+        self,
+        workspace_dir: str,
+        role_name: str,
+        dir_scope: str,
+        repo_root: Optional[str] = None,
     ) -> int:
         count = 0
         ws_scope = os.path.join(workspace_dir, dir_scope)
@@ -647,7 +673,10 @@ class WorkspaceSyncImplTest(unittest.TestCase):
         self.phase_cm.__exit__(None, None, None)
 
     def test_pull_and_harvest(self) -> None:
-        with tempfile.TemporaryDirectory() as main_root, tempfile.TemporaryDirectory() as ws_dir:
+        with (
+            tempfile.TemporaryDirectory() as main_root,
+            tempfile.TemporaryDirectory() as ws_dir,
+        ):
             # Set up main files
             main_lib = os.path.join(main_root, "scope", "lib")
             os.makedirs(main_lib, exist_ok=True)
@@ -683,7 +712,10 @@ class WorkspaceSyncImplTest(unittest.TestCase):
             self.assertIn("modified in workspace", content)
 
     def test_flush_blame_buffer(self) -> None:
-        with tempfile.TemporaryDirectory() as main_root, tempfile.TemporaryDirectory() as ws_dir:
+        with (
+            tempfile.TemporaryDirectory() as main_root,
+            tempfile.TemporaryDirectory() as ws_dir,
+        ):
             culprit_dir = os.path.join(main_root, "scope", "low")
             os.makedirs(culprit_dir, exist_ok=True)
             culprit_file = os.path.join(culprit_dir, "sample.pyi")
@@ -719,11 +751,20 @@ class WorkspaceSyncImplTest(unittest.TestCase):
             self.assertFalse(os.path.exists(blame_buf))
 
     def test_refresh_system_files_decoupled_configuration(self) -> None:
-        with tempfile.TemporaryDirectory() as main_root, tempfile.TemporaryDirectory() as ws_dir:
+        with (
+            tempfile.TemporaryDirectory() as main_root,
+            tempfile.TemporaryDirectory() as ws_dir,
+        ):
             # Set up files in main
-            with open(os.path.join(main_root, "pyproject.toml"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(main_root, "pyproject.toml"), "w", encoding="utf-8"
+            ) as f:
                 f.write("[project]\nname = 'test'\nreadme = 'README.md'\n")
-            with open(os.path.join(main_root, app_info.DEFAULT_ROLES_FILE), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(main_root, app_info.DEFAULT_ROLES_FILE),
+                "w",
+                encoding="utf-8",
+            ) as f:
                 f.write(
                     "[methodology]\nname = 'python'\n\n"
                     "[roles.lib]\nname = 'lib'\nsrc_pattern = '{unit_dir}/lib/{unit_name}.py'\n"
@@ -732,11 +773,15 @@ class WorkspaceSyncImplTest(unittest.TestCase):
                 )
             support_lib_dir = os.path.join(main_root, "scope", "support", "lib")
             os.makedirs(support_lib_dir, exist_ok=True)
-            with open(os.path.join(support_lib_dir, "lifecycle.py"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(support_lib_dir, "lifecycle.py"), "w", encoding="utf-8"
+            ) as f:
                 f.write("# lifecycle runtime\n")
             with open(os.path.join(main_root, "notes.txt"), "w", encoding="utf-8") as f:
                 f.write("# notes\n")
-            with open(os.path.join(main_root, "pyrightconfig.json"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(main_root, "pyrightconfig.json"), "w", encoding="utf-8"
+            ) as f:
                 f.write("{}\n")
 
             os.makedirs(os.path.join(ws_dir, "bin"), exist_ok=True)
@@ -749,10 +794,16 @@ class WorkspaceSyncImplTest(unittest.TestCase):
             )
             self.assertGreater(refreshed, 0)
             self.assertTrue(os.path.isfile(os.path.join(ws_dir, "pyproject.toml")))
-            with open(os.path.join(ws_dir, "pyproject.toml"), "r", encoding="utf-8") as f:
+            with open(
+                os.path.join(ws_dir, "pyproject.toml"), "r", encoding="utf-8"
+            ) as f:
                 self.assertNotIn("readme =", f.read())
-            self.assertFalse(os.path.exists(os.path.join(ws_dir, app_info.DEFAULT_ROLES_FILE)))
-            self.assertTrue(os.path.isfile(os.path.join(ws_dir, "support", "lib", "lifecycle.py")))
+            self.assertFalse(
+                os.path.exists(os.path.join(ws_dir, app_info.DEFAULT_ROLES_FILE))
+            )
+            self.assertTrue(
+                os.path.isfile(os.path.join(ws_dir, "support", "lib", "lifecycle.py"))
+            )
             self.assertFalse(os.path.exists(os.path.join(ws_dir, "notes.txt")))
             self.assertFalse(os.path.exists(os.path.join(ws_dir, "pyrightconfig.json")))
             agents_md = os.path.join(ws_dir, "AGENTS.md")
@@ -760,9 +811,14 @@ class WorkspaceSyncImplTest(unittest.TestCase):
             with open(agents_md, "r", encoding="utf-8") as f:
                 agents_text = f.read()
             self.assertIn("## Contamination Tripwire (Poison Pill)", agents_text)
-            self.assertIn("CRITICAL CONTAMINATION: I read a file outside my assigned role workspace", agents_text)
+            self.assertIn(
+                "CRITICAL CONTAMINATION: I read a file outside my assigned role workspace",
+                agents_text,
+            )
             self.assertIn("## In-Workspace Execution & Permitted Commands", agents_text)
-            self.assertIn(f"## Mandatory {app_info.APP_TITLE} Workflow Binaries", agents_text)
+            self.assertIn(
+                f"## Mandatory {app_info.APP_TITLE} Workflow Binaries", agents_text
+            )
             self.assertIn("bin/fail", agents_text)
             self.assertIn("## Acting on Blame & Feedback", agents_text)
             self.assertIn("## Unresolvable Impasse & Failure Protocol", agents_text)
@@ -781,15 +837,20 @@ class WorkspaceSyncImplTest(unittest.TestCase):
                 self.assertTrue(os.path.isfile(qa_agents_md))
                 with open(qa_agents_md, "r", encoding="utf-8") as f:
                     qa_agents_text = f.read()
-                self.assertIn("## Delivering Blame & Feedback (Auditor Role Requirements)", qa_agents_text)
+                self.assertIn(
+                    "## Delivering Blame & Feedback (Auditor Role Requirements)",
+                    qa_agents_text,
+                )
                 self.assertIn("# CHANGE:", qa_agents_text)
                 self.assertIn("NEVER recycle identical blame critiques", qa_agents_text)
             finally:
                 shutil.rmtree(qa_ws_dir, ignore_errors=True)
 
-
     def test_pull_updates_unmodified_writable_target_and_ensures_perms(self) -> None:
-        with tempfile.TemporaryDirectory() as main_root, tempfile.TemporaryDirectory() as ws_dir:
+        with (
+            tempfile.TemporaryDirectory() as main_root,
+            tempfile.TemporaryDirectory() as ws_dir,
+        ):
             main_scope = os.path.join(main_root, "scope")
             ws_scope = os.path.join(ws_dir, "scope")
             os.makedirs(os.path.join(main_scope, "lib"), exist_ok=True)
@@ -858,7 +919,10 @@ class WorkspaceSyncImplTest(unittest.TestCase):
             self.assertTrue(bool(st.st_mode & stat.S_IWUSR))
 
     def test_pull_deletes_files_missing_in_main(self) -> None:
-        with tempfile.TemporaryDirectory() as main_root, tempfile.TemporaryDirectory() as ws_dir:
+        with (
+            tempfile.TemporaryDirectory() as main_root,
+            tempfile.TemporaryDirectory() as ws_dir,
+        ):
             main_scope = os.path.join(main_root, "scope")
             ws_scope = os.path.join(ws_dir, "scope")
             os.makedirs(os.path.join(main_scope, "lib"), exist_ok=True)
@@ -867,7 +931,7 @@ class WorkspaceSyncImplTest(unittest.TestCase):
             old_file = os.path.join(ws_scope, "lib", "deleted.py")
             with open(old_file, "w", encoding="utf-8") as f:
                 f.write("# deleted file\n")
-            
+
             ws_init = os.path.join(ws_scope, "__init__.py")
             with open(ws_init, "w", encoding="utf-8") as f:
                 f.write("")
@@ -886,7 +950,10 @@ class WorkspaceSyncImplTest(unittest.TestCase):
             self.assertFalse(os.path.exists(ws_init))
 
     def test_pull_synchronizes_and_replaces_stub_dependencies(self) -> None:
-        with tempfile.TemporaryDirectory() as main_root, tempfile.TemporaryDirectory() as ws_dir:
+        with (
+            tempfile.TemporaryDirectory() as main_root,
+            tempfile.TemporaryDirectory() as ws_dir,
+        ):
             part_dir = os.path.join(main_root, "scope", "parts", "sample")
             os.makedirs(os.path.join(part_dir, "low"), exist_ok=True)
             os.makedirs(os.path.join(part_dir, "lib"), exist_ok=True)
@@ -899,9 +966,15 @@ class WorkspaceSyncImplTest(unittest.TestCase):
             with open(real_f, "w", encoding="utf-8") as f:
                 f.write("def get_config() -> str:\n    return 'secret_main_code'\n")
 
-            with open(os.path.join(main_root, "pyproject.toml"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(main_root, "pyproject.toml"), "w", encoding="utf-8"
+            ) as f:
                 f.write("[project]\nname = 'test'\n")
-            with open(os.path.join(main_root, app_info.DEFAULT_ROLES_FILE), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(main_root, app_info.DEFAULT_ROLES_FILE),
+                "w",
+                encoding="utf-8",
+            ) as f:
                 f.write(
                     "[roles.low]\nname = 'low'\nsrc_pattern = '{unit_dir}/low/{unit_name}.pyi'\n\n"
                     "[roles.lib]\nname = 'lib'\nsrc_pattern = '{unit_dir}/lib/{unit_name}.py'\n"
@@ -935,7 +1008,10 @@ class WorkspaceSyncImplTest(unittest.TestCase):
             self.assertFalse(bool(mode & stat.S_IWUSR))
 
     def test_harvest_strips_code_hash_in_main_and_refreshes_ws_hash(self) -> None:
-        with tempfile.TemporaryDirectory() as main_root, tempfile.TemporaryDirectory() as ws_dir:
+        with (
+            tempfile.TemporaryDirectory() as main_root,
+            tempfile.TemporaryDirectory() as ws_dir,
+        ):
             main_lib = os.path.join(main_root, "scope", "parts", "sample", "lib")
             ws_lib = os.path.join(ws_dir, "scope", "parts", "sample", "lib")
             os.makedirs(main_lib, exist_ok=True)
@@ -995,7 +1071,10 @@ class WorkspaceSyncImplTest(unittest.TestCase):
             self.assertNotIn("LAST_CHANGED:", wf_content)
 
     def test_pull_only_pulls_changed_files_and_preserves_subagent_edits(self) -> None:
-        with tempfile.TemporaryDirectory() as main_root, tempfile.TemporaryDirectory() as ws_dir:
+        with (
+            tempfile.TemporaryDirectory() as main_root,
+            tempfile.TemporaryDirectory() as ws_dir,
+        ):
             main_scope = os.path.join(main_root, "scope")
             ws_scope = os.path.join(ws_dir, "scope")
             os.makedirs(os.path.join(main_scope, "lib"), exist_ok=True)
@@ -1004,7 +1083,9 @@ class WorkspaceSyncImplTest(unittest.TestCase):
             main_lib = os.path.join(main_scope, "lib", "unit.py")
             main_low = os.path.join(main_scope, "low", "unit.pyi")
             with open(main_lib, "w", encoding="utf-8") as f:
-                f.write("# --- CLEANROOM METADATA ---\n# CHANGE: initial\n# --- END CLEANROOM METADATA ---\ndef foo(): return 1\n")
+                f.write(
+                    "# --- CLEANROOM METADATA ---\n# CHANGE: initial\n# --- END CLEANROOM METADATA ---\ndef foo(): return 1\n"
+                )
             with open(main_low, "w", encoding="utf-8") as f:
                 f.write("def foo() -> int: ...\n")
 
@@ -1033,7 +1114,9 @@ class WorkspaceSyncImplTest(unittest.TestCase):
 
             # Subagent edits ws_lib (writable file) in role workspace
             with open(ws_lib, "w", encoding="utf-8") as f:
-                f.write("# --- CLEANROOM METADATA ---\n# CHANGE: subagent edit\n# --- END CLEANROOM METADATA ---\ndef foo(): return 999\n")
+                f.write(
+                    "# --- CLEANROOM METADATA ---\n# CHANGE: subagent edit\n# --- END CLEANROOM METADATA ---\ndef foo(): return 999\n"
+                )
 
             # Subagent also modifies ws_low (read-only spec in this role)
             os.chmod(ws_low, 0o644)
@@ -1080,7 +1163,10 @@ class WorkspaceSyncImplTest(unittest.TestCase):
             self.assertNotIn("# subagent comment", content_low_updated)
 
     def test_pull_propagates_upstream_change_when_unmodified_locally(self) -> None:
-        with tempfile.TemporaryDirectory() as main_root, tempfile.TemporaryDirectory() as ws_dir:
+        with (
+            tempfile.TemporaryDirectory() as main_root,
+            tempfile.TemporaryDirectory() as ws_dir,
+        ):
             main_scope = os.path.join(main_root, "scope")
             ws_scope = os.path.join(ws_dir, "scope")
             os.makedirs(os.path.join(main_scope, "low"), exist_ok=True)
@@ -1115,8 +1201,13 @@ class WorkspaceSyncImplTest(unittest.TestCase):
                 content = f.read()
             self.assertIn("def foo(x: int) -> int: ...", content)
 
-    def test_pull_writable_target_handles_upstream_metadata_update_without_conflict(self) -> None:
-        with tempfile.TemporaryDirectory() as main_root, tempfile.TemporaryDirectory() as ws_dir:
+    def test_pull_writable_target_handles_upstream_metadata_update_without_conflict(
+        self,
+    ) -> None:
+        with (
+            tempfile.TemporaryDirectory() as main_root,
+            tempfile.TemporaryDirectory() as ws_dir,
+        ):
             main_scope = os.path.join(main_root, "scope")
             ws_scope = os.path.join(ws_dir, "scope")
             os.makedirs(os.path.join(main_scope, "lib"), exist_ok=True)

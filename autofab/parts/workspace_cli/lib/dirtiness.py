@@ -54,6 +54,7 @@ class WorkspaceDirtinessEvaluator(Singleton[AgentSessionTier], Protocol):
         unit_name: str,
     ) -> Sequence[Tuple[str, str]]: ...
 
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-14T18:15:00Z

@@ -48,7 +48,9 @@ class MockDagStorage:
 
 
 class MockRoleDef:
-    def __init__(self, role_name="lib", is_auditor=False, audit_tag=None, src_pattern=""):
+    def __init__(
+        self, role_name="lib", is_auditor=False, audit_tag=None, src_pattern=""
+    ):
         self.role_name = role_name
         self.is_auditor = is_auditor
         self.audit_tag = audit_tag
@@ -60,8 +62,14 @@ class MockNodeConfig:
 
     def __init__(self):
         self.role_definitions = {
-            "lib": MockRoleDef(role_name="lib", is_auditor=False, src_pattern="{unit_dir}/lib/{unit_name}.py"),
-            "qa": MockRoleDef(role_name="qa", is_auditor=True, audit_tag="QA_AUDIT", src_pattern=""),
+            "lib": MockRoleDef(
+                role_name="lib",
+                is_auditor=False,
+                src_pattern="{unit_dir}/lib/{unit_name}.py",
+            ),
+            "qa": MockRoleDef(
+                role_name="qa", is_auditor=True, audit_tag="QA_AUDIT", src_pattern=""
+            ),
         }
         self.feedback: Optional[list[str]] = None
 
@@ -101,7 +109,9 @@ class ControlSubmitImplTest(unittest.TestCase):
                 unit_address=dag_storage.UnitAddress("sample"),
                 role_address=dag_storage.RoleAddress("lib"),
             )
-            outcome = self.coordinator.submit_target(target, change_summary="Fixed issue", has_modifications=True)
+            outcome = self.coordinator.submit_target(
+                target, change_summary="Fixed issue", has_modifications=True
+            )
             self.assertFalse(outcome.accepted)
             self.assertIn("Verification is failing", outcome.message)
 
@@ -121,17 +131,26 @@ class ControlSubmitImplTest(unittest.TestCase):
             self.storage.mark_node_dirty(target)
 
             # Modified files require summary
-            outcome1 = self.coordinator.submit_target(target, change_summary=None, has_modifications=True)
+            outcome1 = self.coordinator.submit_target(
+                target, change_summary=None, has_modifications=True
+            )
             self.assertFalse(outcome1.accepted)
             self.assertIn("change_summary was not provided", outcome1.message)
 
             # Unmodified files forbid summary
-            outcome2 = self.coordinator.submit_target(target, change_summary="Some summary", has_modifications=False)
+            outcome2 = self.coordinator.submit_target(
+                target, change_summary="Some summary", has_modifications=False
+            )
             self.assertFalse(outcome2.accepted)
-            self.assertIn("not permitted when submitting without workspace file modifications", outcome2.message)
+            self.assertIn(
+                "not permitted when submitting without workspace file modifications",
+                outcome2.message,
+            )
 
             # Valid modified submission
-            outcome3 = self.coordinator.submit_target(target, change_summary="Updated config", has_modifications=True)
+            outcome3 = self.coordinator.submit_target(
+                target, change_summary="Updated config", has_modifications=True
+            )
             self.assertTrue(outcome3.accepted)
             self.assertFalse(self.storage.is_dirty(target))
             self.assertNotIn(target, self.storage.messages)
@@ -149,14 +168,20 @@ class ControlSubmitImplTest(unittest.TestCase):
                 unit_address=dag_storage.UnitAddress("sample"),
                 role_address=dag_storage.RoleAddress("qa"),
             )
-            outcome = self.coordinator.submit_target(target, change_summary="Audit done", has_modifications=False)
+            outcome = self.coordinator.submit_target(
+                target, change_summary="Audit done", has_modifications=False
+            )
             self.assertFalse(outcome.accepted)
             self.assertIn("not permitted for audit nodes", outcome.message)
 
-            outcome_valid = self.coordinator.submit_target(target, change_summary=None, has_modifications=False)
+            outcome_valid = self.coordinator.submit_target(
+                target, change_summary=None, has_modifications=False
+            )
             self.assertTrue(outcome_valid.accepted)
 
-    def test_submit_unmodified_with_implement_message_succeeds_without_summary(self) -> None:
+    def test_submit_unmodified_with_implement_message_succeeds_without_summary(
+        self,
+    ) -> None:
         verif = MockVerificationEvaluator(is_passing=True)
         self.registry.register_instance(
             verif,
@@ -172,13 +197,17 @@ class ControlSubmitImplTest(unittest.TestCase):
             self.storage.mark_node_dirty(target)
             self.storage.add_message(
                 dag_storage.ChangeMessage(
-                    content=dag_storage.MessageContent("Implement task for unit 'sample' in role 'lib'.")
+                    content=dag_storage.MessageContent(
+                        "Implement task for unit 'sample' in role 'lib'."
+                    )
                 ),
                 to=target,
             )
 
             # Unmodified implementation node without feedback MUST succeed when submitted without summary
-            outcome = self.coordinator.submit_target(target, change_summary=None, has_modifications=False)
+            outcome = self.coordinator.submit_target(
+                target, change_summary=None, has_modifications=False
+            )
             self.assertTrue(outcome.accepted)
             self.assertFalse(self.storage.is_dirty(target))
 
@@ -197,18 +226,29 @@ class ControlSubmitImplTest(unittest.TestCase):
                 role_address=dag_storage.RoleAddress("lib"),
             )
             self.storage.mark_node_dirty(target)
-            outcome = self.coordinator.submit_target(target, change_summary=None, has_modifications=False)
+            outcome = self.coordinator.submit_target(
+                target, change_summary=None, has_modifications=False
+            )
             self.assertFalse(outcome.accepted)
-            self.assertIn("Session feedback is present but no workspace files were modified", outcome.message)
+            self.assertIn(
+                "Session feedback is present but no workspace files were modified",
+                outcome.message,
+            )
 
-    def test_submit_target_file_strips_code_hash_in_main_and_refreshes_in_workspace(self) -> None:
+    def test_submit_target_file_strips_code_hash_in_main_and_refreshes_in_workspace(
+        self,
+    ) -> None:
         import tempfile
         import json
         import os
         from autofab.parts.metadata.lib import metadata_asm
+
         metadata_asm.__initialize__(registry=self.registry)
 
-        with tempfile.TemporaryDirectory() as main_root, tempfile.TemporaryDirectory() as ws_root:
+        with (
+            tempfile.TemporaryDirectory() as main_root,
+            tempfile.TemporaryDirectory() as ws_root,
+        ):
             main_lib = os.path.join(main_root, "staging", "parts", "sample", "lib")
             ws_lib = os.path.join(ws_root, "staging", "parts", "sample", "lib")
             os.makedirs(main_lib, exist_ok=True)
@@ -231,6 +271,7 @@ class ControlSubmitImplTest(unittest.TestCase):
 
             # Workspace file has only change and baseline code hash
             from autofab.parts.metadata.lib import src_metadata
+
             code_hash = src_metadata.compute_code_hash("x = 1\n", "sample.py")
             ws_content = (
                 "# --- CLEANROOM METADATA ---\n"
@@ -242,7 +283,11 @@ class ControlSubmitImplTest(unittest.TestCase):
             with open(ws_file, "w", encoding="utf-8") as f:
                 f.write(ws_content)
 
-            with open(os.path.join(ws_root, app_info.DEFAULT_ROLE_DESCRIPTOR), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(ws_root, app_info.DEFAULT_ROLE_DESCRIPTOR),
+                "w",
+                encoding="utf-8",
+            ) as f:
                 json.dump({"role": "lib", "dir_scope": "staging"}, f)
 
             with enter_phase(agent_session.agent_session, registry=self.registry):
@@ -278,7 +323,10 @@ class ControlSubmitImplTest(unittest.TestCase):
         import json
         from autofab.parts.metadata.lib import src_metadata
 
-        with tempfile.TemporaryDirectory() as main_root, tempfile.TemporaryDirectory() as ws_root:
+        with (
+            tempfile.TemporaryDirectory() as main_root,
+            tempfile.TemporaryDirectory() as ws_root,
+        ):
             main_file = os.path.join(main_root, "staging", "lib", "sample.py")
             ws_file = os.path.join(ws_root, "staging", "lib", "sample.py")
             os.makedirs(os.path.dirname(main_file), exist_ok=True)
@@ -303,7 +351,11 @@ class ControlSubmitImplTest(unittest.TestCase):
             with open(ws_file, "w", encoding="utf-8") as f:
                 f.write(content)
 
-            with open(os.path.join(ws_root, app_info.DEFAULT_ROLE_DESCRIPTOR), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(ws_root, app_info.DEFAULT_ROLE_DESCRIPTOR),
+                "w",
+                encoding="utf-8",
+            ) as f:
                 json.dump({"role": "lib", "dir_scope": "staging"}, f)
 
             with enter_phase(agent_session.agent_session, registry=self.registry):

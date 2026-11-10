@@ -28,7 +28,7 @@ Decentralized dirty tracking and feedback distribution require uniform metadata 
 - A source metadata coordinator marks files clean by updating last cleaned timestamp while clearing feedback. [mark_clean_status]
 - A source metadata coordinator marks files dirty by setting dirty reason while updating last cleaned timestamp. [mark_dirty_status]
 - A source metadata coordinator records change descriptions while updating change summary with new code hash. [record_change_status]
-- A source metadata coordinator appends unacted feedback entries while advancing last cleaned timestamp. [append_feedback_entry]
+- A source metadata coordinator appends unacted feedback entries with sender role attribution while advancing last cleaned timestamp. [append_feedback_entry]
 - A source metadata coordinator stamps role audits with current UTC timestamp while advancing last cleaned timestamp. [stamp_audit_entry]
 - A source metadata coordinator clears all role audit entries from file metadata. [clear_audits_entries]
 - A source metadata coordinator deletes last cleaned timestamps from file metadata. [delete_last_cleaned_entry]

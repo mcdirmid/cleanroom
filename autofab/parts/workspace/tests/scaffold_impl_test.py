@@ -40,26 +40,34 @@ class WorkspaceScaffoldImplTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             # Writable file
             w_file = os.path.join(tmp_dir, "writable.txt")
-            self.scaffolder.write_file_with_permissions(w_file, "write content", readonly=False)
+            self.scaffolder.write_file_with_permissions(
+                w_file, "write content", readonly=False
+            )
             self.assertTrue(os.path.isfile(w_file))
             mode = stat.S_IMODE(os.stat(w_file).st_mode)
             self.assertEqual(mode, 0o644)
 
             # Read-only file
             ro_file = os.path.join(tmp_dir, "readonly.txt")
-            self.scaffolder.write_file_with_permissions(ro_file, "ro content", readonly=True)
+            self.scaffolder.write_file_with_permissions(
+                ro_file, "ro content", readonly=True
+            )
             self.assertTrue(os.path.isfile(ro_file))
             mode = stat.S_IMODE(os.stat(ro_file).st_mode)
             self.assertEqual(mode, 0o444)
 
             # Overwrite read-only file
-            self.scaffolder.write_file_with_permissions(ro_file, "new content", readonly=False)
+            self.scaffolder.write_file_with_permissions(
+                ro_file, "new content", readonly=False
+            )
             with open(ro_file, "r", encoding="utf-8") as f:
                 self.assertEqual(f.read(), "new content")
 
             # Executable file
             exe_file = os.path.join(tmp_dir, "exec.sh")
-            self.scaffolder.write_file_with_permissions(exe_file, "#!/bin/sh\n", executable=True)
+            self.scaffolder.write_file_with_permissions(
+                exe_file, "#!/bin/sh\n", executable=True
+            )
             mode = stat.S_IMODE(os.stat(exe_file).st_mode)
             self.assertEqual(mode, 0o755)
 
@@ -75,7 +83,17 @@ class WorkspaceScaffoldImplTest(unittest.TestCase):
             self.scaffolder.deploy_runner_zipapps(bin_dir)
             self.assertFalse(os.path.exists(stale_cov))
 
-            for tool in ("get_work", "check_files", "submit", "blame", "feedback", "fail", "revert", "checkpoint"):
+            for tool in (
+                "get_work",
+                "check_files",
+                "submit",
+                "blame",
+                "feedback",
+                "fail",
+                "revert",
+                "checkpoint",
+                "reject",
+            ):
                 tool_path = os.path.join(bin_dir, tool)
                 self.assertTrue(os.path.isfile(tool_path), f"Missing {tool}")
                 mode = stat.S_IMODE(os.stat(tool_path).st_mode)
@@ -100,15 +118,29 @@ class WorkspaceScaffoldImplTest(unittest.TestCase):
                             )
 
                 # Verify that the tool executes cleanly as a standalone binary
-                res_tool = subprocess.run([tool_path, "--help"], capture_output=True, text=True)
-                self.assertEqual(res_tool.returncode, 0, f"Execution of {tool} failed: {res_tool.stderr}")
+                res_tool = subprocess.run(
+                    [tool_path, "--help"], capture_output=True, text=True
+                )
+                self.assertEqual(
+                    res_tool.returncode,
+                    0,
+                    f"Execution of {tool} failed: {res_tool.stderr}",
+                )
                 self.assertIn("usage:", res_tool.stdout.lower())
 
                 # Also verify with Homebrew python if present (e.g. Python 3.14 on macOS)
                 homebrew_py = "/opt/homebrew/bin/python3"
                 if os.path.isfile(homebrew_py) and homebrew_py != sys.executable:
-                    res_alt = subprocess.run([homebrew_py, tool_path, "--help"], capture_output=True, text=True)
-                    self.assertEqual(res_alt.returncode, 0, f"Execution of {tool} under {homebrew_py} failed: {res_alt.stderr}")
+                    res_alt = subprocess.run(
+                        [homebrew_py, tool_path, "--help"],
+                        capture_output=True,
+                        text=True,
+                    )
+                    self.assertEqual(
+                        res_alt.returncode,
+                        0,
+                        f"Execution of {tool} under {homebrew_py} failed: {res_alt.stderr}",
+                    )
 
             # When deployed for a role without blame capability, blame and feedback are omitted
             role_no_blame = roles.RoleDefinition(
@@ -127,8 +159,9 @@ class WorkspaceScaffoldImplTest(unittest.TestCase):
             self.assertTrue(os.path.isfile(os.path.join(bin_dir, "fail")))
             self.assertTrue(os.path.isfile(os.path.join(bin_dir, "revert")))
             self.assertTrue(os.path.isfile(os.path.join(bin_dir, "checkpoint")))
+            self.assertTrue(os.path.isfile(os.path.join(bin_dir, "reject")))
 
-            # When deployed for an auditor role, revert and checkpoint are omitted
+            # When deployed for an auditor role, revert, checkpoint, and reject are omitted
             role_auditor = roles.RoleDefinition(
                 role_name="qa",
                 guide_path="guides/qa.md",
@@ -140,6 +173,7 @@ class WorkspaceScaffoldImplTest(unittest.TestCase):
             self.scaffolder.deploy_runner_zipapps(bin_dir, role_def=role_auditor)
             self.assertFalse(os.path.exists(os.path.join(bin_dir, "revert")))
             self.assertFalse(os.path.exists(os.path.join(bin_dir, "checkpoint")))
+            self.assertFalse(os.path.exists(os.path.join(bin_dir, "reject")))
             self.assertTrue(os.path.isfile(os.path.join(bin_dir, "blame")))
             self.assertTrue(os.path.isfile(os.path.join(bin_dir, "get_work")))
 
@@ -156,7 +190,9 @@ class WorkspaceScaffoldImplTest(unittest.TestCase):
             self.assertTrue(os.path.isfile(os.path.join(bin_dir, "verify_lib")))
             self.assertTrue(os.path.isfile(os.path.join(bin_dir, "verify_pretense")))
             self.assertTrue(os.path.isfile(os.path.join(bin_dir, "verify_pretense_qa")))
-            self.assertTrue(os.path.isfile(os.path.join(bin_dir, "verify_pretense_coverage")))
+            self.assertTrue(
+                os.path.isfile(os.path.join(bin_dir, "verify_pretense_coverage"))
+            )
             self.assertFalse(os.path.exists(os.path.join(bin_dir, "verify_test")))
             self.assertFalse(os.path.exists(os.path.join(bin_dir, "verify_coverage")))
 
@@ -216,10 +252,16 @@ class WorkspaceScaffoldImplTest(unittest.TestCase):
             self.assertIn("Strict Workspace Confinement", content)
             self.assertIn("Ground Truth Oracle Exclusivity", content)
             self.assertIn("Round Conclusion Protocol", content)
-            self.assertIn("When you have no outstanding work to do and `bin/get_work` does not give you more work to do", content)
+            self.assertIn(
+                "When you have no outstanding work to do and `bin/get_work` does not give you more work to do",
+                content,
+            )
             self.assertIn("Conclude with Text Only", content)
             self.assertIn("Restricted Targets & Test Execution Ban", content)
-            self.assertIn("Executing ad-hoc tests, runtime assertions, or inline Python scripts", content)
+            self.assertIn(
+                "Executing ad-hoc tests, runtime assertions, or inline Python scripts",
+                content,
+            )
             self.assertNotIn("Incremental Authoring", content)
 
     def test_write_role_agents_guide_with_stubs(self) -> None:
@@ -341,7 +383,9 @@ class WorkspaceScaffoldImplTest(unittest.TestCase):
                 feedback_role_deps=[],
                 fused_roles=["lib", "pretense", "pretense_qa", "pretense_coverage"],
             )
-            self.scaffolder.write_role_agents_guide(tmp_dir, pretense_fused, "parts/sample")
+            self.scaffolder.write_role_agents_guide(
+                tmp_dir, pretense_fused, "parts/sample"
+            )
             with open(agents_md, "r", encoding="utf-8") as f:
                 pretense_content = f.read()
             self.assertIn("bin/verify_lib", pretense_content)
@@ -356,12 +400,16 @@ class WorkspaceScaffoldImplTest(unittest.TestCase):
             with tempfile.TemporaryDirectory() as ws_dir:
                 template_file = "templates/skeleton.py"
                 os.makedirs(os.path.join(repo_root, "templates"), exist_ok=True)
-                with open(os.path.join(repo_root, template_file), "w", encoding="utf-8") as f:
+                with open(
+                    os.path.join(repo_root, template_file), "w", encoding="utf-8"
+                ) as f:
                     f.write("# SKELETON TEMPLATE\n")
 
                 parts_dir = os.path.join(repo_root, "pkg", "parts", "sample", "low")
                 os.makedirs(parts_dir, exist_ok=True)
-                with open(os.path.join(parts_dir, "foo.pyi"), "w", encoding="utf-8") as f:
+                with open(
+                    os.path.join(parts_dir, "foo.pyi"), "w", encoding="utf-8"
+                ) as f:
                     f.write("# spec foo\n")
 
                 role_def = roles.RoleDefinition(
@@ -391,10 +439,12 @@ class WorkspaceScaffoldImplTest(unittest.TestCase):
             with tempfile.TemporaryDirectory() as ws_dir:
                 parts_dir = os.path.join(repo_root, "pkg", "parts", "sample", "low")
                 os.makedirs(parts_dir, exist_ok=True)
-                with open(os.path.join(parts_dir, "foo.pyi"), "w", encoding="utf-8") as f:
+                with open(
+                    os.path.join(parts_dir, "foo.pyi"), "w", encoding="utf-8"
+                ) as f:
                     f.write("# spec foo\n")
 
-                cmd_tmpl = 'python3 -c "import sys; open(sys.argv[1], \'w\').write(\'# CMD GENERATED SKELETON\\\\n\')" {target_file}'
+                cmd_tmpl = "python3 -c \"import sys; open(sys.argv[1], 'w').write('# CMD GENERATED SKELETON\\\\n')\" {target_file}"
                 role_def = roles.RoleDefinition(
                     role_name="custom_gen",
                     guide_path="guides/custom.md",
@@ -417,17 +467,23 @@ class WorkspaceScaffoldImplTest(unittest.TestCase):
                 with open(created_file, "r", encoding="utf-8") as f:
                     self.assertEqual(f.read(), "# CMD GENERATED SKELETON\n")
 
-    def test_create_missing_target_skeletons_from_promoted_workspace_template(self) -> None:
+    def test_create_missing_target_skeletons_from_promoted_workspace_template(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as repo_root:
             with tempfile.TemporaryDirectory() as ws_dir:
                 ws_tmpl_dir = os.path.join(ws_dir, "templates")
                 os.makedirs(ws_tmpl_dir, exist_ok=True)
-                with open(os.path.join(ws_tmpl_dir, "hls_template.md"), "w", encoding="utf-8") as f:
+                with open(
+                    os.path.join(ws_tmpl_dir, "hls_template.md"), "w", encoding="utf-8"
+                ) as f:
                     f.write("# PROMOTED HLS TEMPLATE\n")
 
                 parts_dir = os.path.join(repo_root, "pkg", "parts", "sample", "low")
                 os.makedirs(parts_dir, exist_ok=True)
-                with open(os.path.join(parts_dir, "bar.pyi"), "w", encoding="utf-8") as f:
+                with open(
+                    os.path.join(parts_dir, "bar.pyi"), "w", encoding="utf-8"
+                ) as f:
                     f.write("# spec bar\n")
 
                 role_def = roles.RoleDefinition(
@@ -451,6 +507,7 @@ class WorkspaceScaffoldImplTest(unittest.TestCase):
                 self.assertTrue(os.path.isfile(created_file))
                 with open(created_file, "r", encoding="utf-8") as f:
                     self.assertEqual(f.read(), "# PROMOTED HLS TEMPLATE\n")
+
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-30T11:00:00Z

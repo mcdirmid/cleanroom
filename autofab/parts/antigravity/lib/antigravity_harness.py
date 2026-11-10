@@ -60,7 +60,9 @@ class AntigravityHarnessAdapter(subagent_coordinator.HarnessAdapter, Protocol):
         ...
 
     # Contract: AntigravityHarnessAdapter.poll_role - polls subagent turn execution non-blockingly without waiting for completion.
-    def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleTurnResult]:
+    def poll_role(
+        self, task_handle: str
+    ) -> Optional[subagent_coordinator.RoleTurnResult]:
         """Polls subagent turn execution non-blockingly without waiting for completion."""
         ...
 
@@ -96,6 +98,7 @@ class AntigravityHarnessManager(Singleton[AgentSessionTier], Protocol):
     def get_transcript_parser(self) -> TranscriptTelemetryParser:
         """Returns the transcript telemetry parser service."""
         ...
+
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z

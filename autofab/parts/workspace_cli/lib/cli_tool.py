@@ -65,12 +65,17 @@ class WorkspaceToolRunner(Singleton[AgentSessionTier], Protocol):
         critique: str,
         repo_root: Optional[str] = None,
     ) -> int:
-        """Attributes defect critique to culprit target in main repository.
+        """Attributes defect critique to culprit target in main repository."""
+        ...
 
-        POSTCONDITIONS:
-        - WHEN critique is accepted, MUST append blame message to event log in directory containing parts.
-        - WHEN critique is accepted, MUST clear target from pending work.
-        """
+    # Contract: Rejects active feedback on an unmodified target file and scrubs feedback from header.
+    def run_reject(
+        self,
+        file_path: str,
+        reason: str,
+        repo_root: Optional[str] = None,
+    ) -> int:
+        """Rejects active feedback on an unmodified target file and scrubs feedback from header."""
         ...
 
     # Contract: Marks target dirty and records failure feedback diagnostics.
@@ -121,6 +126,7 @@ class WorkspaceToolRunner(Singleton[AgentSessionTier], Protocol):
     ) -> int:
         """Refreshes system files, bin tools, configs, and guides across role workspaces."""
         ...
+
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z

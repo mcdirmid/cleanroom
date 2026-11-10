@@ -15,6 +15,7 @@ from autofab.parts.dag.lib import dag_storage
 from autofab.parts.metadata.lib import src_metadata
 from autofab.parts.workspace.lib import role_registry
 from . import dirtiness, pending, work
+
 try:
     from support.lib import app_info
 except ImportError:
@@ -24,9 +25,9 @@ except ImportError:
         import app_info  # type: ignore
 
 # Contract: Relative filename for pending work tracking buffer.
-PENDING_WORK_FILE = getattr(app_info, "DEFAULT_PENDING_WORK_FILE", ".autofab_pending_work.json")
-
-
+PENDING_WORK_FILE = getattr(
+    app_info, "DEFAULT_PENDING_WORK_FILE", ".autofab_pending_work.json"
+)
 
 
 def _parse_pattern_info(src_pattern: str) -> tuple[str, str, str]:
@@ -172,7 +173,6 @@ class WorkspacePendingManager(pending.WorkspacePendingManager):
     def __init__(self) -> None:
         pass
 
-
     # Contract: Reads target paths from local pending work buffer.
     def get_pending_work(self, workspace_dir: str) -> Sequence[str]:
         p = os.path.join(workspace_dir, PENDING_WORK_FILE)
@@ -192,7 +192,9 @@ class WorkspacePendingManager(pending.WorkspacePendingManager):
     # Contract: Records pending target paths into local buffer file.
     def set_pending_work(self, workspace_dir: str, targets: Sequence[str]) -> None:
         p = os.path.join(workspace_dir, PENDING_WORK_FILE)
-        marker = os.path.join(app_info.resolve_state_dir(workspace_dir), ".no_pending_work")
+        marker = os.path.join(
+            app_info.resolve_state_dir(workspace_dir), ".no_pending_work"
+        )
         if not targets:
             self.clear_pending_work(workspace_dir)
             try:
@@ -270,7 +272,11 @@ class WorkspacePendingManager(pending.WorkspacePendingManager):
         main_root: Optional[str] = None,
         role_name: Optional[str] = None,
     ) -> bool:
-        full_ws = os.path.join(workspace_dir, target_path) if not os.path.isabs(target_path) else target_path
+        full_ws = (
+            os.path.join(workspace_dir, target_path)
+            if not os.path.isabs(target_path)
+            else target_path
+        )
         m_root = main_root
         reg = None
         try:
@@ -293,16 +299,30 @@ class WorkspacePendingManager(pending.WorkspacePendingManager):
             part_dir, unit_name, r_name = _parse_unit_from_file_path(full_ws, m_root)
         except (ValueError, KeyError, OSError, LifecycleResolutionError):
             try:
-                part_dir, unit_name, r_name = _parse_unit_from_file_path(full_ws, workspace_dir)
+                part_dir, unit_name, r_name = _parse_unit_from_file_path(
+                    full_ws, workspace_dir
+                )
             except (ValueError, KeyError, OSError, LifecycleResolutionError):
                 pass
         eval_role = (role_name or r_name).split(":")[-1].strip().lower()
-        role_def = reg.resolve_role_definition(eval_role, repo_root=m_root) if reg and eval_role else None
+        role_def = (
+            reg.resolve_role_definition(eval_role, repo_root=m_root)
+            if reg and eval_role
+            else None
+        )
         if role_def and role_def.fused_roles and r_name:
             eval_role = r_name
-            role_def = reg.resolve_role_definition(eval_role, repo_root=m_root) if reg else None
+            role_def = (
+                reg.resolve_role_definition(eval_role, repo_root=m_root)
+                if reg
+                else None
+            )
 
-        is_auditor = bool(role_def and (role_def.audit_tag or not role_def.src_pattern)) if role_def else False
+        is_auditor = (
+            bool(role_def and (role_def.audit_tag or not role_def.src_pattern))
+            if role_def
+            else False
+        )
         if not is_auditor:
             if not os.path.isfile(full_ws):
                 has_upstream_deps = bool(
@@ -311,13 +331,14 @@ class WorkspacePendingManager(pending.WorkspacePendingManager):
                         role_def.role_deps
                         or role_def.feedback_role_deps
                         or getattr(role_def, "star_feedback_role_deps", ())
-                        or any(s.split(":")[-1] != eval_role for s in role_def.star_role_deps)
+                        or any(
+                            s.split(":")[-1] != eval_role
+                            for s in role_def.star_role_deps
+                        )
                     )
                 )
                 can_regenerate = bool(
-                    role_def
-                    and role_def.src_pattern
-                    and has_upstream_deps
+                    role_def and role_def.src_pattern and has_upstream_deps
                 )
                 if can_regenerate:
                     materialize_starter_template(target_path, eval_role, workspace_dir)
@@ -326,7 +347,11 @@ class WorkspacePendingManager(pending.WorkspacePendingManager):
             # Check candidate metadata across main repository and workspace
             target_meta = None
             if m_root != workspace_dir:
-                rel_target = os.path.relpath(full_ws, workspace_dir) if full_ws.startswith(workspace_dir) else target_path
+                rel_target = (
+                    os.path.relpath(full_ws, workspace_dir)
+                    if full_ws.startswith(workspace_dir)
+                    else target_path
+                )
                 full_main = os.path.join(m_root, rel_target)
                 if os.path.isfile(full_main):
                     target_meta = src_metadata.extract_metadata(full_main)
@@ -350,7 +375,9 @@ class WorkspacePendingManager(pending.WorkspacePendingManager):
 
         try:
             dirt_mgr = get_singleton(dirtiness.WorkspaceDirtinessEvaluator)
-            return dirt_mgr.evaluate_unit_dirty(workspace_dir, part_dir, unit_name, eval_role, m_root).is_dirty
+            return dirt_mgr.evaluate_unit_dirty(
+                workspace_dir, part_dir, unit_name, eval_role, m_root
+            ).is_dirty
         except (LifecycleResolutionError, LookupError):
             pass
         return False
@@ -363,7 +390,11 @@ class WorkspacePendingManager(pending.WorkspacePendingManager):
         main_root: Optional[str] = None,
         role_name: Optional[str] = None,
     ) -> Sequence[str]:
-        full_ws = os.path.join(workspace_dir, target_path) if not os.path.isabs(target_path) else target_path
+        full_ws = (
+            os.path.join(workspace_dir, target_path)
+            if not os.path.isabs(target_path)
+            else target_path
+        )
         m_root = main_root
         reg = None
         try:
@@ -386,24 +417,42 @@ class WorkspacePendingManager(pending.WorkspacePendingManager):
             part_dir, unit_name, r_name = _parse_unit_from_file_path(full_ws, m_root)
         except (ValueError, KeyError, OSError, LifecycleResolutionError):
             try:
-                part_dir, unit_name, r_name = _parse_unit_from_file_path(full_ws, workspace_dir)
+                part_dir, unit_name, r_name = _parse_unit_from_file_path(
+                    full_ws, workspace_dir
+                )
             except (ValueError, KeyError, OSError, LifecycleResolutionError):
                 pass
         eval_role = (role_name or r_name).split(":")[-1].strip().lower()
-        role_def = reg.resolve_role_definition(eval_role, repo_root=m_root) if reg and eval_role else None
+        role_def = (
+            reg.resolve_role_definition(eval_role, repo_root=m_root)
+            if reg and eval_role
+            else None
+        )
         if role_def and role_def.fused_roles and r_name:
             eval_role = r_name
-            role_def = reg.resolve_role_definition(eval_role, repo_root=m_root) if reg else None
+            role_def = (
+                reg.resolve_role_definition(eval_role, repo_root=m_root)
+                if reg
+                else None
+            )
 
         reasons: List[str] = []
-        is_auditor = bool(role_def and (role_def.audit_tag or not role_def.src_pattern)) if role_def else False
+        is_auditor = (
+            bool(role_def and (role_def.audit_tag or not role_def.src_pattern))
+            if role_def
+            else False
+        )
         if not is_auditor:
             if not os.path.isfile(full_ws):
                 reasons.append(f"Source file {target_path} does not exist")
             else:
                 target_meta = None
                 if m_root != workspace_dir:
-                    rel_target = os.path.relpath(full_ws, workspace_dir) if full_ws.startswith(workspace_dir) else target_path
+                    rel_target = (
+                        os.path.relpath(full_ws, workspace_dir)
+                        if full_ws.startswith(workspace_dir)
+                        else target_path
+                    )
                     full_main = os.path.join(m_root, rel_target)
                     if os.path.isfile(full_main):
                         target_meta = src_metadata.extract_metadata(full_main)
@@ -421,7 +470,9 @@ class WorkspacePendingManager(pending.WorkspacePendingManager):
                             msg = f"Unacted feedback in {target_path}: {clean_fb}"
                             if msg not in reasons:
                                 reasons.append(msg)
-                if (meta_ws and not meta_ws.last_cleaned) or (target_meta and not target_meta.last_cleaned):
+                if (meta_ws and not meta_ws.last_cleaned) or (
+                    target_meta and not target_meta.last_cleaned
+                ):
                     msg = f"Target has not been cleaned ({target_path})"
                     if msg not in reasons:
                         reasons.append(msg)
@@ -429,17 +480,22 @@ class WorkspacePendingManager(pending.WorkspacePendingManager):
         if unit_name:
             try:
                 dirt_mgr = get_singleton(dirtiness.WorkspaceDirtinessEvaluator)
-                res = dirt_mgr.evaluate_unit_dirty(workspace_dir, part_dir, unit_name, eval_role, m_root)
+                res = dirt_mgr.evaluate_unit_dirty(
+                    workspace_dir, part_dir, unit_name, eval_role, m_root
+                )
                 for r in res.dirtiness_reasons:
                     if r not in reasons:
                         reasons.append(r)
             except (LifecycleResolutionError, LookupError):
                 pass
 
-        if not reasons and self.is_pending_target_dirty(target_path, workspace_dir, main_root, role_name):
+        if not reasons and self.is_pending_target_dirty(
+            target_path, workspace_dir, main_root, role_name
+        ):
             reasons.append(f"Target is dirty ({target_path})")
 
         return tuple(reasons)
+
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z

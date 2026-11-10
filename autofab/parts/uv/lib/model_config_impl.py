@@ -9,8 +9,10 @@ from typing import Any, Mapping, Optional
 
 try:
     import dotenv
+
     dotenv.load_dotenv()
     from support.lib import app_info
+
     _user_env = os.path.join(app_info.get_user_config_dir(), ".env")
     if os.path.isfile(_user_env):
         dotenv.load_dotenv(_user_env)
@@ -108,7 +110,10 @@ def _load_toml_data(config_file: str) -> Mapping[str, Any]:
     try:
         with open(config_file, "rb") as f:
             return tomllib.load(f)
-    except (OSError, tomllib.TOMLDecodeError):  # pragma: no cover (assumption: invalid toml file)
+    except (
+        OSError,
+        tomllib.TOMLDecodeError,
+    ):  # pragma: no cover (assumption: invalid toml file)
         return {}
 
 

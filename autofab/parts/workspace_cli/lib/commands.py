@@ -52,6 +52,16 @@ class WorkspaceCommandHandler(Singleton[AgentSessionTier], Protocol):
         """Attributes defect critique to culprit target in main repository."""
         ...
 
+    # Contract: Rejects active feedback on an unmodified target file and scrubs feedback from header.
+    def run_reject(
+        self,
+        file_path: str,
+        reason: str,
+        repo_root: Optional[str] = None,
+    ) -> int:
+        """Rejects active feedback on an unmodified target file and scrubs feedback from header."""
+        ...
+
     # Contract: Marks target dirty and records failure feedback diagnostics.
     def run_fail(
         self,
@@ -100,6 +110,7 @@ class WorkspaceCommandHandler(Singleton[AgentSessionTier], Protocol):
     ) -> int:
         """Refreshes system files, bin tools, configs, and guides across role workspaces."""
         ...
+
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z

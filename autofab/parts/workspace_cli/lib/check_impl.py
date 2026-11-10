@@ -27,6 +27,7 @@ from autofab.parts.workspace.lib import (
     role_registry,
     sync,
 )
+
 try:
     from support.lib import app_info
 except ImportError:
@@ -106,12 +107,18 @@ def resolve_common_spec_files(
 
         cands = [s_def.src_pattern.format(unit_dir=part_dir, unit_name=unit_name)]
         if base_unit != unit_name:
-            cands.append(s_def.src_pattern.format(unit_dir=part_dir, unit_name=base_unit))
+            cands.append(
+                s_def.src_pattern.format(unit_dir=part_dir, unit_name=base_unit)
+            )
 
         found_any = False
         for c in cands:
             full_ws = os.path.join(ws_root, c) if not os.path.isabs(c) else c
-            full_repo = os.path.join(repo_root, c) if (repo_root and not os.path.isabs(c)) else None
+            full_repo = (
+                os.path.join(repo_root, c)
+                if (repo_root and not os.path.isabs(c))
+                else None
+            )
 
             if os.path.isfile(full_ws):
                 rel = os.path.relpath(full_ws, ws_root)
@@ -148,7 +155,9 @@ def resolve_feedback_targets(
     except Exception:
         return []
 
-    fb_deps = list(r_def.feedback_role_deps or ()) + list(getattr(r_def, "star_feedback_role_deps", ()) or ())
+    fb_deps = list(r_def.feedback_role_deps or ()) + list(
+        getattr(r_def, "star_feedback_role_deps", ()) or ()
+    )
     if not fb_deps:
         return []
 
@@ -166,18 +175,26 @@ def resolve_feedback_targets(
 
         cands = [fb_def.src_pattern.format(unit_dir=part_dir, unit_name=unit_name)]
         if base_unit != unit_name:
-            cands.append(fb_def.src_pattern.format(unit_dir=part_dir, unit_name=base_unit))
+            cands.append(
+                fb_def.src_pattern.format(unit_dir=part_dir, unit_name=base_unit)
+            )
 
         found_any = False
         for c in cands:
             full_ws = os.path.join(ws_root, c) if not os.path.isabs(c) else c
-            full_repo = os.path.join(repo_root, c) if (repo_root and not os.path.isabs(c)) else None
+            full_repo = (
+                os.path.join(repo_root, c)
+                if (repo_root and not os.path.isabs(c))
+                else None
+            )
 
             path_to_record = None
             if os.path.isfile(full_ws):
                 path_to_record = os.path.relpath(full_ws, ws_root)
             elif full_repo and os.path.isfile(full_repo):
-                path_to_record = os.path.relpath(full_repo, repo_root) if repo_root else c
+                path_to_record = (
+                    os.path.relpath(full_repo, repo_root) if repo_root else c
+                )
 
             if path_to_record:
                 if path_to_record not in resolved:
@@ -194,29 +211,42 @@ def resolve_feedback_targets(
 
 def _is_test_file(target: str) -> bool:
     norm = target.replace("\\", "/").lower()
-    return "/tests/" in norm or norm.startswith("tests/") or norm.endswith(("_test.py", "_test.pyi", "_pretense.py"))
+    return (
+        "/tests/" in norm
+        or norm.startswith("tests/")
+        or norm.endswith(("_test.py", "_test.pyi", "_pretense.py"))
+    )
 
 
 def _is_role_writable_file(role_def: Any, file_path: str) -> bool:
     if not role_def:
         return True
     patterns = (
-        (role_def.writable_file_patterns if hasattr(role_def, "writable_file_patterns") else None)
-        or ()
-    )
+        role_def.writable_file_patterns
+        if hasattr(role_def, "writable_file_patterns")
+        else None
+    ) or ()
     if not patterns:
         return False
     import fnmatch
+
     norm_path = file_path.replace("\\", "/")
     fname = os.path.basename(norm_path)
     for pat in patterns:
         pat_norm = pat.replace("\\", "/")
         file_pat = pat_norm.split("/")[-1] if "/" in pat_norm else pat_norm
         dir_part = pat_norm.split("/")[0] if "/" in pat_norm else ""
-        if fnmatch.fnmatch(norm_path, f"*{pat_norm}") or fnmatch.fnmatch(norm_path, pat_norm):
+        if fnmatch.fnmatch(norm_path, f"*{pat_norm}") or fnmatch.fnmatch(
+            norm_path, pat_norm
+        ):
             return True
         if fnmatch.fnmatch(fname, pat_norm) or fnmatch.fnmatch(fname, file_pat):
-            if not dir_part or f"/{dir_part}/" in norm_path or norm_path.startswith(f"{dir_part}/") or norm_path == fname:
+            if (
+                not dir_part
+                or f"/{dir_part}/" in norm_path
+                or norm_path.startswith(f"{dir_part}/")
+                or norm_path == fname
+            ):
                 return True
         if pat_norm.endswith("/*") and pat_norm[:-2] in norm_path:
             return True
@@ -243,9 +273,13 @@ def _is_target_owned_by_role(
         if _is_test_file(target):
             return False
         sub_coord = get_singleton(submit.SubmissionCoordinator)
-        target_path, _ = sub_coord.resolve_submit_target(target, ws_root, clean_r, dir_scope)
+        target_path, _ = sub_coord.resolve_submit_target(
+            target, ws_root, clean_r, dir_scope
+        )
         if not target_path or not os.path.isfile(target_path):
-            target_path, _ = sub_coord.resolve_submit_target(target, main_root, clean_r, dir_scope)
+            target_path, _ = sub_coord.resolve_submit_target(
+                target, main_root, clean_r, dir_scope
+            )
         return bool(target_path and os.path.isfile(target_path))
 
     # Producer / author role check
@@ -256,9 +290,13 @@ def _is_target_owned_by_role(
         role_def = None
 
     sub_coord = get_singleton(submit.SubmissionCoordinator)
-    target_path, _ = sub_coord.resolve_submit_target(target, ws_root, clean_r, dir_scope)
+    target_path, _ = sub_coord.resolve_submit_target(
+        target, ws_root, clean_r, dir_scope
+    )
     if not target_path or not os.path.isfile(target_path):
-        target_path, _ = sub_coord.resolve_submit_target(target, main_root, clean_r, dir_scope)
+        target_path, _ = sub_coord.resolve_submit_target(
+            target, main_root, clean_r, dir_scope
+        )
 
     cand = target_path or target
 
@@ -273,7 +311,9 @@ def _is_target_owned_by_role(
 
     # 2. Check writable file patterns
     if role_def:
-        if not _is_role_writable_file(role_def, cand) and not _is_role_writable_file(role_def, target):
+        if not _is_role_writable_file(role_def, cand) and not _is_role_writable_file(
+            role_def, target
+        ):
             return False
 
     return True
@@ -287,7 +327,11 @@ def _verify_and_revert_readonly_integrity(
     If any unauthorized modification is detected, reverts the file from canonical state,
     restores read-only permissions, and returns an error description.
     """
-    if not ws_root or not main_root or os.path.realpath(ws_root) == os.path.realpath(main_root):
+    if (
+        not ws_root
+        or not main_root
+        or os.path.realpath(ws_root) == os.path.realpath(main_root)
+    ):
         return None
 
     tampered_files: List[str] = []
@@ -299,8 +343,20 @@ def _verify_and_revert_readonly_integrity(
 
     for root, dirs, files in os.walk(scan_root):
         dirs[:] = [
-            d for d in dirs
-            if d not in ("support", ".git", ".venv", "__pycache__", ".antigravity", "bin", ".bazel", "staging_tests", "guides")
+            d
+            for d in dirs
+            if d
+            not in (
+                "support",
+                ".git",
+                ".venv",
+                "__pycache__",
+                ".antigravity",
+                "bin",
+                ".bazel",
+                "staging_tests",
+                "guides",
+            )
         ]
         if "__init__.py" in files:
             init_ws = os.path.join(root, "__init__.py")
@@ -357,6 +413,7 @@ def record_check_executed(ws_root: str, target_path: str, passed: bool) -> None:
     norm_path = os.path.realpath(target_path)
     mtime = os.path.getmtime(target_path) if os.path.isfile(target_path) else 0.0
     import hashlib
+
     content_hash = ""
     if os.path.isfile(target_path):
         try:
@@ -384,7 +441,9 @@ def record_check_executed(ws_root: str, target_path: str, passed: bool) -> None:
 
 def _is_checked_since_modification(ws_root: str, target_path: str) -> bool:
     """Returns True if the target has been checked via check_files since its last modification."""
-    rec_file = os.path.join(app_info.resolve_state_dir(ws_root), ".last_check_files.json")
+    rec_file = os.path.join(
+        app_info.resolve_state_dir(ws_root), ".last_check_files.json"
+    )
     if not os.path.isfile(rec_file):
         return False
     try:
@@ -404,6 +463,7 @@ def _is_checked_since_modification(ws_root: str, target_path: str) -> bool:
     if not os.path.isfile(target_path):
         return True
     import hashlib
+
     try:
         with open(target_path, "rb") as f:
             cur_hash = hashlib.sha256(f.read()).hexdigest()
@@ -444,7 +504,11 @@ def _extract_unacted_feedback(file_path: str) -> List[str]:
                 if "CLEANROOM METADATA" in stripped or "AUTOFAB METADATA" in stripped:
                     in_header = True
                     continue
-                if "END CLEANROOM METADATA" in stripped or "END AUTOFAB METADATA" in stripped or (in_header and stripped == "-->"):
+                if (
+                    "END CLEANROOM METADATA" in stripped
+                    or "END AUTOFAB METADATA" in stripped
+                    or (in_header and stripped == "-->")
+                ):
                     break
                 if not in_header:
                     continue
@@ -497,7 +561,12 @@ def _extract_last_change_comment(file_path: str) -> Optional[str]:
     return None
 
 
-def _extract_primary_failure(stdout: str, stderr: str, is_timeout: bool = False, timeout_sec: Optional[float] = None) -> str:
+def _extract_primary_failure(
+    stdout: str,
+    stderr: str,
+    is_timeout: bool = False,
+    timeout_sec: Optional[float] = None,
+) -> str:
     """Extracts the primary failure exception, assertion, or error diagnostic from command output."""
     if is_timeout:
         return f"Execution timed out after {timeout_sec or 0:.1f}s (possible infinite loop or deadlock detected in code under test)."
@@ -505,7 +574,11 @@ def _extract_primary_failure(stdout: str, stderr: str, is_timeout: bool = False,
     if not combined:
         return "Verification failed with non-zero exit status."
 
-    failed_lines = [line.strip() for line in combined.splitlines() if line.strip().startswith("FAILED ")]
+    failed_lines = [
+        line.strip()
+        for line in combined.splitlines()
+        if line.strip().startswith("FAILED ")
+    ]
     e_lines = [
         line.strip()
         for line in combined.splitlines()
@@ -558,40 +631,65 @@ def _print_triage_summary(
     main_root: Optional[str] = None,
 ) -> None:
     """Prints the structured triage summary and specification grounding reminders."""
-    target_rel = os.path.relpath(target_path, ws_root) if ws_root and target_path.startswith(ws_root) else target_path
+    target_rel = (
+        os.path.relpath(target_path, ws_root)
+        if ws_root and target_path.startswith(ws_root)
+        else target_path
+    )
     change_header = _extract_last_change_comment(target_path) or "(None recorded)"
-    primary_failure = _extract_primary_failure(stdout, stderr, is_timeout=is_timeout, timeout_sec=timeout_sec)
+    primary_failure = _extract_primary_failure(
+        stdout, stderr, is_timeout=is_timeout, timeout_sec=timeout_sec
+    )
     candidate_culprit = target_rel
 
-    spec_files = resolve_common_spec_files(role_name, part_dir, active_unit, ws_root, repo_root=main_root)
+    spec_files = resolve_common_spec_files(
+        role_name, part_dir, active_unit, ws_root, repo_root=main_root
+    )
     spec_desc = ", ".join(spec_files) if spec_files else "the common specification"
-    fb_targets = resolve_feedback_targets(role_name, part_dir, active_unit, ws_root, repo_root=main_root)
+    fb_targets = resolve_feedback_targets(
+        role_name, part_dir, active_unit, ws_root, repo_root=main_root
+    )
     if target_rel and target_rel not in fb_targets:
         fb_targets = [target_rel] + fb_targets
 
     print("\n" + "=" * 80)
-    print(f"======================= {app_info.get_app_title()} Triage Summary =======================")
+    print(
+        f"======================= {app_info.get_app_title()} Triage Summary ======================="
+    )
     print(f"Target: {target_rel}")
-    print(f"Author's Latest # CHANGE: \"{change_header}\"")
+    print(f'Author\'s Latest # CHANGE: "{change_header}"')
     print(f"Primary Failure: {primary_failure}")
-    print(f"Candidate Culprit: {candidate_culprit} (or other candidate feedback target files)")
+    print(
+        f"Candidate Culprit: {candidate_culprit} (or other candidate feedback target files)"
+    )
     print("\nACTION REQUIRED:")
     print("• You are an AUDITOR, not an author. Do NOT write debug scripts.")
     print(f"• Audit the failure against the specification ({spec_desc}).")
-    print("• Deliver attribution via: bin/blame <culprit_file> \"<critique>\"")
-    print("• After blaming, run 'bin/get_work' to inspect remaining units and conclude.")
+    print('• Stage blame attribution via: bin/blame <culprit_file> "<critique>"')
+    print("• Commit blame and conclude the target via: bin/submit <target>")
+    print(
+        "• After submitting, run 'bin/get_work' to inspect remaining units and conclude."
+    )
     print("=" * 80)
 
     print("\n" + "-" * 80)
-    print("BLAME ROUTING (DETERMINE CULPRIT FROM SPECIFICATION & FEEDBACK TARGET SOURCE CODE):")
+    print(
+        "BLAME ROUTING (DETERMINE CULPRIT FROM SPECIFICATION & FEEDBACK TARGET SOURCE CODE):"
+    )
     print(f"• Ground Truth Specification: {spec_desc}")
     print("• Candidate Files That Can Receive Feedback:")
     for fb_path in fb_targets:
         print(f"  - {fb_path}")
     print("• Routing Rules:")
-    print("  1. Look at the specification contracts and the source code of the candidate feedback files above.")
-    print("  2. Determine which of those files you should blame for each observed problem against the specification.")
-    print(f"  3. TARGET DISPARITY WARNING: The target you checked is '{target_rel}', but verification involves multiple files. NEVER default to blaming '{target_rel}' simply because it was the file you called bin/check_files on! Look at the specification and the source code of all candidate feedback files above to determine which file actually contains the defect.")
+    print(
+        "  1. Look at the specification contracts and the source code of the candidate feedback files above."
+    )
+    print(
+        "  2. Determine which of those files you should blame for each observed problem against the specification."
+    )
+    print(
+        f"  3. TARGET DISPARITY WARNING: The target you checked is '{target_rel}', but verification involves multiple files. NEVER default to blaming '{target_rel}' simply because it was the file you called bin/check_files on! Look at the specification and the source code of all candidate feedback files above to determine which file actually contains the defect."
+    )
     print("-" * 80)
 
     if "coverage" in role_name:
@@ -616,7 +714,7 @@ def _print_triage_summary(
             "  - A verification or test module is defective (missing preconditions in require(), invalid transition logic, or invalid assertions).\n"
             "  - An imported dependency or synthesized fake is modeled incorrectly.\n"
             "• Precondition guards in require(...) MUST ONLY check self.state (rule PN009), NEVER target (SUT).\n"
-            "• Single-paragraph blame: exactly 2 arguments (bin/blame <culprit_file> \"<critique>\"), no newlines."
+            '• Single-paragraph blame: exactly 2 arguments (bin/blame <culprit_file> "<critique>"), no newlines.'
         )
     else:
         print(
@@ -635,7 +733,10 @@ def find_workspace_root() -> str:
     """Discovers root of commissioned role workspace or repo root."""
     curr = os.getcwd()
     while curr and curr != os.path.dirname(curr):
-        if any(os.path.isfile(os.path.join(curr, d)) for d in app_info.get_role_descriptors()):
+        if any(
+            os.path.isfile(os.path.join(curr, d))
+            for d in app_info.get_role_descriptors()
+        ):
             return curr
         curr = os.path.dirname(curr)
     return os.getcwd()
@@ -672,9 +773,15 @@ def _resolve_main_root(
         curr = os.path.abspath(ws_root or os.getcwd())
         check_role = curr
         while check_role and check_role != os.path.dirname(check_role):
-            if any(os.path.isfile(os.path.join(check_role, d)) for d in app_info.get_role_descriptors()):
+            if any(
+                os.path.isfile(os.path.join(check_role, d))
+                for d in app_info.get_role_descriptors()
+            ):
                 parent_dir = os.path.dirname(check_role)
-                if os.path.basename(parent_dir) in app_info.get_role_workspaces_containers():
+                if (
+                    os.path.basename(parent_dir)
+                    in app_info.get_role_workspaces_containers()
+                ):
                     return os.path.realpath(os.path.dirname(parent_dir))
                 return os.path.realpath(parent_dir)
             check_role = os.path.dirname(check_role)
@@ -725,11 +832,16 @@ def _compute_role_work_queue(
 
 def _find_agent_node_config_module() -> Any:
     for k, m in list(sys.modules.items()):
-        if k in ("node_config", "agent_node_config") or k.endswith(".node_config") or k.endswith(".agent_node_config"):
+        if (
+            k in ("node_config", "agent_node_config")
+            or k.endswith(".node_config")
+            or k.endswith(".agent_node_config")
+        ):
             if hasattr(m, "NodeConfig"):
                 return m
     try:
         import importlib
+
         try:
             return importlib.import_module("autofab.parts.agent.lib.node_config")
         except ImportError:
@@ -757,8 +869,10 @@ def _ensure_cli_node_config(main_root: Optional[str] = None) -> None:
     role_defs = {r.role_name: r for r in roles}
 
     if cfg is None:
+
         class CliNodeConfig:
             tier = agent_session.agent_session
+
             def __init__(self, r_defs: Dict[str, Any]) -> None:
                 self.role_definitions = r_defs
                 self.read_only_files = set()
@@ -804,10 +918,17 @@ def _resolve_active_model_entry(
         if os.path.isfile(model_cfg_path):
             try:
                 import tomllib
+
                 with open(model_cfg_path, "rb") as mf:
                     m_data = tomllib.load(mf)
-                target_model = (meta.get("model") if meta else None) or m_data.get("default")
-                if target_model and "models" in m_data and target_model in m_data["models"]:
+                target_model = (meta.get("model") if meta else None) or m_data.get(
+                    "default"
+                )
+                if (
+                    target_model
+                    and "models" in m_data
+                    and target_model in m_data["models"]
+                ):
                     return m_data["models"][target_model]
             except Exception:
                 pass
@@ -837,7 +958,12 @@ def _resolve_effective_max_failures(
         tier_val = m_entry.get("tier")
         prov = str(m_entry.get("provider", "")).lower()
         base_url = str(m_entry.get("base_url", "")).lower()
-        is_local = tier_val == 1 or prov == "mlx" or "8000" in base_url or "localhost" in base_url
+        is_local = (
+            tier_val == 1
+            or prov == "mlx"
+            or "8000" in base_url
+            or "localhost" in base_url
+        )
         return 5 if is_local else 100
 
     tier_val = meta.get("tier") if meta else None
@@ -845,7 +971,9 @@ def _resolve_effective_max_failures(
     return 5 if is_local else 100
 
 
-def _resolve_workspace_guide_path(ws_root: str, guide_path: Optional[str]) -> Optional[str]:
+def _resolve_workspace_guide_path(
+    ws_root: str, guide_path: Optional[str]
+) -> Optional[str]:
     """Resolves a role definition guide path to its workspace-relative path ('guides/<basename>')."""
     if not guide_path:
         return None
@@ -857,7 +985,9 @@ def _resolve_workspace_guide_path(ws_root: str, guide_path: Optional[str]) -> Op
     return ws_guide
 
 
-def _verify_antigravity_argon_model(ws_root: str, meta: Optional[Dict[str, Any]]) -> Optional[str]:
+def _verify_antigravity_argon_model(
+    ws_root: str, meta: Optional[Dict[str, Any]]
+) -> Optional[str]:
     """Verifies when gemini-argon is configured on antigravity that the active subagent is actually using gemini-argon."""
     if not meta:
         return None
@@ -868,7 +998,9 @@ def _verify_antigravity_argon_model(ws_root: str, meta: Optional[Dict[str, Any]]
     if harness not in ("antigravity", ""):
         return None
 
-    ag_dir = os.environ.get("ANTIGRAVITY_BRAIN_DIR") or os.path.expanduser("~/.gemini/antigravity")
+    ag_dir = os.environ.get("ANTIGRAVITY_BRAIN_DIR") or os.path.expanduser(
+        "~/.gemini/antigravity"
+    )
     brain_dir = os.path.join(ag_dir, "brain")
     conv_dir = os.path.join(ag_dir, "conversations")
     if not os.path.isdir(brain_dir) or not os.path.isdir(conv_dir):
@@ -880,7 +1012,9 @@ def _verify_antigravity_argon_model(ws_root: str, meta: Optional[Dict[str, Any]]
         for entry in os.listdir(brain_dir):
             if entry.startswith("."):
                 continue
-            t_file = os.path.join(brain_dir, entry, ".system_generated", "logs", "transcript.jsonl")
+            t_file = os.path.join(
+                brain_dir, entry, ".system_generated", "logs", "transcript.jsonl"
+            )
             if not os.path.isfile(t_file):
                 continue
             try:
@@ -905,6 +1039,7 @@ def _verify_antigravity_argon_model(ws_root: str, meta: Optional[Dict[str, Any]]
 
     try:
         import sqlite3
+
         conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
         try:
             cur = conn.cursor()
@@ -940,7 +1075,6 @@ class WorkspaceChecker(check.WorkspaceChecker):
     # Contract: Evaluates dirty work in local workspace and prints ready tasks, synchronizing from main repository and respecting batch_size and max_feedback_chars.
     def run_get_work(
         self,
-
         dir_scope: Optional[str] = None,
         repo_root: Optional[str] = None,
         force: bool = False,
@@ -959,14 +1093,15 @@ class WorkspaceChecker(check.WorkspaceChecker):
             .strip()
             .lower()
         )
-        d_scope = (
-            dir_scope
-            or ((meta.get("dir_scope") or meta.get("parts_dir", "")) if meta else "")
+        d_scope = dir_scope or (
+            (meta.get("dir_scope") or meta.get("parts_dir", "")) if meta else ""
         )
         if not d_scope:
             try:
                 for entry in os.listdir(ws_root):
-                    if os.path.isdir(os.path.join(ws_root, entry, "parts")) and not entry.startswith((".", "bazel-", "venv")):
+                    if os.path.isdir(
+                        os.path.join(ws_root, entry, "parts")
+                    ) and not entry.startswith((".", "bazel-", "venv")):
                         d_scope = entry
                         break
             except OSError:
@@ -984,7 +1119,9 @@ class WorkspaceChecker(check.WorkspaceChecker):
             try:
                 r_def = reg.resolve_role_definition(role_name, repo_root=main_root)
                 if r_def and r_def.guide_path:
-                    role_guide_path = _resolve_workspace_guide_path(ws_root, r_def.guide_path)
+                    role_guide_path = _resolve_workspace_guide_path(
+                        ws_root, r_def.guide_path
+                    )
                 if r_def and r_def.fused_roles:
                     is_fused = True
             except Exception:
@@ -1028,7 +1165,9 @@ class WorkspaceChecker(check.WorkspaceChecker):
             if fb_chars is not None:
                 effective_max_feedback_chars = int(fb_chars)
 
-        is_auditor = is_auditor_role(role_name, repo_root=main_root) if role_name else False
+        is_auditor = (
+            is_auditor_role(role_name, repo_root=main_root) if role_name else False
+        )
         ready_items: List[Dict[str, Any]] = []
         blocked_items: List[Dict[str, Any]] = []
         is_pending_relist = False
@@ -1056,34 +1195,42 @@ class WorkspaceChecker(check.WorkspaceChecker):
                                 pt, ws_root, role_name=role_name
                             )
                         )
-                        ready_items.append({
-                            "unit_name": os.path.splitext(os.path.basename(pt))[0],
-                            "role": role_name,
-                            "target_file": pt,
-                            "reasons": pt_reasons,
-                            "contract_files": contracts,
-                            "dependencies": [],
-                        })
+                        ready_items.append(
+                            {
+                                "unit_name": os.path.splitext(os.path.basename(pt))[0],
+                                "role": role_name,
+                                "target_file": pt,
+                                "reasons": pt_reasons,
+                                "contract_files": contracts,
+                                "dependencies": [],
+                            }
+                        )
                 else:
                     pending_mgr.clear_pending_work(ws_root)
 
         if not ready_items:
             eval_root = (
-                main_root if (meta and main_root and os.path.isdir(main_root)) else ws_root
+                main_root
+                if (meta and main_root and os.path.isdir(main_root))
+                else ws_root
             )
             ready_items, blocked_items = _compute_role_work_queue(
                 role_name, d_scope, eval_root
             )
 
         if is_auditor and ready_items:
-            marker = os.path.join(app_info.resolve_state_dir(ws_root), ".no_pending_work")
+            marker = os.path.join(
+                app_info.resolve_state_dir(ws_root), ".no_pending_work"
+            )
             if os.path.isfile(marker):
                 try:
                     os.remove(marker)
                 except OSError:
                     pass
 
-            pending_mgr.set_pending_work(ws_root, [it["target_file"] for it in ready_items])
+            pending_mgr.set_pending_work(
+                ws_root, [it["target_file"] for it in ready_items]
+            )
             sub_coord = get_singleton(submit.SubmissionCoordinator)
             failing_items: List[Dict[str, Any]] = []
             for it in ready_items:
@@ -1091,7 +1238,9 @@ class WorkspaceChecker(check.WorkspaceChecker):
                 buf_out = io.StringIO()
                 buf_err = io.StringIO()
                 with redirect_stdout(buf_out), redirect_stderr(buf_err):
-                    check_exit = self.run_check_files(target=target_cand, repo_root=main_root)
+                    check_exit = self.run_check_files(
+                        target=target_cand, repo_root=main_root
+                    )
                 if check_exit == 0:
                     outcome = sub_coord.submit_target_file(
                         target=target_cand,
@@ -1102,20 +1251,30 @@ class WorkspaceChecker(check.WorkspaceChecker):
                     if outcome.accepted:
                         if outcome.message:
                             if hasattr(app_info, "append_log"):
-                                app_info.append_log(target_cand, outcome.message, repo_root=main_root)
+                                app_info.append_log(
+                                    target_cand, outcome.message, repo_root=main_root
+                                )
                                 if ws_root != main_root:
                                     try:
-                                        app_info.append_log(target_cand, outcome.message, repo_root=ws_root)
+                                        app_info.append_log(
+                                            target_cand,
+                                            outcome.message,
+                                            repo_root=ws_root,
+                                        )
                                     except OSError:
                                         pass
-                        print(f"✔ [AUTO-SUBMIT] Pre-verification passed for '{target_cand}'. Automatically recorded {role_name.upper()} audit approval.")
+                        print(
+                            f"✔ [AUTO-SUBMIT] Pre-verification passed for '{target_cand}'. Automatically recorded {role_name.upper()} audit approval."
+                        )
                     pending_mgr.remove_pending_target(ws_root, target_cand)
                 else:
                     failing_items.append(it)
 
             ready_items = failing_items
             if ready_items:
-                pending_mgr.set_pending_work(ws_root, [it["target_file"] for it in ready_items])
+                pending_mgr.set_pending_work(
+                    ws_root, [it["target_file"] for it in ready_items]
+                )
             else:
                 pending_mgr.clear_pending_work(ws_root)
 
@@ -1125,7 +1284,9 @@ class WorkspaceChecker(check.WorkspaceChecker):
         if not ready_items and not blocked_items:
             if meta:
                 pending_mgr.clear_pending_work(ws_root)
-            marker = os.path.join(app_info.resolve_state_dir(ws_root), ".no_pending_work")
+            marker = os.path.join(
+                app_info.resolve_state_dir(ws_root), ".no_pending_work"
+            )
             try:
                 with open(marker, "w", encoding="utf-8") as f:
                     f.write("0\n")
@@ -1149,7 +1310,11 @@ class WorkspaceChecker(check.WorkspaceChecker):
                 effective_batch_size = int(meta["batch_size"])
             except (ValueError, TypeError):
                 pass
-        if effective_max_feedback_chars is None and meta and meta.get("max_feedback_chars"):
+        if (
+            effective_max_feedback_chars is None
+            and meta
+            and meta.get("max_feedback_chars")
+        ):
             try:
                 effective_max_feedback_chars = int(meta["max_feedback_chars"])
             except (ValueError, TypeError):
@@ -1169,7 +1334,11 @@ class WorkspaceChecker(check.WorkspaceChecker):
         remaining_count = 0
         if is_pending_relist:
             presented_items = ready_items
-        elif effective_batch_size is not None and effective_batch_size > 0 and len(ready_items) > effective_batch_size:
+        elif (
+            effective_batch_size is not None
+            and effective_batch_size > 0
+            and len(ready_items) > effective_batch_size
+        ):
             remaining_count = len(ready_items) - effective_batch_size
             presented_items = ready_items[:effective_batch_size]
         else:
@@ -1190,9 +1359,13 @@ class WorkspaceChecker(check.WorkspaceChecker):
                 item_guide = role_guide_path
                 if item.get("role") and item["role"] != role_name:
                     try:
-                        ir_def = reg.resolve_role_definition(item["role"], repo_root=main_root)
+                        ir_def = reg.resolve_role_definition(
+                            item["role"], repo_root=main_root
+                        )
                         if ir_def and ir_def.guide_path:
-                            item_guide = _resolve_workspace_guide_path(ws_root, ir_def.guide_path)
+                            item_guide = _resolve_workspace_guide_path(
+                                ws_root, ir_def.guide_path
+                            )
                     except Exception:
                         pass
                 if item_guide:
@@ -1202,8 +1375,14 @@ class WorkspaceChecker(check.WorkspaceChecker):
                     print("      Dirty Reasons:")
                     for r in item["reasons"]:
                         display_reason = r
-                        if effective_max_feedback_chars is not None and len(display_reason) > effective_max_feedback_chars:
-                            display_reason = display_reason[:effective_max_feedback_chars] + f"... [truncated: total {len(r)} chars]"
+                        if (
+                            effective_max_feedback_chars is not None
+                            and len(display_reason) > effective_max_feedback_chars
+                        ):
+                            display_reason = (
+                                display_reason[:effective_max_feedback_chars]
+                                + f"... [truncated: total {len(r)} chars]"
+                            )
                         print(f"        - {display_reason}")
                 if item.get("contract_files"):
                     print("      Contracts / Specifications to Read:")
@@ -1241,7 +1420,14 @@ class WorkspaceChecker(check.WorkspaceChecker):
             try:
                 reg = get_singleton(role_registry.WorkspaceRegistry)
                 r_def = reg.resolve_role_definition(role_name, repo_root=main_root)
-                has_feedback = bool((r_def.feedback_role_deps if hasattr(r_def, "feedback_role_deps") else ()) or (getattr(r_def, "star_feedback_role_deps", ())))
+                has_feedback = bool(
+                    (
+                        r_def.feedback_role_deps
+                        if hasattr(r_def, "feedback_role_deps")
+                        else ()
+                    )
+                    or (getattr(r_def, "star_feedback_role_deps", ()))
+                )
             except Exception:
                 has_feedback = is_auditor_role(role_name)
 
@@ -1276,18 +1462,30 @@ class WorkspaceChecker(check.WorkspaceChecker):
                     pass
             if is_fused:
                 fused_roles = (meta.get("fused_roles") or []) if meta else []
-                fused_cmds = ", ".join(f"'bin/verify_{r}'" for r in fused_roles) if fused_roles else "prescribed 'bin/verify_*' micro-binaries"
+                fused_cmds = (
+                    ", ".join(f"'bin/verify_{r}'" for r in fused_roles)
+                    if fused_roles
+                    else "prescribed 'bin/verify_*' micro-binaries"
+                )
                 print(
                     f"\nACTIONABLE NEXT STEP: Read contracts and companion guides, implement targets, "
                     f"verify with {fused_cmds}, complete arbiter self-audits, and report completion when all checks pass (do NOT run bin/submit).\n"
                 )
             elif is_auditor:
-                blame_clause = "; deliver blame attribution via 'bin/blame <culprit_file> \"<critique>\"'" if has_feedback else ""
+                blame_clause = (
+                    "; stage blame attribution via 'bin/blame <culprit_file> \"<critique>\"', then run 'bin/submit <target>' to commit blame"
+                    if has_feedback
+                    else ""
+                )
                 print(
-                    f"\nACTIONABLE NEXT STEP: Verification checks failed above. Inspect the triage summary and failure diagnostics{blame_clause} (or 'bin/fail <target_file> \"<reason>\"' on unresolvable impasse). After blaming, run 'bin/get_work' to conclude.\n"
+                    f"\nACTIONABLE NEXT STEP: Verification checks failed. Run 'bin/check_files' to inspect the triage summary and failure diagnostics{blame_clause} (or 'bin/fail <target_file> \"<reason>\"' on unresolvable impasse). After submitting, run 'bin/get_work' to conclude.\n"
                 )
             else:
-                blame_clause = " (or 'bin/blame <culprit_contract> \"<critique>\"' if upstream contract is defective)" if has_feedback else " (or 'bin/submit <file>' if no changes)"
+                blame_clause = (
+                    " (or 'bin/reject <file> \"<reason>\"' if feedback is rejected without modifying code, or 'bin/blame <culprit_contract> \"<critique>\"' if upstream contract is defective)"
+                    if has_feedback
+                    else " (or 'bin/submit <file>' if no changes)"
+                )
                 print(
                     f"\nACTIONABLE NEXT STEP: Read contracts and companion guide, implement changes, verify with 'bin/check_files', then run 'bin/submit <file> \"<summary>\"'{blame_clause} (or 'bin/fail <target_file> \"<reason>\"' on unresolvable impasse).\n"
                 )
@@ -1304,7 +1502,9 @@ class WorkspaceChecker(check.WorkspaceChecker):
         meta = get_current_role_metadata()
         if not meta or not (meta.get("role_name") or meta.get("role")):
             if target:
-                raise ValueError(f"Cannot run check_files: no role defined for workspace '{ws_root}'.")
+                raise ValueError(
+                    f"Cannot run check_files: no role defined for workspace '{ws_root}'."
+                )
             print("No pending or specified targets to check.")
             return 0
         role_name = (
@@ -1315,13 +1515,13 @@ class WorkspaceChecker(check.WorkspaceChecker):
         )
         main_root = _resolve_main_root(ws_root, meta, repo_root)
         _ensure_cli_node_config(main_root)
-        d_scope = (
-            meta.get("dir_scope") or meta.get("parts_dir", "")
-        ) if meta else ""
+        d_scope = (meta.get("dir_scope") or meta.get("parts_dir", "")) if meta else ""
         if not d_scope:
             try:
                 for entry in os.listdir(ws_root):
-                    if os.path.isdir(os.path.join(ws_root, entry, "parts")) and not entry.startswith((".", "bazel-", "venv")):
+                    if os.path.isdir(
+                        os.path.join(ws_root, entry, "parts")
+                    ) and not entry.startswith((".", "bazel-", "venv")):
                         d_scope = entry
                         break
             except OSError:
@@ -1349,8 +1549,13 @@ class WorkspaceChecker(check.WorkspaceChecker):
                 tgt_stem = _normalize_unit_stem(norm_tgt)
                 matched = any(
                     norm_tgt == pt.strip().lstrip("/").replace("\\", "/")
-                    or norm_tgt.endswith(f"/{pt.strip().lstrip('/').replace('\\', '/')}")
-                    or pt.strip().lstrip("/").replace("\\", "/").endswith(f"/{norm_tgt}")
+                    or norm_tgt.endswith(
+                        f"/{pt.strip().lstrip('/').replace('\\', '/')}"
+                    )
+                    or pt.strip()
+                    .lstrip("/")
+                    .replace("\\", "/")
+                    .endswith(f"/{norm_tgt}")
                     or (tgt_stem and _normalize_unit_stem(pt) == tgt_stem)
                     for pt in pending_targets
                 )
@@ -1369,7 +1574,11 @@ class WorkspaceChecker(check.WorkspaceChecker):
                                 "Call bin/get_work first to acquire work, or conclude the round if all work is resolved."
                             )
                         else:
-                            clean_r = role_name.split(":")[-1].strip().lower() if role_name else ""
+                            clean_r = (
+                                role_name.split(":")[-1].strip().lower()
+                                if role_name
+                                else ""
+                            )
                             print(
                                 f"Error: Target '{target}' is not owned by role '{clean_r}'.\n"
                                 f"Call bin/get_work to view assigned pending targets."
@@ -1406,7 +1615,9 @@ class WorkspaceChecker(check.WorkspaceChecker):
                 sys.stderr.write(f"Warning: automatic sync from main failed: {e}\n")
 
         failed_count = 0
-        effective_max_failures = _resolve_effective_max_failures(meta, ws_root, main_root)
+        effective_max_failures = _resolve_effective_max_failures(
+            meta, ws_root, main_root
+        )
 
         integrity_err = _verify_and_revert_readonly_integrity(
             ws_root, main_root, role_name, dir_scope=d_scope
@@ -1442,7 +1653,6 @@ class WorkspaceChecker(check.WorkspaceChecker):
                 failed_count += 1
                 continue
 
-
             ref_root = ws_root if target_path.startswith(ws_root) else main_root
             part_dir, u_name, _ = submit_coord.parse_unit_from_file_path(
                 target_path, ref_root
@@ -1450,14 +1660,18 @@ class WorkspaceChecker(check.WorkspaceChecker):
 
             active_unit = u_name or unit_name
 
-            print(f"=== Checking {active_unit} (role: {role_name}, part: {part_dir}) ===")
+            print(
+                f"=== Checking {active_unit} (role: {role_name}, part: {part_dir}) ==="
+            )
             unit_failed = False
 
             reg = get_singleton(role_registry.WorkspaceRegistry)
             r_def = reg.resolve_role_definition(role_name, repo_root=main_root)
             cmd_tmpl = r_def.verify_template
             if not cmd_tmpl or cmd_tmpl.strip().startswith("#"):
-                print(f"[OK] No verification check required for {active_unit} in role {role_name}.")
+                print(
+                    f"[OK] No verification check required for {active_unit} in role {role_name}."
+                )
             else:
                 formatted_cmd = cmd_tmpl.format(
                     unit_dir=part_dir,
@@ -1465,15 +1679,27 @@ class WorkspaceChecker(check.WorkspaceChecker):
                     max_failures=effective_max_failures,
                     maxfail_arg=f"--maxfail={effective_max_failures}",
                 )
-                if "run_cross_tests.py" in formatted_cmd and not os.path.isfile(os.path.join(ws_root, "bin", "run_cross_tests.py")):
-                    cand_cross = os.path.join(main_root, "bin", "run_cross_tests.py") if main_root else ""
+                if "run_cross_tests.py" in formatted_cmd and not os.path.isfile(
+                    os.path.join(ws_root, "bin", "run_cross_tests.py")
+                ):
+                    cand_cross = (
+                        os.path.join(main_root, "bin", "run_cross_tests.py")
+                        if main_root
+                        else ""
+                    )
                     if cand_cross and os.path.isfile(cand_cross):
                         os.makedirs(os.path.join(ws_root, "bin"), exist_ok=True)
-                        shutil.copy2(cand_cross, os.path.join(ws_root, "bin", "run_cross_tests.py"))
+                        shutil.copy2(
+                            cand_cross,
+                            os.path.join(ws_root, "bin", "run_cross_tests.py"),
+                        )
                 env = dict(os.environ)
                 if "pytest" in cmd_tmpl or "pytest" in formatted_cmd:
                     existing_addopts = env.get("PYTEST_ADDOPTS", "")
-                    if "--maxfail" not in existing_addopts and "--maxfail" not in formatted_cmd:
+                    if (
+                        "--maxfail" not in existing_addopts
+                        and "--maxfail" not in formatted_cmd
+                    ):
                         env["PYTEST_ADDOPTS"] = (
                             f"{existing_addopts} --maxfail={effective_max_failures}".strip()
                         )
@@ -1484,9 +1710,16 @@ class WorkspaceChecker(check.WorkspaceChecker):
                     env["UV_CACHE_DIR"] = "/tmp/uv_cache"
                 extra_paths: list[str] = []
                 if part_dir:
-                    part_abs = os.path.abspath(part_dir if os.path.isabs(part_dir) else os.path.join(ws_root, part_dir))
+                    part_abs = os.path.abspath(
+                        part_dir
+                        if os.path.isabs(part_dir)
+                        else os.path.join(ws_root, part_dir)
+                    )
                     part_parent = os.path.dirname(part_abs)
-                    if os.path.isdir(part_parent) and os.path.basename(part_parent) == "parts":
+                    if (
+                        os.path.isdir(part_parent)
+                        and os.path.basename(part_parent) == "parts"
+                    ):
                         extra_paths.append(part_parent)
                         scope_dir = os.path.dirname(part_parent)
                         if os.path.isdir(scope_dir):
@@ -1504,10 +1737,15 @@ class WorkspaceChecker(check.WorkspaceChecker):
                 else:
                     pypaths: list[str] = [ws_root] if ws_root else []
                     if "PYTHONPATH" in env:
-                        pypaths.extend(p for p in env["PYTHONPATH"].split(os.pathsep) if p and p not in pypaths)
+                        pypaths.extend(
+                            p
+                            for p in env["PYTHONPATH"].split(os.pathsep)
+                            if p and p not in pypaths
+                        )
                     env["PYTHONPATH"] = os.pathsep.join(pypaths)
-                env["PATH"] = os.path.dirname(sys.executable) + os.pathsep + env.get("PATH", "")
-
+                env["PATH"] = (
+                    os.path.dirname(sys.executable) + os.pathsep + env.get("PATH", "")
+                )
 
                 cmd_timeout = getattr(app_info, "get_verify_timeout", lambda: 60.0)()
                 try:
@@ -1531,7 +1769,11 @@ class WorkspaceChecker(check.WorkspaceChecker):
                         else:
                             print(f"[FAIL] Verification failed for {active_unit}")
                         unit_failed = True
-                        if is_auditor_role(role_name, repo_root=main_root) or "coverage" in role_name or "qa" in role_name:
+                        if (
+                            is_auditor_role(role_name, repo_root=main_root)
+                            or "coverage" in role_name
+                            or "qa" in role_name
+                        ):
                             _print_triage_summary(
                                 ws_root=ws_root,
                                 target_path=target_path,
@@ -1555,8 +1797,16 @@ class WorkspaceChecker(check.WorkspaceChecker):
                         else:
                             print(f"[OK] Verification passed for {active_unit}")
                 except subprocess.TimeoutExpired as exc:
-                    out_text = (exc.stdout.decode("utf-8", errors="replace") if isinstance(exc.stdout, bytes) else (exc.stdout or ""))
-                    err_text = (exc.stderr.decode("utf-8", errors="replace") if isinstance(exc.stderr, bytes) else (exc.stderr or ""))
+                    out_text = (
+                        exc.stdout.decode("utf-8", errors="replace")
+                        if isinstance(exc.stdout, bytes)
+                        else (exc.stdout or "")
+                    )
+                    err_text = (
+                        exc.stderr.decode("utf-8", errors="replace")
+                        if isinstance(exc.stderr, bytes)
+                        else (exc.stderr or "")
+                    )
                     clean_out = _strip_arbiter_reminders(out_text)
                     clean_err = _strip_arbiter_reminders(err_text)
                     diagnostic_parts = [
@@ -1570,7 +1820,11 @@ class WorkspaceChecker(check.WorkspaceChecker):
                         diagnostic_parts.append(f"STDERR:\n{clean_err}")
                     print("\n".join(diagnostic_parts))
                     unit_failed = True
-                    if is_auditor_role(role_name, repo_root=main_root) or "coverage" in role_name or "qa" in role_name:
+                    if (
+                        is_auditor_role(role_name, repo_root=main_root)
+                        or "coverage" in role_name
+                        or "qa" in role_name
+                    ):
                         _print_triage_summary(
                             ws_root=ws_root,
                             target_path=target_path,
@@ -1589,23 +1843,50 @@ class WorkspaceChecker(check.WorkspaceChecker):
                 record_check_executed(ws_root, target_path, passed=False)
             else:
                 record_check_executed(ws_root, target_path, passed=True)
-                print(f"[PASSED] All verification checks passed for '{active_unit}'.")
-                unacted_fb = _extract_unacted_feedback(target_path)
-                if unacted_fb:
+                if not is_auditor_role(role_name, repo_root=main_root):
                     print(
-                        f"\n[ATTENTION] Target has {len(unacted_fb)} pending unacted feedback item(s):\n"
-                        + "\n".join(f"  • {item}" for item in unacted_fb)
-                        + "\nNotice: Static verification passed, but it does NOT verify that runtime feedback was fixed."
-                        + "\nYou MUST verify that your code logic satisfies the contract and resolves the defect before calling bin/submit!\n"
+                        f"[PASSED] All local verification checks passed for '{active_unit}'. "
+                        f"Other checks to verify feedback or changes resolution will be performed after bin/submit is called."
+                    )
+                else:
+                    print(
+                        f"[PASSED] All verification checks passed for '{active_unit}'."
                     )
 
-        if failed_count == 0 and os.path.isdir(os.path.join(ws_root, ".git")) and not is_auditor_role(role_name, repo_root=main_root):
+        if (
+            failed_count == 0
+            and os.path.isdir(os.path.join(ws_root, ".git"))
+            and not is_auditor_role(role_name, repo_root=main_root)
+        ):
             try:
-                subprocess.run(["git", "add", "-A"], cwd=ws_root, check=True, capture_output=True, text=True)
-                status_res = subprocess.run(["git", "status", "--porcelain"], cwd=ws_root, check=True, capture_output=True, text=True)
+                subprocess.run(
+                    ["git", "add", "-A"],
+                    cwd=ws_root,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                status_res = subprocess.run(
+                    ["git", "status", "--porcelain"],
+                    cwd=ws_root,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
                 if status_res.stdout.strip():
                     checked_label = ", ".join(targets_to_check)
-                    subprocess.run(["git", "commit", "-m", f"Checkpoint: verified {checked_label}"], cwd=ws_root, check=True, capture_output=True, text=True)
+                    subprocess.run(
+                        [
+                            "git",
+                            "commit",
+                            "-m",
+                            f"Checkpoint: verified {checked_label}",
+                        ],
+                        cwd=ws_root,
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                    )
             except Exception:
                 pass
 
@@ -1627,10 +1908,12 @@ class WorkspaceChecker(check.WorkspaceChecker):
         passed: bool,
     ) -> None:
         record_check_executed(ws_root, target_path, passed)
+
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-30T11:00:00Z
-# LAST_CHANGED: 2026-11-05T10:35:00Z
-# CHANGE: Allow verification and submit for unassigned targets owned by active role
+# LAST_CHANGED: 2026-11-09T20:05:00Z
+# CHANGE: Format non-auditor check_files success with feedback/changes resolution notice
 # COVERAGE_AUDIT: 2026-10-18T19:13:51Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

@@ -22,7 +22,7 @@ The subagent_coordinator_impl implementation component realizes zero-execution m
 - The realization tracks consecutive unproductive rounds where a role yields zero submitted and zero blamed targets and assigned targets remain unresolved, suppressing unproductive counts and reminders when assigned targets are resolved, and halting orchestration when unproductive rounds exceed a threshold (defaulting to 5). [detect_unproductive_turn_impasse]
 - The realization detects repeated identical blame delivery on unchanged targets, terminating and recommissioning worker workspaces on two consecutive identical blames and injecting a restart advisory into subsequent task prompts, halting orchestration upon exceeding 10 restarts, while clearing consecutive blame tracking when an author role submits modifications to a previously blamed target, and preventing concurrent dispatch of downstream roles on a target unit while upstream dependencies on the same target unit are actively executing or scheduled for concurrent dispatch. [detect_repeated_blame_circuit_breaker]
 - The realization preserves unresolved reminder directives and injects them into the task prompts of subsequent role dispatch directives when workers complete rounds without submitting, blaming, or failing assigned targets and assigned targets remain unresolved (instructing workers to conclude with text and no tool calls once no work remains). [remind_worker_on_unresolved_round]
-- The realization emits real-time progress notifications detailing role dispatch, round outcomes, token consumption, and work queue state. [emit_realtime_orchestration_telemetry]
+- The realization emits real-time progress notifications detailing role dispatch, round outcomes, token consumption, and work queue state, and notifies the execution harness adapter of authoritative orchestration state updates capturing active scopes, current wave counts, active running workers, idle completed workers, assigned targets, and convergence status to external coordination storage across role dispatch, round completion, and DAG convergence events. [emit_realtime_orchestration_telemetry]
 - The realization manages the dynamic supervision loop, continuing until all units evaluate clean, a round reports failure, or maximum wave iterations are reached, draining or cleanly interrupting in-flight active workers upon termination. [drive_convergence_loop]
 - The realization automatically deletes all provisioned role workspaces in scope upon achieving clean convergence. [delete_role_workspaces_on_convergence]
 - The realization interrupts active workers upon receiving cancellation signals. [interrupt_active_workers_on_cancellation]
@@ -58,6 +58,13 @@ The subagent_coordinator_impl implementation component realizes zero-execution m
 - Active workspace registry and role discovery services.
   - Grounded: [role_registry: [workspace_registry_service]]
 - Workspace file synchronization and inbound changes pulling services.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-11-06T02:49:00Z
+LAST_CHANGED: 2026-11-09T22:10:00Z
+CHANGE: Authoritative orchestration state updates across role dispatch, round completion, and convergence
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->
   - Grounded: [sync: [workspace_pull_service]]
 
 <!-- CLEANROOM METADATA

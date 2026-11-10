@@ -21,7 +21,7 @@ A scenario pairs a numbered title with a `Given:` state and numbered steps. The 
 - [ ] In interface files, backticked identifiers are restricted strictly to terms defined within the component's specification vocabulary
 - [ ] In implementation files, every backticked collaborator component is declared under `imports:` or `implements:` in the high-level specification
 - [ ] Template residue, including `<component type>`, `<title>`, `Bootstrap:`, and template instruction comments, is absent from the file
-- [ ] Code fences (```), markdown tables (`|`), and specification line-number citations are strictly absent from the file
+- [ ] Code fences (\`\`\`), markdown tables (`|`), and specification line-number citations are strictly absent from the file
 
 ## Scenario structure and headings
 

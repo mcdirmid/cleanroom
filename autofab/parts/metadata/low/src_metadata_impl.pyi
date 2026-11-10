@@ -223,7 +223,7 @@ class SourceMetadataCoordinator(src_metadata.SourceMetadataCoordinator):
         explanation: str,
         sender: str = "user",
     ) -> None:
-        """Appends unacted feedback item to file metadata block and advances LAST_CLEANED.
+        """Appends unacted feedback item with sender role attribution to file metadata block and advances LAST_CLEANED.
 
         GROUNDING:
         - Grounded via update_metadata with append_feedback.

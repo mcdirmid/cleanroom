@@ -20,6 +20,7 @@ class ModelSpec:
     endpoint: Optional[str] = None
     quantization: Optional[str] = None
     default_harness: str = "antigravity"
+    run_timeout_seconds: float = 3600.0
 
     def compute_cost(self, uncached_in: int, cached_in: int, out: int) -> float: ...
 
@@ -126,6 +127,7 @@ class BenchmarkEvaluator(Singleton[SystemTier], Protocol):
         method: Optional[str] = None,
         dsh_web: bool = False,
         dsh_desktop: bool = False,
+        experiment: Optional[str] = None,
     ) -> FlightRecord:
         """Executes a benchmark flight for a designated model and unit.
 
@@ -151,6 +153,7 @@ class BenchmarkEvaluator(Singleton[SystemTier], Protocol):
         record: FlightRecord,
         unit: BenchmarkUnit,
         results_dir: Optional[str] = None,
+        experiment: Optional[str] = None,
     ) -> Optional[Tuple[str, str]]:
         """Archives synthesized library and test files into the results directory with embedded metrics.
 

@@ -2,7 +2,7 @@
 
 ## Summary
 
-The verification target is the software unit encompassing the High-Level Specification (`high/<name>.md`), Planning Canvas (`planning/<name>.md` or `planning/<name>_impl.md`), Low-Level Specification stub (`low/<name>.pyi` or `low/<name>_impl.pyi`), and Scenario file (`scenarios/<name>.md`). Assembly components (`_asm`) bypass planning canvases and scenarios, auditing directly between high-level and low-level specifications. In multi-node sessions, multiple targets are evaluated together, capturing complete `get_work` output to identify ready and blocked units. Each unit is submitted via `submit(target="<target_file>")` once all semantic, planning, grounding, and low-level contract audits pass, stamping `SPEC_QA_AUDIT` into in-band metadata. Specifications and stubs are strictly read-only; using editing tools is prohibited. Defect attribution is delivered exclusively via `blame(target="<culprit_file>", explanation="...")`.
+The verification target is the software unit encompassing the High-Level Specification (`high/<name>.md`), Planning Canvas (`planning/<name>.md` or `planning/<name>_impl.md`), Low-Level Specification stub (`low/<name>.pyi` or `low/<name>_impl.pyi`), and Scenario file (`scenarios/<name>.md`). Assembly components (`_asm`) bypass planning canvases and scenarios, auditing directly between high-level and low-level specifications. In multi-node sessions, multiple targets are evaluated together, capturing complete `get_work` output to identify ready and blocked units. Clean targets passing verification are automatically submitted by `bin/get_work`, stamping `SPEC_QA_AUDIT` into in-band metadata. When verification fails, the arbiter stages blame one item at a time via `blame(target="<culprit_file>", explanation="...")`, then commits blame and concludes the target via `submit(target="<target_file>")`. Specifications and stubs are strictly read-only; using editing tools is prohibited. Manual `submit` strictly requires preceding staged blame.
 
 Auditing follows a strict normative triage chain: if a behavior is absent from high, the scenario over-reaches (do not blame planning or low); if present in high but missing in planning, blame planning; if present in planning but missing in low, blame low. Never attribute a defect to a plane that already carries the requirement. When the three spec planes are mutually consistent and only the scenario disagrees, the arbiter submits the unit and records the scenario discrepancy rather than manufacturing a spec-plane defect. Passing mechanical checks (`check_files`) is merely a baseline sanity check. Defect attribution is strictly diagnostic, concise (~120 words, under 200 words), single-paragraph without newlines, pairing the file location with observed discrepancies or verbatim linter output.
 
@@ -68,7 +68,26 @@ Auditing follows a strict normative triage chain: if a behavior is absent from h
 
 - [ ] Calibration rule: before declaring a novel class of defect, the arbiter compares against a reference unit carrying `SPEC_QA_AUDIT`
 - [ ] Single agent blame per round: only one agent (`high`, `planning`, or `low`) is blamed for a unit in a given round
-- [ ] Blame feedback paragraph format: the explanation is strictly a single paragraph containing no newline characters, formatted as: plane $\to$ section/member $\to$ omitted behavior in that plane's vocabulary $\to$ evidence (quoted clause or verbatim linter diagnostic)
+
+<!-- if experiment:structured_blame -->
+
+- [ ] Structured blame tuple format (mandatory under structured_blame): blame critique MUST use the structured tuple format:
+  `bin/blame <culprit_file> "[slug:<spec.slug>] Violation: <noun phrase> Facet: <noun phrase> [Lines: <range>] [Witness: <key_value_pairs>]"`
+  or via taxonomy tag format:
+  `bin/blame <culprit_file> "[slug:<spec.slug>] [viol:<prefix>.<name>] Facet: <noun phrase> [Lines: <range>] [Witness: <key_value_pairs>]"`
+  or via flags: `bin/blame <culprit_file> --slug <slug> --viol <viol> --facet "<noun phrase>" [--lines "<range>"] [--witness "<values>"]`
+  - Specification slug: Must match a slug declared in `low/*.pyi`.
+  - Violation section: Either a generalized non-prescriptive noun phrase (`Violation: <noun phrase>`, max 8 words, max 60 chars, no action verbs) or a taxonomy tag (`[viol:<prefix>.<name>]`). Canonical violation phrases include `Violation: compound conjunction` and `Violation: uncontracted type`.
+  - Facet: Descriptive noun phrase of domain state/entity without verbs or commands (max 8 words, max 60 chars, e.g. `Facet: relational comparator and hyphen parsing conjunction`).
+  - Lines (optional): Dedicated single line number or range strictly within the culprit file being blamed (e.g. `Lines: 42` or `Lines: 42-50`). Cannot reference foreign files or paths.
+  - Witness: Literal key-value pairs (max 200 chars, e.g. `Witness: clause='POSTCONDITIONS: MUST parse basic comparators...'`). Conversational prose sentences and prescriptive instructions are prohibited. Line numbers belong in `Lines:`, not Witness.
+
+<!-- else -->
+
+- [ ] Blame feedback paragraph format: the explanation is strictly a single paragraph containing no newline characters, formatted as: plane $\\to$ section/member $\\to$ omitted behavior in that plane's vocabulary $\\to$ evidence (quoted clause or verbatim linter diagnostic)
+
+<!-- endif -->
+
 - [ ] Blame feedback length is targeted at approximately 120 words and strictly under 200 words; quoting linter output verbatim as evidence is permitted and encouraged
 - [ ] Blame feedback is strictly non-prescriptive: it identifies the gap without dictating replacement prose, slug names, or code snippets
 - [ ] Unit atomicity: auditing evaluates the unit as a whole; when all specification, low-level, and scenario audits pass, attributing blame is prohibited, and the unit is certified with `submit(target="<target_file>")`

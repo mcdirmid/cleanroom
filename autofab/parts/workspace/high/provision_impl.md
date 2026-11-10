@@ -29,16 +29,15 @@ The workspace provisioner:
 
 - Copies writable target files into the workspace with write permissions, projecting in-band metadata to expose only change, feedback, and ephemeral code hash attributes, and creating a missing target skeleton when a declared file does not yet exist on disk.
 
-- Copies and writes files across role workspaces, applying explicit read-only, writable, or executable permissions.
+- Copies and writes files across role workspaces, applying explicit read-only, writable, or executable permissions, and evaluating conditional markdown directives against active experiments when copying markdown files.
 
 - Synchronizes read-only test stubs for stub role dependencies across role workspaces, delegating stub updates and purging to the workspace stub synthesizer.
 
-- Copies upstream contract dependencies and guides into the workspace with read-only permissions, ensuring agents cannot alter an upstream specification in place.
+- Copies upstream contract dependencies and guides into the workspace with read-only permissions, evaluating conditional markdown directives against active experiments, ensuring agents cannot alter an upstream specification in place.
 
 - Copies user-facing runtime libraries and type stubs (`lifecycle.py`, `lifecycle.pyi`, `framework.py`, `framework.pyi`) into support directories with read-only permissions, projecting constituent runtime support libraries directly into `./support/lib` and the role's assigned companion guide into `./guides` (copying all companion guides across all constituent roles when provisioning a fused role), strictly avoiding copying templates, unneeded methodology configurations (`autofab_roles.toml`, `pyright_spec.json`), redundant package directories, or unbound repository root directories into the role workspace root, while strictly excluding internal methodology oracles, AST linters, and role runners (`build_lint_common.py`, `*_lint.py`, `autofab_role_tool.py`) from role workspace filesystems.
 
 - Deploys self-contained executable zipapps into the `bin/` directory of the workspace, packaging compiled Python bytecode (`.pyc`) and source modules for autofab_role_tool, build_lint_common, and role verification linters inside the archive so that runners execute in-memory across Python runtime versions without exposing loose oracle files in the role workspace filesystem, deploying rollback and checkpoint runners (`bin/revert`, `bin/checkpoint`) strictly for authoring roles while omitting them for auditor roles, and deploying use-based micro-binaries (`bin/verify_lib`, `bin/verify_test`, `bin/verify_pretense`, `bin/verify_coverage`) for fused roles.
-
 
 - Writes the role descriptor configuration file recording the role address, role name, and directory scope, omitting host repository paths to preserve isolation, with optional model profile attributes.
 

@@ -4,7 +4,7 @@ Autofab is a literate, specification-driven software engineering framework for a
 
 All operations in the repository are invoked via **`uv run autofab <command>`**.
 
----
+______________________________________________________________________
 
 ## 1. Quick Start
 
@@ -45,14 +45,16 @@ uv run autofab mark-dirty my_project/parts/agent/lib/agent_config.py "Type signa
 uv run autofab mark-dirty //my_project/parts/agent:agent_config#lib -m "Unit test regression on timeout handling"
 ```
 
----
+______________________________________________________________________
 
 ## 2. Advanced & Internal Subagent Tooling
 
 The commands below are primarily used by autonomous subagents and role workers inside isolated workspaces, or by advanced operators inspecting the DAG:
 
 ### `work-queue`
+
 Inspects the dependency DAG and outputs ready vs. blocked tasks for a scope or role.
+
 ```bash
 # Inspect all ready and blocked nodes across a scope
 uv run autofab work-queue my_project
@@ -66,7 +68,9 @@ uv run autofab work-queue my_project --json
 ```
 
 ### `mark-clean`
+
 Marks target nodes or entire directory scopes clean in metadata and DAG storage without invoking subagents.
+
 ```bash
 # Mark all nodes in a scope clean
 uv run autofab mark-clean my_project
@@ -76,7 +80,9 @@ uv run autofab mark-clean my_project/parts/agent/lib/agent_config.py
 ```
 
 ### `commission` & `decommission`
+
 Manages isolated, double-blind role workspaces (`autofab_role_workspaces/<role>_<scope>/`).
+
 ```bash
 # Initialize role workspaces bound to a model profile
 uv run autofab commission --all my_project --model deepseek-flash
@@ -86,48 +92,63 @@ uv run autofab decommission my_project
 ```
 
 ### `refresh-sys`
+
 Synchronizes system tools, linters, methodology configs (`autofab_roles.toml`), and companion guides from canonical roots to provisioned role workspaces.
+
 ```bash
 uv run autofab refresh-sys
 ```
 
 ### `get_work`
+
 Acquires the next assigned dirty target inside an isolated role workspace.
+
 ```bash
 bin/get_work
 ```
 
 ### `check_files`
+
 Runs deterministic verification checks (linters, type checkers, test suites) against targets in a role workspace.
+
 ```bash
 bin/check_files my_project/parts/agent/lib/agent_config.py
 ```
 
 ### `submit`
+
 Verifies and submits changes for a file with in-band metadata updates (`LAST_CLEANED`, `LAST_CHANGED`, `CODE_HASH`).
+
 ```bash
 bin/submit my_project/parts/agent/lib/agent_config.py "Implemented timeout helper"
 ```
 
 ### `blame`
+
 Attributes an actionable defect critique or feedback to an upstream culprit contract or specification file, triggering upstream invalidation.
+
 ```bash
 bin/blame my_project/parts/agent/low/agent_config.pyi "Contract missing parameter 'timeout'"
 ```
 
 ### `fail`
+
 Records an unresolvable failure or impasse for a target, logging diagnostic failure details and leaving the node dirty.
+
 ```bash
 bin/fail my_project/parts/agent/lib/agent_config.py "Abstract method resolution error in pytest"
 ```
 
 ### `coverage`
+
 Evaluates statement test coverage between an implementation and its double-blind unit test suite.
+
 ```bash
 uv run autofab coverage --impl my_project/parts/agent/lib/agent_config.py --test my_project/parts/agent/tests/agent_config_test.py -t 100.0
 ```
 
 ### `change` & `prompt`
+
 ```bash
 # Record an explicit manual change description on a target
 uv run autofab change my_project/parts/agent/lib/agent_config.py "Refactored timeout helper"
@@ -137,18 +158,22 @@ uv run autofab prompt //my_project/parts/agent:agent_config#lib
 ```
 
 ### `configure`
+
 Scaffolds user global configuration directory `~/.config/autofab` with starter `model_configs.toml` and credentials templates.
+
 ```bash
 uv run autofab configure
 ```
 
 ### `install-antigravity-plugin`
+
 Installs or refreshes the Autofab Antigravity plugin and agent definitions into `~/.gemini/config/plugins/autofab`. When running `uv run autofab clean` with an Antigravity model profile, this is performed automatically.
+
 ```bash
 uv run autofab install-antigravity-plugin
 ```
 
----
+______________________________________________________________________
 
 ## 3. Target Addressing Syntax
 
@@ -162,14 +187,15 @@ Autofab targets can be addressed using multiple canonical notations:
 | **Part Directory** | `my_project/parts/agent` | All roles and units under `agent` part |
 | **Scope Directory** | `my_project` | Entire directory scope across all parts & roles |
 
----
+______________________________________________________________________
 
 ## 4. Model Configuration Schema (`model_configs.toml`)
 
 Autofab resolves model profiles and rate cards from:
+
 1. Local workspace: `./model_configs.toml`
-2. User global configuration: `~/.config/autofab/model_configs.toml` (default)
-3. Canonical starter template: `autofab_py/templates/model_configs.toml`
+1. User global configuration: `~/.config/autofab/model_configs.toml` (default)
+1. Canonical starter template: `autofab_py/templates/model_configs.toml`
 
 Run `uv run autofab configure` to scaffold `~/.config/autofab/model_configs.toml`.
 

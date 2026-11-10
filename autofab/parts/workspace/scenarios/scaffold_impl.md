@@ -12,7 +12,7 @@ Given: an empty or newly created workspace directory `/ws/alpha_scope_a` with a 
    Observed: `/ws/alpha_scope_a/bin` contains standalone executable zipapps for `get_work`, `check_files`, `submit`, `fail`, `revert`, and `checkpoint` (and `blame` and `feedback` when the role declares feedback capability or auditor tags); each file begins with `#!/usr/bin/env python3` followed by a valid zip archive containing `__main__.py` configuring import paths bounded strictly to the role workspace root on sys.path without injecting arbitrary workspace subdirectories onto sys.path, isolating runner execution from the canonical repository root in sys.path, has permissions 0o755, and any preexisting `coverage` file is removed.
    Realized by: the component's zipapp packaging routine which builds compressed archives with embedded repository root traversal and delegates execution to `autofab_role_tool`.
 
-2. The scaffolder deploys runner zipapps into `/ws/gamma_scope_a/bin`.
+1. The scaffolder deploys runner zipapps into `/ws/gamma_scope_a/bin`.
    Observed: `/ws/gamma_scope_a/bin` contains runner zipapps omitting `revert` and `checkpoint`.
    Realized by: the component's zipapp packaging routine checking role writable target patterns.
 
@@ -56,12 +56,17 @@ Given: role `baseline` is a fused role combining `lib`, `test`, `qa`, and `cover
    Observed: `AGENTS.md` exists with multi-phase workflow instructions dynamically derived from constituent role metadata (contract sources, implementation targets, verification targets), incorporating contract grounding, test authoring embedding operational postconditions into transition `ctx.ensures(...)` handlers and driving scenarios via transition dispatch without redundant manual assertions while forbidding assertions on uncontracted non-concerns or synthetic graph placeholders, implementation realization, and targeted reads, use-based micro-binary verification (`bin/verify_lib`, `bin/verify_test`, `bin/verify_coverage`), QA arbiter contract fidelity and type contract respect self-audit directives, coverage arbiter semantic closure directives requiring pruning uncontracted dead defensive code upon coverage failure, and an atomic completion protocol omitting per-target submission.
    Realized by: the component's markdown formatter detecting `fused_roles` on the role definition and generating dynamic fused workflow instructions and arbiter self-audit directives.
 
+### Scenario 7 — Markdown conditional preprocessing during AGENTS.md guide synthesis
+
+Given: an active experiment is configured in the environment, and a companion guide or guide section contains experiment conditional directives.
+
+1. The scaffolder writes the role agents guide into `/ws/alpha_scope_a`.
+   Observed: conditional markdown blocks in companion guides and instructions are evaluated against active experiments so only matching branches remain in the synthesized `AGENTS.md`.
+   Realized by: the component's markdown conditional preprocessing during guide formatting.
+
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-30T11:00:00Z
-LAST_CHANGED: 2026-11-03T20:40:00Z
-CHANGE: Ground template command execution in repository environment with UV_PROJECT
--->
-LAST_CHANGED: 2026-11-02T20:38:00Z
-CHANGE: Prohibit ad-hoc runtime testing and inline python scripts in AGENTS.md
+LAST_CHANGED: 2026-11-07T16:00:00Z
+CHANGE: Markdown conditional preprocessing during AGENTS.md guide synthesis
 SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 -->

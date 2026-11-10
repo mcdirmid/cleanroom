@@ -55,18 +55,30 @@ class PretenseImplTest(unittest.TestCase):
 
     def test_require_and_require_arg_error_modes(self) -> None:
         """Verify require and require_arg error parameter behavior and contract violation exceptions."""
+
         class CustomContractError(Exception):
             pass
 
         # 1. Passing condition succeeds
         pretense.require(True, error=CustomContractError)
-        pretense.require_arg(5, pretense.Domain.integers(min_value=0), error=CustomContractError)
+        pretense.require_arg(
+            5, pretense.Domain.integers(min_value=0), error=CustomContractError
+        )
+        pretense.require_arg(
+            5, pretense.Domain.integers(min_value=0), CustomContractError
+        )
 
         # 2. Failing condition throws specified Error
         with self.assertRaises(CustomContractError):
             pretense.require(False, error=CustomContractError)
         with self.assertRaises(CustomContractError):
-            pretense.require_arg(-1, pretense.Domain.integers(min_value=0), error=CustomContractError)
+            pretense.require_arg(
+                -1, pretense.Domain.integers(min_value=0), error=CustomContractError
+            )
+        with self.assertRaises(CustomContractError):
+            pretense.require_arg(
+                -1, pretense.Domain.integers(min_value=0), CustomContractError
+            )
 
         # 3. Failing condition without specified error throws PretenseSpecificationError
         with self.assertRaises(pretense.PretenseSpecificationError):
@@ -79,8 +91,16 @@ class PretenseImplTest(unittest.TestCase):
         t_inc = pretense.Transition("increment")
         t_inc.require(lambda state, this: state["count"] >= 0)
         t_inc.arguments(lambda state, this, *args: (1,) if not args else args)
-        t_inc.returns(lambda state, this, *args, outcome=pretense.NotBound: pretense.Value(state["count"] + args[0]))
-        t_inc.provide(lambda state, this, *args, result=None: state.__setitem__("count", state["count"] + args[0]))
+        t_inc.returns(
+            lambda state, this, *args, outcome=pretense.NotBound: pretense.Value(
+                state["count"] + args[0]
+            )
+        )
+        t_inc.provide(
+            lambda state, this, *args, result=None: state.__setitem__(
+                "count", state["count"] + args[0]
+            )
+        )
 
         state = {"count": 0}
         inv_called = [False]
@@ -104,8 +124,16 @@ class PretenseImplTest(unittest.TestCase):
         """Verify fake adapter dispatches method calls to matching transitions."""
         t_inc = pretense.Transition("increment")
         t_inc.arguments(lambda state, this, *args, **kwargs: (args[0] if args else 1,))
-        t_inc.returns(lambda state, this, *args, outcome=pretense.NotBound: pretense.Value(state["count"] + args[0]))
-        t_inc.provide(lambda state, this, *args, result=None: state.__setitem__("count", state["count"] + args[0]))
+        t_inc.returns(
+            lambda state, this, *args, outcome=pretense.NotBound: pretense.Value(
+                state["count"] + args[0]
+            )
+        )
+        t_inc.provide(
+            lambda state, this, *args, result=None: state.__setitem__(
+                "count", state["count"] + args[0]
+            )
+        )
 
         class CounterProto:
             def increment(self, step: int = 1) -> int: ...
@@ -148,19 +176,27 @@ class PretenseImplTest(unittest.TestCase):
                 super().__init__(state=state or CounterState(), singletons=singletons)
 
             @pretense.transition(RealCounter.increment)
-            def step_inc(self, ctx: pretense.TransitionContext[RealCounter, [int], int]) -> None:
+            def step_inc(
+                self, ctx: pretense.TransitionContext[RealCounter, [int], int]
+            ) -> None:
                 ctx.antecedent(lambda: self.state.count < 100)
                 ctx.arguments(
-                    step=pretense.Domain(strategy=lambda: 1, validator=lambda step=1: step > 0),
+                    step=pretense.Domain(
+                        strategy=lambda: 1, validator=lambda step=1: step > 0
+                    ),
                 )
                 ctx.returns(lambda step=1: self.state.count + step)
-                ctx.consequent(lambda res, step=1: (
-                    setattr(self.state, "count", self.state.count + step),
-                    self.state.history.append(step),
-                ))
+                ctx.consequent(
+                    lambda res, step=1: (
+                        setattr(self.state, "count", self.state.count + step),
+                        self.state.history.append(step),
+                    )
+                )
 
             @pretense.transition(RealCounter.reset)
-            def step_reset(self, ctx: pretense.TransitionContext[RealCounter, [], None]) -> None:
+            def step_reset(
+                self, ctx: pretense.TransitionContext[RealCounter, [], None]
+            ) -> None:
                 ctx.antecedent(lambda: self.state.count > 0)
                 ctx.arguments()
                 ctx.returns(lambda: None)
@@ -188,6 +224,7 @@ class PretenseImplTest(unittest.TestCase):
 
     def test_transition_context_raises(self) -> None:
         """Verify error specification with ctx.raises."""
+
         class Divider:
             def divide(self, a: int, b: int) -> int:
                 if b == 0:
@@ -195,11 +232,15 @@ class PretenseImplTest(unittest.TestCase):
                 return a // b
 
         class DividerStateMachine(pretense.StateMachine[dict[str, Any]]):
-            def __init__(self, singletons: Optional[dict[type[Any], Any]] = None) -> None:
+            def __init__(
+                self, singletons: Optional[dict[type[Any], Any]] = None
+            ) -> None:
                 super().__init__(state={}, singletons=singletons)
 
             @pretense.transition(Divider.divide)
-            def divide_by_zero(self, ctx: pretense.TransitionContext[Divider, [int, int], int]) -> None:
+            def divide_by_zero(
+                self, ctx: pretense.TransitionContext[Divider, [int, int], int]
+            ) -> None:
                 ctx.arguments(
                     a=pretense.Domain(strategy=lambda: 10, validator=lambda a: True),
                     b=pretense.Domain(strategy=lambda: 0, validator=lambda b: b == 0),
@@ -237,13 +278,19 @@ class PretenseImplTest(unittest.TestCase):
         ctx1.returns(lambda: 42)
         with self.assertRaises(ValueError) as cm:
             ctx1.raises(ValueError)
-        self.assertIn("cannot declare both ctx.raises(...) and ctx.returns(...)", str(cm.exception))
+        self.assertIn(
+            "cannot declare both ctx.raises(...) and ctx.returns(...)",
+            str(cm.exception),
+        )
 
         ctx2 = pretense.TransitionContext(name="step_b")
         ctx2.raises(ValueError)
         with self.assertRaises(ValueError) as cm:
             ctx2.returns(lambda: 42)
-        self.assertIn("cannot declare both ctx.raises(...) and ctx.returns(...)", str(cm.exception))
+        self.assertIn(
+            "cannot declare both ctx.raises(...) and ctx.returns(...)",
+            str(cm.exception),
+        )
 
     def test_safe_instantiate_multi_argument_exception(self) -> None:
         """Verify that fake adapter safely instantiates multi-argument dataclass exceptions."""
@@ -260,12 +307,20 @@ class PretenseImplTest(unittest.TestCase):
                 return name
 
         class PkgRepoStateMachine(pretense.StateMachine[dict[str, Any]]):
-            def __init__(self, singletons: Optional[dict[type[Any], Any]] = None) -> None:
+            def __init__(
+                self, singletons: Optional[dict[type[Any], Any]] = None
+            ) -> None:
                 super().__init__(state={}, singletons=singletons)
 
             @pretense.transition(PkgRepo.find_pkg)
-            def missing_pkg(self, ctx: pretense.TransitionContext[PkgRepo, [str], str]) -> None:
-                ctx.arguments(name=pretense.Domain(strategy=lambda: "ghost", validator=lambda name: name == "ghost"))
+            def missing_pkg(
+                self, ctx: pretense.TransitionContext[PkgRepo, [str], str]
+            ) -> None:
+                ctx.arguments(
+                    name=pretense.Domain(
+                        strategy=lambda: "ghost", validator=lambda name: name == "ghost"
+                    )
+                )
                 ctx.raises(MultiArgError, match="ghost not found")
 
         sm = PkgRepoStateMachine()
@@ -277,17 +332,26 @@ class PretenseImplTest(unittest.TestCase):
 
     def test_return_contract_violation_diagnostic_reason(self) -> None:
         """Verify that diagnostic reason is included when SUT produces value on ctx.raises transition."""
+
         class EchoService:
             def echo(self, text: str) -> str:
                 return text
 
         class EchoStateMachine(pretense.StateMachine[dict[str, Any]]):
-            def __init__(self, singletons: Optional[dict[type[Any], Any]] = None) -> None:
+            def __init__(
+                self, singletons: Optional[dict[type[Any], Any]] = None
+            ) -> None:
                 super().__init__(state={}, singletons=singletons)
 
             @pretense.transition(EchoService.echo)
-            def echo_step(self, ctx: pretense.TransitionContext[EchoService, [str], str]) -> None:
-                ctx.arguments(text=pretense.Domain(strategy=lambda: "hello", validator=lambda text: True))
+            def echo_step(
+                self, ctx: pretense.TransitionContext[EchoService, [str], str]
+            ) -> None:
+                ctx.arguments(
+                    text=pretense.Domain(
+                        strategy=lambda: "hello", validator=lambda text: True
+                    )
+                )
                 ctx.raises(ValueError, match="fail")
 
         real = EchoService()
@@ -298,14 +362,16 @@ class PretenseImplTest(unittest.TestCase):
         err_msg = str(cm.exception)
         self.assertIn("Return Contract Violation", err_msg)
         self.assertIn("was declared with ctx.raises(ValueError)", err_msg)
-        self.assertIn("produced a return value Value('hello') instead of raising", err_msg)
+        self.assertIn(
+            "produced a return value Value('hello') instead of raising", err_msg
+        )
 
     def test_transition_context_type_checking_with_pyright(self) -> None:
         """Verify that Pyright catches attribute typos and type errors on TransitionContext lambdas."""
         import subprocess
         import tempfile
 
-        invalid_code = '''
+        invalid_code = """
 from pretense import TransitionContext
 
 class Version:
@@ -322,16 +388,18 @@ ctx: TransitionContext[SUT, [Version, VersionRange], bool] = TransitionContext()
 
 # Invalid attribute 'pre' instead of 'is_prerelease':
 ctx.returns(lambda v, r: v.pre)
-'''
+"""
         with tempfile.NamedTemporaryFile("w", suffix=".py") as f:
             f.write(invalid_code)
             f.flush()
-            p = subprocess.run(["uv", "run", "pyright", f.name], capture_output=True, text=True)
+            p = subprocess.run(
+                ["uv", "run", "pyright", f.name], capture_output=True, text=True
+            )
             self.assertNotEqual(p.returncode, 0)
             self.assertIn('Cannot access attribute "pre"', p.stdout)
 
         # Invalid return type (string instead of bool)
-        invalid_return_type_code = '''
+        invalid_return_type_code = """
 from pretense import TransitionContext
 
 class Version:
@@ -347,16 +415,20 @@ ctx: TransitionContext[SUT, [Version, VersionRange], bool] = TransitionContext()
 
 # Invalid return type: 'wrong_type' is not bool
 ctx.returns(lambda v, r: "wrong_type")
-'''
+"""
         with tempfile.NamedTemporaryFile("w", suffix=".py") as f:
             f.write(invalid_return_type_code)
             f.flush()
-            p = subprocess.run(["uv", "run", "pyright", f.name], capture_output=True, text=True)
+            p = subprocess.run(
+                ["uv", "run", "pyright", f.name], capture_output=True, text=True
+            )
             self.assertNotEqual(p.returncode, 0)
-            self.assertIn("No overloads for \"returns\" match the provided arguments", p.stdout)
+            self.assertIn(
+                'No overloads for "returns" match the provided arguments', p.stdout
+            )
 
         # Invalid attribute in consequent
-        invalid_consequent_code = '''
+        invalid_consequent_code = """
 from pretense import TransitionContext
 
 class Version:
@@ -372,16 +444,18 @@ ctx: TransitionContext[SUT, [Version, VersionRange], bool] = TransitionContext()
 
 # Invalid attribute in consequent
 ctx.consequent(lambda res, v, r: v.invalid_field)
-'''
+"""
         with tempfile.NamedTemporaryFile("w", suffix=".py") as f:
             f.write(invalid_consequent_code)
             f.flush()
-            p = subprocess.run(["uv", "run", "pyright", f.name], capture_output=True, text=True)
+            p = subprocess.run(
+                ["uv", "run", "pyright", f.name], capture_output=True, text=True
+            )
             self.assertNotEqual(p.returncode, 0)
             self.assertIn('Cannot access attribute "invalid_field"', p.stdout)
 
         # Invalid attribute in recognize
-        invalid_recognize_code = '''
+        invalid_recognize_code = """
 from pretense import TransitionContext, Domain
 
 class Version:
@@ -398,15 +472,17 @@ ctx: TransitionContext[SUT, [Version, VersionRange], bool] = TransitionContext()
 # Invalid attribute in validator
 d = Domain[Version](strategy=lambda: Version(), validator=lambda v: v.unknown_field == 1)
 ctx.arguments(v=d)
-'''
+"""
         with tempfile.NamedTemporaryFile("w", suffix=".py") as f:
             f.write(invalid_recognize_code)
             f.flush()
-            p = subprocess.run(["uv", "run", "pyright", f.name], capture_output=True, text=True)
+            p = subprocess.run(
+                ["uv", "run", "pyright", f.name], capture_output=True, text=True
+            )
             self.assertNotEqual(p.returncode, 0)
             self.assertIn('Cannot access attribute "unknown_field"', p.stdout)
 
-        valid_code = '''
+        valid_code = """
 from pretense import TransitionContext
 
 class Version:
@@ -423,11 +499,13 @@ ctx: TransitionContext[SUT, [Version, VersionRange], bool] = TransitionContext()
 
 # Valid attribute 'is_prerelease':
 ctx.returns(lambda v, r: v.is_prerelease)
-'''
+"""
         with tempfile.NamedTemporaryFile("w", suffix=".py") as f:
             f.write(valid_code)
             f.flush()
-            p = subprocess.run(["uv", "run", "pyright", f.name], capture_output=True, text=True)
+            p = subprocess.run(
+                ["uv", "run", "pyright", f.name], capture_output=True, text=True
+            )
             self.assertEqual(p.returncode, 0, f"Expected 0 errors but got:\n{p.stdout}")
 
     def test_requires_check_and_mode_b_pattern(self) -> None:
@@ -456,11 +534,22 @@ ctx.returns(lambda v, r: v.is_prerelease)
                 super().__init__(state={"items": ["a", "b"], "max": 2})
 
             @pretense.transition(BufferService.push)
-            def push(self, ctx: pretense.TransitionContext[BufferService, [str], None]) -> None:
-                ctx.requires(lambda check: (
-                    check(len(self.state["items"]) < self.state["max"], "buffer capacity reached"),
-                ))
-                ctx.arguments(item=pretense.Domain(strategy=lambda: "item", validator=lambda item: True))
+            def push(
+                self, ctx: pretense.TransitionContext[BufferService, [str], None]
+            ) -> None:
+                ctx.requires(
+                    lambda check: (
+                        check(
+                            len(self.state["items"]) < self.state["max"],
+                            "buffer capacity reached",
+                        ),
+                    )
+                )
+                ctx.arguments(
+                    item=pretense.Domain(
+                        strategy=lambda: "item", validator=lambda item: True
+                    )
+                )
                 ctx.returns(lambda item: None)
                 ctx.update(lambda res, item: self.state["items"].append(item))
 
@@ -473,6 +562,7 @@ ctx.returns(lambda v, r: v.is_prerelease)
 
     def test_ensures_check_assertions_and_diffs(self) -> None:
         """Verify EnsuresCheck assertions, formatted diffs, and singleton lookup."""
+
         class ServiceA:
             def name(self) -> str:
                 return "Alpha"
@@ -496,7 +586,9 @@ ctx.returns(lambda v, r: v.is_prerelease)
         with self.assertRaises(AssertionError) as cm:
             chk.equal("actual_val", "expected_val", "values mismatch")
         self.assertIn("values mismatch", str(cm.exception))
-        self.assertIn("Expected 'expected_val', but got 'actual_val'", str(cm.exception))
+        self.assertIn(
+            "Expected 'expected_val', but got 'actual_val'", str(cm.exception)
+        )
 
         # Singleton resolution
         self.assertIs(chk.get(ServiceA), inst_a)
@@ -536,19 +628,35 @@ ctx.returns(lambda v, r: v.is_prerelease)
                 super().__init__(state=state or StoreState(), singletons=singletons)
 
             @pretense.transition(RealStore.put)
-            def put(self, ctx: pretense.TransitionContext[RealStore, [str, int], int]) -> None:
-                ctx.requires(lambda check: check(len(self.state.entries) < 100, "under max capacity"))
+            def put(
+                self, ctx: pretense.TransitionContext[RealStore, [str, int], int]
+            ) -> None:
+                ctx.requires(
+                    lambda check: check(
+                        len(self.state.entries) < 100, "under max capacity"
+                    )
+                )
                 ctx.arguments(
                     key=pretense.Domain.text(min_size=1, max_size=10),
                     val=pretense.Domain.range(0, 1000),
                 )
                 ctx.returns(lambda key, val: val)
-                ctx.ensures(lambda res, store, check, key, val: (
-                    check(store is not None, "Real store must be provided to ensures"),
-                    check.equal(store.get(key), val, "Store must reflect put value immediately"),
-                    check.equal(res, val, "Return value must equal put value"),
-                ))
-                ctx.update(lambda res, key, val: self.state.entries.__setitem__(key, val))
+                ctx.ensures(
+                    lambda res, store, check, key, val: (
+                        check(
+                            store is not None, "Real store must be provided to ensures"
+                        ),
+                        check.equal(
+                            store.get(key),
+                            val,
+                            "Store must reflect put value immediately",
+                        ),
+                        check.equal(res, val, "Return value must equal put value"),
+                    )
+                )
+                ctx.update(
+                    lambda res, key, val: self.state.entries.__setitem__(key, val)
+                )
 
         # 1. Fake Mode: ensures is omitted!
         sm_fake = StoreStateMachine()
@@ -601,10 +709,13 @@ ctx.returns(lambda v, r: v.is_prerelease)
     def test_pretense_cli_loading_error_and_empty_discovery(self) -> None:
         """Verify CLI exits non-zero on module import error and empty targets."""
         import tempfile
+
         with tempfile.TemporaryDirectory() as tmpdir:
             # 1. Broken import test file
             broken_file = Path(tmpdir) / "broken_pretense.py"
-            broken_file.write_text("from non_existent_pkg import something\n", encoding="utf-8")
+            broken_file.write_text(
+                "from non_existent_pkg import something\n", encoding="utf-8"
+            )
             exit_code = run_pretense_cli([str(broken_file)])
             self.assertNotEqual(exit_code, 0)
 
@@ -629,6 +740,7 @@ ctx.returns(lambda v, r: v.is_prerelease)
             # 4. Multi-failure test file verifying non-masked failure reporting
             import io
             from contextlib import redirect_stdout
+
             multi_fail_file = Path(tmpdir) / "multi_fail_pretense.py"
             multi_fail_file.write_text(
                 "import unittest\n"
@@ -651,6 +763,7 @@ ctx.returns(lambda v, r: v.is_prerelease)
 
     def test_strategy_as_value_argument_generation(self) -> None:
         """Verify Hypothesis SearchStrategy instances can be passed directly as values in arguments."""
+
         @dataclass
         class SampleState:
             values: list[Any] = field(default_factory=list)
@@ -662,7 +775,10 @@ ctx.returns(lambda v, r: v.is_prerelease)
             @pretense.transition(name="tuple_with_strategies")
             def step_tuple(self, ctx: pretense.TransitionContext) -> None:
                 ctx.arguments(
-                    num=pretense.Domain(strategy=st.integers(min_value=10, max_value=20), validator=lambda x: isinstance(x, int)),
+                    num=pretense.Domain(
+                        strategy=st.integers(min_value=10, max_value=20),
+                        validator=lambda x: isinstance(x, int),
+                    ),
                     text="fixed_str",
                     flag=st.booleans(),
                 )
@@ -672,22 +788,35 @@ ctx.returns(lambda v, r: v.is_prerelease)
             @pretense.transition(name="callable_returning_strategies")
             def step_callable(self, ctx: pretense.TransitionContext) -> None:
                 ctx.arguments(
-                    num=pretense.Domain(strategy=st.integers(min_value=100, max_value=200), validator=lambda x: isinstance(x, int)),
+                    num=pretense.Domain(
+                        strategy=st.integers(min_value=100, max_value=200),
+                        validator=lambda x: isinstance(x, int),
+                    ),
                 )
                 ctx.returns(lambda num: num * 2)
 
             @pretense.transition(name="single_strategy_direct")
             def step_single(self, ctx: pretense.TransitionContext) -> None:
                 ctx.arguments(
-                    num=pretense.Domain(strategy=st.integers(min_value=500, max_value=600), validator=lambda x: isinstance(x, int)),
+                    num=pretense.Domain(
+                        strategy=st.integers(min_value=500, max_value=600),
+                        validator=lambda x: isinstance(x, int),
+                    ),
                 )
                 ctx.returns(lambda num: num)
 
             @pretense.transition(name="callable_accepting_draw")
             def step_draw(self, ctx: pretense.TransitionContext) -> None:
                 ctx.arguments(
-                    num=pretense.Domain(strategy=lambda draw: draw(st.integers(min_value=1000, max_value=2000)), validator=lambda x: isinstance(x, int)),
-                    text=pretense.Domain(strategy="drawn", validator=lambda x: x == "drawn"),
+                    num=pretense.Domain(
+                        strategy=lambda draw: draw(
+                            st.integers(min_value=1000, max_value=2000)
+                        ),
+                        validator=lambda x: isinstance(x, int),
+                    ),
+                    text=pretense.Domain(
+                        strategy="drawn", validator=lambda x: x == "drawn"
+                    ),
                 )
                 ctx.returns(lambda num, text: (num, text))
 
@@ -716,6 +845,7 @@ ctx.returns(lambda v, r: v.is_prerelease)
 
         # 2. Dynamic evaluation inside with_draw context
         draw_calls = []
+
         def mock_draw(strat: Any) -> Any:
             draw_calls.append(strat)
             return 99
@@ -726,6 +856,7 @@ ctx.returns(lambda v, r: v.is_prerelease)
 
     def test_strategy_as_value_hypothesis_fuzzing(self) -> None:
         """Verify RuleBasedStateMachine fuzzer draws dynamic values from strategies as values."""
+
         class DynamicCalculator:
             def __init__(self) -> None:
                 self.history: list[int] = []
@@ -740,8 +871,14 @@ ctx.returns(lambda v, r: v.is_prerelease)
             history: list[int] = field(default_factory=list)
 
         class CalculatorStateMachine(pretense.StateMachine):
-            def __init__(self, state: Optional[CalcState] = None, singletons: Optional[dict[type, Any]] = None) -> None:
-                super().__init__(state=state or CalcState(), singletons=singletons or {})
+            def __init__(
+                self,
+                state: Optional[CalcState] = None,
+                singletons: Optional[dict[type, Any]] = None,
+            ) -> None:
+                super().__init__(
+                    state=state or CalcState(), singletons=singletons or {}
+                )
 
             @pretense.transition(DynamicCalculator.compute)
             def step_compute(self, ctx: pretense.TransitionContext) -> None:
@@ -750,15 +887,19 @@ ctx.returns(lambda v, r: v.is_prerelease)
                     m=pretense.Domain.set([1, 2, 3]),
                 )
                 ctx.returns(lambda b, m: b * m)
-                ctx.ensures(lambda res, calc, check, b, m: (
-                    check.equal(res, b * m),
-                    check.equal(calc.history[-1], res),
-                ))
+                ctx.ensures(
+                    lambda res, calc, check, b, m: (
+                        check.equal(res, b * m),
+                        check.equal(calc.history[-1], res),
+                    )
+                )
                 ctx.update(lambda res, b, m: self.state.history.append(res))
 
         calc_sut = DynamicCalculator()
         sm = CalculatorStateMachine(singletons={DynamicCalculator: calc_sut})
-        test_case = sm.to_hypothesis_test_case(sut_factory=lambda: {DynamicCalculator: calc_sut})
+        test_case = sm.to_hypothesis_test_case(
+            sut_factory=lambda: {DynamicCalculator: calc_sut}
+        )
         run_state_machine_as_test(test_case)
         self.assertGreater(len(calc_sut.history), 0)
 
@@ -775,7 +916,9 @@ ctx.returns(lambda v, r: v.is_prerelease)
         self.assertTrue(d_range.validate(9))
         self.assertFalse(d_range.validate(0))
         self.assertFalse(d_range.validate(10))
-        self.assertFalse(d_range.validate(True))  # bool is subclass of int but must be rejected
+        self.assertFalse(
+            d_range.validate(True)
+        )  # bool is subclass of int but must be rejected
 
         # Domain.regex
         d_re = pretense.Domain.regex(r"^\d{3}-[a-z]{2}$")
@@ -790,6 +933,7 @@ ctx.returns(lambda v, r: v.is_prerelease)
 
         # Domain.type with subscripted generics
         from typing import Callable, Collection, Sequence
+
         d_callable = pretense.Domain.type(Callable[[], Any])
         self.assertTrue(d_callable.validate(lambda: None))
         self.assertTrue(d_callable.validate(print))
@@ -831,6 +975,7 @@ ctx.returns(lambda v, r: v.is_prerelease)
         self.assertFalse(d_rng.validate(4))
 
         import re
+
         d_pat = pretense.Domain.of(re.compile(r"^[A-Z]+$"))
         self.assertTrue(d_pat.validate("HELLO"))
         self.assertFalse(d_pat.validate("hello"))
@@ -868,12 +1013,13 @@ ctx.returns(lambda v, r: v.is_prerelease)
         self.assertFalse(d_pert.validate(13))
 
         # Generation resolves mutation
-        draw_fn = lambda s: (lambda a: a + 1)
+        draw_fn = lambda s: lambda a: a + 1
         val = d_pert.strategy(draw_fn)
         self.assertEqual(val, 11)
 
     def test_dependent_domains_and_fake_adapter_dispatch(self) -> None:
         """Verify dependent domains validate and generate across relational arguments in fake dispatch."""
+
         class ComparatorProto:
             def is_less(self, a: int, b: int) -> bool: ...
 
@@ -882,8 +1028,14 @@ ctx.returns(lambda v, r: v.is_prerelease)
             comparisons: list[tuple[int, int]] = field(default_factory=list)
 
         class ComparatorStateMachine(pretense.StateMachine):
-            def __init__(self, state: Optional[CompState] = None, singletons: Optional[dict[type, Any]] = None) -> None:
-                super().__init__(state=state or CompState(), singletons=singletons or {})
+            def __init__(
+                self,
+                state: Optional[CompState] = None,
+                singletons: Optional[dict[type, Any]] = None,
+            ) -> None:
+                super().__init__(
+                    state=state or CompState(), singletons=singletons or {}
+                )
 
             @pretense.transition(ComparatorProto.is_less)
             def step_less(self, ctx: pretense.TransitionContext) -> None:
@@ -925,12 +1077,15 @@ ctx.returns(lambda v, r: v.is_prerelease)
             fake.is_less(5, 5)
 
         # Fuzzing test case generation executes cleanly
-        test_case = sm.to_hypothesis_test_case(sut_factory=lambda: {ComparatorProto: sut})
+        test_case = sm.to_hypothesis_test_case(
+            sut_factory=lambda: {ComparatorProto: sut}
+        )
         run_state_machine_as_test(test_case)
         self.assertGreater(len(sut.calls), 0)
 
     def test_require_custom_specification_error(self) -> None:
         """Verify require raises designated zero-argument PretenseSpecificationError subclass upon violation."""
+
         class CustomUnderflowError(pretense.PretenseSpecificationError):
             pass
 
@@ -969,7 +1124,9 @@ ctx.returns(lambda v, r: v.is_prerelease)
         self.assertFalse(set_dom.validate({1, 2}))
 
         # Domain.mapping_of
-        map_dom = pretense.Domain.mapping_of(pretense.Domain.text(), pretense.Domain.integers())
+        map_dom = pretense.Domain.mapping_of(
+            pretense.Domain.text(), pretense.Domain.integers()
+        )
         self.assertTrue(map_dom.validate({"a": 1, "b": 2}))
         self.assertFalse(map_dom.validate({"a": "not_an_int"}))
 
@@ -1003,8 +1160,14 @@ ctx.returns(lambda v, r: v.is_prerelease)
             pending_items: list[str] = field(default_factory=list)
 
         class QueueCollabStateMachine(StateMachine[QueueCollabState]):
-            def __init__(self, state: Optional[QueueCollabState] = None, singletons: Optional[dict[type[Any], Any]] = None) -> None:
-                super().__init__(state=state or QueueCollabState(), singletons=singletons)
+            def __init__(
+                self,
+                state: Optional[QueueCollabState] = None,
+                singletons: Optional[dict[type[Any], Any]] = None,
+            ) -> None:
+                super().__init__(
+                    state=state or QueueCollabState(), singletons=singletons
+                )
 
             @transition.seeding
             def seed_pending(self, item: str) -> None:
@@ -1018,8 +1181,14 @@ ctx.returns(lambda v, r: v.is_prerelease)
             processed: list[str] = field(default_factory=list)
 
         class WorkerTargetStateMachine(StateMachine[WorkerTargetState]):
-            def __init__(self, state: Optional[WorkerTargetState] = None, singletons: Optional[dict[type[Any], Any]] = None) -> None:
-                super().__init__(state=state or WorkerTargetState(), singletons=singletons)
+            def __init__(
+                self,
+                state: Optional[WorkerTargetState] = None,
+                singletons: Optional[dict[type[Any], Any]] = None,
+            ) -> None:
+                super().__init__(
+                    state=state or WorkerTargetState(), singletons=singletons
+                )
 
             @transition(name="fetch")
             def fetch(self) -> str:
@@ -1036,6 +1205,7 @@ ctx.returns(lambda v, r: v.is_prerelease)
             class RealWorker:
                 def fetch(self) -> str:
                     return fake_q.state.pending_items.pop(0)
+
             return RealWorker()
 
         proto = WorkerTargetStateMachine(singletons={FakeQueue: fake_q})
@@ -1048,7 +1218,9 @@ ctx.returns(lambda v, r: v.is_prerelease)
         )
 
         # Verify collaborator seeding rule exists on the compiled state machine
-        self.assertTrue(hasattr(CompiledFuzz, "step_collab_QueueCollabStateMachine_seed_pending"))
+        self.assertTrue(
+            hasattr(CompiledFuzz, "step_collab_QueueCollabStateMachine_seed_pending")
+        )
 
         # Run state machine instance directly
         sm_runner = CompiledFuzz()
@@ -1081,7 +1253,11 @@ ctx.returns(lambda v, r: v.is_prerelease)
             is_active: bool = True
 
         class VaultStateMachine(StateMachine[VaultState]):
-            def __init__(self, state: Optional[VaultState] = None, singletons: Optional[dict[type[Any], Any]] = None) -> None:
+            def __init__(
+                self,
+                state: Optional[VaultState] = None,
+                singletons: Optional[dict[type[Any], Any]] = None,
+            ) -> None:
                 super().__init__(state=state or VaultState(), singletons=singletons)
 
             @transition.seeding
@@ -1097,7 +1273,11 @@ ctx.returns(lambda v, r: v.is_prerelease)
             allocated_total: int = 0
 
         class AllocatorStateMachine(StateMachine[AllocatorState]):
-            def __init__(self, state: Optional[AllocatorState] = None, singletons: Optional[dict[type[Any], Any]] = None) -> None:
+            def __init__(
+                self,
+                state: Optional[AllocatorState] = None,
+                singletons: Optional[dict[type[Any], Any]] = None,
+            ) -> None:
                 super().__init__(state=state or AllocatorState(), singletons=singletons)
 
             @transition(name="allocate")
@@ -1105,7 +1285,10 @@ ctx.returns(lambda v, r: v.is_prerelease)
                 # 1. Express requirement on collaborator state machine state via sut_state:
                 require(sut_state(VaultState).is_active)
                 require(sut_state(VaultState).balance >= 1)
-                require_arg(amount, Domain.range(1, max(1, min(10, sut_state(VaultState).balance))))
+                require_arg(
+                    amount,
+                    Domain.range(1, max(1, min(10, sut_state(VaultState).balance))),
+                )
 
                 # 2. Mutate collaborator fake directly
                 vault = sut(FakeVault)
@@ -1124,6 +1307,7 @@ ctx.returns(lambda v, r: v.is_prerelease)
                 def allocate(self, amount: int) -> int:
                     fake_vault.state.balance -= amount
                     return amount
+
             return RealAllocator()
 
         CompiledFuzz = compile_hypothesis_test_case(
@@ -1169,7 +1353,11 @@ ctx.returns(lambda v, r: v.is_prerelease)
         R_T = TypeVar("R_T", bound=ReaderState)
 
         class ReaderStateMachine(Generic[R_T], StateMachine[R_T]):
-            def __init__(self, state: Optional[R_T] = None, singletons: Optional[dict[type[Any], Any]] = None) -> None:
+            def __init__(
+                self,
+                state: Optional[R_T] = None,
+                singletons: Optional[dict[type[Any], Any]] = None,
+            ) -> None:
                 super().__init__(state=state or ReaderState(), singletons=singletons)
 
             @transition(name="read")
@@ -1184,7 +1372,11 @@ ctx.returns(lambda v, r: v.is_prerelease)
         W_T = TypeVar("W_T", bound=WriterState)
 
         class WriterStateMachine(Generic[W_T], StateMachine[W_T]):
-            def __init__(self, state: Optional[W_T] = None, singletons: Optional[dict[type[Any], Any]] = None) -> None:
+            def __init__(
+                self,
+                state: Optional[W_T] = None,
+                singletons: Optional[dict[type[Any], Any]] = None,
+            ) -> None:
                 super().__init__(state=state or WriterState(), singletons=singletons)
 
             @transition(name="write")
@@ -1196,8 +1388,15 @@ ctx.returns(lambda v, r: v.is_prerelease)
         class CombinedBufferState(ReaderState, WriterState):
             pass
 
-        class CombinedBufferImplPseudoStateMachine(ReaderStateMachine[CombinedBufferState], WriterStateMachine[CombinedBufferState]):
-            def __init__(self, state: Optional[CombinedBufferState] = None, singletons: Optional[dict[type[Any], Any]] = None) -> None:
+        class CombinedBufferImplPseudoStateMachine(
+            ReaderStateMachine[CombinedBufferState],
+            WriterStateMachine[CombinedBufferState],
+        ):
+            def __init__(
+                self,
+                state: Optional[CombinedBufferState] = None,
+                singletons: Optional[dict[type[Any], Any]] = None,
+            ) -> None:
                 c_state = state or CombinedBufferState()
                 super().__init__(state=c_state, singletons=singletons)
 
@@ -1251,10 +1450,13 @@ ctx.returns(lambda v, r: v.is_prerelease)
         # Run Hypothesis fuzzing
         CompiledFuzz.TestCase().runTest()
 
-    def test_implementation_pseudo_state_machine_executes_base_interface_transition_mutations(self) -> None:
+    def test_implementation_pseudo_state_machine_executes_base_interface_transition_mutations(
+        self,
+    ) -> None:
         """Requirement: Overridden transitions in an implementation pseudo-state machine MUST execute
         the base interface transition's model state mutations and parameter domains while delegating to the
         real SUT via make_return_value and call_target during Hypothesis fuzzing."""
+
         @dataclass
         class CounterState:
             initialized: bool = True
@@ -1265,11 +1467,16 @@ ctx.returns(lambda v, r: v.is_prerelease)
             @pretense.transition(name="add_item")
             def add_item(self, item: str) -> None:
                 pretense.require(self.state.initialized)
-                pretense.require_arg(item, pretense.Domain.sampled_from(["alpha", "beta", "gamma"]))
-                ret = pretense.make_return_value(None)
+                pretense.require_arg(
+                    item, pretense.Domain.sampled_from(["alpha", "beta", "gamma"])
+                )
+                ret = self.inner_add_item(item)
                 self.state.count += 1
                 self.state.items.append(item)
                 assert ret is None
+
+            def inner_add_item(self, item: str) -> None:
+                return None
 
         class RealCounter:
             def __init__(self) -> None:
@@ -1281,10 +1488,10 @@ ctx.returns(lambda v, r: v.is_prerelease)
                 self.sut_items.append(item)
 
         class CounterImplPseudoStateMachine(CounterStateMachine):
-            @pretense.transition(name="add_item")
-            def add_item(self, item: str) -> Any:
+            def inner_add_item(self, item: str) -> Any:
+                super().inner_add_item(item)
                 target = pretense.sut(RealCounter)
-                ret = pretense.call_target(target.add_item(item))
+                ret = target.add_item(item)
                 return ret
 
         counter_sut = RealCounter()
@@ -1314,7 +1521,9 @@ ctx.returns(lambda v, r: v.is_prerelease)
         self.assertGreaterEqual(runner.sm.state.count, 1)
         self.assertGreaterEqual(counter_sut.sut_count, 1)
 
-    def test_raises_synthesizes_multi_arg_dataclass_exception_in_fake_mode(self) -> None:
+    def test_raises_synthesizes_multi_arg_dataclass_exception_in_fake_mode(
+        self,
+    ) -> None:
         @dataclass
         class MultiArgError(Exception):
             message: str
@@ -1327,7 +1536,181 @@ ctx.returns(lambda v, r: v.is_prerelease)
         self.assertEqual(ctx.exception.packages, ())
         self.assertEqual(ctx.exception.raw_text, "<mock_raw_text>")
 
+    def test_checked_adapter_violating_contract_violation_modes(self) -> None:
+        """Verify CheckedAdapter.violating bypasses preconditions, asserts SUT raises error, and enforces terminal state."""
+
+        class ContractViolationError(Exception):
+            pass
+
+        class TargetService:
+            def __init__(self) -> None:
+                self.value: int = 0
+                self.cleaned_up: bool = False
+
+            def set_positive(self, val: int) -> int:
+                if val <= 0:
+                    raise ContractViolationError(f"Value must be positive, got {val}")
+                self.value = val
+                return self.value
+
+            def cleanup(self) -> None:
+                self.cleaned_up = True
+
+        @dataclass
+        class ServiceState:
+            value: int = 0
+
+        class ServiceStateMachine(pretense.StateMachine[ServiceState]):
+            def make_initial_state(self) -> ServiceState:
+                return ServiceState()
+
+            @pretense.transition(TargetService.set_positive)
+            def set_positive(self, val: int) -> int:
+                pretense.require(val > 0, error=ContractViolationError)
+                pretense.require_arg(
+                    val,
+                    pretense.Domain.integers(min_value=1),
+                    error=ContractViolationError,
+                )
+                ret = pretense.make_return_value(val)
+                self.state.value = ret
+                return ret
+
+        # 1. Direct call under violating(ContractViolationError)
+        sut1 = TargetService()
+        sm1 = ServiceStateMachine()
+        checked1 = sm1.bind(sut1)
+        # Normal call works
+        checked1.set_positive(10)
+        self.assertEqual(sut1.value, 10)
+        # Violating call bypasses require/require_arg, executes SUT, catches error, marks terminal
+        exc = checked1.violating(ContractViolationError, match="positive").set_positive(
+            -5
+        )
+        self.assertIsInstance(exc, ContractViolationError)
+        self.assertIn("positive", str(exc))
+
+        # Subsequent call fails because checked adapter is now terminal
+        with self.assertRaises(pretense.PretenseSpecificationError):
+            checked1.set_positive(20)
+
+        # Lifecycle method teardown/cleanup is permitted as no-op or passes through
+        checked1.cleanup()
+
+        # 2. Context manager usage with violating(ContractViolationError)
+        sut2 = TargetService()
+        sm2 = ServiceStateMachine()
+        checked2 = sm2.bind(sut2)
+        with checked2.violating(ContractViolationError, match="positive"):
+            checked2.set_positive(-1)
+        # Terminal after context manager exit
+        with self.assertRaises(pretense.PretenseSpecificationError):
+            checked2.set_positive(5)
+
+        # 3. Violating fails if SUT does not raise
+        sut3 = TargetService()
+        sm3 = ServiceStateMachine()
+        checked3 = sm3.bind(sut3)
+        with self.assertRaises(AssertionError) as err_ctx:
+            checked3.violating(ContractViolationError).set_positive(5)
+        self.assertIn("Expected contract violation", str(err_ctx.exception))
+
+        # 4. Violating fails if SUT raises wrong exception type
+        class UnexpectedError(Exception):
+            pass
+
+        class BrokenTarget:
+            def set_positive(self, val: int) -> int:
+                raise UnexpectedError("internal crash")
+
+        sut4 = BrokenTarget()
+        sm4 = ServiceStateMachine()
+        checked4 = sm4.bind(sut4)
+        with self.assertRaises(AssertionError) as err_ctx:
+            checked4.violating(ContractViolationError).set_positive(-1)
+        self.assertIn(
+            "Expected contract violation ContractViolationError, but UnexpectedError was raised",
+            str(err_ctx.exception),
+        )
+
+        # 5. Violating fails if match pattern is not in exception message
+        sut5 = TargetService()
+        sm5 = ServiceStateMachine()
+        checked5 = sm5.bind(sut5)
+        with self.assertRaises(AssertionError) as err_ctx:
+            checked5.violating(
+                ContractViolationError, match="nonexistent text"
+            ).set_positive(-1)
+        self.assertIn("does not match pattern", str(err_ctx.exception))
+
+    def test_prioritize_exception_group_selects_shortest_sub_exception(self) -> None:
+        """Requirement: MUST prioritize the shortest sub-exception trace in an ExceptionGroup."""
+        raw_eg = (
+            "+ Exception Group Traceback (most recent call last):\n"
+            '  |   File "runner.py", line 10, in run\n'
+            "  | ExceptionGroup: Hypothesis found 3 distinct failures. (3 sub-exceptions)\n"
+            "  +-+---------------- 1 ----------------\n"
+            "    | Traceback (most recent call last):\n"
+            '    |   File "long.py", line 100, in test_long\n'
+            '    |   File "long.py", line 101, in step1\n'
+            '    |   File "long.py", line 102, in step2\n'
+            '    |   File "long.py", line 103, in step3\n'
+            "    | AssertionError: long failure\n"
+            "    +---------------- 2 ----------------\n"
+            "    | Traceback (most recent call last):\n"
+            '    |   File "short.py", line 20, in test_short\n'
+            "    | AssertionError: short failure\n"
+            "    +---------------- 3 ----------------\n"
+            "    | Traceback (most recent call last):\n"
+            '    |   File "medium.py", line 50, in test_medium\n'
+            '    |   File "medium.py", line 51, in step1\n'
+            "    | AssertionError: medium failure\n"
+        )
+        res = pretense_impl._prioritize_exception_group_trace(raw_eg)
+        self.assertIn("Prioritizing shortest unique failure (2/3)", res)
+        self.assertIn("AssertionError: short failure", res)
+        self.assertNotIn("AssertionError: long failure", res)
+
+    def test_prioritize_exception_group_deduplicates_equivalent_failures(self) -> None:
+        """Requirement: MUST deduplicate equivalent failure traces ending in the same exception and location."""
+        raw_eg = (
+            "+ Exception Group Traceback (most recent call last):\n"
+            '  |   File "runner.py", line 10, in run\n'
+            "  | ExceptionGroup: Hypothesis found 3 distinct failures. (3 sub-exceptions)\n"
+            "  +-+---------------- 1 ----------------\n"
+            "    | Traceback (most recent call last):\n"
+            '    |   File "lib.py", line 50, in get_node\n'
+            "    | NodeNotFoundError: Node 'n1' not found\n"
+            "    +---------------- 2 ----------------\n"
+            "    | Traceback (most recent call last):\n"
+            '    |   File "lib.py", line 10, in step\n'
+            '    |   File "lib.py", line 50, in get_node\n'
+            "    | NodeNotFoundError: Node 'n1' not found\n"
+            "    +---------------- 3 ----------------\n"
+            "    | Traceback (most recent call last):\n"
+            '    |   File "other.py", line 20, in add_node\n'
+            "    | DuplicateNodeError: duplicate\n"
+        )
+        res = pretense_impl._prioritize_exception_group_trace(raw_eg)
+        self.assertIn("across 2 unique defect signatures", res)
+        self.assertIn("Shortest Trace: NodeNotFoundError in lib.py:get_node", res)
+
+    def test_format_prioritized_failure_details_orders_by_length(self) -> None:
+        """Requirement: MUST sort multiple test failures so shortest traceback appears first."""
+        long_tb = (
+            "Traceback:\n"
+            + "\n".join(f"  line {i}" for i in range(20))
+            + "\nAssertionError: long"
+        )
+        short_tb = "Traceback:\n  line 1\nAssertionError: short"
+        errors = [("test_long", long_tb), ("test_short", short_tb)]
+        formatted = pretense_impl.format_prioritized_failure_details(errors)
+        # test_short must appear before test_long
+        pos_short = formatted.find("=== test_short ===")
+        pos_long = formatted.find("=== test_long ===")
+        self.assertTrue(pos_short != -1 and pos_long != -1)
+        self.assertLess(pos_short, pos_long)
+
 
 if __name__ == "__main__":
     unittest.main()
-

@@ -36,6 +36,7 @@ class UvManifestLoader(Singleton[SystemTier], Protocol):
     # Contract: resolve manifests into target nodes, definitions, and prompts
     def load_manifest(self, node: dag_storage.DagNode) -> None: ...
 
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-11T05:09:58Z

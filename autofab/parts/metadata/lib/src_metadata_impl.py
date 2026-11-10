@@ -117,7 +117,9 @@ class SourceMetadataCoordinator(src_metadata.SourceMetadataCoordinator):
                 if (
                     stripped == "# --- CLEANROOM METADATA ---"
                     or stripped == "# --- END CLEANROOM METADATA ---"
-                    or (stripped.startswith("<!--") and "CLEANROOM METADATA" in stripped)
+                    or (
+                        stripped.startswith("<!--") and "CLEANROOM METADATA" in stripped
+                    )
                 ):
                     return True
             return False
@@ -350,6 +352,14 @@ class SourceMetadataCoordinator(src_metadata.SourceMetadataCoordinator):
         # Contract: MUST append formatted feedback entry and advance last cleaned timestamp to now.
         now = src_metadata.current_utc_timestamp()
         clean_entry = re.sub(r"^\[.*?\]:\s*", "", explanation.strip())
+        clean_sender = sender.split(":")[-1].strip().lower() if sender else ""
+        if (
+            clean_sender
+            and clean_sender != "user"
+            and not clean_entry.startswith(f"[from:{clean_sender}]")
+            and not clean_entry.startswith("[from:")
+        ):
+            clean_entry = f"[from:{clean_sender}] {clean_entry}"
         self.update_metadata(file_path, append_feedback=clean_entry, last_cleaned=now)
 
     def stamp_audit(self, file_path: Path | str, role_name: str) -> None:
@@ -364,6 +374,8 @@ class SourceMetadataCoordinator(src_metadata.SourceMetadataCoordinator):
     def clear_audits(self, file_path: Path | str) -> None:
         # Contract: MUST rewrite file clearing all audit tags.
         self.update_metadata(file_path, clear_audits=True)
+
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-14T18:40:00Z

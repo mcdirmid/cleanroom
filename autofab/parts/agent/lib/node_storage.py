@@ -6,7 +6,8 @@ import autofab.parts.dag.lib.dag_storage as dag_storage
 
 # Requirements specified in node_storage.pyi
 
-TaskPrompt = NewType('TaskPrompt', str)
+TaskPrompt = NewType("TaskPrompt", str)
+
 
 @dataclass(frozen=True)
 class NodeDefinition:
@@ -15,16 +16,14 @@ class NodeDefinition:
 
 class AgentStorage(dag_storage.DagStorage, Singleton[SystemTier], Protocol):
     # Contract: Provides the node definition encapsulating execution config and task prompt for a declared node.
-    def get_node_definition(self, node: dag_storage.DagNode) -> NodeDefinition:
-        ...
+    def get_node_definition(self, node: dag_storage.DagNode) -> NodeDefinition: ...
 
     # Contract: Provides the task prompt instruction describing work required to clean a declared node.
-    def get_task_prompt(self, node: dag_storage.DagNode) -> TaskPrompt:
-        ...
+    def get_task_prompt(self, node: dag_storage.DagNode) -> TaskPrompt: ...
 
     # Contract: Evaluates whether a node is dirty from in-band metadata and change state of non-silent dependencies.
-    def is_dirty(self, node: dag_storage.DagNode) -> bool:
-        ...
+    def is_dirty(self, node: dag_storage.DagNode) -> bool: ...
+
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z

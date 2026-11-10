@@ -39,12 +39,12 @@ class Allocator(Protocol):
             vault.VaultInactiveException: If the collaborator vault is inactive.
 
         PRECONDITIONS:
-        - WHEN amount is less than or equal to zero, MUST raise AllocationLimitError.
-        - WHEN amount exceeds available vault reserves, MUST raise AllocationLimitError.
+        - [slug:allocator.allocate.invalid_amount]: WHEN amount is less than or equal to zero, MUST raise AllocationLimitError.
+        - [slug:allocator.allocate.insufficient_vault_reserves]: WHEN amount exceeds available vault reserves, MUST raise AllocationLimitError.
 
         POSTCONDITIONS:
-        - WHEN collaborator vault is inactive, MUST raise vault.VaultInactiveException.
-        - WHEN successful, MUST increment allocated by amount.
+        - [slug:allocator.allocate.inactive_vault]: WHEN collaborator vault is inactive, MUST raise vault.VaultInactiveException.
+        - [slug:allocator.allocate.increment_balance]: WHEN successful, MUST increment allocated by amount.
         """
         ...
 
@@ -60,11 +60,11 @@ class Allocator(Protocol):
             vault.VaultInactiveException: If the collaborator vault is inactive.
 
         PRECONDITIONS:
-        - WHEN amount is less than or equal to zero or exceeds allocated, MUST raise AllocationLimitError.
+        - [slug:allocator.release.invalid_amount]: WHEN amount is less than or equal to zero or exceeds allocated, MUST raise AllocationLimitError.
 
         POSTCONDITIONS:
-        - WHEN collaborator vault is inactive, MUST raise vault.VaultInactiveException.
-        - WHEN successful, MUST decrement allocated by amount.
+        - [slug:allocator.release.inactive_vault]: WHEN collaborator vault is inactive, MUST raise vault.VaultInactiveException.
+        - [slug:allocator.release.decrement_balance]: WHEN successful, MUST decrement allocated by amount.
         """
         ...
 

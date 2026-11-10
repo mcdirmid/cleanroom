@@ -71,4 +71,11 @@ Given: command-line arguments specifying `--cov`, `--no-fuzz`, `--timeout 10.0`,
    Observed: the runner executes the specified suite with the configured timeout, fuzzing disabled, and coverage verification active, exiting with code 0 on success.
 
 2. A test suite fails, a target module fails to import, or zero test targets are found.
-   Observed: the runner outputs diagnostic error messages containing all formatted failure and error details across all failed test methods rather than truncating to the first failure, includes auditor guidance reminders directing the agent to formulate blame feedback strictly in terms of how the blamed file is not compliant with the common source of truth specification, permitting line numbers only within the blamed file while strictly forbidding exposing details of other files, and exits with a non-zero status code.
+   Observed: the runner outputs diagnostic error messages containing formatted failure and error details across failed test methods, prioritizing the shortest failure traceback when multiple failures or an exception group occurs to isolate the minimal reproduction, includes auditor guidance reminders directing the agent to formulate blame feedback strictly in terms of how the blamed file is not compliant with the common source of truth specification, permitting line numbers only within the blamed file while strictly forbidding exposing details of other files, and exits with a non-zero status code.
+
+<!-- CLEANROOM METADATA
+LAST_CLEANED: 2026-10-31T00:50:00Z
+LAST_CHANGED: 2026-11-09T12:35:00Z
+CHANGE: Prioritize shortest failure traceback in runner error reporting when multiple failures or exception groups occur
+SPEC_QA_AUDIT: 2026-10-31T00:50:00Z
+-->

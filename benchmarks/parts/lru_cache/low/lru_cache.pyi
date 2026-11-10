@@ -73,11 +73,11 @@ class LRUCache(Protocol):
             CacheCapacityError: If capacity is less than or equal to zero.
 
         PRECONDITIONS:
-        - WHEN capacity is less than or equal to zero, MUST raise CacheCapacityError.
+        - [slug:lru_cache.configure.invalid_capacity]: WHEN capacity is less than or equal to zero, MUST raise CacheCapacityError.
 
         POSTCONDITIONS:
-        - MUST update the cache capacity limit to the specified value.
-        - WHEN new capacity is smaller than current size, MUST evict least-recently-used entries in sequence until size equals capacity, incrementing the evictions counter for each evicted entry.
+        - [slug:lru_cache.configure.update_limit]: MUST update the cache capacity limit to the specified value.
+        - [slug:lru_cache.configure.downsize_eviction]: WHEN new capacity is smaller than current size, MUST evict least-recently-used entries in sequence until size equals capacity, incrementing the evictions counter for each evicted entry.
         """
         ...
 
@@ -93,8 +93,8 @@ class LRUCache(Protocol):
             The associated value if present, or default if absent.
 
         POSTCONDITIONS:
-        - WHEN key is present in cache, MUST return the associated value, promote key to most-recently-used position, and increment hits counter.
-        - WHEN key is absent from cache, MUST return default value and increment misses counter without altering access order.
+        - [slug:lru_cache.get.hit]: WHEN key is present in cache, MUST return the associated value, promote key to most-recently-used position, and increment hits counter.
+        - [slug:lru_cache.get.miss]: WHEN key is absent from cache, MUST return default value and increment misses counter without altering access order.
         """
         ...
 
@@ -110,9 +110,9 @@ class LRUCache(Protocol):
             Tuple of (evicted_key, evicted_value) if an entry was evicted, or None otherwise.
 
         POSTCONDITIONS:
-        - WHEN key already exists in cache, MUST update its stored value, promote key to most-recently-used position without increasing size, and return None.
-        - WHEN key is new and size is at capacity, MUST evict the least-recently-used entry, increment evictions counter, store the new entry at the most-recently-used position, and return tuple of (evicted_key, evicted_value).
-        - WHEN key is new and size is below capacity, MUST store entry at most-recently-used position, increment size by 1, and return None.
+        - [slug:lru_cache.put.update_existing]: WHEN key already exists in cache, MUST update its stored value, promote key to most-recently-used position without increasing size, and return None.
+        - [slug:lru_cache.put.evict_on_capacity]: WHEN key is new and size is at capacity, MUST evict the least-recently-used entry, increment evictions counter, store the new entry at the most-recently-used position, and return tuple of (evicted_key, evicted_value).
+        - [slug:lru_cache.put.insert_below_capacity]: WHEN key is new and size is below capacity, MUST store entry at most-recently-used position, increment size by 1, and return None.
         """
         ...
 
@@ -128,8 +128,8 @@ class LRUCache(Protocol):
             The associated value if present, or default if absent.
 
         POSTCONDITIONS:
-        - WHEN key is present in cache, MUST return the associated value without modifying access recency order or incrementing telemetry counters.
-        - WHEN key is absent from cache, MUST return default value without modifying access recency order or incrementing telemetry counters.
+        - [slug:lru_cache.peek.present_key]: WHEN key is present in cache, MUST return the associated value without modifying access recency order or incrementing telemetry counters.
+        - [slug:lru_cache.peek.absent_key]: WHEN key is absent from cache, MUST return default value without modifying access recency order or incrementing telemetry counters.
         """
         ...
 
@@ -147,10 +147,10 @@ class LRUCache(Protocol):
             CacheKeyNotFoundError: If key is not present in the cache.
 
         PRECONDITIONS:
-        - WHEN key is absent from cache, MUST raise CacheKeyNotFoundError.
+        - [slug:lru_cache.remove.key_not_found]: WHEN key is absent from cache, MUST raise CacheKeyNotFoundError.
 
         POSTCONDITIONS:
-        - WHEN key exists in cache, MUST remove entry, decrement size by 1, and return removed value.
+        - [slug:lru_cache.remove.existing_key]: WHEN key exists in cache, MUST remove entry, decrement size by 1, and return removed value.
         """
         ...
 
@@ -159,8 +159,8 @@ class LRUCache(Protocol):
         """Removes all entries from the cache while preserving operational telemetry.
 
         POSTCONDITIONS:
-        - MUST remove all key-value entries from the cache and reset size to zero.
-        - MUST preserve telemetry counters across clear operations.
+        - [slug:lru_cache.clear.reset_entries]: MUST remove all key-value entries from the cache and reset size to zero.
+        - [slug:lru_cache.clear.preserve_telemetry]: MUST preserve telemetry counters across clear operations.
         """
         ...
 
@@ -172,7 +172,7 @@ class LRUCache(Protocol):
             Immutable CacheStats record reflecting hits, misses, and evictions.
 
         POSTCONDITIONS:
-        - MUST return CacheStats reflecting cumulative hits, misses, and evictions.
+        - [slug:lru_cache.stats.report_telemetry]: MUST return CacheStats reflecting cumulative hits, misses, and evictions.
         """
         ...
 
@@ -181,7 +181,7 @@ class LRUCache(Protocol):
         """Resets operational telemetry counters to zero.
 
         POSTCONDITIONS:
-        - MUST reset hits, misses, and evictions counters to zero without altering cached entries.
+        - [slug:lru_cache.stats.reset_telemetry]: MUST reset hits, misses, and evictions counters to zero without altering cached entries.
         """
         ...
 
@@ -194,8 +194,8 @@ class LRUCache(Protocol):
             List of active cache keys in access recency ascending order.
 
         POSTCONDITIONS:
-        - MUST return all active cache keys ordered from least-recently-used to most-recently-used.
-        - MUST NOT alter access recency order or increment operational telemetry counters.
+        - [slug:lru_cache.keys.lru_order]: MUST return all active cache keys ordered from least-recently-used to most-recently-used.
+        - [slug:lru_cache.keys.non_mutating]: MUST NOT alter access recency order or increment operational telemetry counters.
         """
         ...
 

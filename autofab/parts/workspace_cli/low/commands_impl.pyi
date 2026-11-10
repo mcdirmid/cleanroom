@@ -73,7 +73,10 @@ class WorkspaceCommandHandler(commands.WorkspaceCommandHandler):
         """Verifies and submits target to canonical main repository.
 
         GROUNDING:
-        - Enforces that modified target files have been checked via check_files since modification unless bypassed,
+        - Enforces that modified target files have been checked via check_files since modification unless bypassed;
+          if staged blame entries exist for a failing target, commits all staged blame items via attribution.AttributionCoordinator,
+          marks culprits dirty, appends blame records to autofab_files_ext.AUTOFAB_LOG_FILE, clears the staged blame buffer,
+          and clears the target from pending work; if caller is an auditor role and no staged blame exists for target, rejects submission;
           validates target, executes role verification checks unless bypassed, delegates submission to
           submit.SubmissionCoordinator, appends submission message to autofab_files_ext.AUTOFAB_LOG_FILE
           in the directory containing parts, clears target via pending.WorkspacePendingManager.remove_pending_target,
@@ -93,15 +96,33 @@ class WorkspaceCommandHandler(commands.WorkspaceCommandHandler):
 
         GROUNDING:
         - Enforces that modified workspace targets have been checked via check_files since modification,
+          validates caller role feedback delivery permissions against the union of direct feedback role dependencies (feedback_role_deps) and cross-unit star feedback role dependencies (star_feedback_role_deps),
           sanitizes multi-line critique explanations into a single continuous paragraph,
+          validates the structured blame tuple (specification slug grounding in low specifications, violation taxonomy, facet noun phrase constraints, and zero-entropy symbol embargo) when the structured blame experiment is active,
           validates blame attribution against open coverage spans in the workspace coverage status buffer
           (rejecting repeating identical blame against the same uncovered span set while
           permitting test-directed blame for contracted postconditions and operational errors),
-          delegates attribution to attribution.AttributionCoordinator, appends blame message to
-          autofab_files_ext.AUTOFAB_LOG_FILE in the directory containing parts,
-          records the blamed target in autofab_files_ext.BLAME_BUFFER_FILE in the workspace root,
-          clears target or single pending workspace target from pending work via pending.WorkspacePendingManager,
-          and emits a post-blame round conclusion directive instructing the worker to run bin/get_work.
+          stages blame items into the workspace staged blame buffer, and prompts caller to stage additional
+          blame or commit staged blame via run_submit.
+        """
+        ...
+
+    @operation
+    @override
+    def run_reject(
+        self,
+        file_path: str,
+        reason: str,
+        repo_root: Optional[str] = None,
+    ) -> int:
+        """Rejects active feedback on an unmodified target file and scrubs feedback from header.
+
+        GROUNDING:
+        - Enforces that target file has not been modified since receiving feedback,
+          verifies active feedback exists in the file header, scrubs the feedback header block
+          from the target file, records rejection into autofab_files_ext.BLAME_BUFFER_FILE and
+          autofab_files_ext.AUTOFAB_LOG_FILE, clears target from pending work via
+          pending.WorkspacePendingManager, and emits a post-reject round conclusion directive.
         """
         ...
 
@@ -195,7 +216,7 @@ def __orphan__() -> None:
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-30T11:00:00Z
-# LAST_CHANGED: 2026-11-03T20:40:00Z
-# CHANGE: Prohibit bypassing verification via no_verify in active role workspaces
+# LAST_CHANGED: 2026-11-07T10:20:00Z
+# CHANGE: Ground reject operation and stage-and-commit submit workflow with auditor blame requirement
 # SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---

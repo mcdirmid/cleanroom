@@ -9,8 +9,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    call_target,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -41,20 +39,33 @@ class TargetStateMachine(StateMachine[TargetState]):
         state: Optional[TargetState] = None,
         singletons: Optional[dict[type[Any], Any]] = None,
     ) -> None:
-        super().__init__(state=state or TargetState(), singletons=singletons)
+        super().__init__(state=state or self.make_initial_state(), singletons=singletons)
+
+    def make_initial_state(self) -> TargetState:
+        """Constructs initial model state. Open parameters may be specialized by pseudo-state machines."""
+        return TargetState()
 
     # 1:1 Transition Pattern (1:1 with target method, natural Python branching):
+    # - require(...) inspects self.state ONLY (never method arguments, local variables, or SUT objects).
+    # - require_arg(param, domain) gates argument domains (first arg must be bare parameter name).
+    # - No while loops, lambdas, or bare try/except blocks inside transitions.
+    # - Complex algorithms (e.g. DAG engines, topological sorts) are modeled as abstract state mutations
+    #   and invariant assertions, NOT re-implemented with loops inside transitions.
+    # - Transition delegates to inner transition method: `ret = self.inner_process(item, count)`.
     # @transition(TargetClass.process)
-    # def process(self, item: str, count: int) -> None:
+    # def process(self, item: str, count: int) -> str:
     #     require(self.state.initialized)
     #     require_arg(item, Domain.sampled_from(["sample_1", "sample_2"]), preferred=["sample_1"])
     #     require_arg(count, Domain.range(1, 100), preferred=[1, 10])
-    #     # Fake return value & AST pivot:
-    #     fake_ret = f"result_{item}_{count}"
-    #     ret = make_return_value(fake_ret)
+    #     ret = self.inner_process(item, count)
     #     # State mutation & postcondition assertions:
     #     self.state.items.append(ret)
-    #     assert ret == fake_ret
+    #     assert ret == f"result_{item}_{count}"
+    #     return ret
+    #
+    # def inner_process(self, item: str, count: int) -> str:
+    #     """Computes fake return value for synthesized fake."""
+    #     return f"result_{item}_{count}"
 
     # Seeding Transition (Fake-only, sets up initial state outside default __init__):
     @transition.seeding
@@ -108,6 +119,8 @@ proto = TargetStateMachine()
 #
 #     def test_transitions_coverage(self) -> None:
 #         """Exercises 100% of transitions and seeding transitions on the fake."""
+#         # PRE_LINT_INTERFACE_TRANSITION_COVERAGE requires that EVERY declared
+#         # @transition and @transition.seeding method is called at least once in Test<Target>Fake!
 #         self.sm.seed_initial()
 #         # Exercise every declared transition and seeding transition on self.fake:
 #         # self.fake.process("sample_1", 10)
@@ -121,13 +134,17 @@ proto = TargetStateMachine()
 # class TargetImplPseudoStateMachine(TargetStateMachine):
 #     """Implementation pseudo-state machine for Target measuring differentials and SUT state."""
 #     # Zero state dataclasses; zero require_arg statements (domain constraints are inherited from TargetStateMachine).
-#     # Selectively override only transitions requiring SUT observation or private invariant checking:
-#     # @transition(TargetClass.process)
-#     # def process(self, item: str, count: int) -> None:
+#     # Open model parameters (e.g. initial capacity or defaults) may be specialized via property or make_initial_state:
+#     # def make_initial_state(self) -> TargetState:
+#     #     return TargetState(capacity=100)
+#
+#     # Override inner transitions to drive target and evaluate private invariant assertions:
+#     # def inner_process(self, item: str, count: int) -> str:
+#     #     super().inner_process(item, count)  # optional, fake return value ignored
 #     #     target: TargetClass = sut(TargetClass)
 #     #     # Pre-state observation:
 #     #     old_size = target.size
-#     #     ret = call_target(target.process(item, count))
+#     #     ret = target.process(item, count)
 #     #     # Post-state verification:
 #     #     assert target.size == old_size + 1
 #     #     return ret
@@ -164,6 +181,14 @@ class TestTargetImplReal(unittest.TestCase):
         # to achieve 100% statement coverage under --no-fuzz --cov.
         # Operational postconditions and invariants are verified automatically by transition asserts;
         # fixed scenario tests should contain no redundant manual assertions (self.assertEqual, self.assertTrue).
+        #
+        # Contract violation testing (covering contracted *Error branches in lib):
+        # with self.checked.violating(ExpectedError):
+        #     self.checked.method_that_violates(...)
+        #
+        # Collaborator isolation: if earlier calls exhaust a collaborator (e.g. advance a scheduler to finished),
+        # subsequent loops on that instance (e.g. runner.run()) exit immediately. Use separate test methods
+        # (def test_<scenario>(self)) with fresh setUp() scopes or isolated SUT instances for independent flows.
         pass
 
 
@@ -206,6 +231,6 @@ class TestTargetImplReal(unittest.TestCase):
 # TargetFuzzTest = compile_hypothesis_test_case(
 #     proto=proto,
 #     sut_factory=make_sut,
-#     initial_state_factory=TargetState,
+#     initial_state_factory=proto.make_initial_state,
 #     name="TargetFuzzTest",
 # )

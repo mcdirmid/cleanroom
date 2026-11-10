@@ -17,6 +17,7 @@ from support.lib.lifecycle import (
 )
 from autofab.parts.agent.lib import session as agent_session
 from autofab.parts.subagent.lib import subagent_coordinator, subagent_harness
+
 try:
     from support.lib import app_info
 except ImportError:
@@ -36,9 +37,7 @@ PRICING_RATES: Dict[str, Tuple[float, float, float]] = {
 
 def _read_blame_buffer(workspace_dir: str) -> List[str]:
     """Reads blamed culprit target paths from the workspace blame buffer."""
-    candidate_names = (
-        app_info.DEFAULT_BLAME_BUFFER_FILE,
-    )
+    candidate_names = (app_info.DEFAULT_BLAME_BUFFER_FILE,)
     for cand in candidate_names:
         buf_path = os.path.join(workspace_dir, cand)
         if not os.path.isfile(buf_path):
@@ -52,7 +51,11 @@ def _read_blame_buffer(workspace_dir: str) -> List[str]:
                     if isinstance(item, str):
                         res.append(item)
                     elif isinstance(item, dict):
-                        t = item.get("culprit_target") or item.get("target") or item.get("file")
+                        t = (
+                            item.get("culprit_target")
+                            or item.get("target")
+                            or item.get("file")
+                        )
                         if t:
                             res.append(str(t))
                 if res:
@@ -66,7 +69,9 @@ def _read_blame_buffer(workspace_dir: str) -> List[str]:
     return []
 
 
-def _resolve_pricing_rates(model_name: Optional[str] = None) -> Tuple[float, float, float]:
+def _resolve_pricing_rates(
+    model_name: Optional[str] = None,
+) -> Tuple[float, float, float]:
     """Resolves (cached_per_m, input_per_m, output_per_m) for model name."""
     if not model_name:
         return PRICING_RATES["default"]
@@ -109,24 +114,54 @@ class TranscriptTelemetryParser(antigravity_harness.TranscriptTelemetryParser):
                         data = json.loads(line_s)
                         if isinstance(data, dict):
                             # Inspect usage or metadata objects
-                            usage = data.get("usage") or data.get("metadata", {}).get("usage") or {}
+                            usage = (
+                                data.get("usage")
+                                or data.get("metadata", {}).get("usage")
+                                or {}
+                            )
                             if isinstance(usage, dict):
-                                in_t = usage.get("input_tokens") or usage.get("prompt_tokens") or 0
-                                cache_t = usage.get("cached_tokens") or usage.get("cache_read_tokens") or 0
-                                out_t = usage.get("output_tokens") or usage.get("completion_tokens") or 0
+                                in_t = (
+                                    usage.get("input_tokens")
+                                    or usage.get("prompt_tokens")
+                                    or 0
+                                )
+                                cache_t = (
+                                    usage.get("cached_tokens")
+                                    or usage.get("cache_read_tokens")
+                                    or 0
+                                )
+                                out_t = (
+                                    usage.get("output_tokens")
+                                    or usage.get("completion_tokens")
+                                    or 0
+                                )
                                 input_tokens += int(in_t)
                                 cached_tokens += int(cache_t)
                                 output_tokens += int(out_t)
 
-                            m_name = data.get("model") or data.get("metadata", {}).get("model")
+                            m_name = data.get("model") or data.get("metadata", {}).get(
+                                "model"
+                            )
                             if m_name and not resolved_model:
                                 resolved_model = str(m_name)
                     except json.JSONDecodeError:
-                        for m in re.finditer(r"(?:input_tokens|Input tokens)[:=]\s*(\d+)", line_s, re.IGNORECASE):
+                        for m in re.finditer(
+                            r"(?:input_tokens|Input tokens)[:=]\s*(\d+)",
+                            line_s,
+                            re.IGNORECASE,
+                        ):
                             input_tokens += int(m.group(1))
-                        for m in re.finditer(r"(?:cached_tokens|Cached tokens)[:=]\s*(\d+)", line_s, re.IGNORECASE):
+                        for m in re.finditer(
+                            r"(?:cached_tokens|Cached tokens)[:=]\s*(\d+)",
+                            line_s,
+                            re.IGNORECASE,
+                        ):
                             cached_tokens += int(m.group(1))
-                        for m in re.finditer(r"(?:output_tokens|Output tokens)[:=]\s*(\d+)", line_s, re.IGNORECASE):
+                        for m in re.finditer(
+                            r"(?:output_tokens|Output tokens)[:=]\s*(\d+)",
+                            line_s,
+                            re.IGNORECASE,
+                        ):
                             output_tokens += int(m.group(1))
         except OSError:
             pass
@@ -151,7 +186,6 @@ class TranscriptTelemetryParser(antigravity_harness.TranscriptTelemetryParser):
             cost_usd=cost_usd,
             model_name=resolved_model,
         )
-
 
 
 # Contract: AntigravityHarnessAdapter realizes subagent execution in Antigravity role workspaces.
@@ -183,7 +217,9 @@ class AntigravityHarnessAdapter(antigravity_harness.AntigravityHarnessAdapter):
         with open(prompt_file, "w", encoding="utf-8") as f:
             f.write(dispatch.task_prompt)
 
-        cmd_template = self.custom_cmd or "agy run --cwd {workspace_dir} --file {prompt_file}"
+        cmd_template = (
+            self.custom_cmd or "agy run --cwd {workspace_dir} --file {prompt_file}"
+        )
         formatted_cmd = cmd_template.format(
             workspace_dir=dispatch.workspace_dir,
             prompt_file=prompt_file,
@@ -215,7 +251,9 @@ class AntigravityHarnessAdapter(antigravity_harness.AntigravityHarnessAdapter):
         return handle
 
     # Contract: AntigravityHarnessAdapter.poll_role - polls subagent turn execution non-blockingly without waiting for completion.
-    def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleTurnResult]:
+    def poll_role(
+        self, task_handle: str
+    ) -> Optional[subagent_coordinator.RoleTurnResult]:
         """Polls subagent turn execution non-blockingly without waiting for completion."""
         task = self._tasks.get(task_handle)
         if not task:
@@ -271,7 +309,9 @@ class AntigravityHarnessAdapter(antigravity_harness.AntigravityHarnessAdapter):
             except subprocess.TimeoutExpired:
                 proc.kill()
                 exit_code = -9
-                stderr_txt = f"Execution timed out after {self.timeout_seconds} seconds."
+                stderr_txt = (
+                    f"Execution timed out after {self.timeout_seconds} seconds."
+                )
 
         elapsed = time.time() - start_time
 
@@ -290,8 +330,13 @@ class AntigravityHarnessAdapter(antigravity_harness.AntigravityHarnessAdapter):
             submitted.append(m.group(1))
 
         # Contract: Parse transcript telemetry from state directory.
-        transcript_path = os.path.join(app_info.resolve_state_dir(dispatch.workspace_dir, create=False), "transcript.jsonl")
-        metrics = self.transcript_parser.parse_transcript_file(transcript_path, self.model_name)
+        transcript_path = os.path.join(
+            app_info.resolve_state_dir(dispatch.workspace_dir, create=False),
+            "transcript.jsonl",
+        )
+        metrics = self.transcript_parser.parse_transcript_file(
+            transcript_path, self.model_name
+        )
         telemetry = subagent_coordinator.TokenUsage(
             input_tokens=metrics.input_tokens,
             cached_tokens=metrics.cached_tokens,
@@ -304,7 +349,9 @@ class AntigravityHarnessAdapter(antigravity_harness.AntigravityHarnessAdapter):
         failure_reason = None
         if exit_code != 0:
             status = "failed"
-            failure_reason = f"Process exited with non-zero code {exit_code}: {stderr_txt.strip()}"
+            failure_reason = (
+                f"Process exited with non-zero code {exit_code}: {stderr_txt.strip()}"
+            )
         elif blamed:
             status = "blamed"
 
@@ -375,6 +422,8 @@ class AntigravityHarnessManager(antigravity_harness.AntigravityHarnessManager):
     def get_transcript_parser(self) -> antigravity_harness.TranscriptTelemetryParser:
         """Returns the transcript telemetry parser service."""
         return self._parser
+
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-12T21:45:00Z

@@ -97,7 +97,9 @@ class ControlAttributionImplTest(unittest.TestCase):
         self.storage.dependencies[source] = set()
 
         with enter_phase(agent_session.agent_session, registry=self.registry):
-            outcome = self.coordinator.blame_target(source, unrelated, "Missing API function.")
+            outcome = self.coordinator.blame_target(
+                source, unrelated, "Missing API function."
+            )
             self.assertFalse(outcome.accepted)
             self.assertIn("not an upstream dependency", outcome.message)
 
@@ -191,7 +193,9 @@ class ControlAttributionImplTest(unittest.TestCase):
             role_address=dag_storage.RoleAddress("lib"),
         )
         with enter_phase(agent_session.agent_session, registry=self.registry):
-            outcome = self.coordinator.fail_target(target, "Cannot satisfy constraints.")
+            outcome = self.coordinator.fail_target(
+                target, "Cannot satisfy constraints."
+            )
             self.assertTrue(outcome.accepted)
             self.assertIn(target, outcome.affected_nodes)
             feedback = self.storage.feedback_messages[target]

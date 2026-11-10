@@ -75,7 +75,9 @@ class FakeCoordinator:
                 total_tokens=1700,
                 cost_usd=0.015,
             ),
-            status_message="All units converged cleanly." if self.converged else "Convergence failed.",
+            status_message="All units converged cleanly."
+            if self.converged
+            else "Convergence failed.",
         )
 
 
@@ -97,10 +99,14 @@ class FakeHarnessResolver:
             def dispatch_role(self, dispatch: subagent_coordinator.RoleDispatch) -> str:
                 return "dummy"
 
-            def await_role(self, task_handle: str) -> subagent_coordinator.RoleRoundResult:
+            def await_role(
+                self, task_handle: str
+            ) -> subagent_coordinator.RoleRoundResult:
                 return subagent_coordinator.RoleRoundResult(role="test", status="clean")
 
-            def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleRoundResult]:
+            def poll_role(
+                self, task_handle: str
+            ) -> Optional[subagent_coordinator.RoleRoundResult]:
                 return self.await_role(task_handle)
 
             def interrupt_role(self, task_handle: str) -> None:
@@ -163,7 +169,9 @@ class SubagentToolImplTest(unittest.TestCase):
         """Scenario 3: Verifies execute_command parses target_role positional argument."""
         with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
             runner = scope.get_singleton(subagent_tool.SubagentToolRunner)
-            status = runner.execute_command(["orchestrate", "staging", "qa", "--simulation"])
+            status = runner.execute_command(
+                ["orchestrate", "staging", "qa", "--simulation"]
+            )
             self.assertEqual(status, 0)
             self.assertEqual(self.fake_coord.last_target_role, "qa")
 
@@ -171,12 +179,28 @@ class SubagentToolImplTest(unittest.TestCase):
         """Scenario 4: Verifies execute_command parses --max-unproductive-rounds and --max-unproductive-turns arguments."""
         with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
             runner = scope.get_singleton(subagent_tool.SubagentToolRunner)
-            status = runner.execute_command(["orchestrate", "staging", "--max-unproductive-rounds", "8", "--simulation"])
+            status = runner.execute_command(
+                [
+                    "orchestrate",
+                    "staging",
+                    "--max-unproductive-rounds",
+                    "8",
+                    "--simulation",
+                ]
+            )
             self.assertEqual(status, 0)
             self.assertEqual(self.fake_coord.last_max_unproductive_rounds, 8)
 
             # Test backwards compatibility with --max-unproductive-turns
-            status2 = runner.execute_command(["orchestrate", "staging", "--max-unproductive-turns", "6", "--simulation"])
+            status2 = runner.execute_command(
+                [
+                    "orchestrate",
+                    "staging",
+                    "--max-unproductive-turns",
+                    "6",
+                    "--simulation",
+                ]
+            )
             self.assertEqual(status2, 0)
             self.assertEqual(self.fake_coord.last_max_unproductive_rounds, 6)
 
@@ -184,13 +208,15 @@ class SubagentToolImplTest(unittest.TestCase):
         """Scenario 5: Verifies execute_command parses --target argument and forwards to coordinator."""
         with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
             runner = scope.get_singleton(subagent_tool.SubagentToolRunner)
-            status = runner.execute_command([
-                "orchestrate",
-                "staging",
-                "--target",
-                "//staging/parts/sandbox:file_reader_impl#qa",
-                "--simulation",
-            ])
+            status = runner.execute_command(
+                [
+                    "orchestrate",
+                    "staging",
+                    "--target",
+                    "//staging/parts/sandbox:file_reader_impl#qa",
+                    "--simulation",
+                ]
+            )
             self.assertEqual(status, 0)
             self.assertEqual(
                 self.fake_coord.last_target_node,
@@ -201,12 +227,14 @@ class SubagentToolImplTest(unittest.TestCase):
         """Scenario 6: Verifies execute_command parses --pretense argument without error."""
         with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
             runner = scope.get_singleton(subagent_tool.SubagentToolRunner)
-            status = runner.execute_command([
-                "orchestrate",
-                "staging",
-                "--pretense",
-                "--simulation",
-            ])
+            status = runner.execute_command(
+                [
+                    "orchestrate",
+                    "staging",
+                    "--pretense",
+                    "--simulation",
+                ]
+            )
             self.assertEqual(status, 0)
 
 

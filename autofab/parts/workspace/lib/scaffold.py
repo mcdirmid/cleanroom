@@ -60,6 +60,7 @@ class WorkspaceScaffolder(Singleton[AgentSessionTier], Protocol):
         executable: bool = False,
     ) -> None: ...
 
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-26T20:38:00Z
 # LAST_CHANGED: 2026-10-29T00:40:00Z

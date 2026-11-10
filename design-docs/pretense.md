@@ -37,6 +37,7 @@
    - [Principle 18: Multi-Interface Implementations (`implements: B, C`)](#principle-18-multi-interface-implementations-implements-b-c)
    - [Principle 19: Interface Fixed Conformance Testing (`Test<Target>Fake`)](#principle-19-interface-fixed-conformance-testing-testtargetfake)
    - [Principle 20: Base Interface Transition Delegation & Onion Dispatch](#principle-20-base-interface-transition-delegation--onion-dispatch)
+   - [Principle 21: Model Parameter Specialization & Polymorphic Initial State](#principle-21-model-parameter-specialization--polymorphic-initial-state)
 5. [Contract Violations, Error Handling, and Reachability: Fuzzing vs. Fixed Scenario Testing](#5-contract-violations-error-handling-and-reachability-fuzzing-vs-fixed-scenario-testing)
    - [Contract Violations vs. Operational Errors in Specifications](#contract-violations-vs-operational-errors-in-specifications)
    - [Fuzz Testing Never Explores Contract Violations (Valid by Construction)](#fuzz-testing-never-explores-contract-violations-valid-by-construction)
@@ -610,6 +611,44 @@ To eliminate duplication and prevent cognitive desynchronization between interfa
    - Implementation pseudo-state machines **must NEVER mutate `self.state` directly** (`PN_IMPL_NO_STATE_MUTATION`); model state is updated by the base class.
 3. **Auditor Protection in `pretense_qa.md`**: QA auditors are strictly prohibited from blaming implementation pseudo-state machines for missing `require(...)` gates, missing `require_arg(...)` domains, or missing `self.state` mutations, since these responsibilities are handled by base interface transition delegation.
 
+### Principle 21: Model Parameter Specialization & Polymorphic Initial State
+Because an interface specification (`low/<name>.pyi`) contracts observable behavior without dictating internal implementation choices (such as default capacity, initial buffer size, or thread allocation), the interface state machine and implementation pseudo-state machines manage initial state through structured specialization:
+1. **Interface State Machine as Fake Provider & Abstract Oracle**:
+   - The interface state machine (`<name>_pretense.py`) defines the canonical reference state (`@dataclass class <Target>State`) with sensible defaults needed to synthesize an operational fake (`synthesize_fake(<Target>StateMachine)`).
+   - Any parameters left uncontracted or open by the public interface (e.g. `initial_capacity`) are defined as overridable properties or hooks on the state machine:
+     ```python
+     class TargetStateMachine(StateMachine[TargetState]):
+         @property
+         def default_capacity(self) -> int:
+             return 10  # Sensible default for synthesized fake
+
+         def make_initial_state(self) -> TargetState:
+             """Constructs initial model state. May be specialized by pseudo-state machines."""
+             return TargetState(capacity=self.default_capacity)
+     ```
+   - Inlining concrete implementation constants (e.g. `100` from `low/<name>_impl.pyi`) into the interface state machine is strictly prohibited as a boundary violation.
+2. **Implementation Pseudo-State Machine Specialization**:
+   - The implementation pseudo-state machine (`<name>_impl_pretense.py`) specializes open model parameters to match the concrete realization contract (`low/<name>_impl.pyi`):
+     - **Property Overriding**: For parameter variance (such as `capacity = 100`), the pseudo-state machine overrides the corresponding property or hook (`@property def default_capacity(self) -> int: return 100`).
+     - **Polymorphic State Subclassing**: When an implementation requires tracking implementation-specific reference metrics or state variables (such as rehash counts or compaction cycles), the implementation module may subclass `TargetState` (`@dataclass class TargetImplState(TargetState): ...`) and return it from `make_initial_state()`.
+3. **Hypothesis Initial State Binding**:
+   - When compiling Hypothesis stateful test cases for real implementations:
+     ```python
+     proto = TargetImplPseudoStateMachine()
+
+     TargetFuzzTest = compile_hypothesis_test_case(
+         proto=proto,
+         sut_factory=make_sut,
+         initial_state_factory=proto.make_initial_state,
+         name="TargetFuzzTest",
+     )
+     ```
+   - Hypothesis invokes `proto.make_initial_state()` for every test iteration, binding the specialized model state to each test run without polluting the reusable interface state machine.
+
+#### Foundational Open Question: Does an Interface Have State?
+A deeper architectural question remains: *Does an interface even "have" state, or does an interface possess only observable behaviors, traces, and temporal predicates?*
+In classic formal semantics (trace semantics, coalgebraic testing), an interface is an equivalence relation over observable event sequences ($I \subseteq \Sigma^*$). Defining a concrete `@dataclass` state in the interface chooses one specific canonical algebra to represent those equivalence classes. Whenever that canonical algebra reifies a parameter that is not observable from the public contract (such as an unconfigured initial capacity), tension arises between the fake's need for a runnable instance and the implementation's freedom of realization. Future research will explore whether interface state machines can be expressed purely as trace constraints or open behavioral specifications, where concrete state is projected entirely by the realization algebra.
+
 ---
 
 ## 5. Contract Violations, Error Handling, and Reachability: Fuzzing vs. Fixed Scenario Testing
@@ -643,20 +682,31 @@ When a test executes (calling into the SUT):
 - Hypothesis preserves the full state machine call trace, shrinks the counterexample, and reports the SUT defect.
 - Pretense **never** treats runtime precondition failures as antecedent discards or swallows them.
 
-### Fixed Scenario Testing of Contracted Errors (`require(..., error=...)`)
+### Fixed Scenario Testing of Contract Violations (`checked.violating(...)`)
 
 While generative fuzz testing stays strictly within valid operational paths, statement coverage of library error-handling branches requires exercising contracted errors:
-- Pretense's `require` and `require_arg` support an optional `error` parameter:
+- Pretense's `require` and `require_arg` declare caller contracts and specify the expected error:
   ```python
   require(condition, error=InvalidVersionError)
   require_arg(text, len(text) > 0, error=InvalidRangeError)
   ```
-- In **fixed scenario tests** (deterministic scenario test methods in `Test<Impl>Real` run under `--no-fuzz --cov` to establish statement coverage):
-  - Fixed tests verify contracted operational error outcomes (e.g. `InvalidVersionError`, `InvalidRangeError`, `PackageNotFoundError`, `ResolutionConflictError` declared in `low/*.pyi`).
-  - Contracted errors can be exercised either:
-    1. By executing transitions that intentionally trigger a contract violation, throwing the specified `Error` via `require(..., error=...)` rather than raising a generic framework violation, OR
-    2. By directly asserting the error on the SUT in deterministic scenario test methods using `with self.assertRaises(ContractedError):`.
-  - **Linter Exemption Requirement**: The static linter (`[NO_ERROR_TESTING]`) must resolve `low/*.pyi` declarations. It is strictly prohibited from failing tests that assert exceptions explicitly declared under `Raises:` or as exception types in `low/*.pyi`. Only uncontracted caller preconditions are banned from test assertions.
+- **The Precondition Short-Circuit Defect**:
+  Historically, when a fixed test attempted to verify a contract violation via `checked.method(...)`, Pretense evaluated `require(...)` *before* the AST pivot (`make_return_value` / `call_target`). When the precondition failed, Pretense raised the error immediately, short-circuiting the call before the real SUT was ever invoked. Consequently, the library's `raise InvalidVersionError(...)` statement was never executed, leaving error handling branches persistently uncovered and triggering coverage audit deadlocks.
+- **The Architectural Solution (`checked.violating(...)`)**:
+  Fixed scenario tests verify contracted error outcomes on the SUT using `checked.violating(ExpectedError, match="...")` (or context manager `with checked.violating(ExpectedError):`):
+  ```python
+  # Direct call syntax:
+  self.checked.violating(InvalidVersionError, match="invalid").parse("not-a-version")
+
+  # Context manager syntax:
+  with self.checked.violating(InvalidVersionError):
+      self.checked.parse("not-a-version")
+  ```
+  1. **Precondition Disabling**: During a `violating` transition, antecedent precondition assertions (`require`, `require_arg`) are disabled and return immediately without evaluating.
+  2. **Target SUT Execution & Coverage**: The transition proceeds cleanly through the AST pivot to invoke the real SUT (`self._real_instance.parse(...)`), executing the library's actual error-validation branch and establishing true statement coverage.
+  3. **Exception Verification**: The adapter catches the exception raised by the SUT, asserts that it is an instance of `ExpectedError` (and verifies `match` substring if supplied), and suppresses it so the test passes. If the SUT fails to raise or raises an unexpected exception type, an `AssertionError` is raised immediately.
+  4. **Terminal Instance Invariant**: After a contract violation occurs, the component is in an undefined state. The checked adapter marks itself terminal (`_is_terminal = True`). Any subsequent operational calls on that adapter instance raise `PretenseSpecificationError("Cannot invoke ... on terminal CheckedAdapter; component is in an undefined state after contract violation.")`. Testing a contract violation is therefore **strictly the terminal transition** of any component instance. (Lifecycle teardown methods such as `cleanup`, `teardown`, and `close` remain callable as no-ops).
+
 
 ### The `NO_ERROR_TESTING` Deadlock Problem & Architectural Fix
 

@@ -20,6 +20,7 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     for constituent in CONSTITUENTS:
         constituent.__initialize__(reg)
 
+
 _initialize_ = __initialize__
 
 # --- CLEANROOM METADATA ---

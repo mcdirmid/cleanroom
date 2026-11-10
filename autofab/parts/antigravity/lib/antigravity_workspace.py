@@ -41,6 +41,7 @@ class AntigravityWorkspaceConfigurer(Singleton[AgentSessionTier], Protocol):
         """Establishes Antigravity isolation rules and returns a confinement report."""
         ...
 
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-12T21:45:00Z

@@ -24,7 +24,9 @@ from autofab.parts.workspace_cli.lib import work
 class FakeWorkspaceRegistry:
     tier = agent_session.agent_session
 
-    def resolve_role_definition(self, role_name: str, repo_root: Optional[str] = None) -> role_registry.RoleDefinition:
+    def resolve_role_definition(
+        self, role_name: str, repo_root: Optional[str] = None
+    ) -> role_registry.RoleDefinition:
         clean = role_name.split(":")[-1].strip().lower()
         is_aud = "qa" in clean or "coverage" in clean
         return role_registry.RoleDefinition(
@@ -160,7 +162,9 @@ class SubagentHarnessImplTest(unittest.TestCase):
             # Write blame buffer
             blame_file = os.path.join(self.test_dir, app_info.DEFAULT_BLAME_BUFFER_FILE)
             with open(blame_file, "w", encoding="utf-8") as f:
-                json.dump([{"culprit_target": "low/a.pyi", "reason": "Missing contract"}], f)
+                json.dump(
+                    [{"culprit_target": "low/a.pyi", "reason": "Missing contract"}], f
+                )
 
             result = adapter.await_role(handle)
             self.assertEqual(result.status, "blamed")
@@ -215,7 +219,9 @@ class SubagentHarnessImplTest(unittest.TestCase):
             self.assertEqual(adapter.model_name, "test-model")
 
             adapter_sim = registry.resolve_harness("simulation")
-            self.assertIsInstance(adapter_sim, subagent_harness_impl.CommandHarnessAdapter)
+            self.assertIsInstance(
+                adapter_sim, subagent_harness_impl.CommandHarnessAdapter
+            )
             assert isinstance(adapter_sim, subagent_harness_impl.CommandHarnessAdapter)
             self.assertTrue(adapter_sim.simulation_mode)
 
@@ -223,14 +229,17 @@ class SubagentHarnessImplTest(unittest.TestCase):
                 "any_platform",
                 custom_cmd="custom_cmd {prompt_file}",
             )
-            self.assertIsInstance(adapter_custom, subagent_harness_impl.CommandHarnessAdapter)
-            assert isinstance(adapter_custom, subagent_harness_impl.CommandHarnessAdapter)
+            self.assertIsInstance(
+                adapter_custom, subagent_harness_impl.CommandHarnessAdapter
+            )
+            assert isinstance(
+                adapter_custom, subagent_harness_impl.CommandHarnessAdapter
+            )
             self.assertEqual(adapter_custom.cmd_template, "custom_cmd {prompt_file}")
 
             with self.assertRaises(ValueError) as ctx:
                 registry.resolve_harness("nonexistent_platform")
             self.assertIn("Unknown platform 'nonexistent_platform'", str(ctx.exception))
-
 
     def test_enforcing_execution_timeouts(self) -> None:
         """Scenario 6: Terminates runaway subagent process when timeout expires."""

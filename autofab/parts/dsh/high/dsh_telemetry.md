@@ -32,11 +32,17 @@ The dsh telemetry parser:
 
 - Dispatches role rounds over the local RPC bridge by creating or resuming sessions directly within their physical role workspace directory and naming conversation titles with the target scope and role (e.g. `[<scope>] <role>`), enqueueing prompt tasks without local file lock contention, and avoiding registering per-role workspace folders.
 
+- Renames conversation titles on DeepSeek Harness Web bridge or Desktop RPC.
+
+- Deletes existing sessions from DeepSeek Harness Web bridge or Desktop RPC.
+
+- Discovers and deletes existing conversations associated with a target directory scope (e.g. deleting all conversations containing `[<scope>]` such as `[benchmark_N]` in their title) across DeepSeek Harness Web bridge or Desktop RPC.
+
 - Polls active round status over the local RPC bridge until round quiescence.
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-11-02T17:35:00Z
-CHANGE: Name desktop sessions with scope and role directly in role workspace without creating per-role workspace folders
+LAST_CHANGED: 2026-11-09T23:32:00Z
+CHANGE: Add session renaming, deletion, and scope conversation cleanup operations
 SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->

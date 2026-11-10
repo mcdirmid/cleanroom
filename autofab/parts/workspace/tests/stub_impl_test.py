@@ -131,21 +131,15 @@ class WorkspaceStubImplTest(unittest.TestCase):
 
         # Test role has stub_role_deps=['lib']
         self.assertTrue(
-            self.stub_synth.is_stub_dep_file(
-                "parts/sample/lib/calc.py", test_role
-            )
+            self.stub_synth.is_stub_dep_file("parts/sample/lib/calc.py", test_role)
         )
         # __init__.py is not treated as a stub dep file
         self.assertFalse(
-            self.stub_synth.is_stub_dep_file(
-                "parts/sample/lib/__init__.py", test_role
-            )
+            self.stub_synth.is_stub_dep_file("parts/sample/lib/__init__.py", test_role)
         )
         # lib role has no stub_role_deps
         self.assertFalse(
-            self.stub_synth.is_stub_dep_file(
-                "parts/sample/lib/calc.py", lib_role
-            )
+            self.stub_synth.is_stub_dep_file("parts/sample/lib/calc.py", lib_role)
         )
 
     def test_sync_all_stub_deps(self) -> None:

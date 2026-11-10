@@ -49,8 +49,22 @@ Given: an agent session with an active harness registry.
 1. The harness manager initializes.
    Observed: the DeepSeek Harness adapter factory is installed in the harness registry under platform name dsh.
 
+## Scenario 8 — Renaming replaced role conversation after issuing replacement
+
+Given: an active role round executing within a directory scope in an existing conversation.
+
+1. The harness adapter dispatches a new conversation for the role replacing the previous conversation.
+   Observed: the previous role conversation is renamed to put `[<scope>] dead - <role>` after the replacement conversation is issued to distinguish active threads from obsolete ones.
+
+## Scenario 9 — Publishing authoritative orchestration state snapshots
+
+Given: an active multi-agent orchestration session with active and completed roles.
+
+1. The harness adapter receives an orchestration state update.
+   Observed: an authoritative orchestration state snapshot capturing active scopes, current wave counts, active running workers with session identifiers and target files, idle completed workers, dead sessions, and convergence status is persisted to external coordination storage.
+
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-13T20:00:00Z
-CHANGE: author dsh_harness scenarios
+LAST_CHANGED: 2026-11-09T22:10:00Z
+CHANGE: Authoritative orchestration state snapshot publishing to external coordination storage
 -->

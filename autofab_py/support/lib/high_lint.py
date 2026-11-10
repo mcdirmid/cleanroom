@@ -79,7 +79,10 @@ def lint_high_file(file_path: Path) -> list[str]:
     start_idx = 0
     while start_idx < len(lines) and not lines[start_idx].strip():
         start_idx += 1
-    if start_idx < len(lines) and lines[start_idx].strip() in ("<!-- CLEANROOM METADATA", "<!-- AUTOFAB METADATA"):
+    if start_idx < len(lines) and lines[start_idx].strip() in (
+        "<!-- CLEANROOM METADATA",
+        "<!-- AUTOFAB METADATA",
+    ):
         while start_idx < len(lines) and lines[start_idx].strip() != "-->":
             start_idx += 1
         if start_idx < len(lines) and lines[start_idx].strip() == "-->":
@@ -202,7 +205,11 @@ def lint_high_file(file_path: Path) -> list[str]:
     if not is_asm and not is_ext and imports_list:
         low_path = file_path.parent.parent / "low" / f"{stem}.pyi"
         if not low_path.exists():
-            parts_cand = file_path.parent.parent.parent if file_path.parent.parent.parent.name == "parts" else None
+            parts_cand = (
+                file_path.parent.parent.parent
+                if file_path.parent.parent.parent.name == "parts"
+                else None
+            )
             candidates: list[Path] = []
             if parts_cand and parts_cand.is_dir():
                 candidates = list(parts_cand.glob(f"*/low/{stem}.pyi"))
@@ -253,13 +260,23 @@ def lint_high_file(file_path: Path) -> list[str]:
                                 val = val.value
                             if isinstance(val, ast.Name):
                                 ast_symbols.add(val.id)
-                        elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+                        elif isinstance(node, ast.Constant) and isinstance(
+                            node.value, str
+                        ):
                             ast_symbols.add(node.value)
 
                     # Extract all text under GROUNDING: sections in docstrings
                     grounding_text = ""
                     for node in ast.walk(low_tree):
-                        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Module)):
+                        if isinstance(
+                            node,
+                            (
+                                ast.FunctionDef,
+                                ast.AsyncFunctionDef,
+                                ast.ClassDef,
+                                ast.Module,
+                            ),
+                        ):
                             doc = ast.get_docstring(node)
                             if doc and "GROUNDING:" in doc:
                                 in_g = False
@@ -267,7 +284,14 @@ def lint_high_file(file_path: Path) -> list[str]:
                                     s = line.strip()
                                     if s == "GROUNDING:":
                                         in_g = True
-                                    elif (s.endswith(":") and re.match(r"^[A-Z_]+:$", s)) or s in ("Args:", "Returns:", "Raises:", "Yields:"):
+                                    elif (
+                                        s.endswith(":") and re.match(r"^[A-Z_]+:$", s)
+                                    ) or s in (
+                                        "Args:",
+                                        "Returns:",
+                                        "Raises:",
+                                        "Yields:",
+                                    ):
                                         in_g = False
                                     elif in_g:
                                         grounding_text += " " + s
@@ -275,16 +299,24 @@ def lint_high_file(file_path: Path) -> list[str]:
                     def get_dep_exported_classes(dep_name: str) -> set[str]:
                         classes: set[str] = set()
                         candidates: list[Path] = []
-                        parts_cand = file_path.parent.parent.parent if file_path.parent.parent.parent.name == "parts" else None
+                        parts_cand = (
+                            file_path.parent.parent.parent
+                            if file_path.parent.parent.parent.name == "parts"
+                            else None
+                        )
                         if parts_cand and parts_cand.is_dir():
                             candidates = list(parts_cand.glob(f"*/low/{dep_name}.pyi"))
                             if not candidates:
-                                candidates = list(parts_cand.glob(f"*/low/{dep_name}_ext.pyi"))
+                                candidates = list(
+                                    parts_cand.glob(f"*/low/{dep_name}_ext.pyi")
+                                )
                         if not candidates:
                             for p in find_all_parts_dirs():
                                 candidates.extend(p.glob(f"*/low/{dep_name}.pyi"))
                                 if not candidates:
-                                    candidates.extend(p.glob(f"*/low/{dep_name}_ext.pyi"))
+                                    candidates.extend(
+                                        p.glob(f"*/low/{dep_name}_ext.pyi")
+                                    )
                                 if candidates:
                                     break
                         for cand in candidates:
@@ -293,9 +325,13 @@ def lint_high_file(file_path: Path) -> list[str]:
                                 for s in c_tree.body:
                                     if isinstance(s, ast.ClassDef):
                                         classes.add(s.name)
-                                    elif isinstance(s, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                                    elif isinstance(
+                                        s, (ast.FunctionDef, ast.AsyncFunctionDef)
+                                    ):
                                         classes.add(s.name)
-                                    elif isinstance(s, ast.AnnAssign) and isinstance(s.target, ast.Name):
+                                    elif isinstance(s, ast.AnnAssign) and isinstance(
+                                        s.target, ast.Name
+                                    ):
                                         classes.add(s.target.id)
                                     elif isinstance(s, ast.Assign):
                                         for t in s.targets:
@@ -307,9 +343,16 @@ def lint_high_file(file_path: Path) -> list[str]:
 
                     for dep in imports_list:
                         dep_classes = get_dep_exported_classes(dep)
-                        in_ast = (dep in ast_symbols) or any(c in ast_symbols for c in dep_classes)
-                        in_grounding = bool(re.search(r"\b" + re.escape(dep) + r"\b", grounding_text)) or any(
-                            bool(re.search(r"\b" + re.escape(c) + r"\b", grounding_text)) for c in dep_classes
+                        in_ast = (dep in ast_symbols) or any(
+                            c in ast_symbols for c in dep_classes
+                        )
+                        in_grounding = bool(
+                            re.search(r"\b" + re.escape(dep) + r"\b", grounding_text)
+                        ) or any(
+                            bool(
+                                re.search(r"\b" + re.escape(c) + r"\b", grounding_text)
+                            )
+                            for c in dep_classes
                         )
                         if not in_ast and not in_grounding:
                             errors.append(
@@ -327,7 +370,9 @@ def lint_high_file(file_path: Path) -> list[str]:
 
     for l_idx, line in enumerate(lines[idx:], idx + 1):
         line_s = line.strip()
-        if line_s.startswith("<!--") and ("CLEANROOM METADATA" in line_s or "AUTOFAB METADATA" in line_s):
+        if line_s.startswith("<!--") and (
+            "CLEANROOM METADATA" in line_s or "AUTOFAB METADATA" in line_s
+        ):
             break
         if line.startswith("## "):
             current_section = line_s[3:].strip()
@@ -410,7 +455,9 @@ def main() -> int:
         )
         return 1
 
-    print(f"[OK] {len(expanded_targets)} HLS specifications passed structural & boundary lint.")
+    print(
+        f"[OK] {len(expanded_targets)} HLS specifications passed structural & boundary lint."
+    )
     return 0
 
 

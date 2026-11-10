@@ -62,9 +62,7 @@ class TestUvTargetImpl(unittest.TestCase):
                 _make_dag_node("//pkg/sub:target", "//roles:lib"),
             )
             self.assertEqual(
-                utils.normalize_target(
-                    TargetIdentifier("//pkg/sub:target#lib")
-                ),
+                utils.normalize_target(TargetIdentifier("//pkg/sub:target#lib")),
                 _make_dag_node("//pkg/sub:target", "lib"),
             )
             self.assertEqual(
@@ -78,32 +76,44 @@ class TestUvTargetImpl(unittest.TestCase):
             utils = scope.get_singleton(UvTarget)
             # High spec path
             self.assertEqual(
-                utils.normalize_target(TargetIdentifier("autofab/parts/uv/high/target.md")),
+                utils.normalize_target(
+                    TargetIdentifier("autofab/parts/uv/high/target.md")
+                ),
                 _make_dag_node("//autofab/parts/uv:target", "high"),
             )
             # Scenario spec path
             self.assertEqual(
-                utils.normalize_target(TargetIdentifier("autofab/parts/uv/scenarios/target.md")),
+                utils.normalize_target(
+                    TargetIdentifier("autofab/parts/uv/scenarios/target.md")
+                ),
                 _make_dag_node("//autofab/parts/uv:target", "scenario"),
             )
             # Planning spec path
             self.assertEqual(
-                utils.normalize_target(TargetIdentifier("autofab/parts/uv/planning/target.md")),
+                utils.normalize_target(
+                    TargetIdentifier("autofab/parts/uv/planning/target.md")
+                ),
                 _make_dag_node("//autofab/parts/uv:target", "planning"),
             )
             # Low spec path
             self.assertEqual(
-                utils.normalize_target(TargetIdentifier("autofab/parts/uv/low/target.pyi")),
+                utils.normalize_target(
+                    TargetIdentifier("autofab/parts/uv/low/target.pyi")
+                ),
                 _make_dag_node("//autofab/parts/uv:target", "low"),
             )
             # Library source path
             self.assertEqual(
-                utils.normalize_target(TargetIdentifier("autofab/parts/uv/lib/target.py")),
+                utils.normalize_target(
+                    TargetIdentifier("autofab/parts/uv/lib/target.py")
+                ),
                 _make_dag_node("//autofab/parts/uv:target", "lib"),
             )
             # Test source path
             self.assertEqual(
-                utils.normalize_target(TargetIdentifier("autofab/parts/uv/tests/target_impl_test.py")),
+                utils.normalize_target(
+                    TargetIdentifier("autofab/parts/uv/tests/target_impl_test.py")
+                ),
                 _make_dag_node("//autofab/parts/uv:target_impl", "test"),
             )
 

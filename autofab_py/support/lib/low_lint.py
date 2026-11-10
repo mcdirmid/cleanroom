@@ -67,6 +67,7 @@ def find_all_parts_dirs() -> list[Path]:
                             pass
     return dirs
 
+
 ALLOWED_DOCSTRING_SECTIONS = {
     "Args:",
     "Returns:",
@@ -112,7 +113,10 @@ def _check_comments(content: str, fname: str) -> list[str]:
             in_metadata = True
             continue
         if in_metadata:
-            if stripped in ("# --- END CLEANROOM METADATA ---", "# --- END AUTOFAB METADATA ---"):
+            if stripped in (
+                "# --- END CLEANROOM METADATA ---",
+                "# --- END AUTOFAB METADATA ---",
+            ):
                 in_metadata = False
             continue
         # Track triple-quote boundary
@@ -169,7 +173,12 @@ def _check_docstring_contracts(
     def finish_bullet():
         nonlocal cur_bullet, cur_bullet_lineno
         if cur_bullet is not None:
-            if cur_section in ("INVARIANTS:", "PRECONDITIONS:", "POSTCONDITIONS:", "GROUNDING:"):
+            if cur_section in (
+                "INVARIANTS:",
+                "PRECONDITIONS:",
+                "POSTCONDITIONS:",
+                "GROUNDING:",
+            ):
                 if not cur_bullet.endswith("."):
                     errors.append(
                         f"{fname}:{cur_bullet_lineno}: error: sentence under '{cur_section}' must end with a period: '{cur_bullet}'"
@@ -230,7 +239,11 @@ def _check_docstring_contracts(
                 finish_bullet()
                 cur_bullet = line[2:].strip()
                 cur_bullet_lineno = line_num
-            elif cur_bullet is not None and (raw_line.startswith("  ") or raw_line.startswith("\t") or raw_line.startswith("    ")):
+            elif cur_bullet is not None and (
+                raw_line.startswith("  ")
+                or raw_line.startswith("\t")
+                or raw_line.startswith("    ")
+            ):
                 cur_bullet += " " + line
             else:
                 finish_bullet()
@@ -258,6 +271,13 @@ def lint_low_file(file_path: Path) -> list[str]:
 
     if not content.strip():
         return [f"{fname}:1: error: empty low-level specification file"]
+
+    # Validate specification contract slugs (syntax and local file uniqueness)
+    try:
+        from . import slug_lint
+    except ImportError:
+        import slug_lint  # type: ignore
+    errors.extend(slug_lint.validate_spec_slugs(content, str(file_path)))
 
     # 1. Comment checks (no free-floating # comments)
     errors.extend(_check_comments(content, fname))
@@ -367,14 +387,20 @@ def lint_low_file(file_path: Path) -> list[str]:
     # Validate module docstring if present
     module_doc = ast.get_docstring(tree)
     if module_doc:
-        d_errs, _, _ = _check_docstring_contracts(module_doc, fname, "module", 1, is_impl=is_impl)
+        d_errs, _, _ = _check_docstring_contracts(
+            module_doc, fname, "module", 1, is_impl=is_impl
+        )
         errors.extend(d_errs)
 
     # 5a. High-Level Import Parity Audit (*.pyi and *_impl.pyi)
     if not is_asm and not is_ext:
         high_path = file_path.parent.parent / "high" / f"{stem}.md"
         if not high_path.exists():
-            parts_cand = file_path.parent.parent.parent if file_path.parent.parent.parent.name == "parts" else None
+            parts_cand = (
+                file_path.parent.parent.parent
+                if file_path.parent.parent.parent.name == "parts"
+                else None
+            )
             candidates: list[Path] = []
             if parts_cand and parts_cand.is_dir():
                 candidates = list(parts_cand.glob(f"*/high/{stem}.md"))
@@ -409,8 +435,13 @@ def lint_low_file(file_path: Path) -> list[str]:
                         if h_stripped.startswith("imports:"):
                             h_raw = h_stripped[len("imports:") :].strip()
                             if h_raw:
-                                for h_imp in [i.strip() for i in h_raw.split(",") if i.strip()]:
-                                    if not h_imp.endswith("_ext") and h_imp not in tree_imports:
+                                for h_imp in [
+                                    i.strip() for i in h_raw.split(",") if i.strip()
+                                ]:
+                                    if (
+                                        not h_imp.endswith("_ext")
+                                        and h_imp not in tree_imports
+                                    ):
                                         errors.append(
                                             f"{fname}:1: error: implementation stub missing import for '{h_imp}' declared in '{high_path.name}'"
                                         )
@@ -437,7 +468,15 @@ def lint_low_file(file_path: Path) -> list[str]:
 
                 grounding_text = ""
                 for node in ast.walk(tree):
-                    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Module)):
+                    if isinstance(
+                        node,
+                        (
+                            ast.FunctionDef,
+                            ast.AsyncFunctionDef,
+                            ast.ClassDef,
+                            ast.Module,
+                        ),
+                    ):
                         doc = ast.get_docstring(node)
                         if doc and "GROUNDING:" in doc:
                             in_g = False
@@ -445,7 +484,9 @@ def lint_low_file(file_path: Path) -> list[str]:
                                 s = line.strip()
                                 if s == "GROUNDING:":
                                     in_g = True
-                                elif (s.endswith(":") and re.match(r"^[A-Z_]+:$", s)) or s in ("Args:", "Returns:", "Raises:", "Yields:"):
+                                elif (
+                                    s.endswith(":") and re.match(r"^[A-Z_]+:$", s)
+                                ) or s in ("Args:", "Returns:", "Raises:", "Yields:"):
                                     in_g = False
                                 elif in_g:
                                     grounding_text += " " + s
@@ -453,11 +494,17 @@ def lint_low_file(file_path: Path) -> list[str]:
                 def get_exported_classes_for_dep(dep_name: str) -> set[str]:
                     classes: set[str] = set()
                     candidates: list[Path] = []
-                    parts_cand = file_path.parent.parent.parent if file_path.parent.parent.parent.name == "parts" else None
+                    parts_cand = (
+                        file_path.parent.parent.parent
+                        if file_path.parent.parent.parent.name == "parts"
+                        else None
+                    )
                     if parts_cand and parts_cand.is_dir():
                         candidates = list(parts_cand.glob(f"*/low/{dep_name}.pyi"))
                         if not candidates:
-                            candidates = list(parts_cand.glob(f"*/low/{dep_name}_ext.pyi"))
+                            candidates = list(
+                                parts_cand.glob(f"*/low/{dep_name}_ext.pyi")
+                            )
                     if not candidates:
                         for p in find_all_parts_dirs():
                             candidates.extend(p.glob(f"*/low/{dep_name}.pyi"))
@@ -476,20 +523,44 @@ def lint_low_file(file_path: Path) -> list[str]:
                     return classes
 
                 exempt_modules = {
-                    "typing", "framework", "support.lib.lifecycle", "pathlib", "enum",
-                    "dataclasses", "os", "sys", "re", "agent_session", "session"
+                    "typing",
+                    "framework",
+                    "support.lib.lifecycle",
+                    "pathlib",
+                    "enum",
+                    "dataclasses",
+                    "os",
+                    "sys",
+                    "re",
+                    "agent_session",
+                    "session",
                 }
 
                 for stmt in tree.body:
                     if isinstance(stmt, ast.Import):
                         for a in stmt.names:
                             mod = a.name
-                            if mod in exempt_modules or mod.startswith("framework") or mod.startswith("support."):
+                            if (
+                                mod in exempt_modules
+                                or mod.startswith("framework")
+                                or mod.startswith("support.")
+                            ):
                                 continue
                             classes = get_exported_classes_for_dep(mod)
-                            in_ast = (mod in ast_symbols) or any(c in ast_symbols for c in classes)
-                            in_grounding = bool(re.search(r"\b" + re.escape(mod) + r"\b", grounding_text)) or any(
-                                bool(re.search(r"\b" + re.escape(c) + r"\b", grounding_text)) for c in classes
+                            in_ast = (mod in ast_symbols) or any(
+                                c in ast_symbols for c in classes
+                            )
+                            in_grounding = bool(
+                                re.search(
+                                    r"\b" + re.escape(mod) + r"\b", grounding_text
+                                )
+                            ) or any(
+                                bool(
+                                    re.search(
+                                        r"\b" + re.escape(c) + r"\b", grounding_text
+                                    )
+                                )
+                                for c in classes
                             )
                             if not in_ast and not in_grounding:
                                 errors.append(
@@ -498,12 +569,16 @@ def lint_low_file(file_path: Path) -> list[str]:
             elif not is_asm and not is_ext:
                 try:
                     high_content = high_path.read_text(encoding="utf-8")
-                    for h_l_num, h_line in enumerate(high_content.splitlines(), start=1):
+                    for h_l_num, h_line in enumerate(
+                        high_content.splitlines(), start=1
+                    ):
                         h_stripped = h_line.strip()
                         if h_stripped.startswith("imports:"):
                             h_raw = h_stripped[len("imports:") :].strip()
                             if h_raw:
-                                for h_imp in [i.strip() for i in h_raw.split(",") if i.strip()]:
+                                for h_imp in [
+                                    i.strip() for i in h_raw.split(",") if i.strip()
+                                ]:
                                     if h_imp not in tree_imports:
                                         errors.append(
                                             f"{high_path.name}:{h_l_num}: error: interface specification imports '{h_imp}', but low-level specification '{fname}' does not use it (unnecessary interface import)"
@@ -694,7 +769,11 @@ def lint_low_file(file_path: Path) -> list[str]:
             m_doc = ast.get_docstring(func)
             if m_doc:
                 d_errs, _, m_preconditions = _check_docstring_contracts(
-                    m_doc, fname, f"{cls_node.name}.{func.name}", func.lineno, is_impl=is_impl
+                    m_doc,
+                    fname,
+                    f"{cls_node.name}.{func.name}",
+                    func.lineno,
+                    is_impl=is_impl,
                 )
                 errors.extend(d_errs)
 

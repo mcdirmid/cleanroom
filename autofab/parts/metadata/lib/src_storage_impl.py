@@ -7,6 +7,7 @@ from autofab.parts.agent.lib import node_storage
 from autofab.parts.core.lib import file_paths
 from autofab.parts.dag.lib import dag_storage
 from . import src_metadata
+
 try:
     from support.lib import app_info
 except Exception:
@@ -42,7 +43,9 @@ class AgentStorage(node_storage.AgentStorage):
     tier = system
 
     def __init__(self) -> None:
-        self._node_definitions: Dict[dag_storage.DagNode, node_storage.NodeDefinition] = {}
+        self._node_definitions: Dict[
+            dag_storage.DagNode, node_storage.NodeDefinition
+        ] = {}
         self._dependencies: Dict[
             dag_storage.DagNode, Set[dag_storage.DagDependency]
         ] = {}
@@ -56,9 +59,18 @@ class AgentStorage(node_storage.AgentStorage):
     def _get_manifest_loader(self) -> Optional[Any]:
         try:
             from autofab.parts.uv.lib import manifest_loader
+
             scope = get_active_scope() or get_ambient_system_scope()
             return scope.get(manifest_loader.UvManifestLoader)
-        except (LifecycleResolutionError, LookupError, AttributeError, TypeError, ValueError, KeyError, ImportError):
+        except (
+            LifecycleResolutionError,
+            LookupError,
+            AttributeError,
+            TypeError,
+            ValueError,
+            KeyError,
+            ImportError,
+        ):
             pass
         return None
 
@@ -69,7 +81,13 @@ class AgentStorage(node_storage.AgentStorage):
         if manifest_loader is not None:
             try:
                 manifest_loader.load_manifest(node)
-            except (LifecycleResolutionError, LookupError, AttributeError, RuntimeError, OSError):
+            except (
+                LifecycleResolutionError,
+                LookupError,
+                AttributeError,
+                RuntimeError,
+                OSError,
+            ):
                 pass
 
     def _resolve_source_path(self, node: dag_storage.DagNode) -> Optional[Path]:
@@ -89,7 +107,13 @@ class AgentStorage(node_storage.AgentStorage):
                 root, file_paths.WorkspacePath(file_paths.PathString(rel_path))
             )
             return Path(resolved.path)
-        except (LifecycleResolutionError, LookupError, AttributeError, ValueError, OSError):
+        except (
+            LifecycleResolutionError,
+            LookupError,
+            AttributeError,
+            ValueError,
+            OSError,
+        ):
             return Path(os.path.abspath(os.path.join(root_str, rel_path)))
 
     def get_node_definition(
@@ -99,9 +123,7 @@ class AgentStorage(node_storage.AgentStorage):
         self._ensure_manifest_loaded(node)
         if node in self._node_definitions:
             return self._node_definitions[node]
-        return node_storage.NodeDefinition(
-            task_prompt=node_storage.TaskPrompt("")
-        )
+        return node_storage.NodeDefinition(task_prompt=node_storage.TaskPrompt(""))
 
     def store_node_definition(
         self, node: dag_storage.DagNode, definition: node_storage.NodeDefinition
@@ -109,9 +131,7 @@ class AgentStorage(node_storage.AgentStorage):
         # Contract: MUST record the node definition mapped to the node in storage.
         self._node_definitions[node] = definition
 
-    def get_task_prompt(
-        self, node: dag_storage.DagNode
-    ) -> node_storage.TaskPrompt:
+    def get_task_prompt(self, node: dag_storage.DagNode) -> node_storage.TaskPrompt:
         return self.get_node_definition(node).task_prompt
 
     # Contract: Associates a declared source file relative path with a node in storage.
@@ -228,7 +248,9 @@ class AgentStorage(node_storage.AgentStorage):
             if not feedback_deps:
                 deps = self.get_dependencies(node)
                 if deps:
-                    return any(self.is_dirty(dep.node) for dep in deps if not dep.is_silent)
+                    return any(
+                        self.is_dirty(dep.node) for dep in deps if not dep.is_silent
+                    )
                 return False
 
             contract_deps = [
@@ -496,7 +518,9 @@ class AgentStorage(node_storage.AgentStorage):
                             if m_val and isinstance(m_val, str):
                                 m_pkg = m_val.lstrip("/").split(":")[0]
                                 for rname in roles_fnames:
-                                    candidate_toml_paths.append(os.path.join(bwd, m_pkg, rname))
+                                    candidate_toml_paths.append(
+                                        os.path.join(bwd, m_pkg, rname)
+                                    )
                                 break
                         except (tomllib.TOMLDecodeError, OSError):
                             pass
@@ -508,7 +532,9 @@ class AgentStorage(node_storage.AgentStorage):
             try:
                 for entry in os.listdir(root):
                     sub = os.path.join(root, entry)
-                    if os.path.isdir(sub) and not entry.startswith((".", "bazel-", "venv")):
+                    if os.path.isdir(sub) and not entry.startswith(
+                        (".", "bazel-", "venv")
+                    ):
                         for rname in roles_fnames:
                             candidate_toml_paths.append(os.path.join(sub, rname))
             except OSError:
@@ -537,7 +563,7 @@ class AgentStorage(node_storage.AgentStorage):
             clean_stem = unit_stem
             for sfx in ("_test", "_pretense"):
                 if clean_stem.endswith(sfx):
-                    clean_stem = clean_stem[:-len(sfx)]
+                    clean_stem = clean_stem[: -len(sfx)]
                     break
             unit_name = clean_stem
             unit_dir = ""
@@ -551,13 +577,15 @@ class AgentStorage(node_storage.AgentStorage):
                 p_dir = os.path.dirname(rel_p)
                 sub_dir = ""
                 if role_def and role_def.src_pattern:
-                    clean = role_def.src_pattern.replace("{unit_dir}/", "").replace("{unit_dir}\\", "")
+                    clean = role_def.src_pattern.replace("{unit_dir}/", "").replace(
+                        "{unit_dir}\\", ""
+                    )
                     if "/" in clean:
                         sub_dir = clean.split("/", 1)[0]
                 if sub_dir:
                     sfx = "/" + sub_dir
                     if p_dir.endswith(sfx):
-                        p_dir = p_dir[:-len(sfx)]
+                        p_dir = p_dir[: -len(sfx)]
                     elif p_dir == sub_dir:
                         p_dir = ""
                 unit_dir = p_dir
@@ -636,12 +664,14 @@ class AgentStorage(node_storage.AgentStorage):
                     t_label = tmpl_str.split(":")[-1] if ":" in tmpl_str else ""
                     names = []
                     if t_label:
-                        names.extend([
-                            f"{t_label}_template.md",
-                            f"{t_label}_template.py",
-                            f"{t_label}.md",
-                            f"{t_label}.py",
-                        ])
+                        names.extend(
+                            [
+                                f"{t_label}_template.md",
+                                f"{t_label}_template.py",
+                                f"{t_label}.md",
+                                f"{t_label}.py",
+                            ]
+                        )
                         if t_label.endswith("_template"):
                             names.append(f"{t_label}.md")
                             names.append(f"{t_label}.py")
@@ -650,8 +680,12 @@ class AgentStorage(node_storage.AgentStorage):
                         try:
                             for entry in os.listdir(bwd):
                                 pkg_dir = os.path.join(bwd, entry)
-                                if os.path.isdir(pkg_dir) and not entry.startswith((".", "bazel-", "venv")):
-                                    tmpl_candidates.append(os.path.join(pkg_dir, "templates", t_name))
+                                if os.path.isdir(pkg_dir) and not entry.startswith(
+                                    (".", "bazel-", "venv")
+                                ):
+                                    tmpl_candidates.append(
+                                        os.path.join(pkg_dir, "templates", t_name)
+                                    )
                         except OSError:
                             pass
                 for cand in tmpl_candidates:
@@ -705,14 +739,20 @@ class AgentStorage(node_storage.AgentStorage):
             comp_type = (
                 "implementation"
                 if unit_name.endswith("_impl")
-                else ("assembly" if unit_name.endswith("_asm") else ("external" if unit_name.endswith("_ext") else "interface"))
+                else (
+                    "assembly"
+                    if unit_name.endswith("_asm")
+                    else ("external" if unit_name.endswith("_ext") else "interface")
+                )
             )
             context = {
                 "name": unit_name,
                 "component_type": comp_type,
                 "is_impl": comp_type == "implementation",
                 "needs_implements": comp_type == "implementation",
-                "implemented_interfaces": unit_name[:-5] if unit_name.endswith("_impl") else "",
+                "implemented_interfaces": unit_name[:-5]
+                if unit_name.endswith("_impl")
+                else "",
                 "is_asm": comp_type == "assembly",
                 "is_ext": comp_type == "external",
                 "is_not_ext": comp_type != "external",
@@ -736,7 +776,9 @@ class AgentStorage(node_storage.AgentStorage):
                 if fb_src is not None and fb_src.is_file():
                     meta = src_metadata.extract_metadata(fb_src)
                     if meta and meta.audits and role_name in meta.audits:
-                        new_audits = {k: v for k, v in meta.audits.items() if k != role_name}
+                        new_audits = {
+                            k: v for k, v in meta.audits.items() if k != role_name
+                        }
                         src_metadata.update_metadata(fb_src, audits=new_audits)
             return
 
@@ -748,6 +790,8 @@ class AgentStorage(node_storage.AgentStorage):
         self._messages.setdefault(node, set()).add(
             dag_storage.ChangeMessage(content=dag_storage.MessageContent("dirty"))
         )
+
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-11T05:04:03Z

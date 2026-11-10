@@ -11,11 +11,18 @@ import shutil
 import subprocess
 from typing import Any, List, Optional, Sequence
 
-from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
+from support.lib.lifecycle import (
+    LifecycleRegistry,
+    Singleton,
+    get_default_registry,
+    get_singleton,
+)
+
 try:
-    from support.lib import app_info
+    from support.lib import app_info, markdown_preprocessor
 except Exception:
     import app_info  # type: ignore
+    import markdown_preprocessor  # type: ignore
 from autofab.parts.agent.lib import session as agent_session
 from autofab.parts.metadata.lib import src_metadata
 from . import provision, role_registry, roles, scaffold, stub
@@ -52,6 +59,7 @@ def _find_methodology_for_scope(root: str, dir_scope: str) -> Optional[str]:
 
     cfg_filenames = app_info.get_config_filenames()
     import tomllib
+
     for fname in cfg_filenames:
         cand = os.path.join(scope_dir, fname)
         if os.path.isfile(cand):
@@ -118,14 +126,22 @@ def _resolve_active_methodology_pkg(
 
     if role_def and role_def.guide_path:
         for seg in role_def.guide_path.replace("\\", "/").split("/"):
-            if seg and seg != "guides" and os.path.isdir(os.path.join(resolved_root, seg)):
+            if (
+                seg
+                and seg != "guides"
+                and os.path.isdir(os.path.join(resolved_root, seg))
+            ):
                 return seg
             if seg == "guides":
                 break
 
     if role_def and role_def.template:
         for seg in role_def.template.replace("\\", "/").split("/"):
-            if seg and seg != "templates" and os.path.isdir(os.path.join(resolved_root, seg)):
+            if (
+                seg
+                and seg != "templates"
+                and os.path.isdir(os.path.join(resolved_root, seg))
+            ):
                 return seg
             if seg == "templates":
                 break
@@ -168,7 +184,9 @@ def _copy_projected_file(src: str, dst: str, is_writable: bool) -> None:
     try:
         with open(src, "r", encoding="utf-8") as f:
             content = f.read()
-        projected = _project_for_role_workspace(content, os.path.basename(src), is_writable=is_writable)
+        projected = _project_for_role_workspace(
+            content, os.path.basename(src), is_writable=is_writable
+        )
         _write_file_with_perms(dst, projected, readonly=not is_writable)
     except (UnicodeDecodeError, OSError):
         copy_file_with_perms(src, dst, readonly=not is_writable)
@@ -180,9 +198,27 @@ def _init_workspace_git_repo(workspace_dir: str) -> None:
     is_new = not os.path.exists(git_dir)
     try:
         if is_new:
-            subprocess.run(["git", "init"], cwd=workspace_dir, check=True, capture_output=True, text=True)
-            subprocess.run(["git", "config", "user.name", f"{app_info.APP_TITLE} Worker"], cwd=workspace_dir, check=True, capture_output=True, text=True)
-            subprocess.run(["git", "config", "user.email", f"worker@{app_info.APP_NAME}.local"], cwd=workspace_dir, check=True, capture_output=True, text=True)
+            subprocess.run(
+                ["git", "init"],
+                cwd=workspace_dir,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.name", f"{app_info.APP_TITLE} Worker"],
+                cwd=workspace_dir,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.email", f"worker@{app_info.APP_NAME}.local"],
+                cwd=workspace_dir,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
             gitignore_path = os.path.join(workspace_dir, ".gitignore")
             if not os.path.exists(gitignore_path):
                 state_dir_name = app_info.DEFAULT_STATE_DIR
@@ -198,11 +234,31 @@ def _init_workspace_git_repo(workspace_dir: str) -> None:
                         f"{state_dir_name}/tasks/\n"
                         f"{state_dir_name}/artifacts/\n"
                     )
-        subprocess.run(["git", "add", "-A"], cwd=workspace_dir, check=True, capture_output=True, text=True)
-        status_res = subprocess.run(["git", "status", "--porcelain"], cwd=workspace_dir, check=True, capture_output=True, text=True)
+        subprocess.run(
+            ["git", "add", "-A"],
+            cwd=workspace_dir,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        status_res = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=workspace_dir,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
         if status_res.stdout.strip():
-            msg = "Initial workspace snapshot" if is_new else "Refresh workspace snapshot"
-            subprocess.run(["git", "commit", "-m", msg], cwd=workspace_dir, check=True, capture_output=True, text=True)
+            msg = (
+                "Initial workspace snapshot" if is_new else "Refresh workspace snapshot"
+            )
+            subprocess.run(
+                ["git", "commit", "-m", msg],
+                cwd=workspace_dir,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
     except (subprocess.CalledProcessError, FileNotFoundError, OSError):
         pass
 
@@ -214,7 +270,7 @@ PENDING_WORK_FILE = app_info.DEFAULT_PENDING_WORK_FILE
 def _is_runtime_support_library(fname: str) -> bool:
     """Returns True if file is a user-facing runtime API or type stub, excluding internal oracles."""
     base = fname.lower()
-    if "lint" in base or "tool" in base or "runner" in base or "fuzz" in base or base.startswith("app_info"):
+    if "lint" in base or "tool" in base or "runner" in base or "fuzz" in base:
         return False
     return fname.endswith((".py", ".pyi", ".bzl", ".toml"))
 
@@ -253,9 +309,21 @@ def copy_file_with_perms(
             os.chmod(dst, 0o644)
         except OSError:
             pass
-    with open(src, "rb") as fsrc, open(dst, "wb") as fdst:
-        while chunk := fsrc.read(1024 * 1024):
-            fdst.write(chunk)
+    if src.endswith(".md"):
+        try:
+            with open(src, "r", encoding="utf-8") as fsrc:
+                content = fsrc.read()
+            processed = markdown_preprocessor.preprocess_markdown(content)
+            with open(dst, "w", encoding="utf-8") as fdst:
+                fdst.write(processed)
+        except (UnicodeDecodeError, Exception):
+            with open(src, "rb") as fsrc, open(dst, "wb") as fdst:
+                while chunk := fsrc.read(1024 * 1024):
+                    fdst.write(chunk)
+    else:
+        with open(src, "rb") as fsrc, open(dst, "wb") as fdst:
+            while chunk := fsrc.read(1024 * 1024):
+                fdst.write(chunk)
     shutil.copystat(src, dst)
     if executable:
         mode = 0o555 if readonly else 0o755
@@ -371,9 +439,7 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
         reset: bool = False,
         model: Optional[str] = None,
     ) -> role_registry.WorkspaceDescriptor:
-        registry = get_singleton(
-            role_registry.WorkspaceRegistry
-        )
+        registry = get_singleton(role_registry.WorkspaceRegistry)
         resolved_root = registry.discover_repository_root(repo_root)
         role_def = registry.resolve_role_definition(
             role_name, resolved_root, dir_scope=dir_scope
@@ -383,7 +449,9 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
         )
 
         if reset and os.path.isdir(workspace_dir):
-            stale_candidates = set(app_info.get_pending_work_filenames()) | set(app_info.get_blame_buffer_filenames())
+            stale_candidates = set(app_info.get_pending_work_filenames()) | set(
+                app_info.get_blame_buffer_filenames()
+            )
             for stale_f in sorted(stale_candidates):
                 sp = os.path.join(workspace_dir, stale_f)
                 if os.path.isfile(sp):
@@ -487,7 +555,9 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
             if role_def.fused_roles:
                 for c_role in role_def.fused_roles:
                     try:
-                        c_def = registry.resolve_role_definition(c_role, resolved_root, dir_scope=dir_scope)
+                        c_def = registry.resolve_role_definition(
+                            c_role, resolved_root, dir_scope=dir_scope
+                        )
                         scaffolder.create_missing_target_skeletons(
                             workspace_dir=workspace_dir,
                             repo_root=resolved_root,
@@ -510,7 +580,9 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
         if role_def.fused_roles:
             for c_role in role_def.fused_roles:
                 try:
-                    c_def = registry.resolve_role_definition(c_role, resolved_root, dir_scope=dir_scope)
+                    c_def = registry.resolve_role_definition(
+                        c_role, resolved_root, dir_scope=dir_scope
+                    )
                     if c_def.guide_path and c_def.guide_path not in guides_to_copy:
                         guides_to_copy.append(c_def.guide_path)
                 except Exception:
@@ -522,10 +594,16 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
             ]
             if active_pkg:
                 guide_candidates.append(os.path.join(resolved_root, active_pkg, g_path))
-                guide_candidates.append(os.path.join(resolved_root, active_pkg, "guides", os.path.basename(g_path)))
+                guide_candidates.append(
+                    os.path.join(
+                        resolved_root, active_pkg, "guides", os.path.basename(g_path)
+                    )
+                )
             guide_src = next((c for c in guide_candidates if os.path.isfile(c)), None)
             if guide_src:
-                root_guide_dst = os.path.join(workspace_dir, "guides", os.path.basename(g_path))
+                root_guide_dst = os.path.join(
+                    workspace_dir, "guides", os.path.basename(g_path)
+                )
                 copy_file_with_perms(guide_src, root_guide_dst, readonly=True)
 
         for cfg_name in (
@@ -546,20 +624,24 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
                 with open(ws_pyproject, "r", encoding="utf-8") as f:
                     ptext = f.read()
                 # Contract: MUST strip readme declaration attributes from provisioned pyproject.toml to prevent build backend failures.
-                ptext = re.sub(r'(?m)^\s*readme\s*=.*$\n?', '', ptext)
+                ptext = re.sub(r"(?m)^\s*readme\s*=.*$\n?", "", ptext)
                 # Contract: MUST configure type-checking to cover the workspace without directory exclusions.
                 ptext = re.sub(
-                    r'\[tool\.pyright\][^\[]*include\s*=\s*\[[^\]]*\]',
+                    r"\[tool\.pyright\][^\[]*include\s*=\s*\[[^\]]*\]",
                     '[tool.pyright]\ninclude = ["."]',
                     ptext,
                     flags=re.DOTALL,
                 )
                 if dir_scope:
                     clean_scope = dir_scope.strip("/").split("/")[0]
-                    ptext = ptext.replace(f'"{clean_scope}",', '').replace(f'"{clean_scope}"', '')
-                    ptext = ptext.replace(f'"{dir_scope}",', '').replace(f'"{dir_scope}"', '')
+                    ptext = ptext.replace(f'"{clean_scope}",', "").replace(
+                        f'"{clean_scope}"', ""
+                    )
+                    ptext = ptext.replace(f'"{dir_scope}",', "").replace(
+                        f'"{dir_scope}"', ""
+                    )
                 ptext = re.sub(
-                    r'testpaths\s*=\s*\[[^\]]*\]',
+                    r"testpaths\s*=\s*\[[^\]]*\]",
                     'testpaths = ["."]',
                     ptext,
                 )
@@ -568,17 +650,17 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
                     clean_scope = dir_scope.strip("/").split("/")[0]
                     pypaths_cfg.append(f'"{clean_scope}"')
                     pypaths_cfg.append(f'"{clean_scope}/parts"')
-                pypaths_str = f'pythonpath = [{", ".join(pypaths_cfg)}]'
+                pypaths_str = f"pythonpath = [{', '.join(pypaths_cfg)}]"
                 if "pythonpath" in ptext:
                     ptext = re.sub(
-                        r'pythonpath\s*=\s*\[[^\]]*\]',
+                        r"pythonpath\s*=\s*\[[^\]]*\]",
                         pypaths_str,
                         ptext,
                     )
                 elif "[tool.pytest.ini_options]" in ptext:
                     ptext = ptext.replace(
                         "[tool.pytest.ini_options]",
-                        f'[tool.pytest.ini_options]\n{pypaths_str}',
+                        f"[tool.pytest.ini_options]\n{pypaths_str}",
                     )
                 with open(ws_pyproject, "w", encoding="utf-8") as f:
                     f.write(ptext)
@@ -602,10 +684,14 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
                 os.makedirs(d_lib, exist_ok=True)
                 s_init = os.path.join(pkg_dir, "support", "__init__.py")
                 if os.path.isfile(s_init):
-                    copy_file_with_perms(s_init, os.path.join(d_support, "__init__.py"), readonly=True)
+                    copy_file_with_perms(
+                        s_init, os.path.join(d_support, "__init__.py"), readonly=True
+                    )
                 lib_init = os.path.join(s_lib, "__init__.py")
                 if os.path.isfile(lib_init):
-                    copy_file_with_perms(lib_init, os.path.join(d_lib, "__init__.py"), readonly=True)
+                    copy_file_with_perms(
+                        lib_init, os.path.join(d_lib, "__init__.py"), readonly=True
+                    )
                 for fname in os.listdir(s_lib):
                     sf = os.path.join(s_lib, fname)
                     if not os.path.isfile(sf):
@@ -618,7 +704,11 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
 
         cross_tests_script = os.path.join(resolved_root, "bin", "run_cross_tests.py")
         if os.path.isfile(cross_tests_script):
-            copy_file_with_perms(cross_tests_script, os.path.join(bin_dir, "run_cross_tests.py"), readonly=True)
+            copy_file_with_perms(
+                cross_tests_script,
+                os.path.join(bin_dir, "run_cross_tests.py"),
+                readonly=True,
+            )
 
         resolved_batch_size: Optional[int] = None
         resolved_max_feedback_chars: Optional[int] = None
@@ -628,24 +718,31 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
             if os.path.isfile(m_cfg_file):
                 try:
                     import tomllib
+
                     with open(m_cfg_file, "rb") as mf:
                         m_data = tomllib.load(mf)
                     models_sec = m_data.get("models", {})
                     clean_model = model.strip()
                     for prefix in ("dsh ", "antigravity ", "models."):
                         if clean_model.startswith(prefix):
-                            clean_model = clean_model[len(prefix):].strip()
+                            clean_model = clean_model[len(prefix) :].strip()
                     target_cfg = None
                     if clean_model in models_sec:
                         target_cfg = models_sec[clean_model]
                     else:
                         for k, v in models_sec.items():
-                            if isinstance(v, dict) and (v.get("model") == clean_model or k == clean_model):
+                            if isinstance(v, dict) and (
+                                v.get("model") == clean_model or k == clean_model
+                            ):
                                 target_cfg = v
                                 break
                     if target_cfg:
-                        resolved_batch_size = target_cfg.get("subagent_batch_size") or target_cfg.get("batch_size")
-                        resolved_max_feedback_chars = target_cfg.get("max_feedback_chars")
+                        resolved_batch_size = target_cfg.get(
+                            "subagent_batch_size"
+                        ) or target_cfg.get("batch_size")
+                        resolved_max_feedback_chars = target_cfg.get(
+                            "max_feedback_chars"
+                        )
                         resolved_model_name = clean_model
                 except Exception:
                     pass
@@ -662,7 +759,9 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
             common_spec_roles=role_def.common_spec_roles or None,
         )
         scaffolder.write_role_agents_guide(workspace_dir, role_def, dir_scope)
-        is_auditor = not bool(role_def.writable_file_patterns) or bool(role_def.audit_tag)
+        is_auditor = not bool(role_def.writable_file_patterns) or bool(
+            role_def.audit_tag
+        )
         if not is_auditor:
             _init_workspace_git_repo(workspace_dir)
         else:
@@ -678,6 +777,8 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
         )
         registry.record_workspace(descriptor, resolved_root)
         return descriptor
+
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-30T05:28:00Z
 # LAST_CHANGED: 2026-11-05T11:45:00Z

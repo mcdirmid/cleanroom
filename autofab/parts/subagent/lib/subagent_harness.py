@@ -28,7 +28,9 @@ class CommandHarnessAdapter(subagent_coordinator.HarnessAdapter, Protocol):
         ...
 
     # Contract: CommandHarnessAdapter.poll_role - polls subagent round execution non-blockingly without waiting for completion.
-    def poll_role(self, task_handle: str) -> Optional[subagent_coordinator.RoleRoundResult]:
+    def poll_role(
+        self, task_handle: str
+    ) -> Optional[subagent_coordinator.RoleRoundResult]:
         """Polls subagent round execution without blocking."""
         ...
 
@@ -51,8 +53,7 @@ class HarnessAdapterFactory(Protocol):
         custom_cmd: Optional[str] = None,
         simulation_mode: bool = False,
         **kwargs: Any,
-    ) -> subagent_coordinator.HarnessAdapter:
-        ...
+    ) -> subagent_coordinator.HarnessAdapter: ...
 
 
 # Contract: HarnessRegistry maintains installed platform harness adapter factories and resolves adapters in the agent session tier.
@@ -61,16 +62,14 @@ class HarnessRegistry(Singleton[AgentSessionTier], Protocol):
 
     # Contract: Returns mapping of installed platform names to harness adapter factories.
     @property
-    def installed_harnesses(self) -> Mapping[str, HarnessAdapterFactory]:
-        ...
+    def installed_harnesses(self) -> Mapping[str, HarnessAdapterFactory]: ...
 
     # Contract: HarnessRegistry.install_harness - registers adapter factory under platform name in installed harnesses mapping.
     def install_harness(
         self,
         platform_name: str,
         adapter_factory: HarnessAdapterFactory,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     # Contract: HarnessRegistry.resolve_harness - resolves harness adapter for platform name, custom command template, or simulation mode.
     def resolve_harness(

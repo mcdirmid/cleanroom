@@ -21,7 +21,7 @@ the pending work buffer is empty.
    Realized by: session tier scoping through `agent_session`, inbound change pulling through
    `sync`, queue evaluation and pending target tracking through `work`, and the
    component's own console report formatting.
-2. The caller runs the work subcommand again without changing anything.
+1. The caller runs the work subcommand again without changing anything.
    Observed: the report is refused, naming the pending alpha-role target for widget and directing
    the caller to complete or blame it, and the exit code is non-zero.
    Realized by: `work`, which refuses a new discovery request while uncompleted dirty
@@ -39,7 +39,7 @@ summary.
    modification, and the exit code is non-zero.
    Realized by: target submission gating and code hash validation through `submit`, and
    the component's own argument validation of the producer change summary.
-2. The caller runs the submit subcommand for the target with the summary `clean widget`.
+1. The caller runs the submit subcommand for the target with the summary `clean widget`.
    Observed: the target's in-band metadata records the summary `clean widget`, a submission record
    is appended to the event log, the pending work buffer no longer lists the target, and the
    exit code is zero.
@@ -60,12 +60,15 @@ declares a refusal that names no target.
    Realized by: defect blame attribution through `attribution`, `sync` for the
    in-band append to the culprit file, the component's own log append, and `work` for
    clearing the pending target.
-2. The caller runs the blame subcommand against `beta/high/beta.md` with a critique of two
+1. The caller runs the blame subcommand against `beta/high/beta.md` with a critique of two
    paragraphs.
    Observed: the attribution is refused, naming the single-paragraph constraint, no feedback entry
    is recorded, and the exit code is non-zero.
    Realized by: the component's own argument validation of the critique paragraph count, which
    precedes attribution.
+1. The caller runs the blame subcommand with structured blame options (`--slug`, `--viol`, `--facet`, `--lines`, `--witness`) or a structured critique string while the structured blame experiment is active.
+   Observed: the runner parses and validates the structured blame critique, stages the blame, and returns exit code 0.
+   Realized by: the component's structured blame argument parsing and delegation to `commands:run_blame`.
 
 ### Scenario 4 — Running the fail subcommand
 
@@ -89,7 +92,7 @@ the alpha-role target for gadget is missing.
    Realized by: the component's own resolution of the active role and target files and its
    execution of the corresponding static linting, type checking, and test rules, whose exit status
    it returns.
-2. The caller runs the check files subcommand for the missing alpha-role target for gadget.
+1. The caller runs the check files subcommand for the missing alpha-role target for gadget.
    Observed: the target is regenerated from its starter template before verification runs, and the
    exit code reflects that verification's status.
    Realized by: the component's own starter template regeneration for a role that declares source
@@ -116,7 +119,7 @@ workspace of role alpha in scope_a differ from their canonical content.
    Observed: the beta workspace for scope_b is created and registered, and the exit code is zero.
    Realized by: workspace commissioning through `provision` and active workspace
    registration through `role_registry`.
-2. The caller runs the refresh system subcommand across the active workspaces.
+1. The caller runs the refresh system subcommand across the active workspaces.
    Observed: the system files, bin utilities, and companion guides of the alpha workspace hold the
    canonical content, and the exit code is zero.
    Realized by: active workspace discovery through `role_registry` and system synchronization
@@ -162,7 +165,7 @@ specification `beta/high/beta.md` declares a refusal that names no target.
    Realized by: the component's own blame buffer write, which defers the canonical append to the
    next flush through `sync`.
 
-2. The caller then runs the refresh system subcommand.
+1. The caller then runs the refresh system subcommand.
    Observed: the critique appears as an unacted feedback entry on `beta/high/beta.md` in the
    canonical main repository and the local blame buffer is gone.
    Realized by: `sync`, whose flush reads the local blame buffer and appends the entries
@@ -197,6 +200,7 @@ Given: role alpha is active in scope_a, a ready target carries an unacted feedba
 1. The caller runs the work subcommand for scope_a as role alpha.
    Observed: the console report presents the target with its feedback reason truncated to the configured character limit, carrying a truncation indicator, and the exit code is non-zero.
    Realized by: the component's own console report formatting, resolving feedback throttling constraints from model configuration and bounding reason strings.
+
 ### Scenario 16 — Commissioning with reset and model execution profile binding
 
 Given: the canonical repository root is `/repo`, role alpha is declared in scope_a, and model configuration specifies profile `qwen-moe-q6` with `subagent_batch_size = 3` and `max_feedback_chars = 600`; an existing workspace carries stale pending work buffers.
@@ -205,13 +209,13 @@ Given: the canonical repository root is `/repo`, role alpha is declared in scope
    Observed: the role workspace is commissioned with stale work buffers cleared, the role descriptor records `model = "qwen-moe-q6"`, `batch_size = 3`, and `max_feedback_chars = 600`, and the exit code is 0.
    Realized by: the component's own commission dispatch, wiping stale buffers and resolving execution parameters from model configuration into role metadata.
 
-### Scenario 17 — Surfacing unacted feedback warnings on check files passing
+### Scenario 17 — Omitting redundant feedback repetition on check files passing
 
-Given: role alpha is active in scope_a, target widget compiles cleanly and satisfies all static verification checks, but carries an unacted feedback item in its metadata.
+Given: role alpha is active in scope_a, target widget compiles cleanly and satisfies all static verification checks, and carries feedback in its metadata already presented in get_work and inlined in the file.
 
 1. The caller runs the check files subcommand for the alpha-role target for widget.
-   Observed: static verification passes with an exit code of zero, and the console output explicitly surfaces the unacted feedback items with an attention warning reminding the agent that static checks do not verify runtime behavior or test assertions.
-   Realized by: the component's own check files dispatch, extracting metadata feedback from the target file and printing the feedback reminder banner upon successful check completion.
+   Observed: static verification passes with an exit code of zero, and the console output reports that all local verification checks passed and that other checks to verify feedback or changes resolution will be performed after bin/submit is called, without repeating feedback items already presented in get_work and inlined in the target file header.
+   Realized by: the component's check files dispatch verifying targets and reporting that local checks passed while other checks to verify feedback or changes resolution occur after submit.
 
 ### Scenario 18 — Running role subcommands with repository root override and session tier scoping
 
@@ -229,7 +233,7 @@ Given: role alpha is active in scope_a, and file `parts/alpha/lib/widget.py` has
    Observed: `parts/alpha/lib/widget.py` is restored to its last committed snapshot via git restore, and the exit code is zero.
    Realized by: the component's revert CLI dispatch resolving the workspace directory and restoring target file state from git HEAD.
 
-2. The caller runs the revert subcommand without arguments.
+1. The caller runs the revert subcommand without arguments.
    Observed: all modified tracked files in the workspace are restored to git HEAD, and the exit code is zero.
    Realized by: the component's revert CLI dispatch invoking whole-workspace restore from git HEAD.
 
@@ -241,8 +245,20 @@ Given: role alpha is active in scope_a, and the workspace contains modified file
    Observed: an in-workspace git commit snapshot is recorded with message `Checkpoint: pre-edit` when changes exist, and the exit code is zero.
    Realized by: the component's checkpoint CLI dispatch recording git working tree snapshots.
 
+### Scenario 21 — Running the reject subcommand
+
+Given: role alpha is active in scope_a, and the workspace contains an unmodified target with active feedback.
+
+1. The caller runs the reject subcommand with `reject parts/alpha/lib/widget.py "contract compliant"`.
+   Observed: the feedback comment header is removed, rejection contest is recorded in the blame buffer and event log, the target is cleared from pending work, and the exit code is zero.
+   Realized by: the component's reject CLI parser and dispatch delegating to `commands.WorkspaceCommandHandler.run_reject`.
+
+1. The caller runs the reject subcommand on a modified target file.
+   Observed: rejection is refused with an error instructing that modified files must be submitted with `submit`, and the exit code is non-zero.
+   Realized by: the component's reject CLI dispatch detecting modified code and refusing rejection.
+
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-30T08:00:00Z
-CHANGE: Add scenarios for revert and checkpoint CLI subcommands
+LAST_CHANGED: 2026-11-09T20:05:00Z
+CHANGE: Format non-auditor check_files success with feedback/changes resolution notice
 -->

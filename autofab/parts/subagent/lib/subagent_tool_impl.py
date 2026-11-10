@@ -228,7 +228,6 @@ class SubagentToolRunner(subagent_tool.SubagentToolRunner):
             f"Tokens:     {tel.total_tokens} "
             f"(in: {tel.input_tokens}, cached: {tel.cached_tokens}, out: {tel.output_tokens})"
         )
-        print(f"Est Cost:   ${tel.cost_usd:.4f}")
         print(f"Message:    {summary.status_message}\n")
 
         return 0 if summary.is_converged else 1
@@ -243,9 +242,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             runner = get_singleton(subagent_tool.SubagentToolRunner)
         except (KeyError, LifecycleResolutionError):
             from . import subagent_asm
+
             subagent_asm.__initialize__()
             runner = get_singleton(subagent_tool.SubagentToolRunner)
         return runner.execute_command(raw_args)
+
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-11-03T09:10:00Z

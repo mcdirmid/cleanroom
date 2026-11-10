@@ -22,9 +22,7 @@ from . import antigravity_coordinator, antigravity_workspace
 
 # Contract: Coordinator skill identifier name and description.
 COORDINATOR_SKILL_NAME = app_info.get_coordinator_skill_name()
-COORDINATOR_SKILL_DESC = (
-    f"Autonomous zero-execution {app_info.APP_TITLE} coordinator for multi-agent role scheduling and DAG convergence."
-)
+COORDINATOR_SKILL_DESC = f"Autonomous zero-execution {app_info.APP_TITLE} coordinator for multi-agent role scheduling and DAG convergence."
 
 
 def _render_coordinator_skill_markdown(dir_scope: str = "") -> str:
@@ -62,7 +60,9 @@ Your sole responsibility is coordinating multi-agent DAG convergence across comm
 
 
 # Contract: AntigravityCoordinatorGenerator realizes skill artifact generation, tool parameter formatting, and wake notification parsing in the agent session tier.
-class AntigravityCoordinatorGenerator(antigravity_coordinator.AntigravityCoordinatorGenerator):
+class AntigravityCoordinatorGenerator(
+    antigravity_coordinator.AntigravityCoordinatorGenerator
+):
     """Realizes skill artifact generation, tool parameter formatting, and wake notification parsing."""
 
     tier = agent_session.agent_session
@@ -77,9 +77,7 @@ class AntigravityCoordinatorGenerator(antigravity_coordinator.AntigravityCoordin
     ) -> antigravity_coordinator.CoordinatorSkillDocument:
         """Generates the zero-execution coordinator skill document."""
         content = _render_coordinator_skill_markdown(dir_scope)
-        frontmatter = (
-            f"---\nname: {COORDINATOR_SKILL_NAME}\ndescription: {COORDINATOR_SKILL_DESC}\n---"
-        )
+        frontmatter = f"---\nname: {COORDINATOR_SKILL_NAME}\ndescription: {COORDINATOR_SKILL_DESC}\n---"
         return antigravity_coordinator.CoordinatorSkillDocument(
             name=COORDINATOR_SKILL_NAME,
             description=COORDINATOR_SKILL_DESC,
@@ -94,8 +92,16 @@ class AntigravityCoordinatorGenerator(antigravity_coordinator.AntigravityCoordin
         model: Optional[str] = None,
     ) -> antigravity_coordinator.SubagentDispatchSpec:
         """Formats a role dispatch directive into an Antigravity tool specification."""
-        targets_str = ", ".join(dispatch.ready_targets) if dispatch.ready_targets else "all ready nodes"
-        batch_hint = f" (bounded to batch size {dispatch.batch_size})" if dispatch.batch_size else ""
+        targets_str = (
+            ", ".join(dispatch.ready_targets)
+            if dispatch.ready_targets
+            else "all ready nodes"
+        )
+        batch_hint = (
+            f" (bounded to batch size {dispatch.batch_size})"
+            if dispatch.batch_size
+            else ""
+        )
         base_prompt = (
             f"Execute autonomous {app_info.APP_TITLE} round for role '{dispatch.role_name}' in scope '{dispatch.dir_scope}'.\n"
             f"Nodes ready: {targets_str}{batch_hint}.\n"
@@ -138,7 +144,9 @@ class AntigravityCoordinatorGenerator(antigravity_coordinator.AntigravityCoordin
             )
 
         # Try parsing JSON blocks from markdown fences or bare text
-        json_matches = re.findall(r"```(?:json)?\s*(\{.*?\})\s*```", message_text, re.DOTALL)
+        json_matches = re.findall(
+            r"```(?:json)?\s*(\{.*?\})\s*```", message_text, re.DOTALL
+        )
         candidate_json = json_matches[0] if json_matches else None
         if not candidate_json:
             m = re.search(r"(\{.*\})", message_text, re.DOTALL)
@@ -182,12 +190,16 @@ class AntigravityCoordinatorGenerator(antigravity_coordinator.AntigravityCoordin
                 continue
 
             if not role:
-                m_role = re.match(r"^\s*role[:=]\s*([a-zA-Z0-9_\-]+)", line_s, re.IGNORECASE)
+                m_role = re.match(
+                    r"^\s*role[:=]\s*([a-zA-Z0-9_\-]+)", line_s, re.IGNORECASE
+                )
                 if m_role:
                     role = m_role.group(1).strip()
                     continue
 
-            m_sub = re.match(r"^\s*submitted[:=]\s*\[?([^\]\r\n]+)\]?", line_s, re.IGNORECASE)
+            m_sub = re.match(
+                r"^\s*submitted[:=]\s*\[?([^\]\r\n]+)\]?", line_s, re.IGNORECASE
+            )
             if m_sub:
                 raw = m_sub.group(1).strip()
                 for part in raw.split(","):
@@ -196,7 +208,9 @@ class AntigravityCoordinatorGenerator(antigravity_coordinator.AntigravityCoordin
                         submitted.append(p)
                 continue
 
-            m_blm = re.match(r"^\s*blamed[:=]\s*\[?([^\]\r\n]+)\]?", line_s, re.IGNORECASE)
+            m_blm = re.match(
+                r"^\s*blamed[:=]\s*\[?([^\]\r\n]+)\]?", line_s, re.IGNORECASE
+            )
             if m_blm:
                 raw = m_blm.group(1).strip()
                 for part in raw.split(","):
@@ -206,7 +220,11 @@ class AntigravityCoordinatorGenerator(antigravity_coordinator.AntigravityCoordin
                 continue
 
             if not reason:
-                m_reason = re.match(r"^\s*(?:failure_reason|reason|error)[:=]\s*(.*)$", line_s, re.IGNORECASE)
+                m_reason = re.match(
+                    r"^\s*(?:failure_reason|reason|error)[:=]\s*(.*)$",
+                    line_s,
+                    re.IGNORECASE,
+                )
                 if m_reason:
                     reason = m_reason.group(1).strip()
                     continue
@@ -220,7 +238,9 @@ class AntigravityCoordinatorGenerator(antigravity_coordinator.AntigravityCoordin
         )
 
 
-def _render_isolation_rule_content(role_name: str, dir_scope: str, is_auditor: bool = False) -> str:
+def _render_isolation_rule_content(
+    role_name: str, dir_scope: str, is_auditor: bool = False
+) -> str:
     """Renders the Markdown content for workspace-local Antigravity isolation rules."""
     auditor_bullet = ""
     if is_auditor:
@@ -248,7 +268,9 @@ def _render_isolation_rule_content(role_name: str, dir_scope: str, is_auditor: b
 
 
 # Contract: AntigravityWorkspaceConfigurer realizes Antigravity-specific isolation rules and workspace confinement in the agent session tier.
-class AntigravityWorkspaceConfigurer(antigravity_workspace.AntigravityWorkspaceConfigurer):
+class AntigravityWorkspaceConfigurer(
+    antigravity_workspace.AntigravityWorkspaceConfigurer
+):
     """Realizes Antigravity-specific isolation rules and workspace confinement."""
 
     tier = agent_session.agent_session
@@ -273,15 +295,23 @@ class AntigravityWorkspaceConfigurer(antigravity_workspace.AntigravityWorkspaceC
             reg = get_singleton(role_registry.WorkspaceRegistry)
             root = reg.discover_repository_root(repo_root)
             role_def = reg.resolve_role_definition(role_name, root, dir_scope=dir_scope)
-            is_auditor = not bool(role_def.writable_file_patterns) or bool(role_def.audit_tag)
+            is_auditor = not bool(role_def.writable_file_patterns) or bool(
+                role_def.audit_tag
+            )
         except Exception:
-            if "qa" in role_name.lower() or "coverage" in role_name.lower() or "audit" in role_name.lower():
+            if (
+                "qa" in role_name.lower()
+                or "coverage" in role_name.lower()
+                or "audit" in role_name.lower()
+            ):
                 is_auditor = True
 
         rule_rel_path = os.path.join(".agents", "rules", "isolation.md")
         rule_abs_path = os.path.join(workspace_dir, rule_rel_path)
 
-        rule_content = _render_isolation_rule_content(role_name, dir_scope, is_auditor=is_auditor)
+        rule_content = _render_isolation_rule_content(
+            role_name, dir_scope, is_auditor=is_auditor
+        )
         with open(rule_abs_path, "w", encoding="utf-8") as f:
             f.write(rule_content)
 
@@ -290,43 +320,49 @@ class AntigravityWorkspaceConfigurer(antigravity_workspace.AntigravityWorkspaceC
         hooks_rel_path = os.path.join(".agents", "hooks.json")
         hooks_abs_path = os.path.join(workspace_dir, hooks_rel_path)
         if is_auditor:
-            hooks_content = json.dumps(
-                {
-                    "deny-edits-auditor": {
-                        "PreToolUse": [
-                            {
-                                "matcher": "edit_file|write_file",
-                                "hooks": [
-                                    {
-                                        "type": "command",
-                                        "command": "python3 -c 'import sys, json; json.dump({\"decision\": \"deny\", \"reason\": \"Auditor roles have zero file-editing permissions and are strictly forbidden from modifying files.\"}, sys.stdout); sys.exit(1)'",
-                                    }
-                                ],
-                            }
-                        ]
-                    }
-                },
-                indent=2,
-            ) + "\n"
+            hooks_content = (
+                json.dumps(
+                    {
+                        "deny-edits-auditor": {
+                            "PreToolUse": [
+                                {
+                                    "matcher": "edit_file|write_file",
+                                    "hooks": [
+                                        {
+                                            "type": "command",
+                                            "command": 'python3 -c \'import sys, json; json.dump({"decision": "deny", "reason": "Auditor roles have zero file-editing permissions and are strictly forbidden from modifying files."}, sys.stdout); sys.exit(1)\'',
+                                        }
+                                    ],
+                                }
+                            ]
+                        }
+                    },
+                    indent=2,
+                )
+                + "\n"
+            )
         else:
-            hooks_content = json.dumps(
-                {
-                    "checkpoint-pre-edit": {
-                        "PreToolUse": [
-                            {
-                                "matcher": "edit_file|write_file",
-                                "hooks": [
-                                    {
-                                        "type": "command",
-                                        "command": "./bin/checkpoint pre-edit",
-                                    }
-                                ],
-                            }
-                        ]
-                    }
-                },
-                indent=2,
-            ) + "\n"
+            hooks_content = (
+                json.dumps(
+                    {
+                        "checkpoint-pre-edit": {
+                            "PreToolUse": [
+                                {
+                                    "matcher": "edit_file|write_file",
+                                    "hooks": [
+                                        {
+                                            "type": "command",
+                                            "command": "./bin/checkpoint pre-edit",
+                                        }
+                                    ],
+                                }
+                            ]
+                        }
+                    },
+                    indent=2,
+                )
+                + "\n"
+            )
         with open(hooks_abs_path, "w", encoding="utf-8") as f:
             f.write(hooks_content)
         created_paths.append(hooks_rel_path)
@@ -337,6 +373,8 @@ class AntigravityWorkspaceConfigurer(antigravity_workspace.AntigravityWorkspaceC
             role_name=role_name,
             is_confined=True,
         )
+
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-30T08:30:00Z
@@ -352,12 +390,18 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
         AntigravityCoordinatorGenerator,
-        keys=[antigravity_coordinator.AntigravityCoordinatorGenerator, AntigravityCoordinatorGenerator],
+        keys=[
+            antigravity_coordinator.AntigravityCoordinatorGenerator,
+            AntigravityCoordinatorGenerator,
+        ],
         tier=agent_session.agent_session,
     )
     reg.register_singleton(
         AntigravityWorkspaceConfigurer,
-        keys=[antigravity_workspace.AntigravityWorkspaceConfigurer, AntigravityWorkspaceConfigurer],
+        keys=[
+            antigravity_workspace.AntigravityWorkspaceConfigurer,
+            AntigravityWorkspaceConfigurer,
+        ],
         tier=agent_session.agent_session,
     )
 

@@ -33,6 +33,7 @@ def _ensure_command_handler_registered() -> None:
     except (KeyError, LifecycleResolutionError):
         try:
             from . import workspace_cli_asm
+
             if hasattr(workspace_cli_asm, "__initialize__"):
                 workspace_cli_asm.__initialize__()
         except ImportError:
@@ -63,16 +64,30 @@ def run_revert(target: Optional[str] = None, repo_root: Optional[str] = None) ->
             cur = os.path.dirname(cur)
     git_dir = os.path.join(ws_root, ".git")
     if not os.path.isdir(git_dir):
-        print(f"Error: No git repository found in workspace '{ws_root}'.", file=sys.stderr)
+        print(
+            f"Error: No git repository found in workspace '{ws_root}'.", file=sys.stderr
+        )
         return 1
 
     try:
         if target:
-            ls_res = subprocess.run(["git", "ls-files", target], cwd=ws_root, capture_output=True, text=True)
+            ls_res = subprocess.run(
+                ["git", "ls-files", target], cwd=ws_root, capture_output=True, text=True
+            )
             if ls_res.stdout.strip():
-                subprocess.run(["git", "checkout", "HEAD", "--", target], cwd=ws_root, check=True, capture_output=True, text=True)
+                subprocess.run(
+                    ["git", "checkout", "HEAD", "--", target],
+                    cwd=ws_root,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
             else:
-                target_full = os.path.join(ws_root, target) if not os.path.isabs(target) else target
+                target_full = (
+                    os.path.join(ws_root, target)
+                    if not os.path.isabs(target)
+                    else target
+                )
                 if os.path.exists(target_full):
                     if os.path.isdir(target_full):
                         shutil.rmtree(target_full)
@@ -80,8 +95,20 @@ def run_revert(target: Optional[str] = None, repo_root: Optional[str] = None) ->
                         os.remove(target_full)
             print(f"✔ Reverted '{target}' to last checkpoint.")
         else:
-            subprocess.run(["git", "reset", "--hard", "HEAD"], cwd=ws_root, check=True, capture_output=True, text=True)
-            subprocess.run(["git", "clean", "-fd"], cwd=ws_root, check=True, capture_output=True, text=True)
+            subprocess.run(
+                ["git", "reset", "--hard", "HEAD"],
+                cwd=ws_root,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            subprocess.run(
+                ["git", "clean", "-fd"],
+                cwd=ws_root,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
             print("✔ Reverted workspace to last checkpoint.")
         return 0
     except subprocess.CalledProcessError as e:
@@ -107,10 +134,28 @@ def run_checkpoint(label: Optional[str] = None, repo_root: Optional[str] = None)
         return 0
 
     try:
-        subprocess.run(["git", "add", "-A"], cwd=ws_root, check=True, capture_output=True, text=True)
-        status_res = subprocess.run(["git", "status", "--porcelain"], cwd=ws_root, check=True, capture_output=True, text=True)
+        subprocess.run(
+            ["git", "add", "-A"],
+            cwd=ws_root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        status_res = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=ws_root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
         if status_res.stdout.strip():
-            subprocess.run(["git", "commit", "-m", f"Checkpoint: {tag}"], cwd=ws_root, check=True, capture_output=True, text=True)
+            subprocess.run(
+                ["git", "commit", "-m", f"Checkpoint: {tag}"],
+                cwd=ws_root,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
             if tag != "pre-edit":
                 print(f"✔ Checkpoint recorded: {tag}")
             else:
@@ -198,6 +243,22 @@ class WorkspaceToolRunner(cli_tool.WorkspaceToolRunner):
             return handler.run_blame(
                 culprit_file=culprit_file,
                 critique=critique,
+                repo_root=repo_root,
+            )
+
+    # Contract: Delegates feedback rejection to WorkspaceCommandHandler.run_reject.
+    def run_reject(
+        self,
+        file_path: str,
+        reason: str,
+        repo_root: Optional[str] = None,
+    ) -> int:
+        """Rejects active feedback on an unmodified target file and scrubs feedback from header."""
+        with _session_context():
+            handler = get_singleton(commands.WorkspaceCommandHandler)
+            return handler.run_reject(
+                file_path=file_path,
+                reason=reason,
                 repo_root=repo_root,
             )
 
@@ -314,13 +375,35 @@ class WorkspaceToolRunner(cli_tool.WorkspaceToolRunner):
         p_comm = subparsers.add_parser(
             "commission", help="Commission an isolated role workspace"
         )
-        p_comm.add_argument("role", nargs="?", default=None, help="Role name to commission (e.g. high, planning, low, lib, test, qa, coverage)")
+        p_comm.add_argument(
+            "role",
+            nargs="?",
+            default=None,
+            help="Role name to commission (e.g. high, planning, low, lib, test, qa, coverage)",
+        )
         p_comm.add_argument("dir", nargs="?", default="", help="Directory scope")
-        p_comm.add_argument("--repo-root", default=None, help="Root of canonical repository")
+        p_comm.add_argument(
+            "--repo-root", default=None, help="Root of canonical repository"
+        )
         p_comm.add_argument("--dest", default=None, help="Custom destination directory")
-        p_comm.add_argument("--all", "-a", action="store_true", help="Commission workspaces for all declared roles in scope")
-        p_comm.add_argument("--reset", "-r", action="store_true", help="Reset workspace to clean state, clearing stale work buffers")
-        p_comm.add_argument("--model", "-m", default=None, help="Model profile to bind (e.g. qwen-moe-q6, deepseek-v41-flash, gemini-3.8-flash)")
+        p_comm.add_argument(
+            "--all",
+            "-a",
+            action="store_true",
+            help="Commission workspaces for all declared roles in scope",
+        )
+        p_comm.add_argument(
+            "--reset",
+            "-r",
+            action="store_true",
+            help="Reset workspace to clean state, clearing stale work buffers",
+        )
+        p_comm.add_argument(
+            "--model",
+            "-m",
+            default=None,
+            help="Model profile to bind (e.g. qwen-moe-q6, deepseek-v41-flash, gemini-3.8-flash)",
+        )
 
         # refresh-sys
         p_ref = subparsers.add_parser(
@@ -328,15 +411,23 @@ class WorkspaceToolRunner(cli_tool.WorkspaceToolRunner):
             aliases=["refresh_sys"],
             help="Refresh system files, tools, configs, and guides across role workspaces",
         )
-        p_ref.add_argument("role", nargs="?", default=None, help="Optional role name to filter")
-        p_ref.add_argument("dir", nargs="?", default=None, help="Optional directory scope to filter")
-        p_ref.add_argument("--repo-root", default=None, help="Root of canonical repository")
+        p_ref.add_argument(
+            "role", nargs="?", default=None, help="Optional role name to filter"
+        )
+        p_ref.add_argument(
+            "dir", nargs="?", default=None, help="Optional directory scope to filter"
+        )
+        p_ref.add_argument(
+            "--repo-root", default=None, help="Root of canonical repository"
+        )
 
         # get_work
         p_work = subparsers.add_parser(
             "get_work", help="Get ready dirty tasks in workspace scope"
         )
-        p_work.add_argument("dir", nargs="?", default=None, help="Directory scope override")
+        p_work.add_argument(
+            "dir", nargs="?", default=None, help="Directory scope override"
+        )
         p_work.add_argument(
             "--force",
             "-f",
@@ -382,10 +473,66 @@ class WorkspaceToolRunner(cli_tool.WorkspaceToolRunner):
         )
         p_blame.add_argument(
             "critique",
+            nargs="?",
+            default=None,
             metavar="<actionable-critique>",
             help="Actionable critique message without newlines",
         )
         p_blame.add_argument(
+            "--slug",
+            "--spec-slug",
+            dest="slug",
+            default=None,
+            help="Specification contract slug declared in low/*.pyi",
+        )
+        p_blame.add_argument(
+            "--viol",
+            "--violation",
+            dest="viol",
+            default=None,
+            help="Taxonomy violation code (e.g. [viol:post.wrong_return])",
+        )
+        p_blame.add_argument(
+            "--facet",
+            dest="facet",
+            default=None,
+            help="Constrained noun phrase facet (max 8 words, max 60 chars)",
+        )
+        p_blame.add_argument(
+            "--lines",
+            dest="lines",
+            default=None,
+            help="Line number or line range within culprit file",
+        )
+        p_blame.add_argument(
+            "--witness",
+            dest="witness",
+            default=None,
+            help="Context-free input/output witness values",
+        )
+        p_blame.add_argument(
+            "--repo-root",
+            default=None,
+            help="Path to canonical repository root",
+        )
+
+        # reject
+        p_reject = subparsers.add_parser(
+            "reject",
+            help="Reject active feedback on an unmodified target file and scrub feedback from header",
+            description="Rejects active feedback on an unmodified target file and scrubs feedback from header.",
+        )
+        p_reject.add_argument(
+            "file_path",
+            metavar="<target-file>",
+            help="Path to the unmodified target file with feedback",
+        )
+        p_reject.add_argument(
+            "reason",
+            metavar="<contest-reason>",
+            help="Actionable reason explaining why existing code is already compliant",
+        )
+        p_reject.add_argument(
             "--repo-root",
             default=None,
             help="Path to canonical repository root",
@@ -407,7 +554,9 @@ class WorkspaceToolRunner(cli_tool.WorkspaceToolRunner):
         p_cov = subparsers.add_parser(
             "coverage", help="Evaluate statement test coverage for a module"
         )
-        p_cov.add_argument("target", nargs="?", default=None, help="Target or module name")
+        p_cov.add_argument(
+            "target", nargs="?", default=None, help="Target or module name"
+        )
         p_cov.add_argument("--impl", help="Path to implementation file")
         p_cov.add_argument("--test", help="Path to test file")
         p_cov.add_argument(
@@ -417,9 +566,7 @@ class WorkspaceToolRunner(cli_tool.WorkspaceToolRunner):
             default=0.0,
             help="Minimum coverage percentage required to exit successfully",
         )
-        p_cov.add_argument(
-            "--update-log", help="Path to coverage log file to update"
-        )
+        p_cov.add_argument("--update-log", help="Path to coverage log file to update")
         p_cov.add_argument(
             "--max-spans",
             type=int,
@@ -458,7 +605,9 @@ class WorkspaceToolRunner(cli_tool.WorkspaceToolRunner):
         p_revert = subparsers.add_parser(
             "revert", help="Revert target file or entire workspace from git snapshot"
         )
-        p_revert.add_argument("target", nargs="?", default=None, help="Optional target file to revert")
+        p_revert.add_argument(
+            "target", nargs="?", default=None, help="Optional target file to revert"
+        )
         p_revert.add_argument(
             "--repo-root",
             default=None,
@@ -469,7 +618,9 @@ class WorkspaceToolRunner(cli_tool.WorkspaceToolRunner):
         p_checkpoint = subparsers.add_parser(
             "checkpoint", help="Record git commit checkpoint of workspace state"
         )
-        p_checkpoint.add_argument("label", nargs="?", default="checkpoint", help="Checkpoint label or message")
+        p_checkpoint.add_argument(
+            "label", nargs="?", default="checkpoint", help="Checkpoint label or message"
+        )
         p_checkpoint.add_argument(
             "--repo-root",
             default=None,
@@ -500,7 +651,9 @@ class WorkspaceToolRunner(cli_tool.WorkspaceToolRunner):
                 repo_root=args.repo_root,
             )
         elif args.command == "get_work":
-            return self.run_get_work(dir_scope=args.dir, force=args.force, batch_size=args.batch_size)
+            return self.run_get_work(
+                dir_scope=args.dir, force=args.force, batch_size=args.batch_size
+            )
         elif args.command in ("check_files", "check-files"):
             return self.run_check_files(target=args.target, repo_root=args.repo_root)
         elif args.command == "submit":
@@ -511,9 +664,36 @@ class WorkspaceToolRunner(cli_tool.WorkspaceToolRunner):
                 no_verify=args.no_verify,
             )
         elif args.command in ("blame", "feedback"):
+            critique = args.critique
+            if not critique and (
+                getattr(args, "slug", None)
+                or getattr(args, "viol", None)
+                or getattr(args, "facet", None)
+            ):
+                slug_val = getattr(args, "slug", "")
+                if slug_val and not slug_val.startswith("[slug:"):
+                    slug_val = f"[slug:{slug_val.strip('[]')}]"
+                viol_val = getattr(args, "viol", "")
+                if viol_val and not viol_val.startswith("[viol:"):
+                    viol_val = f"[viol:{viol_val.strip('[]')}]"
+                facet_val = getattr(args, "facet", "")
+                lines_val = getattr(args, "lines", None)
+                witness_val = getattr(args, "witness", None)
+                critique = f"{slug_val} {viol_val} Facet: {facet_val}"
+                if lines_val:
+                    critique += f" Lines: {lines_val}"
+                if witness_val:
+                    critique += f" Witness: {witness_val}"
             return self.run_blame(
                 args.culprit_file,
-                args.critique,
+                critique,
+                # Legitimate reflection: optional attribute extraction from dynamic argparse.Namespace
+                repo_root=getattr(args, "repo_root", None),
+            )
+        elif args.command == "reject":
+            return self.run_reject(
+                args.file_path,
+                args.reason,
                 # Legitimate reflection: optional attribute extraction from dynamic argparse.Namespace
                 repo_root=getattr(args, "repo_root", None),
             )
@@ -558,6 +738,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     with _session_context():
         runner = WorkspaceToolRunner()
         return runner.execute_command(raw_args)
+
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-30T08:00:00Z

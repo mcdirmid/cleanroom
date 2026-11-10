@@ -53,7 +53,17 @@ class WorkspaceRegistryImplTest(unittest.TestCase):
     def test_list_roles(self) -> None:
         roles = self.ws_registry.list_roles()
         role_names = [r.role_name for r in roles]
-        for expected in ("high", "scenario", "planning", "low", "spec_qa", "lib", "test", "qa", "coverage"):
+        for expected in (
+            "high",
+            "scenario",
+            "planning",
+            "low",
+            "spec_qa",
+            "lib",
+            "test",
+            "qa",
+            "coverage",
+        ):
             self.assertIn(expected, role_names)
 
     def test_load_roles_from_toml_and_build_fallback(self) -> None:
@@ -64,26 +74,32 @@ class WorkspaceRegistryImplTest(unittest.TestCase):
             build_file = os.path.join(build_dir, "BUILD.bazel")
             with open(build_file, "w", encoding="utf-8") as f:
                 f.write(
-                    'define_role(\n'
+                    "define_role(\n"
                     '    name = "build_role",\n'
                     '    src_pattern = "{unit_dir}/build/{unit_name}.py",\n'
-                    ')\n'
+                    ")\n"
                 )
-            role_build = self.ws_registry.resolve_role_definition("build_role", repo_root=tmp_root)
+            role_build = self.ws_registry.resolve_role_definition(
+                "build_role", repo_root=tmp_root
+            )
             self.assertEqual(role_build.role_name, "build_role")
 
             # 2. TOML takes precedence over BUILD.bazel
             toml_file = os.path.join(tmp_root, app_info.DEFAULT_ROLES_FILE)
             with open(toml_file, "w", encoding="utf-8") as f:
                 f.write(
-                    '[roles.toml_role]\n'
+                    "[roles.toml_role]\n"
                     'name = "toml_role"\n'
                     'src_pattern = "{unit_dir}/toml/{unit_name}.py"\n'
                     'template_command = "uv run python -m test_scaffold"\n'
                 )
-            role_toml = self.ws_registry.resolve_role_definition("toml_role", repo_root=tmp_root)
+            role_toml = self.ws_registry.resolve_role_definition(
+                "toml_role", repo_root=tmp_root
+            )
             self.assertEqual(role_toml.role_name, "toml_role")
-            self.assertEqual(role_toml.template_command, "uv run python -m test_scaffold")
+            self.assertEqual(
+                role_toml.template_command, "uv run python -m test_scaffold"
+            )
 
     def test_compute_workspace_dir(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_root:
@@ -102,7 +118,9 @@ class WorkspaceRegistryImplTest(unittest.TestCase):
     def test_record_load_and_unregister_workspace(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_root:
             role_def = self.ws_registry.resolve_role_definition("lib")
-            ws_dir = os.path.join(tmp_root, app_info.DEFAULT_ROLE_WORKSPACES_CONTAINER, "test_lib_staging")
+            ws_dir = os.path.join(
+                tmp_root, app_info.DEFAULT_ROLE_WORKSPACES_CONTAINER, "test_lib_staging"
+            )
             desc = role_registry.WorkspaceDescriptor(
                 workspace_dir=ws_dir,
                 main_repository_root=tmp_root,
@@ -116,7 +134,9 @@ class WorkspaceRegistryImplTest(unittest.TestCase):
             self.assertEqual(active[0].workspace_dir, ws_dir)
             self.assertEqual(active[0].role_definition.role_name, "lib")
 
-            unregistered = self.ws_registry.unregister_workspace(ws_dir, repo_root=tmp_root)
+            unregistered = self.ws_registry.unregister_workspace(
+                ws_dir, repo_root=tmp_root
+            )
             self.assertTrue(unregistered)
             active_after = self.ws_registry.load_active_workspaces(repo_root=tmp_root)
             self.assertEqual(len(active_after), 0)
@@ -126,7 +146,7 @@ class WorkspaceRegistryImplTest(unittest.TestCase):
             toml_file = os.path.join(tmp_root, app_info.DEFAULT_ROLES_FILE)
             with open(toml_file, "w", encoding="utf-8") as f:
                 f.write(
-                    '[roles.bad_role]\n'
+                    "[roles.bad_role]\n"
                     'name = "bad_role"\n'
                     'src_pattern = "{unit_dir}/bad/{unit_name}.py"\n'
                     'role_deps = ["low"]\n'
@@ -141,7 +161,7 @@ class WorkspaceRegistryImplTest(unittest.TestCase):
             toml_file = os.path.join(tmp_root, app_info.DEFAULT_ROLES_FILE)
             with open(toml_file, "w", encoding="utf-8") as f:
                 f.write(
-                    '[roles.bad_role]\n'
+                    "[roles.bad_role]\n"
                     'name = "bad_role"\n'
                     'src_pattern = "{unit_dir}/bad/{unit_name}.py"\n'
                     'role_deps = ["high"]\n'
@@ -151,12 +171,14 @@ class WorkspaceRegistryImplTest(unittest.TestCase):
                 self.ws_registry.resolve_role_definition("bad_role", repo_root=tmp_root)
             self.assertIn("redundantly declares feedback_role_deps", str(ctx.exception))
 
-    def test_redundant_star_feedback_role_deps_in_feedback_role_deps_raises_value_error(self) -> None:
+    def test_redundant_star_feedback_role_deps_in_feedback_role_deps_raises_value_error(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmp_root:
             toml_file = os.path.join(tmp_root, app_info.DEFAULT_ROLES_FILE)
             with open(toml_file, "w", encoding="utf-8") as f:
                 f.write(
-                    '[roles.bad_role]\n'
+                    "[roles.bad_role]\n"
                     'name = "bad_role"\n'
                     'src_pattern = "{unit_dir}/bad/{unit_name}.py"\n'
                     'star_feedback_role_deps = ["pretense"]\n'
@@ -164,14 +186,18 @@ class WorkspaceRegistryImplTest(unittest.TestCase):
                 )
             with self.assertRaises(ValueError) as ctx:
                 self.ws_registry.resolve_role_definition("bad_role", repo_root=tmp_root)
-            self.assertIn("redundantly declares star_feedback_role_deps", str(ctx.exception))
+            self.assertIn(
+                "redundantly declares star_feedback_role_deps", str(ctx.exception)
+            )
 
-    def test_redundant_star_feedback_role_deps_in_star_role_deps_raises_value_error(self) -> None:
+    def test_redundant_star_feedback_role_deps_in_star_role_deps_raises_value_error(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmp_root:
             toml_file = os.path.join(tmp_root, app_info.DEFAULT_ROLES_FILE)
             with open(toml_file, "w", encoding="utf-8") as f:
                 f.write(
-                    '[roles.bad_role]\n'
+                    "[roles.bad_role]\n"
                     'name = "bad_role"\n'
                     'src_pattern = "{unit_dir}/bad/{unit_name}.py"\n'
                     'star_feedback_role_deps = ["pretense"]\n'
@@ -179,20 +205,24 @@ class WorkspaceRegistryImplTest(unittest.TestCase):
                 )
             with self.assertRaises(ValueError) as ctx:
                 self.ws_registry.resolve_role_definition("bad_role", repo_root=tmp_root)
-            self.assertIn("redundantly declares star_feedback_role_deps", str(ctx.exception))
+            self.assertIn(
+                "redundantly declares star_feedback_role_deps", str(ctx.exception)
+            )
 
     def test_star_feedback_role_deps_resolved_successfully(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_root:
             toml_file = os.path.join(tmp_root, app_info.DEFAULT_ROLES_FILE)
             with open(toml_file, "w", encoding="utf-8") as f:
                 f.write(
-                    '[roles.auditor_star]\n'
+                    "[roles.auditor_star]\n"
                     'name = "auditor_star"\n'
                     'src_pattern = ""\n'
                     'star_feedback_role_deps = ["pretense"]\n'
                     'feedback_role_deps = ["lib"]\n'
                 )
-            r_def = self.ws_registry.resolve_role_definition("auditor_star", repo_root=tmp_root)
+            r_def = self.ws_registry.resolve_role_definition(
+                "auditor_star", repo_root=tmp_root
+            )
             self.assertEqual(list(r_def.star_feedback_role_deps), ["pretense"])
             self.assertEqual(list(r_def.feedback_role_deps), ["lib"])
 
@@ -201,7 +231,7 @@ class WorkspaceRegistryImplTest(unittest.TestCase):
             toml_file = os.path.join(tmp_root, app_info.DEFAULT_ROLES_FILE)
             with open(toml_file, "w", encoding="utf-8") as f:
                 f.write(
-                    '[roles.bad_role]\n'
+                    "[roles.bad_role]\n"
                     'name = "bad_role"\n'
                     'src_pattern = "{unit_dir}/bad/{unit_name}.py"\n'
                     'role_deps = ["high"]\n'
@@ -209,87 +239,102 @@ class WorkspaceRegistryImplTest(unittest.TestCase):
                 )
             with self.assertRaises(ValueError) as ctx:
                 self.ws_registry.resolve_role_definition("bad_role", repo_root=tmp_root)
-            self.assertIn("as both a role dependency and a silent role dependency", str(ctx.exception))
+            self.assertIn(
+                "as both a role dependency and a silent role dependency",
+                str(ctx.exception),
+            )
 
     def test_auditor_role_in_role_deps_raises_value_error(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_root:
             toml_file = os.path.join(tmp_root, app_info.DEFAULT_ROLES_FILE)
             with open(toml_file, "w", encoding="utf-8") as f:
                 f.write(
-                    '[roles.qa]\n'
+                    "[roles.qa]\n"
                     'name = "qa"\n'
                     'src_pattern = ""\n\n'
-                    '[roles.bad_role]\n'
+                    "[roles.bad_role]\n"
                     'name = "bad_role"\n'
                     'src_pattern = "{unit_dir}/bad/{unit_name}.py"\n'
                     'role_deps = ["qa"]\n'
                 )
             with self.assertRaises(ValueError) as ctx:
                 self.ws_registry.resolve_role_definition("bad_role", repo_root=tmp_root)
-            self.assertIn("Auditor roles can only be silent_role_deps", str(ctx.exception))
+            self.assertIn(
+                "Auditor roles can only be silent_role_deps", str(ctx.exception)
+            )
 
     def test_auditor_role_in_star_role_deps_raises_value_error(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_root:
             toml_file = os.path.join(tmp_root, app_info.DEFAULT_ROLES_FILE)
             with open(toml_file, "w", encoding="utf-8") as f:
                 f.write(
-                    '[roles.spec_qa]\n'
+                    "[roles.spec_qa]\n"
                     'name = "spec_qa"\n'
                     'src_pattern = ""\n\n'
-                    '[roles.bad_role]\n'
+                    "[roles.bad_role]\n"
                     'name = "bad_role"\n'
                     'src_pattern = "{unit_dir}/bad/{unit_name}.py"\n'
                     'star_role_deps = ["spec_qa"]\n'
                 )
             with self.assertRaises(ValueError) as ctx:
                 self.ws_registry.resolve_role_definition("bad_role", repo_root=tmp_root)
-            self.assertIn("Auditor roles can only be silent_role_deps", str(ctx.exception))
+            self.assertIn(
+                "Auditor roles can only be silent_role_deps", str(ctx.exception)
+            )
 
     def test_auditor_role_in_feedback_role_deps_raises_value_error(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_root:
             toml_file = os.path.join(tmp_root, app_info.DEFAULT_ROLES_FILE)
             with open(toml_file, "w", encoding="utf-8") as f:
                 f.write(
-                    '[roles.coverage]\n'
+                    "[roles.coverage]\n"
                     'name = "coverage"\n'
                     'src_pattern = ""\n\n'
-                    '[roles.bad_role]\n'
+                    "[roles.bad_role]\n"
                     'name = "bad_role"\n'
                     'src_pattern = "{unit_dir}/bad/{unit_name}.py"\n'
                     'feedback_role_deps = ["coverage"]\n'
                 )
             with self.assertRaises(ValueError) as ctx:
                 self.ws_registry.resolve_role_definition("bad_role", repo_root=tmp_root)
-            self.assertIn("Auditor roles can only be silent_role_deps", str(ctx.exception))
+            self.assertIn(
+                "Auditor roles can only be silent_role_deps", str(ctx.exception)
+            )
 
     def test_custom_auditor_role_in_role_deps_raises_value_error(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_root:
             toml_file = os.path.join(tmp_root, app_info.DEFAULT_ROLES_FILE)
             with open(toml_file, "w", encoding="utf-8") as f:
                 f.write(
-                    '[roles.my_auditor]\n'
+                    "[roles.my_auditor]\n"
                     'name = "my_auditor"\n'
                     'src_pattern = ""\n\n'
-                    '[roles.my_consumer]\n'
+                    "[roles.my_consumer]\n"
                     'name = "my_consumer"\n'
                     'src_pattern = "{unit_dir}/lib/{unit_name}.py"\n'
                     'role_deps = ["my_auditor"]\n'
                 )
             with self.assertRaises(ValueError) as ctx:
-                self.ws_registry.resolve_role_definition("my_consumer", repo_root=tmp_root)
-            self.assertIn("Auditor roles can only be silent_role_deps", str(ctx.exception))
+                self.ws_registry.resolve_role_definition(
+                    "my_consumer", repo_root=tmp_root
+                )
+            self.assertIn(
+                "Auditor roles can only be silent_role_deps", str(ctx.exception)
+            )
 
     def test_auditor_role_in_silent_role_deps_succeeds(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_root:
             toml_file = os.path.join(tmp_root, app_info.DEFAULT_ROLES_FILE)
             with open(toml_file, "w", encoding="utf-8") as f:
                 f.write(
-                    '[roles.valid_consumer]\n'
+                    "[roles.valid_consumer]\n"
                     'name = "valid_consumer"\n'
                     'src_pattern = "{unit_dir}/lib/{unit_name}.py"\n'
                     'silent_role_deps = ["qa"]\n'
                 )
-            role_def = self.ws_registry.resolve_role_definition("valid_consumer", repo_root=tmp_root)
+            role_def = self.ws_registry.resolve_role_definition(
+                "valid_consumer", repo_root=tmp_root
+            )
             self.assertEqual(role_def.role_name, "valid_consumer")
             self.assertEqual(list(role_def.silent_role_deps), ["qa"])
 
@@ -300,7 +345,7 @@ class WorkspaceRegistryImplTest(unittest.TestCase):
             roles_toml = os.path.join(meth_dir, app_info.DEFAULT_ROLES_FILE)
             with open(roles_toml, "w", encoding="utf-8") as f:
                 f.write(
-                    '[roles.scoped_role]\n'
+                    "[roles.scoped_role]\n"
                     'name = "scoped_role"\n'
                     'src_pattern = "{unit_dir}/scoped/{unit_name}.py"\n'
                 )
@@ -316,7 +361,9 @@ class WorkspaceRegistryImplTest(unittest.TestCase):
             )
             self.assertEqual(role_def.role_name, "scoped_role")
 
-            roles = self.ws_registry.list_roles(repo_root=tmp_root, dir_scope="consumer_scope/parts")
+            roles = self.ws_registry.list_roles(
+                repo_root=tmp_root, dir_scope="consumer_scope/parts"
+            )
             self.assertIn("scoped_role", [r.role_name for r in roles])
 
     def test_resolve_package_qualified_role_address(self) -> None:
@@ -326,7 +373,7 @@ class WorkspaceRegistryImplTest(unittest.TestCase):
             roles_toml = os.path.join(pkg_dir, app_info.DEFAULT_ROLES_FILE)
             with open(roles_toml, "w", encoding="utf-8") as f:
                 f.write(
-                    '[roles.ext_role]\n'
+                    "[roles.ext_role]\n"
                     'name = "ext_role"\n'
                     'src_pattern = "{unit_dir}/ext/{unit_name}.py"\n'
                 )
@@ -343,21 +390,26 @@ class WorkspaceRegistryImplTest(unittest.TestCase):
             roles_file = os.path.join(repo_root, app_info.DEFAULT_ROLES_FILE)
             with open(roles_file, "w", encoding="utf-8") as f:
                 f.write(
-                    '[roles.lib]\n'
+                    "[roles.lib]\n"
                     'name = "lib"\n'
                     'src_pattern = "{unit_dir}/lib/{unit_name}.py"\n'
                 )
 
-            workspaces_dir = os.path.join(base_tmp, app_info.DEFAULT_ROLE_WORKSPACES_CONTAINER)
+            workspaces_dir = os.path.join(
+                base_tmp, app_info.DEFAULT_ROLE_WORKSPACES_CONTAINER
+            )
             ws_dir = os.path.join(workspaces_dir, "my_repo_lib_staging")
             os.makedirs(ws_dir, exist_ok=True)
             meta_path = os.path.join(ws_dir, app_info.DEFAULT_ROLE_DESCRIPTOR)
             with open(meta_path, "w", encoding="utf-8") as f:
-                json.dump({
-                    "role_name": "lib",
-                    "dir_scope": "staging",
-                    "last_sync_timestamp": "2026-01-02T03:04:05Z",
-                }, f)
+                json.dump(
+                    {
+                        "role_name": "lib",
+                        "dir_scope": "staging",
+                        "last_sync_timestamp": "2026-01-02T03:04:05Z",
+                    },
+                    f,
+                )
 
             fresh_registry = role_registry_impl.WorkspaceRegistry()
             active = fresh_registry.load_active_workspaces(repo_root=repo_root)

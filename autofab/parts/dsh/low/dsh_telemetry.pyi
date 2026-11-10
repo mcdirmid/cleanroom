@@ -166,9 +166,50 @@ class DshTelemetryParser(Singleton[AgentSessionTier], Protocol):
         """Polls active round status over the local JSON-RPC bridge (backwards-compatible alias for poll_round_rpc)."""
         ...
 
+    @operation
+    def rename_session(
+        self,
+        session_id: str,
+        title: str,
+        sessions_dir: Optional[str] = None,
+    ) -> bool:
+        """Renames a session on DeepSeek Harness Web bridge or Desktop RPC.
+
+        POSTCONDITIONS:
+        - MUST update the session title to title and return True if successful, or False if unreachable.
+        """
+        ...
+
+    @operation
+    def delete_session(
+        self,
+        session_id: str,
+        sessions_dir: Optional[str] = None,
+    ) -> bool:
+        """Deletes a session from DeepSeek Harness Web bridge or Desktop RPC.
+
+        POSTCONDITIONS:
+        - MUST delete the session from the server and return True if successful, or False if unreachable.
+        """
+        ...
+
+    @operation
+    def cleanup_scope_sessions(
+        self,
+        dir_scope: str,
+        sessions_dir: Optional[str] = None,
+    ) -> int:
+        """Discovers and deletes all existing sessions whose title contains [<dir_scope>].
+
+        POSTCONDITIONS:
+        - MUST find all sessions with [<dir_scope>] in their title and delete them.
+        - MUST return the count of deleted sessions.
+        """
+        ...
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:46Z
-# LAST_CHANGED: 2026-11-02T17:35:00Z
-# CHANGE: Name desktop sessions with scope and role directly in role workspace without creating per-role workspace folders
+# LAST_CHANGED: 2026-11-09T23:32:00Z
+# CHANGE: Add session renaming, deletion, and scope conversation cleanup operations
 # SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---

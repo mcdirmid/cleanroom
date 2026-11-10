@@ -43,7 +43,17 @@ class WorkspaceRolesImplTest(unittest.TestCase):
     def test_list_roles(self) -> None:
         roles = self.resolver.list_roles()
         role_names = [r.role_name for r in roles]
-        for expected in ("high", "scenario", "planning", "low", "spec_qa", "lib", "test", "qa", "coverage"):
+        for expected in (
+            "high",
+            "scenario",
+            "planning",
+            "low",
+            "spec_qa",
+            "lib",
+            "test",
+            "qa",
+            "coverage",
+        ):
             self.assertIn(expected, role_names)
 
     def test_reject_redundant_feedback_in_role_deps(self) -> None:
@@ -64,9 +74,7 @@ class WorkspaceRolesImplTest(unittest.TestCase):
             toml_path = os.path.join(tmp_dir, app_info.DEFAULT_ROLES_FILE)
             with open(toml_path, "w", encoding="utf-8") as f:
                 f.write(
-                    "[roles.bad]\n"
-                    'role_deps = ["other"]\n'
-                    'star_role_deps = ["other"]\n'
+                    '[roles.bad]\nrole_deps = ["other"]\nstar_role_deps = ["other"]\n'
                 )
             with self.assertRaises(ValueError) as ctx:
                 self.resolver.list_roles(repo_root=tmp_dir)
@@ -77,13 +85,14 @@ class WorkspaceRolesImplTest(unittest.TestCase):
             toml_path = os.path.join(tmp_dir, app_info.DEFAULT_ROLES_FILE)
             with open(toml_path, "w", encoding="utf-8") as f:
                 f.write(
-                    "[roles.bad]\n"
-                    'role_deps = ["other"]\n'
-                    'silent_role_deps = ["other"]\n'
+                    '[roles.bad]\nrole_deps = ["other"]\nsilent_role_deps = ["other"]\n'
                 )
             with self.assertRaises(ValueError) as ctx:
                 self.resolver.list_roles(repo_root=tmp_dir)
-            self.assertIn("both a role dependency and a silent role dependency", str(ctx.exception))
+            self.assertIn(
+                "both a role dependency and a silent role dependency",
+                str(ctx.exception),
+            )
 
     def test_reject_auditor_in_role_deps(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -97,8 +106,9 @@ class WorkspaceRolesImplTest(unittest.TestCase):
                 )
             with self.assertRaises(ValueError) as ctx:
                 self.resolver.list_roles(repo_root=tmp_dir)
-            self.assertIn("Auditor roles can only be silent_role_deps", str(ctx.exception))
-
+            self.assertIn(
+                "Auditor roles can only be silent_role_deps", str(ctx.exception)
+            )
 
     def test_list_roles_pipeline_filtering(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -112,7 +122,11 @@ class WorkspaceRolesImplTest(unittest.TestCase):
             # Create a dir_scope with config setting pipeline = "pretense"
             scope_dir = os.path.join(tmp_dir, "my_scope")
             os.makedirs(scope_dir)
-            with open(os.path.join(scope_dir, app_info.DEFAULT_CONFIG_FILE), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(scope_dir, app_info.DEFAULT_CONFIG_FILE),
+                "w",
+                encoding="utf-8",
+            ) as f:
                 f.write('pipeline = "pretense"\n')
 
             roles = self.resolver.list_roles(repo_root=tmp_dir, dir_scope="my_scope")
@@ -124,10 +138,16 @@ class WorkspaceRolesImplTest(unittest.TestCase):
             # Create standard scope
             std_dir = os.path.join(tmp_dir, "std_scope")
             os.makedirs(std_dir)
-            with open(os.path.join(std_dir, app_info.DEFAULT_CONFIG_FILE), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(std_dir, app_info.DEFAULT_CONFIG_FILE),
+                "w",
+                encoding="utf-8",
+            ) as f:
                 f.write('pipeline = "standard"\n')
 
-            std_roles = self.resolver.list_roles(repo_root=tmp_dir, dir_scope="std_scope")
+            std_roles = self.resolver.list_roles(
+                repo_root=tmp_dir, dir_scope="std_scope"
+            )
             std_names = [r.role_name for r in std_roles]
             self.assertIn("lib", std_names)
             self.assertIn("test", std_names)
@@ -136,7 +156,9 @@ class WorkspaceRolesImplTest(unittest.TestCase):
             # Unconfigured scope defaults to standard pipeline
             unconf_dir = os.path.join(tmp_dir, "unconf_scope")
             os.makedirs(unconf_dir)
-            unconf_roles = self.resolver.list_roles(repo_root=tmp_dir, dir_scope="unconf_scope")
+            unconf_roles = self.resolver.list_roles(
+                repo_root=tmp_dir, dir_scope="unconf_scope"
+            )
             unconf_names = [r.role_name for r in unconf_roles]
             self.assertIn("lib", unconf_names)
             self.assertIn("test", unconf_names)
@@ -145,9 +167,15 @@ class WorkspaceRolesImplTest(unittest.TestCase):
             # Combined pipeline
             comb_dir = os.path.join(tmp_dir, "comb_scope")
             os.makedirs(comb_dir)
-            with open(os.path.join(comb_dir, app_info.DEFAULT_CONFIG_FILE), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(comb_dir, app_info.DEFAULT_CONFIG_FILE),
+                "w",
+                encoding="utf-8",
+            ) as f:
                 f.write('pipeline = "combined"\n')
-            comb_roles = self.resolver.list_roles(repo_root=tmp_dir, dir_scope="comb_scope")
+            comb_roles = self.resolver.list_roles(
+                repo_root=tmp_dir, dir_scope="comb_scope"
+            )
             comb_names = [r.role_name for r in comb_roles]
             self.assertIn("lib", comb_names)
             self.assertIn("test", comb_names)
@@ -163,19 +191,26 @@ class WorkspaceRolesImplTest(unittest.TestCase):
                     'src_patterns = ["{unit_dir}/lib_a/{unit_name}.py", "{unit_dir}/tests_a/{unit_name}_fixed_test.py"]\n\n'
                     "[roles.auditor]\n"
                     "name = 'auditor'\n"
-                    'role_deps = []\n'
+                    "role_deps = []\n"
                     'feedback_role_deps = ["baseline_a"]\n'
                 )
-            r_base = self.resolver.resolve_role_definition("baseline_a", repo_root=tmp_dir)
+            r_base = self.resolver.resolve_role_definition(
+                "baseline_a", repo_root=tmp_dir
+            )
             self.assertEqual(
                 r_base.src_patterns,
-                ("{unit_dir}/lib_a/{unit_name}.py", "{unit_dir}/tests_a/{unit_name}_fixed_test.py"),
+                (
+                    "{unit_dir}/lib_a/{unit_name}.py",
+                    "{unit_dir}/tests_a/{unit_name}_fixed_test.py",
+                ),
             )
             self.assertEqual(r_base.src_pattern, "{unit_dir}/lib_a/{unit_name}.py")
             self.assertIn("lib_a/*.py", r_base.writable_file_patterns)
             self.assertIn("tests_a/*.py", r_base.writable_file_patterns)
 
-            r_audit = self.resolver.resolve_role_definition("auditor", repo_root=tmp_dir)
+            r_audit = self.resolver.resolve_role_definition(
+                "auditor", repo_root=tmp_dir
+            )
             self.assertIn("lib_a/*.py", r_audit.readonly_file_patterns)
             self.assertIn("tests_a/*.py", r_audit.readonly_file_patterns)
 

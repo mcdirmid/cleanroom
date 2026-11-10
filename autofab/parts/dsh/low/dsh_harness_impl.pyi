@@ -1,6 +1,6 @@
 """Low-level implementation specification for dsh_harness_impl."""
 
-from typing import Any, Optional
+from typing import Any, Mapping, Optional, Sequence
 from support.lib.framework import operation, override, poly_type, singleton_type
 from support.lib.lifecycle import Singleton
 import session as agent_session
@@ -33,15 +33,14 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
         """Dispatches work directive to a DeepSeek Harness role workspace.
 
         GROUNDING:
-        - Prepares role-tailored task prompts distinguishing auditor roles from authoring roles,
+        - Prepares concise two-step task prompts directing workers strictly to read AGENTS.md in the workspace root if not already in context and run bin/get_work,
+          omitting role labels, workspace paths, and explanatory ceremony,
           incorporates coordinator reminder directives when provided in role dispatch directives,
-          directs workers to read AGENTS.md in the workspace root and discover work via get_work without inlining target lists or writing pending buffers to disk prior to worker execution,
-          instructs authoring roles to edit only assigned target files, rely solely on check_files,
-          and refrain from implementing scratch tests or auxiliary files,
           derives initial pending targets in task memory from assigned ready targets or disk pending work without writing pending buffers to disk prior to worker execution,
           tracks pre-dispatch file offsets of candidate event logs to isolate round-specific action records,
           evaluates server reachability via dsh_telemetry,
           dispatches over the local RPC bridge when reachable with retry backoff to stream progress to the desktop UI without file lock contention (failing cleanly without attempting incompatible headless CLI fallback resumption),
+          renames previous conversation to put [<scope>] dead - <role> after a replacement conversation is issued for the role,
           or executes the dsh CLI process bound to dispatch.workspace_dir using headless profile and overlay patches conforming to dsh_ext when the server is absent,
           and returns task handle.
         """
@@ -59,7 +58,7 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
         - Awaits RPC round completion or process termination without mandatory timeout unless configured, computes buffer
           differences seeded from ready targets or disk pending work via work, inspects autofab_files_ext.BLAME_BUFFER_FILE and
           candidate event logs across workspace root and scoped directories scanning only lines beyond pre-dispatch file offsets for attributed defects and action records matching change, clean, submitted, and audit records, scrapes active session identifiers from event logs and
-          saves to the state directory session ID file (resetting session on failure), assigns unresolved status when zero targets are submitted or blamed or when interrupted without clean completion,
+          saves to the state directory session ID file (recycling after N rounds defaulting to 4 rounds with clean session reset, resetting session on failure), assigns unresolved status when zero targets are submitted or blamed or when interrupted without clean completion,
           tracks session token baselines across rounds, calculates incremental round deltas from cumulative session metrics across persistent session rounds to prevent double-counting (evicting baselines upon failed rounds or session reset),
           parses session telemetry via dsh_telemetry, and constructs subagent_coordinator.RoleRoundResult.
         """
@@ -88,7 +87,26 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
         """Aborts active DeepSeek Harness subagent task execution upon timeout or limit.
 
         GROUNDING:
-        - Aborts the active RPC session via session/cancel or terminates the running subprocess associated with task_handle, marking the task interrupted.
+        - Aborts the active RPC session via session/cancel or terminates the running subprocess associated with task_handle, and marks the task interrupted without marking the active conversation dead before a replacement exists.
+        """
+        ...
+
+    @operation
+    @override
+    def update_orchestration_state(
+        self,
+        dir_scope: str,
+        wave_count: int,
+        active_workers: Mapping[str, str],
+        assigned_targets: Mapping[str, Sequence[str]],
+        all_scope_roles: Sequence[str],
+        converged: bool = False,
+        failed: bool = False,
+    ) -> None:
+        """Updates and publishes external orchestration state for the active scope.
+
+        GROUNDING:
+        - Resolves coordination storage location, matches active roles to recorded session identifiers, tracks superseded sessions, and writes authoritative state snapshot JSON.
         """
         ...
 
@@ -143,7 +161,7 @@ class DshHarnessManager(dsh_harness.DshHarnessManager):
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-30T19:50:00Z
-# LAST_CHANGED: 2026-10-30T19:50:00Z
-# CHANGE: Isolate candidate cleanroom action logs by tracking pre-dispatch file offsets and prevent historical action records from prior rounds from causing false clean or blame states upon interruption
+# LAST_CHANGED: 2026-11-09T22:10:00Z
+# CHANGE: Authoritative orchestration state snapshot publishing to external coordination storage
 # SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---

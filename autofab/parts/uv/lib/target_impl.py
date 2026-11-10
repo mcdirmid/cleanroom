@@ -59,6 +59,7 @@ class UvTarget(target.UvTarget):
             try:
                 from autofab.parts.workspace.lib import roles
                 from support.lib.lifecycle import get_singleton
+
                 resolver = get_singleton(roles.RoleResolver)
                 for r_def in resolver.list_roles():
                     if r_def.src_pattern:
@@ -68,6 +69,7 @@ class UvTarget(target.UvTarget):
 
             if not roles_dict:
                 import tomllib
+
                 try:
                     from support.lib import app_info
                 except ImportError:
@@ -93,7 +95,11 @@ class UvTarget(target.UvTarget):
                     try:
                         for entry in os.listdir(cur):
                             sub = os.path.join(cur, entry)
-                            if os.path.isdir(sub) and not entry.startswith((".", "bazel-", "venv")) and entry not in ws_containers:
+                            if (
+                                os.path.isdir(sub)
+                                and not entry.startswith((".", "bazel-", "venv"))
+                                and entry not in ws_containers
+                            ):
                                 for rf in r_files:
                                     toml_paths.append(os.path.join(sub, rf))
                     except OSError:
@@ -125,7 +131,7 @@ class UvTarget(target.UvTarget):
                         _, sfx = f_pat.split("{unit_name}", 1)
                         sfx_stem = os.path.splitext(sfx)[0]
                         if sfx_stem and unit_name.endswith(sfx_stem):
-                            unit_name = unit_name[:-len(sfx_stem)]
+                            unit_name = unit_name[: -len(sfx_stem)]
                     break
 
             if inferred_role:
@@ -136,7 +142,9 @@ class UvTarget(target.UvTarget):
 
         norm_unit = dag_storage.UnitAddress(self._normalize_label(ident_str))
         norm_role = dag_storage.RoleAddress(
-            self._normalize_label(role_part) if ":" in role_part or role_part.startswith("//") else role_part
+            self._normalize_label(role_part)
+            if ":" in role_part or role_part.startswith("//")
+            else role_part
         )
         return dag_storage.DagNode(unit_address=norm_unit, role_address=norm_role)
 
@@ -147,6 +155,8 @@ class UvTarget(target.UvTarget):
             unit = unit[2:]
         package_part = unit.split(":")[0] if ":" in unit else unit
         return target.NodeDirectory(path=file_paths.PathString(package_part))
+
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-07T00:00:00Z

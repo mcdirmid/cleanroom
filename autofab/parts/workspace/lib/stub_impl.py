@@ -9,7 +9,12 @@ import re
 import shutil
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
-from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
+from support.lib.lifecycle import (
+    LifecycleRegistry,
+    Singleton,
+    get_default_registry,
+    get_singleton,
+)
 from support.lib import app_info
 from autofab.parts.agent.lib import session as agent_session
 from . import role_registry, stub
@@ -99,7 +104,11 @@ def _is_stub_dep_file(
                     return True
         if stub_def.src_pattern:
             d, _, ext = _parse_pat_to_glob(stub_def.src_pattern)
-            if d and (parent == d or f"/{d}/" in rel_path.replace("\\", "/")) and (not ext or fname.endswith(ext)):
+            if (
+                d
+                and (parent == d or f"/{d}/" in rel_path.replace("\\", "/"))
+                and (not ext or fname.endswith(ext))
+            ):
                 return True
     return False
 
@@ -163,7 +172,9 @@ def _find_spec_pyi(
         try:
             for entry in os.listdir(main_root):
                 base_dir = os.path.join(main_root, entry)
-                if not os.path.isdir(base_dir) or entry.startswith((".", "bazel-", "venv")):
+                if not os.path.isdir(base_dir) or entry.startswith(
+                    (".", "bazel-", "venv")
+                ):
                     continue
                 p_dir = os.path.join(base_dir, "parts", part_name)
                 if os.path.isdir(p_dir):
@@ -215,17 +226,32 @@ def _generate_readonly_test_stub(
             except ImportError:
                 pass
             if generate_lib_skeleton is None:
-                root_cand = out_path.split(f"{os.sep}parts{os.sep}")[0] if f"{os.sep}parts{os.sep}" in out_path else os.getcwd()
-                root_cand = os.path.dirname(root_cand) if os.path.basename(root_cand) else root_cand
+                root_cand = (
+                    out_path.split(f"{os.sep}parts{os.sep}")[0]
+                    if f"{os.sep}parts{os.sep}" in out_path
+                    else os.getcwd()
+                )
+                root_cand = (
+                    os.path.dirname(root_cand)
+                    if os.path.basename(root_cand)
+                    else root_cand
+                )
                 import importlib
+
                 try:
                     for entry in os.listdir(root_cand):
                         pkg_dir = os.path.join(root_cand, entry)
-                        if os.path.isdir(pkg_dir) and not entry.startswith((".", "bazel-", "venv")):
+                        if os.path.isdir(pkg_dir) and not entry.startswith(
+                            (".", "bazel-", "venv")
+                        ):
                             try:
-                                mod = importlib.import_module(f"{entry}.support.lib.lib_lint")
+                                mod = importlib.import_module(
+                                    f"{entry}.support.lib.lib_lint"
+                                )
                                 # Legitimate reflection: optional plugin hook discovery on dynamically imported module
-                                generate_lib_skeleton = getattr(mod, "generate_lib_skeleton", None)
+                                generate_lib_skeleton = getattr(
+                                    mod, "generate_lib_skeleton", None
+                                )
                                 if generate_lib_skeleton is not None:
                                     break
                             except ImportError:
@@ -233,7 +259,9 @@ def _generate_readonly_test_stub(
                 except OSError:
                     pass
             if generate_lib_skeleton is not None:
-                skeleton = generate_lib_skeleton(pyi_path, stem, parts_base=current_base or None)
+                skeleton = generate_lib_skeleton(
+                    pyi_path, stem, parts_base=current_base or None
+                )
         except (ImportError, OSError, SyntaxError, RuntimeError, ValueError):
             skeleton = None
 
@@ -270,7 +298,10 @@ def _generate_readonly_test_stub(
             cand_bases = [current_base] if current_base else []
             try:
                 for entry in os.listdir(root_parent):
-                    if os.path.isdir(os.path.join(root_parent, entry, "parts")) and entry not in cand_bases:
+                    if (
+                        os.path.isdir(os.path.join(root_parent, entry, "parts"))
+                        and entry not in cand_bases
+                    ):
                         cand_bases.append(entry)
             except OSError:
                 pass
@@ -297,9 +328,8 @@ def _generate_readonly_test_stub(
     for line in skeleton.splitlines():
         if line.startswith("from __future__") or line.startswith("# Requirements"):
             continue
-        if (
-            line.strip() == "from dataclasses import dataclass"
-            and ("field(" in skeleton or "field:" in skeleton)
+        if line.strip() == "from dataclasses import dataclass" and (
+            "field(" in skeleton or "field:" in skeleton
         ):
             line = "from dataclasses import dataclass, field"
         framework_mods = {
@@ -327,9 +357,7 @@ def _generate_readonly_test_stub(
                         line = f"from {current_base}.parts.{target_part}.{dep_dir} import {mod_name}{alias}"
                 else:
                     line = f"from {target_base}.parts.{target_part}.{dep_dir} import {mod_name}{alias}"
-        m_from = re.match(
-            r"^from\s+([a-zA-Z0-9_]+)\s+import\s+(.+)$", line.strip()
-        )
+        m_from = re.match(r"^from\s+([a-zA-Z0-9_]+)\s+import\s+(.+)$", line.strip())
         if m_from:
             mod_name = m_from.group(1)
             names_part = m_from.group(2)
@@ -342,9 +370,13 @@ def _generate_readonly_test_stub(
                         line = f"from {current_base}.parts.{target_part}.{dep_dir}.{mod_name} import {names_part}"
                 else:
                     line = f"from {target_base}.parts.{target_part}.{dep_dir}.{mod_name} import {names_part}"
-        if re.search(r"\bparts\.", line) and not line.strip().startswith(("from pretense.", "import pretense.", "from pretense ", "import pretense ")):
+        if re.search(r"\bparts\.", line) and not line.strip().startswith(
+            ("from pretense.", "import pretense.", "from pretense ", "import pretense ")
+        ):
             line = re.sub(
-                r"\b(?:(?<!pretense\.)[a-zA-Z0-9_]+\.)?parts\.", f"{current_base}.parts.", line
+                r"\b(?:(?<!pretense\.)[a-zA-Z0-9_]+\.)?parts\.",
+                f"{current_base}.parts.",
+                line,
             )
         if line.strip().startswith("# TODO_"):
             continue
@@ -365,9 +397,13 @@ def _generate_readonly_test_stub(
                     fn_name = node.name
                     if not any(f"def {fn_name}" in l for l in stub_lines):
                         args_unp = ast.unparse(node.args)
-                        ret_ann = f" -> {ast.unparse(node.returns)}" if node.returns else ""
+                        ret_ann = (
+                            f" -> {ast.unparse(node.returns)}" if node.returns else ""
+                        )
                         stub_lines.append(f"def {fn_name}({args_unp}){ret_ann}:")
-                        stub_lines.append(f'    raise NotImplementedError("{app_info.APP_TITLE} Test Stub: Behavior specified in .pyi")')
+                        stub_lines.append(
+                            f'    raise NotImplementedError("{app_info.APP_TITLE} Test Stub: Behavior specified in .pyi")'
+                        )
                         stub_lines.append("")
         except (OSError, SyntaxError, TypeError, ValueError):
             pass
@@ -391,7 +427,10 @@ def _sync_all_stub_deps(
         cand_bases = [dir_scope] if dir_scope else []
         try:
             for entry in os.listdir(main_root):
-                if os.path.isdir(os.path.join(main_root, entry, "parts")) and entry not in cand_bases:
+                if (
+                    os.path.isdir(os.path.join(main_root, entry, "parts"))
+                    and entry not in cand_bases
+                ):
                     cand_bases.append(entry)
         except OSError:
             pass
@@ -417,7 +456,9 @@ def _sync_all_stub_deps(
             try:
                 for entry in os.listdir(main_root):
                     cand_p = os.path.join(main_root, entry, "parts")
-                    if os.path.isdir(cand_p) and not entry.startswith((".", "bazel-", "venv")):
+                    if os.path.isdir(cand_p) and not entry.startswith(
+                        (".", "bazel-", "venv")
+                    ):
                         main_parts_dir = cand_p
                         break
             except OSError:
@@ -484,7 +525,9 @@ def _sync_all_stub_deps(
 
             curr_p = os.path.dirname(ws_dep_dir)
             ws_root_clean = os.path.abspath(workspace_dir or ws_scope_dir)
-            while curr_p and curr_p != ws_root_clean and curr_p.startswith(ws_root_clean):
+            while (
+                curr_p and curr_p != ws_root_clean and curr_p.startswith(ws_root_clean)
+            ):
                 p_init = os.path.join(curr_p, "__init__.py")
                 if not os.path.isfile(p_init):
                     write_file_with_perms(p_init, "", readonly=True)
@@ -507,7 +550,11 @@ def _sync_all_stub_deps(
                     try:
                         if os.path.getmtime(pyi_path) > os.path.getmtime(dst_stub):
                             _generate_readonly_test_stub(
-                                pyi_path, stem, dst_stub, dep_dir=dep_dir, part_map=part_map
+                                pyi_path,
+                                stem,
+                                dst_stub,
+                                dep_dir=dep_dir,
+                                part_map=part_map,
                             )
                             synced_count += 1
                     except OSError:
@@ -548,7 +595,9 @@ class WorkspaceStubSynthesizer(stub.WorkspaceStubSynthesizer):
         dir_scope: str = "",
     ) -> int:
         """Synchronizes read-only test stubs for all stub_role_deps of a role."""
-        ws_scope_dir = os.path.join(workspace_dir, dir_scope) if dir_scope else workspace_dir
+        ws_scope_dir = (
+            os.path.join(workspace_dir, dir_scope) if dir_scope else workspace_dir
+        )
         main_scope_dir = os.path.join(main_root, dir_scope) if dir_scope else main_root
         return _sync_all_stub_deps(
             ws_scope_dir,
@@ -573,6 +622,8 @@ class WorkspaceStubSynthesizer(stub.WorkspaceStubSynthesizer):
     def is_valid_test_stub(self, file_path: str) -> bool:
         """Checks whether file_path is already a valid autofab test stub."""
         return _is_valid_test_stub(file_path)
+
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-14T17:55:00Z

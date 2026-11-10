@@ -94,8 +94,15 @@ Given: a role worker repeatedly delivers an identical blame signature across con
 2. The role worker again delivers identical blame repeatedly, triggering a third restart.
    Observed: the coordinator halts orchestration immediately and reports an unconverged summary indicating the repeated blame circuit breaker tripped.
 
+## Scenario 14 — Publishing authoritative orchestration state updates
+
+Given: multi-agent supervision running in a designated scope with active workers and ready queues.
+
+1. The coordinator dispatches roles and reaps completed workers.
+   Observed: authoritative orchestration state snapshots detailing active scopes, current wave counts, active running workers, idle completed workers, assigned targets, and convergence outcomes are published across dispatch, round completion, and DAG convergence events.
+
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-18T01:30:00Z
-CHANGE: add scenario for restricting execution to target units and transitive dependencies
+LAST_CHANGED: 2026-11-09T22:10:00Z
+CHANGE: Add scenario for authoritative orchestration state snapshot publishing
 -->

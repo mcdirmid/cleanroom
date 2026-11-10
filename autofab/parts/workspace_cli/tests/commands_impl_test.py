@@ -13,11 +13,12 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_singleton
 from autofab.parts.agent.lib import session as agent_session
-from support.lib import app_info
+from support.lib import app_info, experiments
 from autofab.parts.control.lib import (
     attribution,
     submit,
 )
+from autofab.parts.metadata.lib import src_metadata
 from autofab.parts.workspace_cli.lib import (
     coverage,
     check,
@@ -60,7 +61,10 @@ class FakeWorkspaceRegistry:
         return self.roles
 
     def resolve_role_definition(
-        self, role_name: str, repo_root: Optional[str] = None, dir_scope: Optional[str] = None
+        self,
+        role_name: str,
+        repo_root: Optional[str] = None,
+        dir_scope: Optional[str] = None,
     ) -> role_registry.RoleDefinition:
         clean = role_name.split(":")[-1].strip().lower()
         for r in self.roles:
@@ -71,7 +75,7 @@ class FakeWorkspaceRegistry:
             guide_path=f"guides/{clean}.md",
             writable_file_patterns=[f"{clean}/*"],
             readonly_file_patterns=[],
-            feedback_role_deps=[],
+            feedback_role_deps=["lib", "test", "low", "planning", "high"],
             src_pattern=f"{clean}/{{unit_name}}.py",
         )
 
@@ -157,7 +161,11 @@ class FakePendingManager:
         return list(self.pending)
 
     def is_pending_target_dirty(
-        self, pt: str, ws_root: str, main_root: Optional[str] = None, role_name: Optional[str] = None
+        self,
+        pt: str,
+        ws_root: str,
+        main_root: Optional[str] = None,
+        role_name: Optional[str] = None,
     ) -> bool:
         return True
 
@@ -171,6 +179,7 @@ class FakePendingManager:
         if target in self.pending:
             self.pending.remove(target)
             return
+
         def _norm(s: str) -> str:
             stem = os.path.splitext(os.path.basename(s.replace("\\", "/")))[0]
             changed = True
@@ -182,6 +191,7 @@ class FakePendingManager:
                         changed = True
                         break
             return stem
+
         norm_t = _norm(target)
         for p in list(self.pending):
             if _norm(p) == norm_t:
@@ -309,7 +319,10 @@ class FakeCoverageEvaluator:
         )
 
     def format_coverage_report(
-        self, cov: coverage.ModuleCoverage, threshold: float = 0.0, max_spans: Optional[int] = None
+        self,
+        cov: coverage.ModuleCoverage,
+        threshold: float = 0.0,
+        max_spans: Optional[int] = None,
     ) -> str:
         return f"Coverage report: {cov.coverage_pct}%"
 
@@ -319,6 +332,7 @@ class FakeWorkspaceChecker:
 
     def __init__(self) -> None:
         self.checked: set[str] = set()
+        self.check_exit_code = 0
 
     def run_get_work(
         self,
@@ -337,7 +351,7 @@ class FakeWorkspaceChecker:
         if target:
             self.checked.add(os.path.realpath(target))
             self.checked.add(target)
-        return 0
+        return self.check_exit_code
 
     def record_check_executed(
         self,
@@ -353,7 +367,9 @@ class FakeWorkspaceChecker:
         ws_root: str,
         target_path: str,
     ) -> bool:
-        return os.path.realpath(target_path) in self.checked or target_path in self.checked
+        return (
+            os.path.realpath(target_path) in self.checked or target_path in self.checked
+        )
 
 
 class WorkspaceCommandsImplTest(unittest.TestCase):
@@ -365,7 +381,7 @@ class WorkspaceCommandsImplTest(unittest.TestCase):
                 guide_path="guides/lib.md",
                 writable_file_patterns=["lib/*.py"],
                 readonly_file_patterns=["low/*.pyi"],
-                feedback_role_deps=["low"],
+                feedback_role_deps=["low", "lib"],
                 src_pattern="lib/{unit_name}.py",
             ),
         ]
@@ -439,7 +455,11 @@ class WorkspaceCommandsImplTest(unittest.TestCase):
         self.test_dir = tempfile.mkdtemp()
         self.old_cwd = os.getcwd()
         os.chdir(self.test_dir)
-        with open(os.path.join(self.test_dir, app_info.DEFAULT_ROLE_DESCRIPTOR), "w", encoding="utf-8") as f:
+        with open(
+            os.path.join(self.test_dir, app_info.DEFAULT_ROLE_DESCRIPTOR),
+            "w",
+            encoding="utf-8",
+        ) as f:
             json.dump({"role_name": "lib", "dir_scope": "pkg", "parts_dir": "pkg"}, f)
 
     def tearDown(self) -> None:
@@ -463,7 +483,9 @@ class WorkspaceCommandsImplTest(unittest.TestCase):
         self.assertEqual(ret_no_check, 1)
 
         # Bypassed with no_verify=True
-        ret = self.cmd_handler.run_submit(target_file, summary="test change", no_verify=True)
+        ret = self.cmd_handler.run_submit(
+            target_file, summary="test change", no_verify=True
+        )
         self.assertEqual(ret, 0)
         self.assertNotIn(target_file, self.fake_pending.pending)
 
@@ -500,6 +522,12 @@ class WorkspaceCommandsImplTest(unittest.TestCase):
 
         ret = self.cmd_handler.run_blame(culprit, "Contract mismatch error")
         self.assertEqual(ret, 0)
+        # Blame is staged, pending target not yet cleared
+        self.assertIn(culprit, self.fake_pending.pending)
+
+        # Commit blame via submit
+        ret_submit = self.cmd_handler.run_submit(culprit)
+        self.assertEqual(ret_submit, 0)
         self.assertNotIn(culprit, self.fake_pending.pending)
 
         buf_path = os.path.join(self.test_dir, commands_impl.BLAME_BUFFER_FILE)
@@ -508,7 +536,9 @@ class WorkspaceCommandsImplTest(unittest.TestCase):
             entries = json.load(f)
         self.assertTrue(any(e.get("target") == culprit.lstrip("/") for e in entries))
 
-    def test_run_blame_sanitizes_multiline_critique_and_emits_get_work_directive(self) -> None:
+    def test_run_blame_sanitizes_multiline_critique_and_emits_get_work_directive(
+        self,
+    ) -> None:
         culprit = os.path.join(self.test_dir, "low", "foo.pyi")
         os.makedirs(os.path.dirname(culprit), exist_ok=True)
         with open(culprit, "w") as f:
@@ -517,18 +547,36 @@ class WorkspaceCommandsImplTest(unittest.TestCase):
 
         import io
         from unittest.mock import patch
+
         with patch("sys.stdout", new_callable=io.StringIO) as mock_out:
-            ret = self.cmd_handler.run_blame(culprit, "Line 1 critique.\nLine 2 critique details.")
+            ret = self.cmd_handler.run_blame(
+                culprit, "Line 1 critique.\nLine 2 critique details."
+            )
             out = mock_out.getvalue()
 
         self.assertEqual(ret, 0)
-        self.assertIn("[BLAME DELIVERED] Target blamed and returned to upstream author.", out)
-        self.assertIn("MANDATORY: Run 'bin/get_work' now to inspect remaining units.", out)
+        self.assertIn("[BLAME STAGED] Blame staged for", out)
+        self.assertIn("Line 1 critique. Line 2 critique details.", out)
+
+        with patch("sys.stdout", new_callable=io.StringIO) as mock_out_sub:
+            ret_sub = self.cmd_handler.run_submit(culprit)
+            out_sub = mock_out_sub.getvalue()
+
+        self.assertEqual(ret_sub, 0)
+        self.assertIn("[BLAME DELIVERED] Committed 1 blame item(s)", out_sub)
+        self.assertIn(
+            "MANDATORY: Run 'bin/get_work' now to inspect remaining units.", out_sub
+        )
         buf_path = os.path.join(self.test_dir, commands_impl.BLAME_BUFFER_FILE)
         self.assertTrue(os.path.isfile(buf_path))
         with open(buf_path, "r", encoding="utf-8") as f:
             entries = json.load(f)
-        self.assertTrue(any("Line 1 critique. Line 2 critique details." in e.get("explanation", "") for e in entries))
+        self.assertTrue(
+            any(
+                "Line 1 critique. Line 2 critique details." in e.get("explanation", "")
+                for e in entries
+            )
+        )
 
     def test_run_blame_clears_pending_library_target_when_pretense_blamed(self) -> None:
         r_def = role_registry.RoleDefinition(
@@ -536,13 +584,16 @@ class WorkspaceCommandsImplTest(unittest.TestCase):
             guide_path="guides/pretense_qa.md",
             writable_file_patterns=[],
             readonly_file_patterns=[],
-            feedback_role_deps=["lib", "pretense"],
+            feedback_role_deps=["lib"],
+            star_feedback_role_deps=["pretense"],
             src_pattern="",
             audit_tag="PRETEST_QA_AUDIT",
         )
         self.fake_reg.roles.append(r_def)
         with open(
-            os.path.join(self.test_dir, app_info.DEFAULT_ROLE_DESCRIPTOR), "w", encoding="utf-8"
+            os.path.join(self.test_dir, app_info.DEFAULT_ROLE_DESCRIPTOR),
+            "w",
+            encoding="utf-8",
         ) as f:
             json.dump(
                 {"role_name": "pretense_qa", "dir_scope": "pkg", "parts_dir": "pkg"},
@@ -565,6 +616,10 @@ class WorkspaceCommandsImplTest(unittest.TestCase):
 
         ret = self.cmd_handler.run_blame(culprit, "Recursion in pretense aggregate")
         self.assertEqual(ret, 0)
+        self.assertIn(lib_target, self.fake_pending.pending)
+
+        ret_sub = self.cmd_handler.run_submit(lib_target)
+        self.assertEqual(ret_sub, 0)
         # lib_target must be cleared from pending work
         self.assertNotIn(lib_target, self.fake_pending.pending)
         self.assertEqual(self.fake_pending.pending, [])
@@ -585,6 +640,10 @@ class WorkspaceCommandsImplTest(unittest.TestCase):
 
         ret = self.cmd_handler.run_blame(culprit, "External dependency defect")
         self.assertEqual(ret, 0)
+        self.assertIn(my_target, self.fake_pending.pending)
+
+        ret_sub = self.cmd_handler.run_submit(my_target)
+        self.assertEqual(ret_sub, 0)
         # my_target must be resolved because exactly one pending target was being worked on
         self.assertNotIn(my_target, self.fake_pending.pending)
         self.assertEqual(self.fake_pending.pending, [])
@@ -618,7 +677,9 @@ class WorkspaceCommandsImplTest(unittest.TestCase):
         self.fake_pending.pending = [target_file]
 
         # Rejects fail when modified without running check_files
-        ret_blocked = self.cmd_handler.run_fail(target_file, reason="Verification error")
+        ret_blocked = self.cmd_handler.run_fail(
+            target_file, reason="Verification error"
+        )
         self.assertEqual(ret_blocked, 1)
 
         # Once checked via check_files, fail succeeds
@@ -672,20 +733,191 @@ class WorkspaceCommandsImplTest(unittest.TestCase):
         self.assertIn("misattribution: no test-owned spans in this deficit", err_out)
 
         # 2. Blaming lib file for pragma annotation succeeds
-        ret_lib = self.cmd_handler.run_blame(lib_culprit, "Precondition error branch unreachable under contract")
+        ret_lib = self.cmd_handler.run_blame(
+            lib_culprit, "Precondition error branch unreachable under contract"
+        )
         self.assertEqual(ret_lib, 0)
+        ret_sub = self.cmd_handler.run_submit(lib_culprit)
+        self.assertEqual(ret_sub, 0)
 
         # 3. Repeating identical blame against identical unyielding span set must be refused
         with patch("sys.stderr", new_callable=io.StringIO) as mock_err:
-            ret_repeat = self.cmd_handler.run_blame(lib_culprit, "Repeated blame on same spans")
+            ret_repeat = self.cmd_handler.run_blame(
+                lib_culprit, "Repeated blame on same spans"
+            )
             err_repeat = mock_err.getvalue()
         self.assertEqual(ret_repeat, 1)
-        self.assertIn("repeating identical blame against the same uncovered span set is prohibited", err_repeat)
+        self.assertIn(
+            "repeating identical blame against the same uncovered span set is prohibited",
+            err_repeat,
+        )
+
+    def test_run_reject(self) -> None:
+        target = os.path.join(self.test_dir, "lib", "my_lib.py")
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        with open(target, "w", encoding="utf-8") as f:
+            f.write(
+                "# --- AUTOFAB METADATA ---\n# FEEDBACK:\n# - [from qa] Bad argument validation\n# --- END AUTOFAB METADATA ---\ndef foo():\n    return 42\n"
+            )
+
+        self.fake_pending.pending = [target]
+
+        # 1. Empty reason rejected
+        ret_empty = self.cmd_handler.run_reject(target, "   ")
+        self.assertEqual(ret_empty, 1)
+
+        # 2. Missing target rejected
+        ret_missing = self.cmd_handler.run_reject("nonexistent.py", "Already compliant")
+        self.assertEqual(ret_missing, 1)
+
+        # 3. Modified file rejected
+        from unittest.mock import patch
+
+        with patch.object(src_metadata, "is_code_modified", return_value=True):
+            ret_mod = self.cmd_handler.run_reject(target, "Already compliant")
+            self.assertEqual(ret_mod, 1)
+
+        # 4. Target without feedback rejected
+        clean_target = os.path.join(self.test_dir, "lib", "clean_lib.py")
+        with open(clean_target, "w", encoding="utf-8") as f:
+            f.write(
+                "# --- AUTOFAB METADATA ---\n# --- END AUTOFAB METADATA ---\ndef bar():\n    return 0\n"
+            )
+        with patch.object(src_metadata, "is_code_modified", return_value=False):
+            ret_nofb = self.cmd_handler.run_reject(clean_target, "Already compliant")
+            self.assertEqual(ret_nofb, 1)
+
+        # 5. Successful rejection on unmodified file with feedback
+        with patch.object(src_metadata, "is_code_modified", return_value=False):
+            ret_ok = self.cmd_handler.run_reject(
+                target, "Specification in low/foo.pyi permits 42"
+            )
+            self.assertEqual(ret_ok, 0)
+
+        # Feedback block scrubbed from file
+        with open(target, "r", encoding="utf-8") as f:
+            content = f.read()
+        self.assertNotIn("FEEDBACK:", content)
+        self.assertNotIn("Bad argument validation", content)
+
+        # Pending cleared
+        self.assertNotIn(target, self.fake_pending.pending)
+
+        # Rejection recorded in buffer
+        buf_path = os.path.join(self.test_dir, commands_impl.BLAME_BUFFER_FILE)
+        self.assertTrue(os.path.isfile(buf_path))
+        with open(buf_path, "r", encoding="utf-8") as f:
+            entries = json.load(f)
+        self.assertTrue(
+            any(
+                "[REJECTED] Specification in low/foo.pyi permits 42"
+                in e.get("explanation", "")
+                for e in entries
+            )
+        )
+
+    def test_auditor_submit_requires_blame(self) -> None:
+        r_def = role_registry.RoleDefinition(
+            role_name="qa",
+            guide_path="guides/qa.md",
+            writable_file_patterns=[],
+            readonly_file_patterns=[],
+            feedback_role_deps=["lib", "test"],
+            src_pattern="",
+            audit_tag="QA_AUDIT",
+        )
+        self.fake_reg.roles.append(r_def)
+        with open(
+            os.path.join(self.test_dir, app_info.DEFAULT_ROLE_DESCRIPTOR),
+            "w",
+            encoding="utf-8",
+        ) as f:
+            json.dump(
+                {"role_name": "qa", "dir_scope": "pkg", "parts_dir": "pkg"},
+                f,
+            )
+
+        target = os.path.join(self.test_dir, "lib", "my_lib.py")
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        with open(target, "w") as f:
+            f.write("# lib code\n")
+        self.fake_pending.pending = [target]
+        self.fake_check.check_exit_code = 1
+
+        # Auditor submit without preceding blame fails
+        ret_no_blame = self.cmd_handler.run_submit(target)
+        self.assertEqual(ret_no_blame, 1)
+
+        # Stage blame
+        ret_blame = self.cmd_handler.run_blame(target, "Postcondition failure")
+        self.assertEqual(ret_blame, 0)
+
+        # Auditor submit with staged blame succeeds
+        ret_submit = self.cmd_handler.run_submit(target)
+        self.assertEqual(ret_submit, 0)
+        self.assertNotIn(target, self.fake_pending.pending)
+
+    def test_structured_blame_valid_stages_successfully(self) -> None:
+        experiments.set_active_experiments("structured_blame")
+        try:
+            target = os.path.join(self.test_dir, "lib", "my_lib.py")
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            with open(target, "w") as f:
+                f.write("# lib\n")
+
+            valid_critique = (
+                "[slug:valid.contract.slug] [viol:post.wrong_return] "
+                "Facet: embedded operator whitespace Witness: input='>= 1.0.0'"
+            )
+            ret = self.cmd_handler.run_blame(target, valid_critique)
+            self.assertEqual(ret, 0)
+            staged = commands_impl._load_staged_blames(self.test_dir)
+            self.assertEqual(len(staged), 1)
+            self.assertIn("Facet: embedded operator whitespace", staged[0]["critique"])
+        finally:
+            experiments.clear_active_experiments()
+
+    def test_structured_blame_unstructured_rejected(self) -> None:
+        experiments.set_active_experiments("structured_blame")
+        try:
+            target = os.path.join(self.test_dir, "lib", "my_lib.py")
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            with open(target, "w") as f:
+                f.write("# lib\n")
+
+            ret = self.cmd_handler.run_blame(
+                target, "Free-form prose critique without slug or facet"
+            )
+            self.assertEqual(ret, 1)
+            staged = commands_impl._load_staged_blames(self.test_dir)
+            self.assertEqual(len(staged), 0)
+        finally:
+            experiments.clear_active_experiments()
+
+    def test_structured_blame_forbidden_verb_rejected(self) -> None:
+        experiments.set_active_experiments("structured_blame")
+        try:
+            target = os.path.join(self.test_dir, "lib", "my_lib.py")
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            with open(target, "w") as f:
+                f.write("# lib\n")
+
+            critique_with_verb = (
+                "[slug:valid.contract.slug] [viol:post.wrong_return] "
+                "Facet: fix the return value Witness: val=1"
+            )
+            ret = self.cmd_handler.run_blame(target, critique_with_verb)
+            self.assertEqual(ret, 1)
+            staged = commands_impl._load_staged_blames(self.test_dir)
+            self.assertEqual(len(staged), 0)
+        finally:
+            experiments.clear_active_experiments()
+
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-30T11:00:00Z
-# LAST_CHANGED: 2026-11-03T19:30:00Z
-# CHANGE: Test coverage span misattribution and duplicate blame prevention in run_blame
+# LAST_CHANGED: 2026-11-07T10:20:00Z
+# CHANGE: Test reject command, blame staging, and auditor submit blame requirement
 # COVERAGE_AUDIT: 2026-10-15T17:42:47Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

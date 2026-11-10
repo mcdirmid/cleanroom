@@ -9,6 +9,7 @@ import shutil
 import sqlite3
 import tempfile
 import threading
+import time
 from typing import Any
 import unittest
 from unittest.mock import patch
@@ -41,23 +42,60 @@ class MockDshRpcHandler(http.server.BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json")
         self.end_headers()
 
-        resp_data: dict[str, Any] = {"type": "server-response", "rpcId": req_data.get("rpcId")}
+        resp_data: dict[str, Any] = {
+            "type": "server-response",
+            "rpcId": req_data.get("rpcId"),
+        }
         if method == "initialize":
             resp_data["result"] = {"ok": True}
         elif method == "workspace/create":
-            resp_data["result"] = {"ok": True, "value": {"workspace": {"workspaceId": "ws-mock-123"}}}
+            resp_data["result"] = {
+                "ok": True,
+                "value": {"workspace": {"workspaceId": "ws-mock-123"}},
+            }
         elif method == "workspace/rename":
-            if getattr(MockDshRpcHandler, "simulate_name_conflict", False) and payload_args.get("request", {}).get("title") == "pkg":
-                resp_data["result"] = {"ok": False, "error": {"code": "workspace/name-conflict", "message": "Workspace name already in use"}}
+            if (
+                getattr(MockDshRpcHandler, "simulate_name_conflict", False)
+                and payload_args.get("request", {}).get("title") == "pkg"
+            ):
+                resp_data["result"] = {
+                    "ok": False,
+                    "error": {
+                        "code": "workspace/name-conflict",
+                        "message": "Workspace name already in use",
+                    },
+                }
             else:
-                resp_data["result"] = {"ok": True, "value": {"workspaceId": payload_args.get("request", {}).get("workspaceId"), "title": payload_args.get("request", {}).get("title")}}
+                resp_data["result"] = {
+                    "ok": True,
+                    "value": {
+                        "workspaceId": payload_args.get("request", {}).get(
+                            "workspaceId"
+                        ),
+                        "title": payload_args.get("request", {}).get("title"),
+                    },
+                }
         elif method == "session/create":
-            req_sid = payload_args.get("request", {}).get("sessionId") or payload_args.get("sessionId") or "mock-sess-created"
+            req_sid = (
+                payload_args.get("request", {}).get("sessionId")
+                or payload_args.get("sessionId")
+                or "mock-sess-created"
+            )
             resp_data["result"] = {"ok": True, "value": {"sessionId": req_sid}}
         elif method == "session/rename":
-            resp_data["result"] = {"ok": True, "value": {"title": payload_args.get("request", {}).get("title"), "seq": 1}}
+            resp_data["result"] = {
+                "ok": True,
+                "value": {
+                    "title": payload_args.get("request", {}).get("title"),
+                    "seq": 1,
+                },
+            }
         elif method == "session/prompt":
-            resp_data["result"] = {"ok": True, "value": {"accepted": True}, "messageId": "msg-mock-456"}
+            resp_data["result"] = {
+                "ok": True,
+                "value": {"accepted": True},
+                "messageId": "msg-mock-456",
+            }
         elif method == "session/list":
             resp_data["result"] = {
                 "ok": True,
@@ -72,7 +110,11 @@ class MockDshRpcHandler(http.server.BaseHTTPRequestHandler):
                             "projections": {
                                 "kind": "sequenced",
                                 "values": {
-                                    "tokenUsage": {"uncachedInputTokens": 100, "cacheReadTokens": 50, "outputTokens": 20},
+                                    "tokenUsage": {
+                                        "uncachedInputTokens": 100,
+                                        "cacheReadTokens": 50,
+                                        "outputTokens": 20,
+                                    },
                                     "turnOutline": [],
                                 },
                             },
@@ -86,8 +128,18 @@ class MockDshRpcHandler(http.server.BaseHTTPRequestHandler):
                             "projections": {
                                 "kind": "sequenced",
                                 "values": {
-                                    "tokenUsage": {"uncachedInputTokens": 200, "cacheReadTokens": 100, "outputTokens": 50},
-                                    "turnOutline": [{"turn": 1, "prompt": "Work", "response": "done"}],
+                                    "tokenUsage": {
+                                        "uncachedInputTokens": 200,
+                                        "cacheReadTokens": 100,
+                                        "outputTokens": 50,
+                                    },
+                                    "turnOutline": [
+                                        {
+                                            "turn": 1,
+                                            "prompt": "Work",
+                                            "response": "done",
+                                        }
+                                    ],
                                 },
                             },
                         },
@@ -99,7 +151,11 @@ class MockDshRpcHandler(http.server.BaseHTTPRequestHandler):
             if "running" in sid:
                 resp_data["result"] = {
                     "status": "running",
-                    "usage": {"inputTokens": 100, "cacheReadTokens": 50, "outputTokens": 20},
+                    "usage": {
+                        "inputTokens": 100,
+                        "cacheReadTokens": 50,
+                        "outputTokens": 20,
+                    },
                 }
             elif "error" in sid:
                 resp_data["result"] = {
@@ -109,7 +165,11 @@ class MockDshRpcHandler(http.server.BaseHTTPRequestHandler):
             else:
                 resp_data["result"] = {
                     "status": "completed",
-                    "usage": {"inputTokens": 200, "cacheReadTokens": 100, "outputTokens": 50},
+                    "usage": {
+                        "inputTokens": 200,
+                        "cacheReadTokens": 100,
+                        "outputTokens": 50,
+                    },
                 }
         else:
             resp_data["result"] = {"ok": True}
@@ -129,7 +189,9 @@ class DshTelemetryImplTest(unittest.TestCase):
 
         self.http_server = http.server.HTTPServer(("127.0.0.1", 0), MockDshRpcHandler)
         self.server_port = self.http_server.server_address[1]
-        self.server_thread = threading.Thread(target=self.http_server.serve_forever, daemon=True)
+        self.server_thread = threading.Thread(
+            target=self.http_server.serve_forever, daemon=True
+        )
         self.server_thread.start()
 
     def tearDown(self) -> None:
@@ -145,7 +207,9 @@ class DshTelemetryImplTest(unittest.TestCase):
         cookies_path = os.path.join(desktop_dir, "Cookies")
         conn = sqlite3.connect(cookies_path)
         cur = conn.cursor()
-        cur.execute("CREATE TABLE cookies (name TEXT, value TEXT, source_port INTEGER, last_access_utc INTEGER)")
+        cur.execute(
+            "CREATE TABLE cookies (name TEXT, value TEXT, source_port INTEGER, last_access_utc INTEGER)"
+        )
         cur.execute(
             "INSERT INTO cookies VALUES ('dsh-auth-session', 'mock-token-xyz', ?, 100000)",
             (port,),
@@ -192,16 +256,22 @@ class DshTelemetryImplTest(unittest.TestCase):
     def test_rate_card_cost_models(self) -> None:
         parser = dsh_telemetry_impl.DshTelemetryParser()
         # Local model: 0.0
-        m_local = parser.parse_stream_text("Input tokens: 100\nOutput tokens: 100\n", model_name="qwen-7b")
+        m_local = parser.parse_stream_text(
+            "Input tokens: 100\nOutput tokens: 100\n", model_name="qwen-7b"
+        )
         self.assertEqual(m_local.cost_usd, 0.0)
 
         # GPT-4o model
-        m_gpt = parser.parse_stream_text("Input tokens: 1000\nOutput tokens: 1000\n", model_name="gpt-4o")
+        m_gpt = parser.parse_stream_text(
+            "Input tokens: 1000\nOutput tokens: 1000\n", model_name="gpt-4o"
+        )
         expected = (1000 * 0.0000025) + (1000 * 0.000010)
         self.assertAlmostEqual(m_gpt.cost_usd, expected, places=6)
 
         # Opus model
-        m_opus = parser.parse_stream_text("Input tokens: 1000\nOutput tokens: 1000\n", model_name="claude-3-opus")
+        m_opus = parser.parse_stream_text(
+            "Input tokens: 1000\nOutput tokens: 1000\n", model_name="claude-3-opus"
+        )
         expected_opus = (1000 * 0.000015) + (1000 * 0.000075)
         self.assertAlmostEqual(m_opus.cost_usd, expected_opus, places=6)
 
@@ -218,7 +288,9 @@ class DshTelemetryImplTest(unittest.TestCase):
     def test_sync_desktop_session_creates_structure(self) -> None:
         sessions_dir = os.path.join(self.test_dir, "harness", "sessions")
         # Create a mock session directory for the workspace so projcache is written
-        encoded_ws = "--" + os.path.realpath(self.test_dir).strip("/").replace("/", "-") + "--"
+        encoded_ws = (
+            "--" + os.path.realpath(self.test_dir).strip("/").replace("/", "-") + "--"
+        )
         mock_sess_dir = os.path.join(sessions_dir, encoded_ws, "mock-sess-1")
         os.makedirs(mock_sess_dir, exist_ok=True)
         parser = dsh_telemetry_impl.DshTelemetryParser()
@@ -229,11 +301,21 @@ class DshTelemetryImplTest(unittest.TestCase):
             dir_scope="//pkg",
             start_time=1000.0,
         )
-        projcache_file = os.path.join(self.test_dir, "harness", "storages", "session_projcache", "sessions", "mock-sess-1.json")
+        projcache_file = os.path.join(
+            self.test_dir,
+            "harness",
+            "storages",
+            "session_projcache",
+            "sessions",
+            "mock-sess-1.json",
+        )
         self.assertTrue(os.path.isfile(projcache_file))
         with open(projcache_file, "r", encoding="utf-8") as pf:
             pdata = json.load(pf)
-        self.assertEqual(pdata.get("record", {}).get("rows", {}).get("title", {}).get("val"), "[pkg] lib")
+        self.assertEqual(
+            pdata.get("record", {}).get("rows", {}).get("title", {}).get("val"),
+            "[pkg] lib",
+        )
 
     def test_is_desktop_server_available_true(self) -> None:
         """Scenario 5: Evaluates desktop server reachability as True when server is active."""
@@ -252,7 +334,11 @@ class DshTelemetryImplTest(unittest.TestCase):
     def test_is_desktop_server_available_false_when_no_cookies(self) -> None:
         """Scenario 5: Evaluates desktop server reachability as False when cookies DB does not exist."""
         parser = dsh_telemetry_impl.DshTelemetryParser()
-        self.assertFalse(parser.is_desktop_server_available(os.path.join(self.test_dir, "empty", "sessions")))
+        self.assertFalse(
+            parser.is_desktop_server_available(
+                os.path.join(self.test_dir, "empty", "sessions")
+            )
+        )
 
     def test_dispatch_round_rpc_success(self) -> None:
         """Scenario 5: Dispatches role round over RPC bridge and returns valid task handle without creating per-role workspace."""
@@ -276,10 +362,21 @@ class DshTelemetryImplTest(unittest.TestCase):
         self.assertNotIn("workspace/rename", called_methods)
         self.assertIn("session/create", called_methods)
         self.assertIn("session/rename", called_methods)
-        sess_create_call = next(args for m, args in MockDshRpcHandler.recorded_calls if m == "session/create")
-        self.assertEqual(sess_create_call.get("request", {}).get("cwd"), os.path.realpath(self.test_dir))
+        sess_create_call = next(
+            args
+            for m, args in MockDshRpcHandler.recorded_calls
+            if m == "session/create"
+        )
+        self.assertEqual(
+            sess_create_call.get("request", {}).get("cwd"),
+            os.path.realpath(self.test_dir),
+        )
         self.assertIsNone(sess_create_call.get("request", {}).get("workspaceId"))
-        sess_rename_call = next(args for m, args in MockDshRpcHandler.recorded_calls if m == "session/rename")
+        sess_rename_call = next(
+            args
+            for m, args in MockDshRpcHandler.recorded_calls
+            if m == "session/rename"
+        )
         self.assertEqual(sess_rename_call.get("request", {}).get("title"), "[pkg] lib")
 
     def test_dispatch_round_rpc_title_without_scope(self) -> None:
@@ -296,7 +393,11 @@ class DshTelemetryImplTest(unittest.TestCase):
             dir_scope="",
         )
         self.assertIsNotNone(handle)
-        sess_rename_call = next(args for m, args in MockDshRpcHandler.recorded_calls if m == "session/rename")
+        sess_rename_call = next(
+            args
+            for m, args in MockDshRpcHandler.recorded_calls
+            if m == "session/rename"
+        )
         self.assertEqual(sess_rename_call.get("request", {}).get("title"), "lib")
 
     def test_dispatch_round_rpc_resumes_session_directly_in_cwd(self) -> None:
@@ -314,11 +415,18 @@ class DshTelemetryImplTest(unittest.TestCase):
             dir_scope="//pkg",
         )
         self.assertIsNotNone(handle)
-        sess_create_calls = [args for m, args in MockDshRpcHandler.recorded_calls if m == "session/create"]
-        self.assertTrue(any(
-            c.get("request", {}).get("cwd") == os.path.realpath(self.test_dir) and c.get("request", {}).get("sessionId") == "running-session-1"
-            for c in sess_create_calls
-        ))
+        sess_create_calls = [
+            args
+            for m, args in MockDshRpcHandler.recorded_calls
+            if m == "session/create"
+        ]
+        self.assertTrue(
+            any(
+                c.get("request", {}).get("cwd") == os.path.realpath(self.test_dir)
+                and c.get("request", {}).get("sessionId") == "running-session-1"
+                for c in sess_create_calls
+            )
+        )
 
     def test_dispatch_round_rpc_server_unavailable(self) -> None:
         """Scenario 5: Returns None when dispatching role round to unavailable server."""
@@ -398,9 +506,7 @@ class DshTelemetryImplTest(unittest.TestCase):
         cfg_path = os.path.join(self.test_dir, "model_configs.toml")
         with open(cfg_path, "w", encoding="utf-8") as f:
             f.write(
-                "[models.my-moe]\n"
-                'model = "Qwen3.6-35B-A3B-oQ6-mtp"\n'
-                'provider = "mlx"\n'
+                '[models.my-moe]\nmodel = "Qwen3.6-35B-A3B-oQ6-mtp"\nprovider = "mlx"\n'
             )
         parser = dsh_telemetry_impl.DshTelemetryParser()
         handle = parser.dispatch_round_rpc(
@@ -411,7 +517,11 @@ class DshTelemetryImplTest(unittest.TestCase):
             model_name="my-moe",
         )
         self.assertIsNotNone(handle)
-        select_calls = [args for meth, args in MockDshRpcHandler.recorded_calls if meth == "session/selectModel"]
+        select_calls = [
+            args
+            for meth, args in MockDshRpcHandler.recorded_calls
+            if meth == "session/selectModel"
+        ]
         self.assertTrue(len(select_calls) > 0)
         req = select_calls[-1].get("request", {})
         self.assertEqual(req.get("provider"), "omlx")
@@ -423,7 +533,9 @@ class DshTelemetryImplTest(unittest.TestCase):
         dsh_web_cand = os.path.join(home, ".dsh", "sessions")
 
         with patch.dict(os.environ, {"AUTOFAB_DSH_WEB": "1"}, clear=False):
-            self.assertEqual(dsh_telemetry_impl._resolve_default_sessions_dir(), dsh_web_cand)
+            self.assertEqual(
+                dsh_telemetry_impl._resolve_default_sessions_dir(), dsh_web_cand
+            )
 
         with patch.dict(os.environ, {}, clear=True):
             resolved = dsh_telemetry_impl._resolve_default_sessions_dir()
@@ -431,13 +543,24 @@ class DshTelemetryImplTest(unittest.TestCase):
 
     @patch("autofab.parts.dsh.lib.dsh_telemetry_impl._call_web_bridge")
     @patch("autofab.parts.dsh.lib.dsh_telemetry_impl._discover_web_bridge")
-    def test_dispatch_round_rpc_web_ungrouped(self, mock_discover: Any, mock_call: Any) -> None:
+    def test_dispatch_round_rpc_web_ungrouped(
+        self, mock_discover: Any, mock_call: Any
+    ) -> None:
         """Scenario 7: In Web mode, dispatches role round directly as an ungrouped session labeled [scope] role."""
         mock_discover.return_value = {"url": "http://127.0.0.1:47821", "port": 47821}
 
-        def fake_call(bridge: Any, tool_name: str, args: Any, timeout: float = 10.0) -> Any:
+        def fake_call(
+            bridge: Any, tool_name: str, args: Any, timeout: float = 10.0
+        ) -> Any:
             if tool_name == "dsh_spawn":
-                return {"content": [{"type": "text", "text": json.dumps({"sessionId": "worker-session-456"})}]}
+                return {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": json.dumps({"sessionId": "worker-session-456"}),
+                        }
+                    ]
+                }
             return None
 
         mock_call.side_effect = fake_call
@@ -455,11 +578,15 @@ class DshTelemetryImplTest(unittest.TestCase):
             self.assertIn("worker-session-456", handle or "")
 
             # Verify dsh_container was NOT called
-            container_calls = [c for c in mock_call.call_args_list if c[0][1] == "dsh_container"]
+            container_calls = [
+                c for c in mock_call.call_args_list if c[0][1] == "dsh_container"
+            ]
             self.assertEqual(len(container_calls), 0)
 
             # Verify dsh_spawn received label and no parent_session
-            spawn_calls = [c for c in mock_call.call_args_list if c[0][1] == "dsh_spawn"]
+            spawn_calls = [
+                c for c in mock_call.call_args_list if c[0][1] == "dsh_spawn"
+            ]
             self.assertEqual(len(spawn_calls), 1)
             spawn_args = spawn_calls[0][0][2]
             self.assertNotIn("parent_session", spawn_args)
@@ -476,36 +603,189 @@ class DshTelemetryImplTest(unittest.TestCase):
                 model_name="deepseek-flash",
             )
             self.assertIsNotNone(handle_2)
-            spawn_calls_2 = [c for c in mock_call.call_args_list if c[0][1] == "dsh_spawn"]
+            spawn_calls_2 = [
+                c for c in mock_call.call_args_list if c[0][1] == "dsh_spawn"
+            ]
             self.assertEqual(len(spawn_calls_2), 2)
             task_name_2 = spawn_calls_2[1][0][2].get("task_name", "")
             self.assertNotEqual(task_name_1, task_name_2)
 
     @patch("autofab.parts.dsh.lib.dsh_telemetry_impl._call_web_bridge")
     @patch("autofab.parts.dsh.lib.dsh_telemetry_impl._discover_web_bridge")
-    def test_poll_round_rpc_web_dict_status(self, mock_discover: Any, mock_call: Any) -> None:
+    def test_poll_round_rpc_web_dict_status(
+        self, mock_discover: Any, mock_call: Any
+    ) -> None:
         """Scenario 6: Polls active round over Web bridge recognizing dict status {completed: ...}."""
         mock_discover.return_value = {"url": "http://127.0.0.1:47821", "port": 47821}
         mock_call.return_value = {
-            "content": [{
-                "type": "text",
-                "text": json.dumps([{
-                    "task_name": "worker_task_1",
-                    "sessionId": "session-123",
-                    "status": {"completed": "Done with all tasks"}
-                }])
-            }]
+            "content": [
+                {
+                    "type": "text",
+                    "text": json.dumps(
+                        [
+                            {
+                                "task_name": "worker_task_1",
+                                "sessionId": "session-123",
+                                "status": {"completed": "Done with all tasks"},
+                            }
+                        ]
+                    ),
+                }
+            ]
         }
         parser = dsh_telemetry_impl.DshTelemetryParser()
         status = parser.poll_round_rpc("dsh_rpc_web::session-123::worker_task_1")
         self.assertFalse(status.is_active)
         self.assertTrue(status.is_completed)
 
+    @patch("autofab.parts.dsh.lib.dsh_telemetry_impl._call_web_bridge")
+    @patch("autofab.parts.dsh.lib.dsh_telemetry_impl._discover_web_bridge")
+    def test_poll_round_rpc_web_missing_worker_after_grace_period(
+        self, mock_discover: Any, mock_call: Any
+    ) -> None:
+        """Scenario 6: Missing worker from Web bridge after grace period is marked completed with error."""
+        mock_discover.return_value = {"url": "http://127.0.0.1:47821", "port": 47821}
+        mock_call.return_value = {
+            "content": [
+                {
+                    "type": "text",
+                    "text": json.dumps(
+                        [
+                            {
+                                "task_name": "other_worker",
+                                "sessionId": "session-456",
+                                "status": "running",
+                            }
+                        ]
+                    ),
+                }
+            ]
+        }
+        parser = dsh_telemetry_impl.DshTelemetryParser()
+        task_h = "dsh_rpc_web::session-123::worker_task_1"
+        parser._active_rpc_turns[task_h] = {
+            "start_time": time.time() - 20.0,
+            "workspace_dir": self.test_dir,
+        }
+        status = parser.poll_round_rpc(task_h)
+        self.assertFalse(status.is_active)
+        self.assertTrue(status.is_completed)
+        self.assertIn("missing", (status.error or "").lower())
+
+    @patch("autofab.parts.dsh.lib.dsh_telemetry_impl._call_web_bridge")
+    @patch("autofab.parts.dsh.lib.dsh_telemetry_impl._discover_web_bridge")
+    def test_rename_session_web(self, mock_discover: Any, mock_call: Any) -> None:
+        """Scenario 8: Renames session over Web bridge via dsh_rename_session."""
+        mock_discover.return_value = {"url": "http://127.0.0.1:47821", "port": 47821}
+        mock_call.return_value = {"content": [{"type": "text", "text": '{"ok": true}'}]}
+
+        with patch.dict(os.environ, {"AUTOFAB_DSH_WEB": "1"}, clear=False):
+            parser = dsh_telemetry_impl.DshTelemetryParser()
+            ok = parser.rename_session("sess-1", "[benchmark_1] dead - lib")
+            self.assertTrue(ok)
+            rename_calls = [
+                c for c in mock_call.call_args_list if c[0][1] == "dsh_rename_session"
+            ]
+            self.assertEqual(len(rename_calls), 1)
+            self.assertEqual(
+                rename_calls[0][0][2],
+                {"sessionId": "sess-1", "title": "[benchmark_1] dead - lib"},
+            )
+
+    @patch("autofab.parts.dsh.lib.dsh_telemetry_impl._call_web_bridge")
+    @patch("autofab.parts.dsh.lib.dsh_telemetry_impl._discover_web_bridge")
+    def test_delete_session_web(self, mock_discover: Any, mock_call: Any) -> None:
+        """Scenario 8: Deletes session over Web bridge via dsh_delete_session."""
+        mock_discover.return_value = {"url": "http://127.0.0.1:47821", "port": 47821}
+        mock_call.return_value = {"content": [{"type": "text", "text": '{"ok": true}'}]}
+
+        with patch.dict(os.environ, {"AUTOFAB_DSH_WEB": "1"}, clear=False):
+            parser = dsh_telemetry_impl.DshTelemetryParser()
+            ok = parser.delete_session("sess-del-1")
+            self.assertTrue(ok)
+            del_calls = [
+                c for c in mock_call.call_args_list if c[0][1] == "dsh_delete_session"
+            ]
+            self.assertEqual(len(del_calls), 1)
+            self.assertEqual(del_calls[0][0][2], {"sessionId": "sess-del-1"})
+
+    @patch("autofab.parts.dsh.lib.dsh_telemetry_impl._call_web_bridge")
+    @patch("autofab.parts.dsh.lib.dsh_telemetry_impl._discover_web_bridge")
+    def test_cleanup_scope_sessions_web(
+        self, mock_discover: Any, mock_call: Any
+    ) -> None:
+        """Scenario 8: Cleans up sessions matching [<scope>] over Web bridge."""
+        mock_discover.return_value = {"url": "http://127.0.0.1:47821", "port": 47821}
+
+        def fake_bridge_call(
+            bridge: Any, tool_name: str, args: Any, timeout: float = 10.0
+        ) -> Any:
+            if tool_name == "dsh_list_sessions":
+                return {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": json.dumps(
+                                [
+                                    {"sessionId": "s1", "title": "[benchmark_1] lib"},
+                                    {
+                                        "sessionId": "s2",
+                                        "title": "[benchmark_1] dead - pretense",
+                                    },
+                                    {"sessionId": "s3", "title": "[benchmark_10] lib"},
+                                    {"sessionId": "s4", "title": "unrelated session"},
+                                ]
+                            ),
+                        }
+                    ]
+                }
+            if tool_name == "dsh_delete_session":
+                return {"content": [{"type": "text", "text": '{"ok": true}'}]}
+            return None
+
+        mock_call.side_effect = fake_bridge_call
+
+        with patch.dict(os.environ, {"AUTOFAB_DSH_WEB": "1"}, clear=False):
+            parser = dsh_telemetry_impl.DshTelemetryParser()
+            cleaned = parser.cleanup_scope_sessions("benchmark_1")
+            self.assertEqual(cleaned, 2)
+            del_calls = [
+                c for c in mock_call.call_args_list if c[0][1] == "dsh_delete_session"
+            ]
+            self.assertEqual(len(del_calls), 2)
+            del_sids = {c[0][2].get("sessionId") for c in del_calls}
+            self.assertEqual(del_sids, {"s1", "s2"})
+
+    def test_rename_and_delete_session_desktop(self) -> None:
+        """Requirement: Renames and deletes sessions in Desktop RPC/storage mode."""
+        sessions_dir = os.path.join(self.test_dir, "harness", "sessions")
+        sess_path = os.path.join(sessions_dir, "ws_1", "sess_desk_1")
+        os.makedirs(sess_path, exist_ok=True)
+        hdr_path = os.path.join(sess_path, "header.json")
+        with open(hdr_path, "w", encoding="utf-8") as f:
+            json.dump({"id": "sess_desk_1", "title": "Old Title"}, f)
+
+        parser = dsh_telemetry_impl.DshTelemetryParser()
+
+        # Rename
+        renamed = parser.rename_session(
+            "sess_desk_1", "[benchmark_5] dead - lib", sessions_dir=sessions_dir
+        )
+        self.assertTrue(renamed)
+        with open(hdr_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            self.assertEqual(data.get("title"), "[benchmark_5] dead - lib")
+
+        # Delete
+        deleted = parser.delete_session("sess_desk_1", sessions_dir=sessions_dir)
+        self.assertTrue(deleted)
+        self.assertFalse(os.path.exists(sess_path))
+
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-11-06T10:40:00Z
-# CHANGE: Add test for poll_round_rpc web bridge dict status outcome
+# LAST_CHANGED: 2026-11-09T23:45:00Z
+# CHANGE: Add tests for rename_session, delete_session, and cleanup_scope_sessions
 # SPEC_QA_AUDIT: 2026-10-19T22:33:00Z
 # --- END CLEANROOM METADATA ---
 # COVERAGE_AUDIT: 2026-10-15T17:42:47Z

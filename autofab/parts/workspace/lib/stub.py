@@ -50,6 +50,7 @@ class WorkspaceStubSynthesizer(Singleton[AgentSessionTier], Protocol):
         """Checks whether file_path is already a valid autofab test stub."""
         ...
 
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-14T17:55:00Z

@@ -94,6 +94,7 @@ class RoleResolver(Singleton[AgentSessionTier], Protocol):
         """Loads and resolves all role definitions declared in the repository or bound methodology configuration."""
         ...
 
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-26T20:38:00Z
 # LAST_CHANGED: 2026-10-31T20:47:00Z

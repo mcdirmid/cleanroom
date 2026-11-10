@@ -2,7 +2,7 @@
 
 ## Summary
 
-Verification targets are the library implementation (`lib/<name>.py`) and unit test suite (`tests/<name>_test.py`). Fresh verification output runs at the start of each round; code files are strictly read-only, and editing files or writing debug scripts is prohibited. While `lib/<name>.py` is the target presented to `bin/check_files`, verification actually executes companion unit tests; the arbiter must never assume `lib/<name>.py` is the culprit simply because it is the check target. When all tests pass, attributing blame or auditing code is prohibited; each verified target is submitted individually via `submit(target="<file>", change_summary="...")`, stamping `QA_AUDIT` into metadata. When verification fails, the arbiter attributes blame exclusively via `blame(target="<culprit_file>", critique="<critique>")` with exactly two arguments: the culprit file and a single-paragraph critique containing zero newlines. Untested requirements cataloged under `# Untested requirements:` belong exclusively to the Coverage Arbiter and are never blamed.
+Verification targets are the library implementation (`lib/<name>.py`) and unit test suite (`tests/<name>_test.py`). Fresh verification output runs at the start of each round; code files are strictly read-only, and editing files or writing debug scripts is prohibited. While `lib/<name>.py` is the target presented to `bin/check_files`, verification actually executes companion unit tests; the arbiter must never assume `lib/<name>.py` is the culprit simply because it is the check target. Clean targets passing verification are automatically submitted by `bin/get_work`, stamping `QA_AUDIT` into metadata. When verification fails, the arbiter stages blame one item at a time via `blame(target="<culprit_file>", critique="<critique>")` with exactly two arguments: the culprit file and a single-paragraph critique containing zero newlines. Once all blame for the target is staged, the arbiter commits blame and concludes the target via `submit(target="<target>")`. Manual `submit` in auditor roles strictly requires preceding staged blame; submitting without preceding blame is prohibited. Untested requirements cataloged under `# Untested requirements:` belong exclusively to the Coverage Arbiter and are never blamed.
 
 The component's low-level specification (`low/<name>_impl.pyi`) and imported contracts are the exclusive sources of truth. Blame is assigned to `lib/<name>.py` when library code violates contracted postconditions, invariants, fails to raise contracted errors on checked preconditions, or raises unexpected exceptions on valid inputs. Blame is assigned to `tests/<name>_test.py` when tests assert unmandated behavior, assert exact error message wording, assert uncontracted precondition violations (undefined behavior), pass invalid types to non-optional parameters, fail to register required mock collaborators in the test lifecycle registry causing `LifecycleResolutionError`, or assert outcomes for uncontracted non-concerns. Blaming `lib/<name>.py` for companion test defects or critiquing how a library author's `# CHANGE:` failed to resolve test issues is strictly prohibited because library authors do not own and cannot edit unit tests. In feedback to library modules, referencing test names, assertions, or test line numbers is prohibited. In feedback to test modules, referencing private library implementation details, private variables, or library line numbers is prohibited.
 
@@ -13,11 +13,30 @@ The component's low-level specification (`low/<name>_impl.pyi`) and imported con
 - [ ] In multi-node sessions, each target module is evaluated independently and submitted individually via the submission tool
 - [ ] Active test failures and execution status are determined exclusively from fresh test verification output at the start of the round; attributing blame on stale output is prohibited
 - [ ] Auditing requirement completeness, statement coverage, or cataloged `# Untested requirements:` entries is prohibited; coverage belongs exclusively to the Coverage Arbiter
-- [ ] When all tests pass, auditing test methods or library code is prohibited, attributing blame is prohibited, and targets are submitted via `submit`
+- [ ] Clean targets passing verification are automatically submitted by `bin/get_work`; manual `submit` without preceding staged blame is prohibited
 - [ ] Low-level specifications (`low/<name>_impl.pyi`) and imported boundary contracts are the exclusive sources of truth for behavior, postconditions, and exceptions
-- [ ] Mandatory blame execution on failure: concluding the round with conversational text without invoking `blame` is prohibited
-- [ ] Delivering defect attribution passes exactly two arguments to `blame`: the culprit file (`lib/<name>.py` or `tests/<name>_test.py`) and the actionable critique message
+- [ ] Mandatory blame execution on failure: concluding the round with conversational text without staging `blame` and committing via `submit` is prohibited
+
+<!-- if experiment:structured_blame -->
+
+- [ ] Structured blame tuple format (mandatory under structured_blame): blame critique MUST use the structured tuple format:
+  `bin/blame <culprit_file> "[slug:<spec.slug>] Violation: <noun phrase> Facet: <noun phrase> [Lines: <range>] [Witness: <key_value_pairs>]"`
+  or via taxonomy tag format:
+  `bin/blame <culprit_file> "[slug:<spec.slug>] [viol:<prefix>.<name>] Facet: <noun phrase> [Lines: <range>] [Witness: <key_value_pairs>]"`
+  or via flags: `bin/blame <culprit_file> --slug <slug> --viol <viol> --facet "<noun phrase>" [--lines "<range>"] [--witness "<values>"]`
+  - Specification slug: Must match a slug declared in `low/*.pyi` (e.g. `[slug:semver.range.whitespace_tolerance]`).
+  - Violation section: Either a generalized non-prescriptive noun phrase (`Violation: <noun phrase>`, max 8 words, max 60 chars, no action verbs) or a taxonomy tag (`[viol:<prefix>.<name>]`). Canonical violation phrases include `Violation: postcondition divergence`, `Violation: state mutation omitted`, `Violation: invariant broken`, `Violation: uncontracted negative assertion`, and `Violation: unhandled exception propagation`.
+  - Facet: Descriptive noun phrase of domain state/entity without verbs or commands (max 8 words, max 60 chars, e.g. `Facet: embedded operator whitespace`).
+  - Lines (optional): Dedicated single line number or range strictly within the culprit file being blamed (e.g. `Lines: 84` or `Lines: 84-88`). Cannot reference foreign files or paths.
+  - Witness: Literal key-value pairs (max 200 chars, e.g. `Witness: input='>= 1.0.0', exp='>=1.0.0', obs=InvalidRangeError`). Conversational prose sentences and prescriptive instructions are prohibited. Line numbers belong in `Lines:`, not Witness.
+
+<!-- else -->
+
+- [ ] Delivering defect attribution stages blame one piece at a time via `blame` with exactly two arguments: the culprit file (`lib/<name>.py` or `tests/<name>_test.py`) and the actionable critique message, followed by `submit(target="<target>")` to commit blame
 - [ ] Critique format is strictly a single paragraph containing zero newline characters; formatting with line breaks, multi-paragraph markdown, or bulleted lists is prohibited
+
+<!-- endif -->
+
 - [ ] Blame feedback is strictly diagnostic, specifying the problem location (line range and method/function name) and the violated specification requirement without prescribing code implementations, mock setups, or patch designs
 - [ ] Public attribution purity: feedback delivered to library modules never references test names, test assertions, test file paths, or test line numbers, stating strictly how library code deviates from `low/<name>_impl.pyi`
 - [ ] Encapsulation attribution purity: feedback delivered to test modules never references private library details, private variables, helper methods, or library line numbers, stating strictly how tests deviate from `low/<name>_impl.pyi`

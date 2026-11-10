@@ -7,6 +7,7 @@ import copy
 import faulthandler
 import importlib.util
 import os
+import re
 import signal
 import sys
 import threading
@@ -15,13 +16,30 @@ import traceback
 import unittest
 from pathlib import Path
 import tomllib
-from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Set, Tuple, Type
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    Type,
+)
 
 import hypothesis
 import hypothesis.strategies as st
 from hypothesis.stateful import RuleBasedStateMachine, rule
 
-from support.lib.lifecycle import LifecycleRegistry, Singleton, SystemTier, get_default_registry, system
+from support.lib.lifecycle import (
+    LifecycleRegistry,
+    Singleton,
+    SystemTier,
+    get_default_registry,
+    system,
+)
 from . import pretense
 from .pretense import (
     NotBound,
@@ -100,11 +118,17 @@ class WatchdogMonitor:
             return None
 
         try:
-            faulthandler.dump_traceback_later(timeout_seconds, exit=True, file=sys.stderr)
+            faulthandler.dump_traceback_later(
+                timeout_seconds, exit=True, file=sys.stderr
+            )
         except (ValueError, OSError, RuntimeError):
             pass
 
-        warning_delay = max(0.2, timeout_seconds - 0.2) if timeout_seconds > 0.4 else timeout_seconds * 0.8
+        warning_delay = (
+            max(0.2, timeout_seconds - 0.2)
+            if timeout_seconds > 0.4
+            else timeout_seconds * 0.8
+        )
         timer: Optional[threading.Timer] = None
 
         def _hard_kill() -> None:
@@ -117,7 +141,9 @@ class WatchdogMonitor:
                 f"\n[FAIL] Pretense target {target_str}execution timed out after {timeout_seconds:.1f}s "
                 f"(possible infinite loop or deadlock detected in code under test).\n"
             )
-            diag = format_active_step_diagnostic("ACTIVE STEP DIAGNOSTIC (PRE-TIMEOUT WARNING)", target_name)
+            diag = format_active_step_diagnostic(
+                "ACTIVE STEP DIAGNOSTIC (PRE-TIMEOUT WARNING)", target_name
+            )
             if diag:
                 sys.stderr.write(f"{diag}\n")
             sys.stderr.write("Thread stack trace at timeout:\n")
@@ -209,7 +235,9 @@ def compile_hypothesis_test_case(
 
     def make_rule_method(t: Any) -> Callable[..., Any]:
         @rule(data=st.data())
-        def rule_method(self: Any, data: Any = None, *call_args: Any, **call_kwargs: Any) -> Any:
+        def rule_method(
+            self: Any, data: Any = None, *call_args: Any, **call_kwargs: Any
+        ) -> Any:
             if data is None:
                 data = _DummyData()
             curr_t = t
@@ -228,9 +256,12 @@ def compile_hypothesis_test_case(
                 s_dict.update(self.sm.singletons)
             try:
                 from support.lib.lifecycle import get_active_scope
+
                 scope = get_active_scope()
                 instances_by_desc = getattr(scope, "_instances_by_desc", None)
-                if instances_by_desc is not None and isinstance(instances_by_desc, dict):
+                if instances_by_desc is not None and isinstance(
+                    instances_by_desc, dict
+                ):
                     for inst in instances_by_desc.values():
                         if inst not in s_dict.values():
                             s_dict[type(inst)] = inst
@@ -258,7 +289,9 @@ def compile_hypothesis_test_case(
             if getattr(curr_t, "is_seeding", False):
                 is_fake = getattr(self.sut, "__is_pretense_fake__", False)
                 has_sut_attr = hasattr(self.sut, curr_t.name)
-                has_singleton_attr = any(hasattr(v, curr_t.name) for v in s_dict.values())
+                has_singleton_attr = any(
+                    hasattr(v, curr_t.name) for v in s_dict.values()
+                )
                 if not is_fake and not has_sut_attr and not has_singleton_attr:
                     _current_sm.reset(token_sm)
                     _current_sut.reset(token_sut)
@@ -273,17 +306,25 @@ def compile_hypothesis_test_case(
 
             if call_args or call_kwargs:
                 if curr_t.args_fn is not None:
-                    args = curr_t.args_fn(self.sm.state, self.sm, *call_args, **call_kwargs)
+                    args = curr_t.args_fn(
+                        self.sm.state, self.sm, *call_args, **call_kwargs
+                    )
                 else:
                     args = call_args or tuple(call_kwargs.values())
             else:
                 with with_draw(data.draw):
                     if curr_t.args_fn is not None:
                         import inspect
+
                         sig = inspect.signature(curr_t.args_fn)
                         extra_params = [
-                            p for p in list(sig.parameters.values())[2:]
-                            if p.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+                            p
+                            for p in list(sig.parameters.values())[2:]
+                            if p.kind
+                            in (
+                                inspect.Parameter.POSITIONAL_ONLY,
+                                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                            )
                         ]
                         nb_args = [NotBound] * len(extra_params)
                         try:
@@ -304,7 +345,14 @@ def compile_hypothesis_test_case(
                 return None
 
             global _ACTIVE_STEP, _ACTIVE_TRACE
-            current_step = TraceStep(curr_t.name, getattr(curr_t.target, "__name__", None), getattr(curr_t, "is_seeding", False), args, {}, None)
+            current_step = TraceStep(
+                curr_t.name,
+                getattr(curr_t.target, "__name__", None),
+                getattr(curr_t, "is_seeding", False),
+                args,
+                {},
+                None,
+            )
             self.trace.append(current_step)
             type(self)._last_trace = list(self.trace)
             _ACTIVE_STEP = current_step
@@ -330,7 +378,10 @@ def compile_hypothesis_test_case(
                             if hasattr(inst, curr_t.name):
                                 seeding_target = inst
                                 break
-                    if seeding_target is not None and (getattr(curr_t, "_target_fn", None) is None or getattr(seeding_target, "__is_pretense_fake__", False)):
+                    if seeding_target is not None and (
+                        getattr(curr_t, "_target_fn", None) is None
+                        or getattr(seeding_target, "__is_pretense_fake__", False)
+                    ):
                         res = getattr(seeding_target, curr_t.name)(*args)
                     elif getattr(curr_t, "_target_fn", None) is not None:
                         res = curr_t._target_fn(self.sm, *args)
@@ -349,18 +400,30 @@ def compile_hypothesis_test_case(
                     except Exception as e:
                         sut_exc = e
 
-                    sut_outcome = Raised(sut_exc) if sut_exc is not None else Value(sut_res)
+                    sut_outcome = (
+                        Raised(sut_exc) if sut_exc is not None else Value(sut_res)
+                    )
                     valid_outcome: Any = None
                     if curr_t.return_fn is not None:
-                        recognized = curr_t.return_fn(self.sm.state, self.sm, *args, outcome=sut_outcome)
+                        recognized = curr_t.return_fn(
+                            self.sm.state, self.sm, *args, outcome=sut_outcome
+                        )
                         if recognized is None and sut_outcome == Value(None):
                             valid_outcome = Value(None)
                         elif recognized is not None:
-                            valid_outcome = recognized if isinstance(recognized, (Value, Raised)) else Value(recognized)
+                            valid_outcome = (
+                                recognized
+                                if isinstance(recognized, (Value, Raised))
+                                else Value(recognized)
+                            )
                         else:
                             reason = ""
                             ctx_obj = getattr(curr_t, "ctx", None)
-                            if ctx_obj and getattr(ctx_obj, "expected_exception", None) is not None:
+                            if (
+                                ctx_obj
+                                and getattr(ctx_obj, "expected_exception", None)
+                                is not None
+                            ):
                                 exp_cls, exp_m = ctx_obj.expected_exception
                                 reason = (
                                     f" (transition '{curr_t.name}' was declared with ctx.raises({exp_cls.__name__}) "
@@ -376,28 +439,51 @@ def compile_hypothesis_test_case(
                             raise sut_exc
                         valid_outcome = Value(sut_res)
 
-                    actual_val = valid_outcome.val if isinstance(valid_outcome, Value) else valid_outcome
+                    actual_val = (
+                        valid_outcome.val
+                        if isinstance(valid_outcome, Value)
+                        else valid_outcome
+                    )
                     from .pretense import EnsuresCheck, _resolve_target_singleton
+
                     target_obj = _resolve_target_singleton(s_dict, curr_t.target)
                     if target_obj is None and self.sut is not None:
                         if isinstance(self.sut, dict):
-                            target_obj = next(iter(self.sut.values())) if self.sut else None
+                            target_obj = (
+                                next(iter(self.sut.values())) if self.sut else None
+                            )
                         else:
                             target_obj = self.sut
                     if getattr(curr_t, "ensure_fn", None) is not None:
                         check_obj = EnsuresCheck(s_dict)
                         curr_t.ensure_fn(actual_val, target_obj, check_obj, *args)
                     if curr_t.provider is not None:
-                        curr_t.provider(self.sm.state, self.sm, *args, result=actual_val)
+                        curr_t.provider(
+                            self.sm.state, self.sm, *args, result=actual_val
+                        )
                     res = actual_val
-                current_step = TraceStep(curr_t.name, getattr(curr_t.target, "__name__", None), getattr(curr_t, "is_seeding", False), args, {}, res)
+                current_step = TraceStep(
+                    curr_t.name,
+                    getattr(curr_t.target, "__name__", None),
+                    getattr(curr_t, "is_seeding", False),
+                    args,
+                    {},
+                    res,
+                )
                 self.trace[-1] = current_step
             except AssertionError:
                 raise
             except BaseException as e:
                 exp_type = _last_contracted_exception_type.get()
                 if exp_type is not None and isinstance(e, exp_type):
-                    current_step = TraceStep(curr_t.name, getattr(curr_t.target, "__name__", None), getattr(curr_t, "is_seeding", False), args, {}, None)
+                    current_step = TraceStep(
+                        curr_t.name,
+                        getattr(curr_t.target, "__name__", None),
+                        getattr(curr_t, "is_seeding", False),
+                        args,
+                        {},
+                        None,
+                    )
                     self.trace[-1] = current_step
                 else:
                     raise
@@ -422,7 +508,9 @@ def compile_hypothesis_test_case(
         c_proto = c_spec() if isinstance(c_spec, type) else c_spec
 
         @rule(data=st.data())
-        def collab_rule_method(self: Any, data: Any = None, *call_args: Any, **call_kwargs: Any) -> Any:
+        def collab_rule_method(
+            self: Any, data: Any = None, *call_args: Any, **call_kwargs: Any
+        ) -> Any:
             if data is None:
                 data = _DummyData()
             from .pretense import (
@@ -448,9 +536,12 @@ def compile_hypothesis_test_case(
                 s_dict.update(self.sm.singletons)
             try:
                 from support.lib.lifecycle import get_active_scope
+
                 scope = get_active_scope()
                 instances_by_desc = getattr(scope, "_instances_by_desc", None)
-                if instances_by_desc is not None and isinstance(instances_by_desc, dict):
+                if instances_by_desc is not None and isinstance(
+                    instances_by_desc, dict
+                ):
                     for inst in instances_by_desc.values():
                         if inst not in s_dict.values():
                             s_dict[type(inst)] = inst
@@ -460,6 +551,7 @@ def compile_hypothesis_test_case(
             collab_obj = None
             if hasattr(ct, "target") and ct.target is not None:
                 from .pretense import _resolve_target_singleton
+
                 collab_obj = _resolve_target_singleton(s_dict, ct.target)
             if collab_obj is None:
                 for inst in s_dict.values():
@@ -469,30 +561,45 @@ def compile_hypothesis_test_case(
             if collab_obj is None:
                 try:
                     from support.lib.lifecycle import get_singleton
+
                     if isinstance(c_spec, type):
                         collab_obj = get_singleton(c_spec)
                 except Exception:
                     pass
 
-            collab_state = getattr(collab_obj, "state", None) or getattr(collab_obj, "_state", None) or getattr(c_proto, "state", None)
+            collab_state = (
+                getattr(collab_obj, "state", None)
+                or getattr(collab_obj, "_state", None)
+                or getattr(c_proto, "state", None)
+            )
             collab_sm = getattr(collab_obj, "_sm", None) or c_proto
 
-            if collab_state is not None and not all(req(collab_state, collab_sm) for req in ct.requirements):
+            if collab_state is not None and not all(
+                req(collab_state, collab_sm) for req in ct.requirements
+            ):
                 return None
 
             if call_args or call_kwargs:
                 if ct.args_fn is not None:
-                    args = ct.args_fn(collab_state, collab_sm, *call_args, **call_kwargs)
+                    args = ct.args_fn(
+                        collab_state, collab_sm, *call_args, **call_kwargs
+                    )
                 else:
                     args = call_args or tuple(call_kwargs.values())
             else:
                 with with_draw(data.draw):
                     if ct.args_fn is not None:
                         import inspect
+
                         sig = inspect.signature(ct.args_fn)
                         extra_params = [
-                            p for p in list(sig.parameters.values())[2:]
-                            if p.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+                            p
+                            for p in list(sig.parameters.values())[2:]
+                            if p.kind
+                            in (
+                                inspect.Parameter.POSITIONAL_ONLY,
+                                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                            )
                         ]
                         nb_args = [NotBound] * len(extra_params)
                         try:
@@ -506,7 +613,9 @@ def compile_hypothesis_test_case(
                 return None
 
             global _ACTIVE_STEP, _ACTIVE_TRACE
-            current_step = TraceStep(ct.name, getattr(ct.target, "__name__", None), True, args, {}, None)
+            current_step = TraceStep(
+                ct.name, getattr(ct.target, "__name__", None), True, args, {}, None
+            )
             self.trace.append(current_step)
             type(self)._last_trace = list(self.trace)
             _ACTIVE_STEP = current_step
@@ -514,7 +623,9 @@ def compile_hypothesis_test_case(
 
             token_suts = _ACTIVE_SUTS.set(dict(s_dict))
             token_sut = _current_sut.set(collab_obj)
-            token_ver = _is_verification.set(not getattr(collab_obj, "__is_pretense_fake__", False))
+            token_ver = _is_verification.set(
+                not getattr(collab_obj, "__is_pretense_fake__", False)
+            )
             token_tgt = _current_target.set(collab_obj)
             token_mth = _current_method.set(ct.name)
             token_arg = _current_args.set(args)
@@ -533,7 +644,9 @@ def compile_hypothesis_test_case(
                         res = ct.return_fn(collab_state, collab_sm, *args)
                     if ct.provider is not None:
                         ct.provider(collab_state, collab_sm, *args, result=res)
-                current_step = TraceStep(ct.name, getattr(ct.target, "__name__", None), True, args, {}, res)
+                current_step = TraceStep(
+                    ct.name, getattr(ct.target, "__name__", None), True, args, {}, res
+                )
                 self.trace[-1] = current_step
             finally:
                 _ACTIVE_STEP = None
@@ -547,7 +660,9 @@ def compile_hypothesis_test_case(
                 _current_sut.reset(token_sut)
                 _ACTIVE_SUTS.reset(token_suts)
 
-        collab_rule_method.__name__ = f"step_collab_{c_proto.__class__.__name__}_{ct.name}"
+        collab_rule_method.__name__ = (
+            f"step_collab_{c_proto.__class__.__name__}_{ct.name}"
+        )
         return collab_rule_method
 
     attrs: Dict[str, Any] = {}
@@ -585,16 +700,21 @@ def compile_hypothesis_test_case(
             self.sut = sut_factory
         elif hasattr(proto_inst, "singletons") and proto_inst.singletons:
             non_fakes = {
-                k: v for k, v in proto_inst.singletons.items()
+                k: v
+                for k, v in proto_inst.singletons.items()
                 if not getattr(v, "__is_pretense_fake__", False)
             }
             if non_fakes:
                 self.sut = dict(non_fakes)
             else:
-                fake_cls = pretense.synthesize_fake(proto if isinstance(proto, type) else type(proto))
+                fake_cls = pretense.synthesize_fake(
+                    proto if isinstance(proto, type) else type(proto)
+                )
                 self.sut = fake_cls(state=self.sm.state)
         else:
-            fake_cls = pretense.synthesize_fake(proto if isinstance(proto, type) else type(proto))
+            fake_cls = pretense.synthesize_fake(
+                proto if isinstance(proto, type) else type(proto)
+            )
             self.sut = fake_cls(state=self.sm.state)
 
         if getattr(self.sut, "__is_pretense_fake__", False):
@@ -616,12 +736,17 @@ def compile_hypothesis_test_case(
                     c_cls = c_spec if isinstance(c_spec, type) else type(c_spec)
                     has_collab = False
                     for k, inst in self.sm.singletons.items():
-                        if isinstance(k, type) and (issubclass(k, c_cls) or issubclass(c_cls, k)):
+                        if isinstance(k, type) and (
+                            issubclass(k, c_cls) or issubclass(c_cls, k)
+                        ):
                             has_collab = True
                             break
                         if getattr(inst, "__is_pretense_fake__", False):
                             sm_obj = getattr(inst, "_sm", None)
-                            if sm_obj is not None and (isinstance(sm_obj, c_cls) or type(sm_obj).__name__ == c_cls.__name__):
+                            if sm_obj is not None and (
+                                isinstance(sm_obj, c_cls)
+                                or type(sm_obj).__name__ == c_cls.__name__
+                            ):
                                 has_collab = True
                                 break
                     if not has_collab:
@@ -630,7 +755,9 @@ def compile_hypothesis_test_case(
                             fake_inst = fake_collab_cls()
                             self.sm.singletons[c_cls] = fake_inst
                             if hasattr(c_cls, "target_protocol"):
-                                self.sm.singletons[getattr(c_cls, "target_protocol")] = fake_inst
+                                self.sm.singletons[
+                                    getattr(c_cls, "target_protocol")
+                                ] = fake_inst
                         except Exception:
                             pass
         self.trace = []
@@ -658,7 +785,9 @@ def compile_hypothesis_test_case(
         c_proto = c_spec() if isinstance(c_spec, type) else c_spec
         for ct in getattr(c_proto, "transitions", []):
             if getattr(ct, "is_seeding", False):
-                attrs[f"step_collab_{c_proto.__class__.__name__}_{ct.name}"] = make_collab_rule_method(c_spec, ct)
+                attrs[f"step_collab_{c_proto.__class__.__name__}_{ct.name}"] = (
+                    make_collab_rule_method(c_spec, ct)
+                )
 
     cls: Type[RuleBasedStateMachine] = type(class_name, (RuleBasedStateMachine,), attrs)
     if settings is not None:
@@ -672,6 +801,7 @@ pretense.StateMachine.register_compiler(compile_hypothesis_test_case)
 # ============================================================================
 # Runner and CLI
 # ============================================================================
+
 
 def _configure_sys_path() -> None:
     """Configures sys.path by resolving cwd and pythonpath in pyproject.toml."""
@@ -747,9 +877,18 @@ def discover_targets(
         elif path.is_dir():
             for root, _, files in os.walk(path):
                 root_path = Path(root)
-                if root_path.name == "pretense" or any(f.endswith("_pretense.py") for f in files):
+                if root_path.name == "pretense" or any(
+                    f.endswith("_pretense.py") for f in files
+                ):
                     for f in files:
-                        if f.endswith(".py") and not f.startswith("__") and (root_path.name == "pretense" or f.endswith("_pretense.py")):
+                        if (
+                            f.endswith(".py")
+                            and not f.startswith("__")
+                            and (
+                                root_path.name == "pretense"
+                                or f.endswith("_pretense.py")
+                            )
+                        ):
                             discovered_files.append((root_path / f).resolve())
 
     unique_files: List[Path] = []
@@ -784,7 +923,9 @@ def discover_targets(
             if loading_errors is not None:
                 loading_errors.append((file_path, tb))
             else:
-                raise PretenseSpecificationError(f"Failed to load {file_path}: {e}") from e
+                raise PretenseSpecificationError(
+                    f"Failed to load {file_path}: {e}"
+                ) from e
             continue
 
         for attr_name in dir(mod):
@@ -794,23 +935,55 @@ def discover_targets(
             attr = getattr(mod, attr_name)
 
             is_fuzz_target = (
-                (isinstance(attr, type) and issubclass(attr, RuleBasedStateMachine) and attr is not RuleBasedStateMachine)
-                or (isinstance(attr, type) and issubclass(attr, unittest.TestCase) and ("Fuzz" in attr_name or "fuzz" in attr_name.lower()))
+                (
+                    isinstance(attr, type)
+                    and issubclass(attr, RuleBasedStateMachine)
+                    and attr is not RuleBasedStateMachine
+                )
+                or (
+                    isinstance(attr, type)
+                    and issubclass(attr, unittest.TestCase)
+                    and ("Fuzz" in attr_name or "fuzz" in attr_name.lower())
+                )
                 or isinstance(attr, StateMachineProto)
                 or hasattr(attr, "transitions")
             )
             if no_fuzz and is_fuzz_target:
                 continue
 
-            if isinstance(attr, type) and issubclass(attr, RuleBasedStateMachine) and attr is not RuleBasedStateMachine:
-                targets.append(_PretenseTestTarget(name=attr_name, file_path=file_path, test_case_cls=attr.TestCase))
+            if (
+                isinstance(attr, type)
+                and issubclass(attr, RuleBasedStateMachine)
+                and attr is not RuleBasedStateMachine
+            ):
+                targets.append(
+                    _PretenseTestTarget(
+                        name=attr_name, file_path=file_path, test_case_cls=attr.TestCase
+                    )
+                )
             elif isinstance(attr, type) and issubclass(attr, unittest.TestCase):
-                targets.append(_PretenseTestTarget(name=attr_name, file_path=file_path, test_case_cls=attr))
-            elif isinstance(attr, type) and attr_name.endswith("Test") and hasattr(attr, "run_all"):
-                targets.append(_PretenseTestTarget(name=attr_name, file_path=file_path, test_case_cls=attr))
+                targets.append(
+                    _PretenseTestTarget(
+                        name=attr_name, file_path=file_path, test_case_cls=attr
+                    )
+                )
+            elif (
+                isinstance(attr, type)
+                and attr_name.endswith("Test")
+                and hasattr(attr, "run_all")
+            ):
+                targets.append(
+                    _PretenseTestTarget(
+                        name=attr_name, file_path=file_path, test_case_cls=attr
+                    )
+                )
             elif isinstance(attr, StateMachineProto) or hasattr(attr, "transitions"):
-                sut_factory = getattr(mod, "get_sut", None) or getattr(mod, "create_sut", None)
-                state_factory = getattr(mod, "get_initial_state", None) or getattr(mod, "initial_state", None)
+                sut_factory = getattr(mod, "get_sut", None) or getattr(
+                    mod, "create_sut", None
+                )
+                state_factory = getattr(mod, "get_initial_state", None) or getattr(
+                    mod, "initial_state", None
+                )
                 if callable(sut_factory) and callable(state_factory):
                     compiled = compile_hypothesis_test_case(
                         proto=attr,
@@ -818,9 +991,109 @@ def discover_targets(
                         initial_state_factory=state_factory,
                         name=f"Compiled_{attr_name}",
                     )
-                    targets.append(_PretenseTestTarget(name=attr_name, file_path=file_path, test_case_cls=compiled.TestCase, proto=attr))
+                    targets.append(
+                        _PretenseTestTarget(
+                            name=attr_name,
+                            file_path=file_path,
+                            test_case_cls=compiled.TestCase,
+                            proto=attr,
+                        )
+                    )
 
     return targets
+
+
+def _prioritize_exception_group_trace(tb: str) -> str:
+    """Prioritizes the shortest sub-exception trace in an ExceptionGroup to isolate minimal reproduction, deduplicating equivalent failures."""
+    m = re.search(r"ExceptionGroup:\s*Hypothesis found (\d+) distinct failures", tb)
+    if not m:
+        return tb
+    total_failures = int(m.group(1))
+
+    parts = re.split(r"(?:\n\s*(?:\+-\+|\+)\s*-+\s*\d+\s*-+)", tb)
+    if len(parts) <= 2:
+        return tb
+
+    header = parts[0].strip()
+    sub_blocks = [b.strip() for b in parts[1:]]
+
+    # Cluster sub-exceptions by terminal failure signature: (exception_type, last_frame_file, last_frame_func)
+    # Equivalent failure paths ending at the same location are treated as duplicates; keep shortest trace per cluster.
+    clusters: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
+    for idx, block in enumerate(sub_blocks, 1):
+        lines = [l.strip().lstrip("|").strip() for l in block.splitlines() if l.strip()]
+        exc_lines = [
+            l
+            for l in lines
+            if ("Error:" in l or "AssertionError" in l)
+            and not l.startswith("Draw")
+            and not l.startswith("state.")
+        ]
+        last_exc = exc_lines[-1] if exc_lines else "UnknownError"
+        exc_type = last_exc.split(":")[0].split(".")[-1]
+
+        frames = re.findall(r"File \"([^\"]+)\", line (\d+), in (\w+)", block)
+        if frames:
+            last_file = frames[-1][0].split("/")[-1]
+            last_func = frames[-1][2]
+        else:
+            last_file = "unknown"
+            last_func = "unknown"
+
+        sig = (exc_type, last_file, last_func)
+        line_count = len(block.splitlines())
+        if sig not in clusters or line_count < clusters[sig]["line_count"]:
+            clusters[sig] = {
+                "idx": idx,
+                "block": block,
+                "line_count": line_count,
+                "sig": sig,
+            }
+
+    unique_failures = sorted(clusters.values(), key=lambda x: x["line_count"])
+    primary = unique_failures[0]
+    p_idx = primary["idx"]
+    p_sig = primary["sig"]
+    p_lines = primary["line_count"]
+
+    indent_block = "\n".join(
+        "    " + line if line else "" for line in primary["block"].splitlines()
+    )
+    res = [
+        header,
+        f"\n[Hypothesis found {total_failures} failures across {len(unique_failures)} unique defect signatures. Prioritizing shortest unique failure ({p_idx}/{total_failures}); {total_failures - 1} redundant or longer traces omitted]:",
+        f"  +-+---------------- Shortest Trace: {p_sig[0]} in {p_sig[1]}:{p_sig[2]} ({p_lines} lines) ----------------\n{indent_block}",
+    ]
+    if len(unique_failures) > 1:
+        res.append(
+            "\nOther unique defect signatures identified (will be tested in subsequent runs):"
+        )
+        for u in unique_failures[1:4]:
+            u_sig = u["sig"]
+            u_lines = u["line_count"]
+            res.append(f"  • {u_sig[0]} in {u_sig[1]}:{u_sig[2]} ({u_lines} lines)")
+        if len(unique_failures) > 4:
+            res.append(
+                f"  • ... and {len(unique_failures) - 4} other unique defect signatures."
+            )
+
+    return "\n".join(res)
+
+
+def format_prioritized_failure_details(errors: List[Tuple[Any, str]]) -> str:
+    """Formats test failure details prioritizing the shortest stack trace across failures and exception groups."""
+    if not errors:
+        return "Test failed."
+
+    # Sort errors by traceback length ascending so the shortest trace appears first
+    sorted_errors = sorted(errors, key=lambda item: len(item[1].splitlines()))
+
+    formatted_blocks: List[str] = []
+    for test_case, tb in sorted_errors:
+        prioritized_tb = _prioritize_exception_group_trace(tb.strip())
+        formatted_blocks.append(f"=== {test_case} ===\n{prioritized_tb}")
+
+    return "\n\n".join(formatted_blocks)
 
 
 def run_pretense_cli(argv: Optional[List[str]] = None) -> int:
@@ -829,14 +1102,43 @@ def run_pretense_cli(argv: Optional[List[str]] = None) -> int:
         prog="pretense",
         description="Pretense: Declarative State-Machine Testing & Verification Engine",
     )
-    parser.add_argument("paths", nargs="*", default=["."], help="Files or directories to discover test suites in.")
-    parser.add_argument("-k", "--keyword", default=None, help="Filter tests by name expression.")
-    parser.add_argument("-v", "--verbose", action="store_true", help="Verbose test execution output.")
-    parser.add_argument("-s", "--synthesize", action="store_true", help="Synthesize standalone unit test on failure.")
-    parser.add_argument("--smoke", action="store_true", help="Run fast smoke test with minimal fuzz iterations (3 examples).")
-    parser.add_argument("--no-fuzz", action="store_true", help="Disable random property fuzzing (1 scenario iteration).")
-    parser.add_argument("--cov", action="store_true", help="Run with coverage tracking.")
-    parser.add_argument("--threshold", type=float, default=100.0, help="Required minimum coverage threshold percentage.")
+    parser.add_argument(
+        "paths",
+        nargs="*",
+        default=["."],
+        help="Files or directories to discover test suites in.",
+    )
+    parser.add_argument(
+        "-k", "--keyword", default=None, help="Filter tests by name expression."
+    )
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="Verbose test execution output."
+    )
+    parser.add_argument(
+        "-s",
+        "--synthesize",
+        action="store_true",
+        help="Synthesize standalone unit test on failure.",
+    )
+    parser.add_argument(
+        "--smoke",
+        action="store_true",
+        help="Run fast smoke test with minimal fuzz iterations (3 examples).",
+    )
+    parser.add_argument(
+        "--no-fuzz",
+        action="store_true",
+        help="Disable random property fuzzing (1 scenario iteration).",
+    )
+    parser.add_argument(
+        "--cov", action="store_true", help="Run with coverage tracking."
+    )
+    parser.add_argument(
+        "--threshold",
+        type=float,
+        default=100.0,
+        help="Required minimum coverage threshold percentage.",
+    )
     parser.add_argument(
         "--timeout",
         type=float,
@@ -848,7 +1150,9 @@ def run_pretense_cli(argv: Optional[List[str]] = None) -> int:
 
     raw_timeout = args.timeout
     if raw_timeout is None:
-        env_val = os.environ.get("PRETENSE_TIMEOUT", os.environ.get("CLEANROOM_VERIFY_TIMEOUT", "90.0"))
+        env_val = os.environ.get(
+            "PRETENSE_TIMEOUT", os.environ.get("CLEANROOM_VERIFY_TIMEOUT", "90.0")
+        )
         try:
             raw_timeout = float(env_val)
         except ValueError:
@@ -857,7 +1161,11 @@ def run_pretense_cli(argv: Optional[List[str]] = None) -> int:
 
     def _collect_lib_impls_from_dir(lib_dir: Path) -> Set[str]:
         res: Set[str] = set()
-        py_files = [f for f in lib_dir.glob("*.py") if not f.name.startswith("__") and f.is_file()]
+        py_files = [
+            f
+            for f in lib_dir.glob("*.py")
+            if not f.name.startswith("__") and f.is_file()
+        ]
         stems = {f.stem for f in py_files}
         for f in py_files:
             # If this is <name>.py and <name>_impl.py also exists in the same lib dir,
@@ -869,7 +1177,11 @@ def run_pretense_cli(argv: Optional[List[str]] = None) -> int:
 
     def _resolve_target_lib_for_test_file(test_file: Path) -> Set[str]:
         res: Set[str] = set()
-        if test_file.is_file() and test_file.parent.name == "pretense" and (test_file.parent.parent / "lib").is_dir():
+        if (
+            test_file.is_file()
+            and test_file.parent.name == "pretense"
+            and (test_file.parent.parent / "lib").is_dir()
+        ):
             lib_dir = test_file.parent.parent / "lib"
             stem = test_file.stem
             unit_name = stem[:-9] if stem.endswith("_pretense") else stem
@@ -892,15 +1204,21 @@ def run_pretense_cli(argv: Optional[List[str]] = None) -> int:
                 for t_file in p_res.glob("*_pretense.py"):
                     target_lib_files.update(_resolve_target_lib_for_test_file(t_file))
                 if not target_lib_files:
-                    target_lib_files.update(_collect_lib_impls_from_dir(p_res.parent / "lib"))
+                    target_lib_files.update(
+                        _collect_lib_impls_from_dir(p_res.parent / "lib")
+                    )
             for root, _, files in os.walk(p_res):
                 r_path = Path(root)
                 if r_path.name == "pretense" and (r_path.parent / "lib").is_dir():
                     for f in files:
                         if f.endswith("_pretense.py"):
-                            target_lib_files.update(_resolve_target_lib_for_test_file(r_path / f))
+                            target_lib_files.update(
+                                _resolve_target_lib_for_test_file(r_path / f)
+                            )
                     if not target_lib_files:
-                        target_lib_files.update(_collect_lib_impls_from_dir(r_path.parent / "lib"))
+                        target_lib_files.update(
+                            _collect_lib_impls_from_dir(r_path.parent / "lib")
+                        )
                 elif r_path.name == "lib" and "support" not in r_path.parts:
                     target_lib_files.update(_collect_lib_impls_from_dir(r_path))
 
@@ -919,13 +1237,17 @@ def run_pretense_cli(argv: Optional[List[str]] = None) -> int:
         loading_errors=loading_errors,
     )
     if loading_errors:
-        sys.stderr.write(f"\n[FAIL] Pretense failed to load {len(loading_errors)} test module(s):\n")
+        sys.stderr.write(
+            f"\n[FAIL] Pretense failed to load {len(loading_errors)} test module(s):\n"
+        )
         for fpath, tb in loading_errors:
             sys.stderr.write(f"\n--- Loading Error: {fpath} ---\n{tb}\n")
         return 1
 
     if not targets:
-        sys.stderr.write(f"Error: No Pretense test targets found in: {', '.join(str(p) for p in target_paths)}\n")
+        sys.stderr.write(
+            f"Error: No Pretense test targets found in: {', '.join(str(p) for p in target_paths)}\n"
+        )
         return 1
 
     print(f"=== Running Pretense State Machine Suites ({len(targets)} targets) ===")
@@ -950,13 +1272,19 @@ def run_pretense_cli(argv: Optional[List[str]] = None) -> int:
             if args.smoke:
                 if hasattr(target.test_case_cls, "settings"):
                     from hypothesis import settings as hyp_settings, HealthCheck
+
                     target.test_case_cls.settings = hyp_settings(
                         max_examples=3,
                         stateful_step_count=5,
                         deadline=None,
-                        suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much],
+                        suppress_health_check=[
+                            HealthCheck.too_slow,
+                            HealthCheck.filter_too_much,
+                        ],
                     )
-            if hasattr(target.test_case_cls, "run_all") and callable(target.test_case_cls.run_all):
+            if hasattr(target.test_case_cls, "run_all") and callable(
+                target.test_case_cls.run_all
+            ):
                 runner_inst = target.test_case_cls()
                 runner_inst.run_all()
                 success = True
@@ -973,15 +1301,18 @@ def run_pretense_cli(argv: Optional[List[str]] = None) -> int:
                     success = False
                     errors = result.failures + result.errors
                     if errors:
-                        formatted_blocks: List[str] = []
-                        for test_case, tb in errors:
-                            formatted_blocks.append(f"=== {test_case} ===\n{tb.strip()}")
-                        error_msg = "\n\n".join(formatted_blocks)
+                        error_msg = format_prioritized_failure_details(errors)
                     else:
                         error_msg = "Test failed."
-        except (AssertionError, PretenseSpecificationError, RuntimeError, ValueError, TypeError) as e:
+        except (
+            AssertionError,
+            PretenseSpecificationError,
+            RuntimeError,
+            ValueError,
+            TypeError,
+        ) as e:
             success = False
-            error_msg = traceback.format_exc()
+            error_msg = _prioritize_exception_group_trace(traceback.format_exc())
         finally:
             WatchdogMonitor.disarm(watchdog_handle)
 
@@ -1002,23 +1333,31 @@ def run_pretense_cli(argv: Optional[List[str]] = None) -> int:
                             capture = True
                             continue
                         if capture:
-                            if line.strip().startswith(("+", "===", "---")) or ("Traceback" in line and not line.strip().startswith("|")):
+                            if line.strip().startswith(("+", "===", "---")) or (
+                                "Traceback" in line and not line.strip().startswith("|")
+                            ):
                                 break
                             clean_line = line.strip().lstrip("|").strip()
                             if clean_line and not clean_line.startswith("Explanation:"):
                                 failing_lines.append(clean_line)
                     if failing_lines:
                         print("\n=== Synthesized Deterministic Regression Scenario ===")
-                        print("# Minimal counterexample sequence extracted from Hypothesis:")
+                        print(
+                            "# Minimal counterexample sequence extracted from Hypothesis:"
+                        )
                         for fl in failing_lines:
                             print(f"#   {fl}")
                         print("======================================================")
-            diag = format_active_step_diagnostic("Active Step Diagnostic at failure", target_name=target_name)
+            diag = format_active_step_diagnostic(
+                "Active Step Diagnostic at failure", target_name=target_name
+            )
             if diag:
                 print(f"\n{diag}")
 
     total_time = time.time() - suite_start
-    print(f"\nSummary: {total_passed} passed, {total_failed} failed in {total_time:.2f}s")
+    print(
+        f"\nSummary: {total_passed} passed, {total_failed} failed in {total_time:.2f}s"
+    )
     if total_failed > 0:
         print(
             "\n" + "=" * 80 + "\n"
@@ -1029,7 +1368,8 @@ def run_pretense_cli(argv: Optional[List[str]] = None) -> int:
             "• Frame test failures strictly as contract discrepancies against the specification.\n"
             "• Explain the expected postcondition outcome versus the observed behavior.\n"
             "• Preconditions cannot be tested: *Error exceptions designate contract violations and must never be tested or expected with raises(). If an *Error occurs, blame the pretense module for failing to gate inputs via require(...), NEVER the library.\n"
-            + "=" * 80
+            + "="
+            * 80
         )
 
     if cov_engine is not None:
@@ -1038,12 +1378,15 @@ def run_pretense_cli(argv: Optional[List[str]] = None) -> int:
         measured = set(cov_engine.get_data().measured_files())
         morfs: Optional[List[str]] = None
         if target_lib_files:
-            matched = [f for f in measured if str(Path(f).resolve()) in target_lib_files]
+            matched = [
+                f for f in measured if str(Path(f).resolve()) in target_lib_files
+            ]
             if matched:
                 morfs = matched
         if morfs is None:
             morfs = [
-                f for f in measured
+                f
+                for f in measured
                 if "/lib/" in f
                 and "/support/" not in f
                 and "/pretense/" not in f
@@ -1051,7 +1394,9 @@ def run_pretense_cli(argv: Optional[List[str]] = None) -> int:
             ]
         total_cov = cov_engine.report(morfs=morfs if morfs else None, show_missing=True)
         if total_cov < args.threshold:
-            print(f"\n[FAIL] Coverage threshold not met: {total_cov:.1f}% < {args.threshold:.1f}%")
+            print(
+                f"\n[FAIL] Coverage threshold not met: {total_cov:.1f}% < {args.threshold:.1f}%"
+            )
             print(
                 "\n" + "=" * 80 + "\n"
                 "[COVERAGE ARBITER REMINDER - EXPLAIN FEEDBACK IN TERMS OF SPECIFICATION]\n"
@@ -1061,7 +1406,8 @@ def run_pretense_cli(argv: Optional[List[str]] = None) -> int:
                 "• Translate uncovered statements and branches into missing specification requirements or scenario cases.\n"
                 "• If an uncovered branch is an unreachable defensive check or caller assumption guaranteed by the specification, instruct the implementation author to prune it or mark it as unreachable according to the methodology.\n"
                 "• If an uncovered line persists after tests were updated or across multiple rounds, examine the library implementation closely: trace control flow and invariants to verify whether the line is structurally unreachable or defensive dead code; if unreachable, blame the library (prune, unreachable(), or # pragma: no cover).\n"
-                + "=" * 80
+                + "="
+                * 80
             )
             return 1
 
@@ -1076,13 +1422,27 @@ def main(argv: Optional[List[str]] = None) -> int:
 # Engine Singleton Implementation
 # ============================================================================
 
+
 class PretenseEngine(pretense.PretenseEngine):
     """Realizes state machine compilation, test suite execution, watchdog timeouts, and fake synthesis."""
 
     def compile_state_machine(self, machine_cls: Type[Any]) -> Type[Any]:
-        sut_factory = getattr(machine_cls, "get_sut", None) or getattr(machine_cls, "create_sut", None) or (lambda: None)
-        state_factory = getattr(machine_cls, "get_initial_state", None) or getattr(machine_cls, "initial_state", None) or (lambda: None)
-        proto = machine_cls() if isinstance(machine_cls, type) and issubclass(machine_cls, StateMachineProto) else pretense.StateMachine()
+        sut_factory = (
+            getattr(machine_cls, "get_sut", None)
+            or getattr(machine_cls, "create_sut", None)
+            or (lambda: None)
+        )
+        state_factory = (
+            getattr(machine_cls, "get_initial_state", None)
+            or getattr(machine_cls, "initial_state", None)
+            or (lambda: None)
+        )
+        proto = (
+            machine_cls()
+            if isinstance(machine_cls, type)
+            and issubclass(machine_cls, StateMachineProto)
+            else pretense.StateMachine()
+        )
         return compile_hypothesis_test_case(proto, sut_factory, state_factory)
 
     def run_suite(self, config: PretenseRunnerConfig) -> PretenseRunResult:
@@ -1119,8 +1479,12 @@ class PretenseEngine(pretense.PretenseEngine):
                 lines.append(f"    # Step {i}: Seeding transition")
                 lines.append(f"    sm.{step.transition_name}({args_repr})")
             else:
-                lines.append(f"    # Step {i}: Method transition '{step.transition_name}'")
-                lines.append(f"    sm.dispatch_transition({step.transition_name!r}, {args_repr})")
+                lines.append(
+                    f"    # Step {i}: Method transition '{step.transition_name}'"
+                )
+                lines.append(
+                    f"    sm.dispatch_transition({step.transition_name!r}, {args_repr})"
+                )
             lines.append("")
         lines.append("    # Verify invariants hold at conclusion")
         lines.append("    sm.check_invariants()")
@@ -1131,6 +1495,7 @@ class PretenseEngine(pretense.PretenseEngine):
 
 
 # --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
+
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     """Registers constituent singletons into the lifecycle registry."""

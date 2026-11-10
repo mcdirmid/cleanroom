@@ -34,8 +34,8 @@ class StreamReader(Protocol):
             Oldest unread payload string, or None if stream is empty.
 
         POSTCONDITIONS:
-        - WHEN unread_count is greater than 0, MUST pop oldest unread item, decrement unread_count by 1, and return item.
-        - WHEN unread_count equals 0, MUST return None.
+        - [slug:stream_reader.read.pop_payload]: WHEN unread_count is greater than 0, MUST pop oldest unread item, decrement unread_count by 1, and return item.
+        - [slug:stream_reader.read.empty_stream]: WHEN unread_count equals 0, MUST return None.
         """
         ...
 

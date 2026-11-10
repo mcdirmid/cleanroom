@@ -41,7 +41,7 @@ When coordinating multi-agent execution:
 
 - When supervising a fused role worker, upon receiving a completion notification the realization executes formal verification across the targets in the fused workspace, delivering error diagnostics to the worker with up to a hardcoded maximum of 3 retries on verification failure, and upon successful verification atomically harvesting modified files, stamping audit tags and change summaries, and marking all constituent targets clean in the repository.
 
-- The realization emits real-time progress notifications detailing role dispatch, round outcomes, token consumption, and work queue state.
+- The realization emits real-time progress notifications detailing role dispatch, round outcomes, token consumption, and work queue state, and notifies the execution harness adapter of authoritative orchestration state updates capturing active scopes, current wave counts, active running workers, idle completed workers, assigned targets, and convergence status to external coordination storage across role dispatch, round completion, and DAG convergence events.
 
 - The realization manages the dynamic supervision loop, continuing until all units evaluate clean, a round reports failure, or maximum wave iterations are reached, draining or cleanly interrupting in-flight active workers upon termination.
 
@@ -53,7 +53,7 @@ When coordinating multi-agent execution:
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-11-06T02:49:00Z
-LAST_CHANGED: 2026-11-06T02:49:00Z
-CHANGE: Scope concurrent downstream role withholding to the active target unit
+LAST_CHANGED: 2026-11-09T22:10:00Z
+CHANGE: Authoritative orchestration state updates across role dispatch, round completion, and convergence
 SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->

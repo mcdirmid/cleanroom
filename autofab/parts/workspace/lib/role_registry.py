@@ -91,6 +91,7 @@ class WorkspaceRegistry(Singleton[AgentSessionTier], Protocol):
         """Loads all active workspace descriptors from active session memory and provisioned role workspaces."""
         ...
 
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
 # LAST_CHANGED: 2026-10-14T18:45:00Z

@@ -47,9 +47,8 @@ class WorkScheduler(Singleton[AgentSessionTier], Protocol):
     ) -> Mapping[str, int]: ...
 
     # Contract: Formats aggregated synthesized task prompt for candidate nodes with defect feedback and role directives.
-    def format_task_prompt(
-        self, nodes: Sequence[dag_storage.DagNode]
-    ) -> str: ...
+    def format_task_prompt(self, nodes: Sequence[dag_storage.DagNode]) -> str: ...
+
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z

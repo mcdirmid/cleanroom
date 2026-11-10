@@ -18,7 +18,7 @@ An agent session's *workspace scaffolder* prepares role runner tools, metadata c
 
 The workspace scaffolder:
 
-- Deploys executable runner tools into the `bin/` directory of the workspace, packaging work, check files, submit, and fail runners as standalone zipapp executables with execution permissions, packaging blame only when the role declares feedback capability or auditor tags, and omitting blame for author roles without feedback capability.
+- Deploys executable runner tools into the `bin/` directory of the workspace, packaging work, check files, submit, and fail runners as standalone zipapp executables with execution permissions, packaging blame only when the role declares feedback capability or auditor tags, omitting blame for author roles without feedback capability, and packaging reject for author roles with writable targets to reject feedback on unmodified files (omitting reject for auditor roles with zero writable targets).
 
 - Writes workspace role configuration into a hidden role descriptor file recording role identity, directory scope, common specification roles, and optional model profile settings without exposing host repository paths.
 
@@ -30,7 +30,7 @@ The workspace scaffolder:
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-27T11:35:00Z
-LAST_CHANGED: 2026-10-29T15:40:00Z
-CHANGE: Synthesize missing target starter skeletons via role template_command and templates without hardcoded file patterns or tool imports
+LAST_CHANGED: 2026-11-07T10:20:00Z
+CHANGE: Package reject runner for author roles with writable targets
 SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 -->

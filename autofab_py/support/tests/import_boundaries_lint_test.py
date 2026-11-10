@@ -11,6 +11,7 @@ import glob
 import os
 import sys
 import unittest
+
 try:
     from support.lib import app_info
 except Exception:
@@ -32,11 +33,12 @@ def find_repo_root() -> str:
     # 3. Walk up from __file__
     cur = os.path.abspath(os.path.dirname(__file__))
     while cur and cur != os.path.dirname(cur):
-        cfg_names = getattr(app_info, "get_config_filenames", lambda: ("autofab.toml", "cleanroom.toml"))()
-        if (
-            any(os.path.isfile(os.path.join(cur, cfg)) for cfg in cfg_names)
-            or os.path.isfile(os.path.join(cur, "pyproject.toml"))
-        ):
+        cfg_names = getattr(
+            app_info, "get_config_filenames", lambda: ("autofab.toml", "cleanroom.toml")
+        )()
+        if any(
+            os.path.isfile(os.path.join(cur, cfg)) for cfg in cfg_names
+        ) or os.path.isfile(os.path.join(cur, "pyproject.toml")):
             return cur
         cur = os.path.dirname(cur)
     return os.getcwd()
@@ -57,6 +59,7 @@ for p in [
 
 import ast
 
+
 def _scan_for_staging_imports(file_path: str) -> list[str]:
     errors: list[str] = []
     try:
@@ -69,24 +72,36 @@ def _scan_for_staging_imports(file_path: str) -> list[str]:
         if isinstance(node, ast.Import):
             for alias in node.names:
                 if "staging" in alias.name.split("."):
-                    errors.append(f"{file_path}:{node.lineno}: error: prohibited import of staging module '{alias.name}'")
+                    errors.append(
+                        f"{file_path}:{node.lineno}: error: prohibited import of staging module '{alias.name}'"
+                    )
         elif isinstance(node, ast.ImportFrom):
             if node.module and "staging" in node.module.split("."):
-                errors.append(f"{file_path}:{node.lineno}: error: prohibited import from staging module '{node.module}'")
+                errors.append(
+                    f"{file_path}:{node.lineno}: error: prohibited import from staging module '{node.module}'"
+                )
             for alias in node.names:
                 if alias.name == "staging":
-                    errors.append(f"{file_path}:{node.lineno}: error: prohibited import of staging module '{alias.name}'")
+                    errors.append(
+                        f"{file_path}:{node.lineno}: error: prohibited import of staging module '{alias.name}'"
+                    )
         elif isinstance(node, ast.Call):
             func = node.func
             is_import_call = (
-                (isinstance(func, ast.Name) and func.id == "__import__")
-                or (isinstance(func, ast.Attribute) and func.attr == "import_module" and isinstance(func.value, ast.Name) and func.value.id == "importlib")
+                isinstance(func, ast.Name) and func.id == "__import__"
+            ) or (
+                isinstance(func, ast.Attribute)
+                and func.attr == "import_module"
+                and isinstance(func.value, ast.Name)
+                and func.value.id == "importlib"
             )
             if is_import_call and node.args:
                 arg0 = node.args[0]
                 if isinstance(arg0, ast.Constant) and isinstance(arg0.value, str):
                     if "staging" in arg0.value.split("."):
-                        errors.append(f"{file_path}:{node.lineno}: error: prohibited dynamic import of staging module '{arg0.value}'")
+                        errors.append(
+                            f"{file_path}:{node.lineno}: error: prohibited dynamic import of staging module '{arg0.value}'"
+                        )
     return errors
 
 
@@ -137,7 +152,9 @@ class ImportBoundariesLintTest(unittest.TestCase):
         """Rule 3: Unit tests must only import their target under test and never foreign *_impl."""
         errors: list[str] = []
         for root_dir in ["autofab", "autofab_py", "pretense"]:
-            pattern = os.path.join(REPO_ROOT, root_dir, "parts", "*", "tests", "*_test.py")
+            pattern = os.path.join(
+                REPO_ROOT, root_dir, "parts", "*", "tests", "*_test.py"
+            )
             for file_path in glob.glob(pattern):
                 part_dir = os.path.dirname(os.path.dirname(file_path))
                 lib_pkg = os.path.join(os.path.relpath(part_dir, REPO_ROOT), "lib")
