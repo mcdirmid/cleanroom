@@ -608,23 +608,41 @@ autofab <subcommand> [arguments] [options]
 
 ## 8. Multi-Harness Telemetry & Desktop Integration
 
-### DeepSeek Harness (`dsh`), Direct JSON-RPC Integration & Cordis Shell
+### DeepSeek Harness (`dsh`), Web Daemon, Direct JSON-RPC Integration & Cordis Shell
 
-Autofab provides deep integration with DeepSeek Harness (`dsh`) across both direct JSON-RPC client-server communication and local CLI workflows:
+Autofab provides deep integration with DeepSeek Harness (`dsh`) across direct JSON-RPC client-server communication, local CLI workflows, and remote browser-accessible daemon environments (fully documented in [`design-docs/dsh.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/dsh.md)):
 
-1. **Direct JSON-RPC Remote Orchestration**:
+1. **DSH Web Background Daemon & Remote Access**:
+   - Managed as a macOS background daemon via `launchd` (`~/Library/LaunchAgents/com.deepseek.dsh-web.plist`) listening on web port 3080 and internal bridge port 47821.
+   - Remote access authenticated via dynamic active token extracted from `~/.dsh/dsh-web.log`: `http://seans-macbook-pro-2.local:3080/?token=<active_token>`.
+   - Browser-trust boundary enforced against `trustedHosts` in `~/.dsh/profiles/web/cordis.patch.yml`.
+   - Enforces the Cleanroom Lean Preset (`preset-standard`), exposing strictly `bash_run` to reduce tool overhead from 5.5K to 1.7K tokens.
+
+2. **Visual Subagent Hierarchy Plugin (`dsh-autofab-hierarchy`)**:
+   - Native Cordis UI plugin deployed at `~/.dsh/profiles/web/plugins/dsh-autofab-hierarchy/`.
+   - Mounts directly into the navigation sidebar above **Ungrouped**, hiding flat `[<scope>] <role>` items and presenting them as collapsible run containers.
+   - Subscribes to live coordinator state via `/autofab/api/state` connected to `~/.dsh/autofab_state.json`.
+   - Renders live wave status with SVG vector indicators (zero emoji rule), interactive role selection bringing worker sessions directly to the main viewport, and collapsible historical waves ("Prior waves").
+   - Provides interactive run deletion via a hover trash icon calling `POST /autofab/api/delete-scope` to cleanly terminate sessions in the session manager.
+
+3. **Workspace Retention & Selective Recycling (`benchmarks/runs/`)**:
+   - Retains complete execution trees under `benchmarks/runs/<suite>_<model_slug>_<index>/` with `flight_status.json`.
+   - Preserves failed runs strictly in-place (no `.failed` renaming) for direct inspection and debugging, automatically advancing run index ($N \to N+1$).
+   - Automatically recycles finished run slots upon re-execution.
+
+4. **Direct JSON-RPC Remote Orchestration**:
    - Autofab connects directly to the running DeepSeek Harness server over JSON-RPC via HTTP.
    - Discovers active desktop endpoints and authentication credentials dynamically from the Cordis desktop SQLite cookie store (`cookies.sqlite`).
    - Invokes structured RPC methods (`workspace/create`, `session/create`, `session/prompt`) to drive subagent rounds directly against the running server.
    - Completely eliminates kernel write-lease contention (`flock` on `session.lock`) when running alongside an active Cordis desktop UI session, preventing UI session forking and deadlocks.
    - Retains automatic fallback to headless CLI invocation (`dsh exec`) when no desktop server instance is discovered.
 
-2. **`dsh_telemetry` Background Daemon**:
+5. **`dsh_telemetry` Background Daemon**:
    - Runs a non-blocking UNIX domain socket server listening for subagent lifecycle events.
    - Emits structured JSON events: `{"event": "subagent_start", "scope": "...", "role": "...", "workspace": "..."}`.
    - Tracks per-round token usage, execution time, and tool call frequency.
 
-3. **Cordis Desktop Shell Overlay**:
+6. **Cordis Desktop Shell Overlay**:
    - Injects real-time status badges into the Cordis desktop shell.
    - Displays active cleaning waves, dirty dependency DAGs, and subagent process health.
 

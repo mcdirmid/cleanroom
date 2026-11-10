@@ -432,13 +432,14 @@ Autofab provides deep integration with DeepSeek Harness (`dsh`) across direct JS
    - **Lean Preset Parity**: The Cordis profile `~/.dsh/profiles/web/cordis.patch.yml` enforces the Cleanroom Lean Preset (`preset-standard`). Tool token overhead is reduced from 5.5K to 1.7K tokens (exposing only `bash_run`), and system prompts are compacted from 1.5K to 967 tokens, matching DSH Desktop identically.
    - **Environment Isolation**: Unit test and mock harness suites are decoupled from live Web sessions by gating Web mode strictly on `AUTOFAB_DSH_WEB="1"`. CLI flags (`--dsh-web`, `--dsh-desktop`) and `model_configs.toml` (`dsh_web = true` / `dsh_mode = web`) allow effortless runtime toggling.
 
-3. **The Subagent Hierarchy Invariant in DSH Web (Open UI Problem)**:
-   - While ungrouped sessions execute cleanly, spawning 5 to 10 top-level sessions per benchmark flight clutters the DSH Web sidebar.
-   - Direct nesting as `{ kind: "subagent" }` fails due to DSH internal invariants:
-     - **Closed Lifecycle Invariant**: `@deepseek-ai/dsh-base` and `@deepseek-ai/dsh-subagent` expect subagents to be spawned via internal LLM dispatch loop (`tool-subagent` or `agent-team`).
-     - **Immutable v4 Journal Headers**: Binary session journals (`session.v4.jsonl.zstd`) commit `origin: "subagent"`, `parentSession: "<parent_id>"`, and `delegationDepth: 1` immutably at creation time; in-memory mutation is discarded on reload.
-     - **Strict API Gateway Validation**: `@deepseek-ai/dsh-api-session-controller` throws `subagent/unauthorized` if on-disk headers lack matching parent records.
-   - Active forward roadmap: Scaffold dedicated Cordis UI plugin `@autofab/dsh-ui-dashboard` or inject native headers in `dsh-subagent-bridge` (detailed in [Task 7](#task-7-dsh-web-visual-subagent-hierarchy--custom-cordis-dashboard-plugin)).
+3. **The Visual Subagent Hierarchy & Native Cordis Plugin (`dsh-autofab-hierarchy`)**:
+   - To eliminate the clutter of 10 to 30 top-level sessions in DSH Web without triggering API Gateway `subagent/unauthorized` errors, Cleanroom deploys the native Cordis UI plugin `dsh-autofab-hierarchy` at `~/.dsh/profiles/web/plugins/dsh-autofab-hierarchy/`.
+   - **Sidebar Injection**: Injected directly into `div[data-component="sidebar"]` above **Ungrouped**, hiding flat `[<scope>] <role>` items from the raw session list and presenting them as collapsible run containers.
+   - **Real-Time State Pipeline**: The coordinator emits live DAG execution states to `~/.dsh/autofab_state.json`. The plugin serves `/autofab/api/state` and polls every 1,500ms using in-place DOM diffing (`updateExistingFlightGroup`).
+   - **Zero Emoji Styling**: Strictly renders scalable vector SVGs (animated circular spinners for running roles, solid green dots for idle workers, and minimalist trash icons).
+   - **Accordion Waves**: Displays the active wave prominently with role pills while collapsing completed iterations into a "Prior waves (N)" accordion.
+   - **Interactive Scope Deletion**: Header hover trash button triggers `POST /autofab/api/delete-scope`, deleting worker sessions from DSH's internal session manager and removing the run from disk.
+   - **Workspace Retention**: Retains run trees under `benchmarks/runs/<suite>_<model_slug>_<index>/` with `flight_status.json`, selective recycling (finished recycled, failed preserved in-place), and multi-segment scoping. Full architecture is documented in [`design-docs/dsh.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/dsh.md).
 
 4. **Direct JSON-RPC Desktop Remote Orchestration**:
    - Autofab connects directly to the running DeepSeek Harness desktop server over JSON-RPC via HTTP.
@@ -688,26 +689,30 @@ The following prioritized roadmap outlines the active forward engineering tasks 
      - Update `autofab_py/guides/pretense.md` and `autofab_py/guides/pretense_coverage.md` with explicit criteria requiring 100% branch coverage from state-machine fuzz transitions.
 
 ### Task 6: DSH Web Visual Subagent Hierarchy & Custom Cordis Dashboard Plugin
-- **Priority**: Medium
-- **Component**: `autofab/parts/dsh/`, `~/.dsh/plugins/` (Cordis DSH Web plugin)
-- **Design Specification**: Homed in Section 7 ([Multi-Harness Telemetry & Desktop Integration](#deepseek-harness-dsh-dsh-web-daemon-direct-json-rpc-integration--cordis-shell))
-- **Objective**: Replace the current flat proliferation of top-level ungrouped sessions in DSH Web with an integrated, visual Subagent Dashboard presenting a single top-level coordinator entry per flight run, an interactive role status card, and clean drill-down navigation without `subagent/unauthorized` errors.
-- **Problem Statement**:
-  - While ungrouped first-class sessions (`[<scope>] <role>`) execute reliably in production with lean preset parity, spawning 5 to 10 top-level sessions per benchmark flight clutters the DSH Web sidebar.
-  - Attempting to force sessions into standard `{ kind: "subagent" }` paths fails because DSH Web's API Gateway strictly requires immutable v4 journal headers (`origin: "subagent"`, `parentSession: "<parent_id>"`) and expects agents to be spawned via internal LLM dispatch loops (`tool-subagent`).
-- **Implementation Steps**:
-  1. **Scaffold Cordis UI Dashboard Plugin (`@autofab/dsh-ui-dashboard`)**:
-     - Scaffold a dedicated Cordis web plugin package in `~/.dsh/plugins/autofab-dashboard/` or repo distribution.
-     - Register a custom dashboard card/panel in DSH Web querying `sessionController.list()` and grouping all sessions carrying the `[<scope>]` tag or Autofab flight metadata under a single collapsible Flight Run container.
-     - Render an interactive DAG topology / role status board displaying worker progress (`lib`, `test`, `qa`, `coverage`, `pretense`), latencies, and token costs.
-  2. **Native Direct Navigation via `{ kind: "session" }` with Group-By-Scope Sidebar Filtering**:
-     - Wire role worker cards to open child sessions via standard `{ kind: "session", sessionId }`, ensuring zero `subagent/unauthorized` errors while visually presenting as a hierarchical run.
-     - Implement sidebar session filtering to collapse child worker sessions out of the main "Ungrouped" list into their parent run container.
-  3. **Bridge Native Header Injection Probe**:
-     - Prototype hooking `service.create()` options in `dsh-subagent-bridge` to test if `origin: 'subagent'` and `parentSession: parentId` can be baked cleanly into the v4 binary journal (`session.v4.jsonl.zstd`) at format instantiation without Homebrew core patching.
-     - Test address resolution `{ kind: "subagent", parentSessionId, childSessionId }` across browser reloads to verify if DSH Gateway accepts the resulting session.
-  4. **Interactive Subagent Drawer Integration**:
-     - Integrate a role inspector drawer into DSH Web so clicking a child worker slides out the streaming conversation thread without navigating away from the flight coordinator view.
+- **Priority**: Completed (Production)
+- **Component**: `autofab/parts/dsh/`, `~/.dsh/profiles/web/plugins/dsh-autofab-hierarchy/`
+- **Design Specification**: Homed in [`design-docs/dsh.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/dsh.md) and Section 7 ([Multi-Harness Telemetry & Desktop Integration](#deepseek-harness-dsh-dsh-web-daemon-direct-json-rpc-integration--cordis-shell))
+- **Status**: Production / Fully Implemented
+- **Delivered Capabilities**:
+  1. [x] **Native Cordis Client UI Plugin (`dsh-autofab-hierarchy`)**:
+     - Scaffolded and deployed at `~/.dsh/profiles/web/plugins/dsh-autofab-hierarchy/` with backend (`lib/index.js`) and frontend (`lib/client.js`).
+     - Mounted directly in DSH Web's sidebar (`div[data-component="sidebar"]`) above Ungrouped.
+     - Hides raw `[<scope>] <role>` items from the Ungrouped list and groups them into clean, collapsible run cards.
+  2. [x] **Real-Time State Pipeline & In-Place DOM Diffing**:
+     - Coordinator writes live DAG state to `~/.dsh/autofab_state.json`.
+     - Backend exposes `GET /autofab/api/state` and `POST /autofab/api/state`.
+     - Client polls every 1,500ms and updates cards using DOM diffing (`updateExistingFlightGroup`) to maintain focus and scroll positions.
+  3. [x] **Zero Emoji Vector Styling**:
+     - Clean SVG vector icons: animated circular spinner for running workers, solid green dot for idle/complete workers, typographic role pills, and minimalist trash icon.
+  4. [x] **Historical Wave Management**:
+     - Active wave is prominently displayed with current targets and status.
+     - Historical waves collapse into a "Prior waves (N)" interactive accordion.
+  5. [x] **Interactive Scope Deletion API**:
+     - Trash icon in the flight group header triggers `POST /autofab/api/delete-scope`.
+     - Cleanly deletes worker sessions from DSH's internal session manager and purges disk state with instant visual DOM removal.
+  6. [x] **Workspace Retention & Selective Recycling Integration**:
+     - Integrated with `benchmarks/runs/<suite>_<model_slug>_<index>/` and `flight_status.json`.
+     - In-place failure preservation (no `.failed` renaming) and automatic recycling of finished slots.
 
 
 

@@ -1167,6 +1167,59 @@ benchmarks/results/
 3. **Post-Flight Workspace Drain**:
    - Following archival, `drain_unit_workspace()` is executed again to cleanse `lib/` and `tests/` in the subject directory, ensuring subsequent model runs operate on an unpolluted filesystem.
 
+### Benchmark Run Workspace Retention & Selective Slot Recycling (`benchmarks/runs/`)
+
+In addition to static artifact archival under `benchmarks/results/`, modern benchmark execution via `autofab benchmark` retains the entire live execution environment to facilitate developer inspection, interactive debugging, and telemetry review:
+
+```
+benchmarks/runs/
+└── <suite>_<model_slug>_<index>/              # e.g., dag_engine_lite_qwen_moe_1/
+    ├── flight_status.json                     # JSON status manifest (status, timestamp, pass)
+    └── parts/
+        └── <suite>/                           # Complete retained workspace tree
+            ├── high/
+            ├── planning/
+            ├── scenarios/
+            ├── low/
+            ├── lib/
+            ├── tests/
+            └── pretense/
+```
+
+1. **Workspace Layout & Flight Status Manifest (`flight_status.json`)**:
+   - Each benchmark flight is provisioned under `benchmarks/runs/<suite>_<model_slug>_<index>/`.
+   - The directory root maintains a structured `flight_status.json` file recording execution lifecycle state:
+     ```json
+     {
+       "suite": "ring_buffer",
+       "model": "qwen-moe",
+       "flight_id": "ring_buffer_qwen_moe_1",
+       "status": "finished",
+       "created_at": "2026-11-10T08:15:00Z",
+       "completed_at": "2026-11-10T08:22:30Z",
+       "passed": true
+     }
+     ```
+   - Valid lifecycle states are `"status": "running"`, `"status": "finished"` (verification passed), and `"status": "failed"` (verification failed or timeout).
+
+2. **In-Place Failure Preservation (Deprecation of `.failed` Directory Suffix)**:
+   - Previously, failed benchmark flights were renamed by appending `.failed` to the workspace directory (`<flight_dir>.failed`). This invalidated editor file references, open shell tabs, and terminal commands.
+   - Under current architecture, **workspaces are preserved strictly in-place at their original path**. The teardown handler updates `flight_status.json` with `"status": "failed"` and `"passed": false` without altering directory paths on disk.
+
+3. **Selective Slot Recycling Policy**:
+   - When a new benchmark flight is launched for a suite and model combination, `_provision_flight_scope` scans `benchmarks/runs/` to determine the target slot:
+     - **Finished Slots (`status: finished`)**: Automatically recycled and overwritten. Finished runs represent verified artifacts already archived in `benchmarks/results/`, making slot reuse resource-efficient.
+     - **Failed Slots (`status: failed`)**: **Preserved permanently in-place** for post-mortem debugging. The provisioner increments the sequential run index ($N \to N+1$), creating a new slot (e.g., `<suite>_<model>_2`).
+     - **In-Flight Slots (`status: running`)**: Preserved to avoid stepping on active concurrent runs; the index advances sequentially.
+
+4. **Multi-Segment Target Scope Resolution**:
+   - Retained benchmark paths contain multi-segment directories (`benchmarks/runs/<name>/parts/...`).
+   - The target resolution engine (`parse_cleanroom_target` in `autofab_role_tool.py`) preserves multi-segment scopes rather than truncating to the top-level directory (`benchmarks`), ensuring that work queues, role workspaces, and coordinator barriers correctly isolate target units.
+
+5. **DSH Web Integration & Interactive Deletion**:
+   - Retained benchmark scopes appear automatically in the DSH Web visual hierarchy plugin (`dsh-autofab-hierarchy`).
+   - Users can interactively delete completed or failed runs directly from the sidebar via the hover trash icon, which invokes `POST /autofab/api/delete-scope` to terminate lingering worker sessions and purge workspace directories.
+
 ### Artifact, JSON Telemetry & LaTeX Table Emitter
 
 Every benchmarking run produces:
