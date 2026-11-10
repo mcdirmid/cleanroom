@@ -83,30 +83,14 @@ class DshTelemetryParser(Singleton[AgentSessionTier], Protocol):
         ...
 
     @operation
-    def sync_desktop_session(
-        self,
-        sessions_dir: Optional[str],
-        workspace_dir: str,
-        role_name: str,
-        dir_scope: str,
-        start_time: float,
-    ) -> None:
-        """Synchronizes active session records with the DeepSeek Harness Desktop application.
-
-        POSTCONDITIONS:
-        - MUST update desktop storage files setting session title to include scope and role, and send RPC notifications when sessions_dir is valid without creating per-role workspace records.
-        """
-        ...
-
-    @operation
-    def is_desktop_server_available(
+    def is_server_available(
         self,
         sessions_dir: Optional[str] = None,
     ) -> bool:
-        """Evaluates whether an active DeepSeek Harness Desktop application or background server is reachable.
+        """Evaluates whether an active DeepSeek Harness Web loopback bridge is reachable.
 
         POSTCONDITIONS:
-        - MUST probe application cookie storage and verify reachability over the local RPC bridge.
+        - MUST check active Web loopback bridge configuration and verify reachability over the bridge.
         """
         ...
 
@@ -173,7 +157,7 @@ class DshTelemetryParser(Singleton[AgentSessionTier], Protocol):
         title: str,
         sessions_dir: Optional[str] = None,
     ) -> bool:
-        """Renames a session on DeepSeek Harness Web bridge or Desktop RPC.
+        """Renames a session on DeepSeek Harness Web bridge.
 
         POSTCONDITIONS:
         - MUST update the session title to title and return True if successful, or False if unreachable.
@@ -186,7 +170,7 @@ class DshTelemetryParser(Singleton[AgentSessionTier], Protocol):
         session_id: str,
         sessions_dir: Optional[str] = None,
     ) -> bool:
-        """Deletes a session from DeepSeek Harness Web bridge or Desktop RPC.
+        """Deletes a session from DeepSeek Harness Web bridge.
 
         POSTCONDITIONS:
         - MUST delete the session from the server and return True if successful, or False if unreachable.

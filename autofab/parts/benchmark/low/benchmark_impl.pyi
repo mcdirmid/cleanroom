@@ -67,7 +67,6 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
         pretense: bool = False,
         method: Optional[str] = None,
         dsh_web: bool = False,
-        dsh_desktop: bool = False,
         experiment: Optional[str] = None,
     ) -> benchmark.FlightRecord:
         """Executes a benchmark flight for a designated model and unit.

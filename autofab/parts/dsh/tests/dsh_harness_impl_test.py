@@ -120,8 +120,10 @@ class FakeDshTelemetryParser:
     def turn_status(self, val: dsh_telemetry.DshRpcRoundStatus) -> None:
         self.round_status = val
 
-    def is_desktop_server_available(self, sessions_dir: Optional[str] = None) -> bool:
+    def is_server_available(self, sessions_dir: Optional[str] = None) -> bool:
         return self.server_available
+
+    is_desktop_server_available = is_server_available
 
     def dispatch_round_rpc(
         self,
@@ -173,16 +175,6 @@ class FakeDshTelemetryParser:
         model_name: Optional[str] = None,
     ) -> dsh_telemetry.DshSessionTokenMetrics:
         return dsh_telemetry.DshSessionTokenMetrics()
-
-    def sync_desktop_session(
-        self,
-        sessions_dir: Optional[str],
-        workspace_dir: str,
-        role_name: str,
-        dir_scope: str,
-        start_time: float,
-    ) -> None:
-        pass
 
     def rename_session(
         self,
@@ -680,7 +672,7 @@ class DshHarnessImplTest(unittest.TestCase):
             adapter.await_role(handle)
 
     def test_dispatch_role_server_available_rpc_unreachable_fails_cleanly(self) -> None:
-        """Scenario 1: Fails cleanly without running incompatible headless CLI when desktop server RPC is unreachable."""
+        """Scenario 1: Fails cleanly without running incompatible headless CLI when server RPC is unreachable."""
         with enter_phase(agent_session.agent_session, registry=self.registry):
             fake_parser = FakeDshTelemetryParser(server_available=True, fail_rpc=True)
             adapter = DshHarnessAdapter(
@@ -704,7 +696,7 @@ class DshHarnessImplTest(unittest.TestCase):
             result = adapter.await_role(handle)
             self.assertEqual(result.status, "failed")
             self.assertIn(
-                "DeepSeek Harness Desktop RPC is unavailable after retries",
+                "DeepSeek Harness Web RPC is unavailable after retries",
                 result.failure_reason or "",
             )
 
@@ -1068,17 +1060,13 @@ class DshHarnessImplTest(unittest.TestCase):
             res3 = adapter.await_role(handle3)
             self.assertEqual(res3.status, "unresolved")
 
-    def test_resolve_default_sessions_dir_gating(self) -> None:
-        """Verifies _resolve_default_sessions_dir strictly gates web candidate on AUTOFAB_DSH_WEB==1."""
+    def test_resolve_default_sessions_dir(self) -> None:
+        """Verifies _resolve_default_sessions_dir defaults to ~/.dsh/sessions."""
         home = os.path.expanduser("~")
-        dsh_web_cand = os.path.join(home, ".dsh", "sessions")
-
-        with patch.dict(os.environ, {"AUTOFAB_DSH_WEB": "1"}, clear=False):
-            self.assertEqual(_resolve_default_sessions_dir(), dsh_web_cand)
+        dsh_cand = os.path.join(home, ".dsh", "sessions")
 
         with patch.dict(os.environ, {}, clear=True):
-            resolved = _resolve_default_sessions_dir()
-            self.assertNotEqual(resolved, dsh_web_cand)
+            self.assertEqual(_resolve_default_sessions_dir(), dsh_cand)
 
     def test_update_orchestration_state(self) -> None:
         """Verifies update_orchestration_state writes authoritative state snapshot."""

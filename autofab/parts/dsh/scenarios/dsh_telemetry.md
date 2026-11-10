@@ -21,21 +21,19 @@ Given: a DeepSeek Harness session storage directory containing a compressed `ses
 1. The telemetry parser parses session storage for the workspace.
    Observed: the archive is located and decompressed, and the session token metrics are extracted.
 
-## Scenario 4 — Synchronizing session into desktop storage
+## Scenario 4 — Evaluating Web loopback bridge reachability
 
-Given: a live workspace and session directory.
-
-1. The telemetry parser synchronizes the session with desktop storage.
-   Observed: the session projcache JSON is created or updated with the scope and role as title and start timestamp without creating per-role workspace records.
-
-## Scenario 5 — Evaluating desktop server reachability and dispatching round over RPC
-
-Given: an active DeepSeek Harness server or Desktop application listening on a local port with valid authentication cookies.
+Given: an active DeepSeek Harness Web loopback bridge listening on a local port.
 
 1. The telemetry parser evaluates server reachability.
    Observed: reachability is confirmed.
+
+## Scenario 5 — Dispatching round over Web loopback bridge
+
+Given: an active DeepSeek Harness Web loopback bridge.
+
 1. The telemetry parser dispatches a role round with workspace directory, role name, task prompt, and directory scope.
-   Observed: the round is accepted by the server over the JSON-RPC bridge with session titled with scope and role directly within the role workspace directory, and a task handle is returned.
+   Observed: the round is accepted by the server over the bridge with session titled with scope and role directly within the role workspace directory, and a task handle is returned.
 
 ## Scenario 6 — Polling active RPC round status until completion
 
@@ -46,7 +44,7 @@ Given: a task handle representing an active role round dispatched over the RPC b
 
 ## Scenario 7 — Renaming, deleting, and cleaning up scope sessions
 
-Given: an active DeepSeek Harness Web bridge or Desktop server with existing sessions.
+Given: an active DeepSeek Harness Web bridge with existing sessions.
 
 1. The telemetry parser renames a session by identifier.
    Observed: the session title is updated to the proposed title.
@@ -55,6 +53,7 @@ Given: an active DeepSeek Harness Web bridge or Desktop server with existing ses
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-11-09T23:32:00Z
-CHANGE: Add session renaming, deletion, and scope conversation cleanup operations
+LAST_CHANGED: 2026-11-10T18:00:00Z
+CHANGE: Remove legacy DSH Desktop references; consolidate on DSH Web bridge
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->

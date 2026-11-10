@@ -105,47 +105,18 @@ def _resolve_default_sessions_dir() -> str:
     if "DSH_SESSIONS_DIR" in os.environ and os.environ["DSH_SESSIONS_DIR"].strip():
         return os.environ["DSH_SESSIONS_DIR"].strip()
 
-    home = os.path.expanduser("~")
-    dsh_web_cand = os.path.join(home, ".dsh", "sessions")
-    if os.environ.get("AUTOFAB_DSH_WEB") == "1":
-        return dsh_web_cand
-
     dsh_home = os.environ.get("DSH_HOME")
     if dsh_home and dsh_home.strip():
-        h_cand = os.path.join(dsh_home.strip(), "harness", "sessions")
-        if os.path.isdir(h_cand):
-            return h_cand
         s_cand = os.path.join(dsh_home.strip(), "sessions")
         if os.path.isdir(s_cand):
             return s_cand
-        return h_cand
+        h_cand = os.path.join(dsh_home.strip(), "harness", "sessions")
+        if os.path.isdir(h_cand):
+            return h_cand
+        return s_cand
 
     home = os.path.expanduser("~")
-    candidates = [
-        os.path.join(
-            home, "Library", "Application Support", "dsh-desktop", "harness", "sessions"
-        ),
-        os.path.join(home, ".config", "dsh-desktop", "harness", "sessions"),
-        os.path.join(home, ".local", "share", "dsh-desktop", "harness", "sessions"),
-    ]
-    appdata = os.environ.get("APPDATA")
-    if appdata:
-        candidates.append(os.path.join(appdata, "dsh-desktop", "harness", "sessions"))
-
-    for cand in candidates:
-        if os.path.isdir(cand):
-            return cand
-
-    # Platform default fallback
-    if sys.platform == "darwin":
-        return os.path.join(
-            home, "Library", "Application Support", "dsh-desktop", "harness", "sessions"
-        )
-    elif sys.platform == "win32":
-        return os.path.join(
-            os.environ.get("APPDATA", home), "dsh-desktop", "harness", "sessions"
-        )
-    return os.path.join(home, ".config", "dsh-desktop", "harness", "sessions")
+    return os.path.join(home, ".dsh", "sessions")
 
 
 @dataclass
@@ -259,7 +230,7 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
         if self._simulation_mode:
             proc = None
         else:
-            server_available = self._telemetry_parser.is_desktop_server_available(
+            server_available = self._telemetry_parser.is_server_available(
                 self._sessions_dir
             )
             if not server_available:
@@ -299,7 +270,7 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
                     return task_handle
                 else:
                     err_msg = (
-                        "DeepSeek Harness server is unreachable (neither DSH Web bridge nor DSH Desktop RPC is available). "
+                        "DeepSeek Harness server is unreachable (DSH Web bridge is not available). "
                         "Headless execution is strictly banned."
                     )
                     with open(log_path, "w", encoding="utf-8") as lf:
@@ -348,7 +319,7 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
 
             if not rpc_handle:
                 err_msg = (
-                    "DeepSeek Harness Desktop RPC is unavailable after retries (desktop server restarting or unreachable). "
+                    "DeepSeek Harness Web RPC is unavailable after retries (server restarting or unreachable). "
                     "Headless execution is strictly banned."
                 )
                 with open(log_path, "w", encoding="utf-8") as lf:
@@ -716,15 +687,6 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
                     self._session_baselines[session_id] = metrics
                 self._session_baselines[task.dispatch.workspace_dir] = metrics
 
-        if not self._simulation_mode:
-            self._telemetry_parser.sync_desktop_session(
-                sessions_dir=self._sessions_dir,
-                workspace_dir=task.dispatch.workspace_dir,
-                role_name=task.dispatch.role_name,
-                dir_scope=task.dispatch.dir_scope,
-                start_time=task.start_time,
-            )
-
         return subagent_coordinator.RoleRoundResult(
             role=task.dispatch.role_name,
             status=status,
@@ -862,17 +824,6 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
                 elapsed = time.time() - task.start_time
                 if elapsed >= self._timeout_seconds:
                     return self.await_role(task_handle)
-            if not self._simulation_mode and self._sessions_dir:
-                try:
-                    self._telemetry_parser.sync_desktop_session(
-                        sessions_dir=self._sessions_dir,
-                        workspace_dir=task.dispatch.workspace_dir,
-                        role_name=task.dispatch.role_name,
-                        dir_scope=task.dispatch.dir_scope,
-                        start_time=task.start_time,
-                    )
-                except Exception:
-                    pass
             return None
 
         return self.await_role(task_handle)
@@ -889,29 +840,9 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
                 task.process.kill()
             except OSError:
                 pass
-        session_id = ""
         if task.is_rpc and task.rpc_handle:
             try:
-                active_turns = getattr(self._telemetry_parser, "_active_rpc_turns", {})
-                turn_info = (
-                    active_turns.get(task.rpc_handle)
-                    if isinstance(active_turns, dict)
-                    else None
-                )
-                port = None
-                cookie_name = ""
-                cookie_value = ""
-                if turn_info:
-                    session_id = turn_info.get("session_id", "")
-                    port = turn_info.get("port")
-                    cookie_name = turn_info.get("cookie_name", "")
-                    cookie_value = turn_info.get("cookie_value", "")
-                elif task.rpc_handle.startswith(("dsh_rpc::", "dsh_rpc_web::")):
-                    parts = task.rpc_handle.split("::")
-                    if len(parts) >= 2:
-                        session_id = parts[1]
-
-                if task.rpc_handle.startswith("dsh_rpc_web::"):
+                if task.rpc_handle.startswith(("dsh_web::", "dsh_rpc_web::")):
                     parts = task.rpc_handle.split("::")
                     actual_sid = parts[1] if len(parts) >= 2 else ""
                     task_name = parts[2] if len(parts) >= 3 else actual_sid
@@ -920,22 +851,6 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
                         dsh_telemetry_impl._call_web_bridge(
                             bridge, "dsh_close", {"worker": task_name}, timeout=2.0
                         )
-
-                if not port:
-                    server_info = dsh_telemetry_impl._discover_desktop_server(
-                        self._sessions_dir
-                    )
-                    if server_info:
-                        port, cookie_name, cookie_value = server_info
-                if port and session_id:
-                    dsh_telemetry_impl._call_dsh_rpc(
-                        port,
-                        cookie_name,
-                        cookie_value,
-                        "session/cancel",
-                        {"request": {"sessionId": session_id}},
-                        timeout=2.0,
-                    )
             except Exception:
                 pass
 

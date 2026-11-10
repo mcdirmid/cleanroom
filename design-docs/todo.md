@@ -430,7 +430,7 @@ Autofab provides deep integration with DeepSeek Harness (`dsh`) across direct JS
    - **First-Class Navigation**: Role workers (`lib`, `test`, `qa`, `coverage`, `pretense`) spawn as independent top-level sessions labeled `[<scope>] <role>` (e.g. `[ring_buffer] lib`) residing in DSH Web's sidebar under **Ungrouped**.
    - **Zero Gateway Authorization Errors**: Because these sessions open with standard `{ kind: "session" }` addresses, clicking them in Mac or iPad Safari opens the full streaming conversation without tripping `subagent/unauthorized`.
    - **Lean Preset Parity**: The Cordis profile `~/.dsh/profiles/web/cordis.patch.yml` enforces the Cleanroom Lean Preset (`preset-standard`). Tool token overhead is reduced from 5.5K to 1.7K tokens (exposing only `bash_run`), and system prompts are compacted from 1.5K to 967 tokens, matching DSH Desktop identically.
-   - **Environment Isolation**: Unit test and mock harness suites are decoupled from live Web sessions by gating Web mode strictly on `AUTOFAB_DSH_WEB="1"`. CLI flags (`--dsh-web`, `--dsh-desktop`) and `model_configs.toml` (`dsh_web = true` / `dsh_mode = web`) allow effortless runtime toggling.
+   - **Environment Isolation**: Unit test and mock harness suites are decoupled from live Web sessions by gating Web mode strictly on `AUTOFAB_DSH_WEB="1"`. CLI flags (`--dsh-web`) and `model_configs.toml` (`dsh_web = true`) allow runtime toggling. Legacy DSH Desktop support has been retired and removed.
 
 3. **The Visual Subagent Hierarchy & Native Cordis Plugin (`dsh-autofab-hierarchy`)**:
    - To eliminate the clutter of 10 to 30 top-level sessions in DSH Web without triggering API Gateway `subagent/unauthorized` errors, Cleanroom deploys the native Cordis UI plugin `dsh-autofab-hierarchy` at `~/.dsh/profiles/web/plugins/dsh-autofab-hierarchy/`.
@@ -561,7 +561,7 @@ In Google Antigravity environments:
   - Enforced Lean Preset parity (`preset-standard` exposing only `bash_run`, ~1.7K tool tokens, 967 prompt tokens), matching DSH Desktop token economy identically.
   - Gated live Web mode strictly on `AUTOFAB_DSH_WEB="1"` in `dsh_telemetry_impl.py` and `dsh_harness_impl.py` to isolate unit test and mock harness suites from live background daemon sessions.
   - Resolved `PYTHONPATH` isolation in `app_info.py` across concurrent benchmark flights and sub-workspaces.
-  - Added `--dsh-desktop` flag, `--dsh-web` CLI switch, and `model_configs.toml` global toggle (`dsh_web = true` / `dsh_mode = web`).
+  - Removed legacy `--dsh-desktop` support and dedicated code; standardized execution exclusively on DSH Web bridge (`--dsh-web` and `model_configs.toml` `dsh_web = true`).
   - Cascaded HLS-downstream specification alignment across `high/`, `planning/`, `scenarios/`, `low/`, `lib/`, and `tests/` for benchmark and workspace tools.
   - Validated across benchmark flights and logs for `ring_buffer` and `dag_engine_lite` suites.
 - [x] **Phase 15: Specification Contract Preconditions, Checked Errors & Semantic Coverage De-Coercion**

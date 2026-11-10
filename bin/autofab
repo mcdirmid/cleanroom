@@ -2,7 +2,7 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 export PYTHONPATH="$REPO_ROOT:$REPO_ROOT/autofab_py:$REPO_ROOT/autofab:$REPO_ROOT/autofab/support/lib:$REPO_ROOT/autofab_py/support/lib:$REPO_ROOT/pretense:$REPO_ROOT/pretense/support/lib:$PYTHONPATH"
-export DSH_HOME="${DSH_HOME:-$HOME/Library/Application Support/dsh-desktop/harness}"
+export DSH_HOME="${DSH_HOME:-$HOME/.dsh}"
 if command -v uv >/dev/null 2>&1 && [ -f "$REPO_ROOT/pyproject.toml" ]; then
     exec uv run python "$REPO_ROOT/autofab/support/lib/autofab_role_tool.py" "$@"
 else

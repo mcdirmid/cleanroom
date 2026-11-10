@@ -131,12 +131,7 @@ class SubagentToolRunner(subagent_tool.SubagentToolRunner):
         orch_parser.add_argument(
             "--dsh-web",
             action="store_true",
-            help="Use DeepSeek Harness Web loopback bridge instead of Electron Desktop RPC.",
-        )
-        orch_parser.add_argument(
-            "--dsh-desktop",
-            action="store_true",
-            help="Force DeepSeek Harness Desktop RPC execution even when Web mode is the configured default.",
+            help="Use DeepSeek Harness Web loopback bridge.",
         )
 
         args_list = list(argv)
@@ -145,9 +140,7 @@ class SubagentToolRunner(subagent_tool.SubagentToolRunner):
 
         parsed = parser.parse_args(args_list)
         if parsed.command == "orchestrate":
-            if getattr(parsed, "dsh_desktop", False):
-                os.environ["AUTOFAB_DSH_WEB"] = "0"
-            elif getattr(parsed, "dsh_web", False):
+            if getattr(parsed, "dsh_web", False):
                 os.environ["AUTOFAB_DSH_WEB"] = "1"
             scope = parsed.scope_opt or parsed.dir_scope
             if not scope:

@@ -30,7 +30,7 @@ The `dsh_ext` external component specifies DeepSeek Harness CLI options, role ag
 
 **Session Storage and Telemetry Schema**
 
-- Storage Directory: Discovered via `DSH_SESSIONS_DIR`, `DSH_HOME/harness/sessions`, or platform application support directory (`~/Library/Application Support/dsh-desktop/harness/sessions` on macOS, `~/.config/dsh-desktop/harness/sessions` on Linux), storing `<dir-slug>/<session-id>/session.v4.jsonl.zstd` (with uncompressed `session.v4.jsonl` fallback)
+- Storage Directory: Discovered via `DSH_SESSIONS_DIR`, `DSH_HOME/harness/sessions`, or user directory (`~/.dsh/sessions`), storing `<dir-slug>/<session-id>/session.v4.jsonl.zstd` (with uncompressed `session.v4.jsonl` fallback)
 - Concurrency Lock: `session.lock` inside the active session directory verified non-blockingly via file locking.
 - Active Session ID: `<workspace_dir>/.cleanroom/dsh_session_id.txt` for persisting active session ID across rounds, reset upon failed rounds.
 - Structured JSON run event usage fields:
@@ -41,11 +41,12 @@ The `dsh_ext` external component specifies DeepSeek Harness CLI options, role ag
 
 **DeepSeek Harness Local JSON-RPC Wire Protocol**
 
-- Discovery: Read-only SQLite `Cookies` (`dsh-auth-%`) in application support directories discovering active listening port and authentication cookie.
-- Local RPC Endpoints (`POST http://127.0.0.1:{port}/api/{endpoint}`):
-  - `workspace/create`: Enrolls workspace path, returns `{ result: { value: { workspace: { workspaceId } } } }`.
-  - `session/create`: Enrolls or attaches session to workspace, returns `{ result: { ok: true } }`.
-  - `session/prompt`: Enqueues prompt task, returns `{ result: { messageId } }`.
+- Discovery: Endpoint configuration discovered from `~/.dsh/bridge/endpoint.json`.
+- Local RPC Endpoints (`POST {endpoint_url}`):
+  - `dsh_spawn`: Spawns an ungrouped role worker session, returns `{ ok: true }`.
+  - `dsh_list_workers`: Returns active worker tasks with status.
+  - `dsh_close`: Closes an active worker session.
+  - `dsh_list_sessions`: Lists all session records.
 - Subagent Delegation Depth Limits (`maxDepth`):
   - Supported in `@deepseek-ai/dsh-tool-subagent` via integer values (`maxDepth: 2`) or `'provider-managed'`, backed by in-process providers with `depthLimit` capability.
 

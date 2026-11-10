@@ -2123,7 +2123,6 @@ def _execute_flight(
     method: Optional[str] = None,
     max_waves: Optional[int] = 100,
     dsh_web: bool = False,
-    dsh_desktop: bool = False,
     experiment: Optional[str] = None,
 ) -> benchmark.FlightRecord:
     if experiment:
@@ -2340,9 +2339,7 @@ def _execute_flight(
                 cmd.extend(["--experiment", experiment])
             if resolved_harness == "antigravity" and antigravity_dispatch:
                 cmd.extend(["--antigravity-dispatch", antigravity_dispatch])
-            if dsh_desktop or os.environ.get("AUTOFAB_DSH_WEB") == "0":
-                cmd.append("--dsh-desktop")
-            elif dsh_web or os.environ.get("AUTOFAB_DSH_WEB") == "1":
+            if dsh_web or os.environ.get("AUTOFAB_DSH_WEB") == "1":
                 cmd.append("--dsh-web")
             default_timeout = model.run_timeout_seconds
             max_wait = (
@@ -2819,7 +2816,6 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
         method: Optional[str] = None,
         max_waves: Optional[int] = 100,
         dsh_web: bool = False,
-        dsh_desktop: bool = False,
         experiment: Optional[str] = None,
     ) -> benchmark.FlightRecord:
         return _execute_flight(
@@ -2840,7 +2836,6 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
             method=method,
             max_waves=max_waves,
             dsh_web=dsh_web,
-            dsh_desktop=dsh_desktop,
             experiment=experiment,
         )
 
@@ -3179,11 +3174,6 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
             help="Execute DSH subagent rounds via DSH Web bridge on port 3080/47821.",
         )
         parser.add_argument(
-            "--dsh-desktop",
-            action="store_true",
-            help="Force DeepSeek Harness Desktop RPC execution even when Web mode is the configured default.",
-        )
-        parser.add_argument(
             "--experiment",
             type=str,
             default=None,
@@ -3242,10 +3232,7 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
                     del os.environ["AUTOFAB_EXPERIMENT"]
 
         effective_dsh_web = False
-        if args.dsh_desktop:
-            os.environ["AUTOFAB_DSH_WEB"] = "0"
-            effective_dsh_web = False
-        elif args.dsh_web:
+        if args.dsh_web:
             os.environ["AUTOFAB_DSH_WEB"] = "1"
             effective_dsh_web = True
         else:
@@ -3391,7 +3378,6 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
                     method=args.method,
                     max_waves=args.max_waves,
                     dsh_web=effective_dsh_web,
-                    dsh_desktop=args.dsh_desktop,
                     experiment=args.experiment,
                 )
                 self.save_flight_json(record, str(logs_dir))

@@ -328,7 +328,7 @@ def resolve_default_dsh_web(repo_root: str | Path | None = None) -> bool:
                     return True
         except Exception:
             pass
-    return False
+    return True
 
 
 def get_user_credentials_file() -> str:

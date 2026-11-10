@@ -28,24 +28,21 @@ Given: a DeepSeek Harness session storage directory containing a compressed `ses
    Observed: the archive is located and decompressed (or read directly if uncompressed), and the session token metrics are extracted.
    Realized by: the component's session archive locator invoking zstd decompression or plain jsonl reading and parsing session records.
 
-### Scenario 4 — Synchronizing session into desktop storage
+### Scenario 4 — Evaluating Web loopback bridge reachability
 
-Given: a live workspace and session directory.
-
-1. The telemetry parser synchronizes the session with desktop storage.
-   Observed: the session projcache JSON is created or updated with the scope and role as title and start timestamp without creating per-role workspace records.
-   Realized by: the component's desktop synchronizer writing projcache files and sending RPC requests to local Desktop endpoints.
-
-### Scenario 5 — Evaluating desktop server reachability and dispatching round over RPC
-
-Given: an active DeepSeek Harness server or Desktop application listening on a local port with valid authentication cookies.
+Given: an active DeepSeek Harness Web loopback bridge.
 
 1. The telemetry parser evaluates server reachability.
-   Observed: reachability is confirmed.
-   Realized by: probing the active application port and verifying cookie authentication.
+   Observed: reachability is confirmed via the Web loopback bridge endpoint.
+   Realized by: discovering active Web bridge endpoint from bridge configuration.
+
+### Scenario 5 — Dispatching round over DSH Web bridge as ungrouped session
+
+Given: an active DeepSeek Harness Web loopback bridge.
+
 1. The telemetry parser dispatches a role round with workspace directory, role name, task prompt, and directory scope.
-   Observed: the round is accepted by the server over the JSON-RPC bridge with session titled with scope and role directly within the role workspace directory, and a task handle is returned.
-   Realized by: executing session/create (using role workspace directory directly without workspaceId), session/rename, session/selectModel (resolving declared model profile names against model configuration definitions discovered in workspace ancestors, working directories, user configuration, or repository hierarchy and mapping local MLX providers to oMLX endpoints), and session/prompt RPC requests.
+   Observed: the role worker is spawned directly as an independent top-level session with a globally unique task name labeled `[<scope>] <role>` under Ungrouped without container attachment or parent session reference.
+   Realized by: invoking dsh_spawn with a unique task name, formatted label, and cwd without invoking dsh_container or passing parent_session.
 
 ### Scenario 6 — Polling active RPC round status until completion
 
@@ -55,30 +52,19 @@ Given: a task handle representing an active role round dispatched over the RPC b
    Observed: a DshRpcRoundStatus record is returned indicating execution state and accumulated token usage, recognizing terminal outcomes in string states ('completed', 'done', 'success', 'closed', 'error', 'failed', 'aborted') or dictionary structures with 'completed' or 'errored' keys, or returning completed with error when the worker is absent from active worker listings beyond an initial grace period.
    Realized by: querying session status and event records over the JSON-RPC bridge or bridge tool endpoints.
 
-### Scenario 7 — Dispatching round over DSH Web bridge as ungrouped session
+### Scenario 7 — Renaming, deleting, and cleaning up scope sessions
 
-Given: DeepSeek Harness Web mode enabled via environment configuration and an active loopback bridge.
-
-1. The telemetry parser evaluates server reachability.
-   Observed: reachability is confirmed via the Web loopback bridge endpoint without requiring desktop cookies.
-   Realized by: discovering active Web bridge endpoint from bridge configuration.
-1. The telemetry parser dispatches a role round.
-   Observed: the role worker is spawned directly as an independent top-level session with a globally unique task name labeled `[<scope>] <role>` under Ungrouped without container attachment or parent session reference.
-   Realized by: invoking dsh_spawn with a unique task name, formatted label, and cwd without invoking dsh_container or passing parent_session.
-
-### Scenario 8 — Renaming, deleting, and cleaning up scope sessions
-
-Given: an active DeepSeek Harness Web bridge or Desktop server with existing sessions.
+Given: an active DeepSeek Harness Web bridge with existing sessions.
 
 1. The telemetry parser renames a session by identifier.
    Observed: the session title is updated to the proposed title.
-   Realized by: invoking dsh_rename_session over the Web bridge or session/rename over Desktop RPC.
+   Realized by: invoking dsh_rename_session over the Web bridge.
 1. The telemetry parser cleans up conversations matching a directory scope.
    Observed: all sessions containing `[<scope>]` in their title are deleted from the server.
-   Realized by: listing sessions via dsh_list_sessions or session/list, filtering by `[<scope>]` in the title, and deleting each matching session via dsh_delete_session or session/delete.
+   Realized by: listing sessions via dsh_list_sessions, filtering by `[<scope>]` in the title, and deleting each matching session via dsh_delete_session.
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-11-10T01:30:00Z
-CHANGE: Conclude missing RPC workers as errored completion when absent from registry beyond grace period
+LAST_CHANGED: 2026-11-10T18:00:00Z
+CHANGE: Remove legacy DSH Desktop references; consolidate on DSH Web bridge
 -->

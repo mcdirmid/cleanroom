@@ -71,18 +71,8 @@ class DshTelemetryParser(Singleton[AgentSessionTier], Protocol):
         model_name: Optional[str] = None,
     ) -> DshSessionTokenMetrics: ...
 
-    # Contract: MUST update desktop storage files and send RPC notifications when sessions_dir is valid.
-    def sync_desktop_session(
-        self,
-        sessions_dir: Optional[str],
-        workspace_dir: str,
-        role_name: str,
-        dir_scope: str,
-        start_time: float,
-    ) -> None: ...
-
-    # Contract: MUST probe application cookie storage and verify reachability over the local RPC bridge.
-    def is_desktop_server_available(
+    # Contract: MUST check active Web loopback bridge configuration and verify reachability over the bridge.
+    def is_server_available(
         self,
         sessions_dir: Optional[str] = None,
     ) -> bool: ...

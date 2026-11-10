@@ -6,7 +6,7 @@ Given: a role dispatch directive for role_a with prompt and ready targets in wor
 
 1. The harness adapter dispatches the round.
    Observed: when a live DeepSeek Harness server is reachable, the round is dispatched over the local RPC bridge with transient retry backoff without file lock contention (failing cleanly when unreachable without attempting incompatible headless CLI resumption); when the server is absent, a concise task prompt file directing workers to read AGENTS.md if not already in context and run bin/get_work (incorporating coordinator reminders when present) is written, lock availability is verified to adopt persisted sessions safely, and a DeepSeek Harness subagent process is launched with handle `dsh-task-1-role_a`.
-   Realized by: the component evaluating server reachability, dispatching over the JSON-RPC bridge with backoff or launching the headless process with overlay patch parameters and session resumption flags when the desktop server is absent.
+   Realized by: the component evaluating server reachability, dispatching over the JSON-RPC bridge with backoff or launching the headless process with overlay patch parameters and session resumption flags when the server is absent.
 
 ### Scenario 2 — Awaiting successful round and extracting token telemetry
 

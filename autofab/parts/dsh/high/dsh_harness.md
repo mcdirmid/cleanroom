@@ -10,7 +10,7 @@ Autonomous multi-agent execution requires reliable process management, non-block
 
 **Out of scope:** The dsh_harness interface component does not partition topological waves or evaluate DAG dirtiness; these are handled by other components.
 
-**Delegated:** Session lifecycle scoping is delegated to agent_session; harness adapter protocols and round outcome types are delegated to subagent_coordinator; token telemetry extraction, rate card calculation, and desktop session synchronization are delegated to dsh_telemetry; platform harness registration is delegated to subagent_harness.
+**Delegated:** Session lifecycle scoping is delegated to agent_session; harness adapter protocols and round outcome types are delegated to subagent_coordinator; token telemetry extraction and rate card calculation are delegated to dsh_telemetry; platform harness registration is delegated to subagent_harness.
 
 ## Types and Behavior
 
@@ -24,7 +24,7 @@ The *dsh harness manager* of an agent session creates and manages DeepSeek Harne
 
 When executing a role round:
 
-- The dsh harness adapter formats task prompts, evaluates whether an active DeepSeek Harness server or Desktop application is reachable over the local RPC bridge, dispatches the round over the RPC bridge when reachable to stream real-time progress to the Desktop UI without file lock contention, renaming older role conversations to put `[<scope>] dead - <role>` (e.g. `[benchmark_N] dead - <role>`) after a new replacement role conversation is issued to distinguish active role threads from obsolete ones without marking threads dead before their replacement exists, and falls back to dispatching headless subagent processes within the designated role workspace directory when unreachable.
+- The dsh harness adapter formats task prompts, evaluates whether an active DeepSeek Harness Web loopback bridge is reachable over the local RPC bridge, dispatches the round over the RPC bridge when reachable to stream real-time progress without file lock contention, renaming older role conversations to put `[<scope>] dead - <role>` (e.g. `[benchmark_N] dead - <role>`) after a new replacement role conversation is issued to distinguish active role threads from obsolete ones without marking threads dead before their replacement exists, and falls back to dispatching headless subagent processes within the designated role workspace directory when unreachable.
 
 - The dsh harness adapter provides non-blocking polling and awaiting of round completion via the RPC bridge or process supervision without mandatory execution timeouts, terminating active executions only when an explicit timeout limit is configured, and cancelling active executions upon interrupt without marking active role threads as dead before a replacement exists.
 

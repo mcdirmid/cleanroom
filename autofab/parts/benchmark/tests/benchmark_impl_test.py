@@ -2159,29 +2159,6 @@ class BenchmarkImplTest(unittest.TestCase):
             elif "AUTOFAB_DSH_WEB" in os.environ:
                 del os.environ["AUTOFAB_DSH_WEB"]
 
-    def test_run_cli_dsh_desktop_flag(self) -> None:
-        """Scenario 19: run_cli accepts --dsh-desktop and sets AUTOFAB_DSH_WEB environment to '0'."""
-        evaluator = BenchmarkEvaluator()
-        orig_env = os.environ.get("AUTOFAB_DSH_WEB")
-        try:
-            os.environ["AUTOFAB_DSH_WEB"] = "1"
-            ret = evaluator.run_cli(
-                [
-                    "--dry-run",
-                    "--suite=cpython",
-                    "--model=deepseek-flash",
-                    "--units=1",
-                    "--dsh-desktop",
-                ]
-            )
-            self.assertEqual(ret, 0)
-            self.assertEqual(os.environ.get("AUTOFAB_DSH_WEB"), "0")
-        finally:
-            if orig_env is not None:
-                os.environ["AUTOFAB_DSH_WEB"] = orig_env
-            elif "AUTOFAB_DSH_WEB" in os.environ:
-                del os.environ["AUTOFAB_DSH_WEB"]
-
     def test_run_cli_default_experiment_on_non_baseline(self) -> None:
         """Scenario 20: run_cli defaults active experiment to structured_blame for non-baseline flights."""
         evaluator = BenchmarkEvaluator()

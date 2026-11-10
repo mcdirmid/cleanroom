@@ -867,23 +867,8 @@ def ensure_dsh_skill_installed() -> str | None:
         candidates.append(os.path.join(dsh_home.strip(), "skills"))
 
     home = os.path.expanduser("~")
-    candidates.extend(
-        [
-            os.path.join(
-                home,
-                "Library",
-                "Application Support",
-                "dsh-desktop",
-                "harness",
-                "skills",
-            ),
-            os.path.join(home, ".config", "dsh-desktop", "harness", "skills"),
-            os.path.join(home, ".local", "share", "dsh-desktop", "harness", "skills"),
-        ]
-    )
-    appdata = os.environ.get("APPDATA")
-    if appdata:
-        candidates.append(os.path.join(appdata, "dsh-desktop", "harness", "skills"))
+    candidates.append(os.path.join(home, ".dsh", "skills"))
+    candidates.append(os.path.join(home, ".dsh", "harness", "skills"))
 
     target_skills_dir = None
     for cand in candidates:
@@ -2648,11 +2633,6 @@ def run_clean(
         help="Use DeepSeek Harness Web loopback bridge instead of Electron Desktop RPC.",
     )
     parser.add_argument(
-        "--dsh-desktop",
-        action="store_true",
-        help="Force DeepSeek Harness Desktop RPC execution even when Web mode is the configured default.",
-    )
-    parser.add_argument(
         "--pipeline",
         "--method",
         dest="pipeline",
@@ -2803,10 +2783,7 @@ def run_clean(
                 forward_args.append("--pretense")
             if parsed.simulation:
                 forward_args.append("--simulation")
-            if getattr(parsed, "dsh_desktop", False):
-                os.environ["AUTOFAB_DSH_WEB"] = "0"
-                forward_args.append("--dsh-desktop")
-            elif getattr(parsed, "dsh_web", False):
+            if getattr(parsed, "dsh_web", False):
                 os.environ["AUTOFAB_DSH_WEB"] = "1"
                 forward_args.append("--dsh-web")
             else:
@@ -3097,9 +3074,7 @@ def run_benchmark_cli(argv: list[str]) -> int:
             os.environ["AUTOFAB_EXPERIMENT"] = arg.split("=", 1)[1]
         elif arg == "--experiment" and idx + 1 < len(argv):
             os.environ["AUTOFAB_EXPERIMENT"] = argv[idx + 1]
-    if "--dsh-desktop" in argv:
-        os.environ["AUTOFAB_DSH_WEB"] = "0"
-    elif "--dsh-web" in argv:
+    if "--dsh-web" in argv:
         os.environ["AUTOFAB_DSH_WEB"] = "1"
     else:
         app_info = _get_app_info()

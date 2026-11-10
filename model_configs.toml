@@ -14,9 +14,8 @@
 # The runtime harness ("dsh", "antigravity") is derived directly from the model profile.
 default = "deepseek-flash"
 
-# dsh_web: Default execution mode for DSH models (true = DSH Web bridge, false = DSH Desktop RPC).
-# Can be overridden via CLI flags --dsh-web or --dsh-desktop.
-dsh_web = false
+# dsh_web: Execution mode for DSH models (true = DSH Web bridge).
+dsh_web = true
 
 # max_unproductive_rounds: Global circuit breaker limit for consecutive rounds
 # that fail to produce change or progress before aborting.

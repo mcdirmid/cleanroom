@@ -43,11 +43,15 @@ Autonomous multi-agent execution requires reliable process management, non-block
   - Grounded: [subagent_harness: [harness_registry_service]]
 - DeepSeek Harness process execution, session storage parsing, and turn result synthesis logic.
   - Deferred: Realized by the dsh harness implementation component.
-- DeepSeek Harness telemetry parsing and desktop synchronization services.
+- DeepSeek Harness telemetry parsing and Web bridge management services.
   - Grounded: [dsh_telemetry: [dsh_telemetry_services]]
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
+LAST_CHANGED: 2026-11-10T18:00:00Z
+CHANGE: Remove legacy DSH Desktop references; consolidate on DSH Web bridge
+SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
+-->
 LAST_CHANGED: 2026-11-09T22:10:00Z
 CHANGE: Authoritative orchestration state snapshot publishing to external coordination storage
 SPEC_QA_AUDIT: 2026-10-15T17:42:46Z

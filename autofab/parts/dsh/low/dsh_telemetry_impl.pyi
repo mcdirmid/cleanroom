@@ -55,32 +55,14 @@ class DshTelemetryParser(dsh_telemetry.DshTelemetryParser):
 
     @operation
     @override
-    def sync_desktop_session(
-        self,
-        sessions_dir: Optional[str],
-        workspace_dir: str,
-        role_name: str,
-        dir_scope: str,
-        start_time: float,
-    ) -> None:
-        """Synchronizes active session records with the DeepSeek Harness Desktop application.
-
-        GROUNDING:
-        - Updates desktop session projcache records with session titled after the scope and role, and dispatches RPC
-          notifications to running Desktop processes without creating per-role workspace records (dsh_telemetry_mechanics).
-        """
-        ...
-
-    @operation
-    @override
-    def is_desktop_server_available(
+    def is_server_available(
         self,
         sessions_dir: Optional[str] = None,
     ) -> bool:
-        """Evaluates whether an active DeepSeek Harness Desktop application or background server is reachable.
+        """Evaluates whether an active DeepSeek Harness Web loopback bridge is reachable.
 
         GROUNDING:
-        - Probes application cookie storage and verifies reachability over the local RPC bridge
+        - Probes active Web loopback bridge configuration and verifies reachability
           (dsh_telemetry_mechanics).
         """
         ...
@@ -153,10 +135,10 @@ class DshTelemetryParser(dsh_telemetry.DshTelemetryParser):
         title: str,
         sessions_dir: Optional[str] = None,
     ) -> bool:
-        """Renames a session on DeepSeek Harness Web bridge or Desktop RPC.
+        """Renames a session on DeepSeek Harness Web bridge.
 
         GROUNDING:
-        - Invokes dsh_rename_session on Web bridge or session/rename on Desktop RPC (dsh_telemetry_mechanics).
+        - Invokes dsh_rename_session on Web bridge (dsh_telemetry_mechanics).
         """
         ...
 
@@ -167,10 +149,10 @@ class DshTelemetryParser(dsh_telemetry.DshTelemetryParser):
         session_id: str,
         sessions_dir: Optional[str] = None,
     ) -> bool:
-        """Deletes a session from DeepSeek Harness Web bridge or Desktop RPC.
+        """Deletes a session from DeepSeek Harness Web bridge.
 
         GROUNDING:
-        - Invokes dsh_delete_session on Web bridge or session/delete on Desktop RPC (dsh_telemetry_mechanics).
+        - Invokes dsh_delete_session on Web bridge (dsh_telemetry_mechanics).
         """
         ...
 
@@ -184,7 +166,7 @@ class DshTelemetryParser(dsh_telemetry.DshTelemetryParser):
         """Discovers and deletes all existing sessions whose title contains [<dir_scope>].
 
         GROUNDING:
-        - Lists sessions via dsh_list_sessions or session/list, finds sessions with [<dir_scope>] in their title, and deletes them (dsh_telemetry_mechanics).
+        - Lists sessions via dsh_list_sessions, finds sessions with [<dir_scope>] in their title, and deletes them (dsh_telemetry_mechanics).
         """
         ...
 

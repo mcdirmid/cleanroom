@@ -153,15 +153,12 @@ Given: the benchmark evaluator and CLI argument parser.
 1. The caller runs `autofab benchmark` with `--baseline` and `--method combined` (or alias `--combined`).
    Observed: routes execution through the unified Autofab clean orchestrator targeting the fused role `combined_baseline`, evaluates composite verification gates, methodology is `combined_baseline`, and passing artifacts are archived with `-combined-baseline` destination suffix.
 
-## Scenario 19 — DSH Web loopback bridge execution via --dsh-web and Desktop override via --dsh-desktop
+## Scenario 19 — DSH Web loopback bridge execution via --dsh-web
 
 Given: the benchmark evaluator and CLI argument parser.
 
 1. The caller runs `autofab benchmark` with `--dsh-web`.
    Observed: sets the DSH Web loopback bridge environment variable or forwards `--dsh-web` to the subagent runner subprocess, enabling DeepSeek subagent execution and telemetry retrieval via the DSH Web loopback bridge.
-
-1. The caller runs `autofab benchmark` with `--dsh-desktop`.
-   Observed: explicitly unsets the DSH Web loopback bridge environment variable or forwards `--dsh-desktop` to the subagent runner subprocess, forcing DeepSeek Harness Desktop RPC execution even when DSH Web is configured as the default.
 
 ## Scenario 20 — Active experiment flight execution and artifact archival suffixing
 
