@@ -106,7 +106,7 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
         """Updates and publishes external orchestration state for the active scope.
 
         GROUNDING:
-        - Resolves coordination storage location, matches active roles to recorded session identifiers, tracks superseded sessions, and writes authoritative state snapshot JSON.
+        - Resolves coordination storage location, matches active roles to recorded session identifiers, filters out uninvoked roles, tracks superseded sessions, and writes authoritative state snapshot JSON.
         """
         ...
 

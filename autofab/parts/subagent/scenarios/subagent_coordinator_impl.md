@@ -69,8 +69,8 @@ Given: scope_a has dirty roles across specification and implementation levels.
 Given: dynamic supervision achieves clean convergence across all evaluated roles in scope_a.
 
 1. The coordinator concludes orchestration.
-   Observed: all provisioned role workspace directories for scope_a are automatically deleted before returning the summary.
-   Realized by: the component's convergence cleanup deleting all provisioned role workspace directories for scope_a when is_converged is true.
+   Observed: all provisioned role workspace directories for scope_a are automatically deleted before returning the summary, unless workspace retention is requested.
+   Realized by: the component's convergence cleanup deleting all provisioned role workspace directories for scope_a when is_converged is true, unless workspace retention is enabled via AUTOFAB_RETAIN_WORKSPACES.
 
 ### Scenario 10 — Halting orchestration upon consecutive unproductive round impasse
 

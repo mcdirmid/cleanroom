@@ -96,10 +96,10 @@ class DependencySolver(dependency_solver.DependencySolver):
         """
         ...
 
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-30T19:00:00Z
+# --- AUTOFAB METADATA ---
+# LAST_CLEANED: 2026-11-10T07:51:09Z
 # LAST_CHANGED: 2026-10-30T19:00:00Z
 # CHANGE: Update imports to semver_core and semver_range
 # CODE_HASH: 000000000000
-# SPEC_QA_AUDIT: 2026-10-30T19:00:00Z
-# --- END CLEANROOM METADATA ---
+# SPEC_QA_AUDIT: 2026-11-10T07:51:09Z
+# --- END AUTOFAB METADATA ---

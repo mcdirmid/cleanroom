@@ -155,10 +155,10 @@ class LRUCache(lru_cache.LRUCache):
         """
         ...
 
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-30T18:30:00Z
+# --- AUTOFAB METADATA ---
+# LAST_CLEANED: 2026-11-10T07:51:09Z
 # LAST_CHANGED: 2026-11-02T19:50:00Z
 # CHANGE: Implement keys_in_lru_order @test_only query in LRUCache
-# CODE_HASH: 29d2fe29ddc4
-# SPEC_QA_AUDIT: 2026-10-30T18:30:00Z
-# --- END CLEANROOM METADATA ---
+# CODE_HASH: dc54ab154a9a
+# SPEC_QA_AUDIT: 2026-11-10T07:51:09Z
+# --- END AUTOFAB METADATA ---

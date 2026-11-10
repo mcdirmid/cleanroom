@@ -120,8 +120,9 @@ Realized by: Testing candidate versions against compiled comparator inequalities
 
 ## Implementation-only
 
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-21T20:57:17Z
+<!-- AUTOFAB METADATA
+LAST_CLEANED: 2026-11-10T07:51:08Z
 LAST_CHANGED: 2026-10-27T22:30:00Z
 CHANGE: Re-align scenarios with HLS updates for basic comparators and clean value object strings
+CODE_HASH: 6e03453d9da2
 -->

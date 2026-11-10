@@ -60,19 +60,19 @@ Given: a list of completed flight records and an optional output file path.
 Given: a completed flight for model `qwen-35b` on benchmark unit `dag_engine` with synthesized `lib/`, `tests/`, and `.autofab.log` files in the ephemeral flight scope.
 
 1. The benchmark evaluator provisions the flight scope.
-   Observed: allocates a concise unique flight scope directory (e.g. `benchmark_1`), deletes all existing conversations that have `[benchmark_1]` in their titles from DeepSeek Harness, copies the target unit directory and configuration into `<flight_scope>/parts/<unit>`, explicitly configures the methodology pipeline as `pipeline = "pretense"` or `pipeline = "standard"`, rewrites benchmark package imports to reference the flight scope package while disallowing bare parts imports, drains pre-existing `lib/` and `tests/` directories, and marks specifications clean up to `spec_qa` within the flight scope to isolate code and test generation.
+   Observed: allocates a concise unique flight scope directory under the benchmark runs container (e.g. `benchmarks/runs/dag_engine_qwen_35b_1`), deletes all existing conversations matching `[dag_engine_qwen_35b_1]` from DeepSeek Harness, copies the target unit directory and configuration into `<flight_scope_dir>/parts/<unit>`, explicitly configures the methodology pipeline as `pipeline = "pretense"` or `pipeline = "standard"`, rewrites benchmark package imports to reference the flight scope package while disallowing bare parts imports, drains pre-existing `lib/` and `tests/` directories, and marks specifications clean up to `spec_qa` within the flight scope to isolate code and test generation.
 
 1. The benchmark evaluator archives the artifacts.
    Observed: creates `lib_1.py`, `test_1.py`, and `autofab_1.log` under `benchmarks/results/dag_engine/qwen-35b/`, embedding flight telemetry comments in `lib_1.py`.
 
 1. The caller checks the benchmark unit workspace and flight scope.
-   Observed: the unit's `lib/` and `tests/` directories have been drained clean, and the ephemeral flight scope directory has been removed.
+   Observed: the unit's `lib/` and `tests/` directories have been drained clean, and the flight scope directory contains `flight_status.json` recording finished status and verification outcome, keeping the flight scope directory and associated role workspaces preserved on disk for external harness inspection.
 
 1. A second run is executed concurrently for the same model and benchmark.
-   Observed: provisions a separate ephemeral flight scope, operates without cross-flight collision, and creates `lib_2.py`, `test_2.py`, and `autofab_2.log` in the results directory without colliding with run 1.
+   Observed: provisions a separate ephemeral flight scope under `benchmarks/runs/`, operates without cross-flight collision, and creates `lib_2.py`, `test_2.py`, and `autofab_2.log` in the results directory without colliding with run 1.
 
 1. A third run fails verification gates or fails DAG convergence (such as having failing unit tests, zero unit tests passed, type errors, or non-zero exit code).
-   Observed: the benchmark evaluator skips artifact archival, preserves the flight scope directory as `<flight_scope>.failed`, preserves associated role workspaces under `<flight_scope>.failed/<role_workspaces>`, emits diagnostics to stderr, avoids writing results files, and returns 1 from `run_cli`.
+   Observed: the benchmark evaluator skips artifact archival, preserves the flight scope directory and its associated role workspaces in-place without moving to a `.failed` directory, writes `flight_status.json` with status `failed` and verification outcome `FAIL`, emits diagnostics to stderr, avoids writing results files, and returns 1 from `run_cli`. A subsequent run skips the failed slot, preserving it for troubleshooting, and allocates the next sequential slot index.
 
 ## Scenario 9 — Dry-run execution bypasses artifact archival and draining
 
@@ -178,7 +178,7 @@ Given: the benchmark evaluator and CLI argument parser.
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-19T18:45:00Z
-LAST_CHANGED: 2026-11-09T23:32:00Z
-CHANGE: Delete existing conversations matching benchmark_N on flight start
+LAST_CHANGED: 2026-11-10T08:43:00Z
+CHANGE: Retain failed benchmark workspaces in-place with failed status without .failed renaming, recycling only finished runs
 SPEC_QA_AUDIT: 2026-10-19T19:35:00Z
 -->

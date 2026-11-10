@@ -59,9 +59,10 @@ By encapsulating adjacency index management under re-entrant locks, employing Ka
 - Directed acyclic graph protocol, wave scheduler, DAG runner, lifecycle states, and run report.
   - Grounded: [dag_engine: [dag_engine_core_service]]
 
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-26T21:35:31Z
+<!-- AUTOFAB METADATA
+LAST_CLEANED: 2026-11-10T07:51:09Z
 LAST_CHANGED: 2026-11-02T19:55:00Z
 CHANGE: Ground observe_cancellation_state test-only query on DAGRunner
-SPEC_QA_AUDIT: 2026-10-26T21:35:31Z
+CODE_HASH: 6124dea1c1c7
+SPEC_QA_AUDIT: 2026-11-10T07:51:09Z
 -->

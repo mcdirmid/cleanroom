@@ -1041,7 +1041,11 @@ def parse_cleanroom_target(target_str: str) -> tuple[str, str | None, bool]:
         else:
             pkg_part = norm
         segs = pkg_part.split("/")
-        scope = segs[0] if segs else raw
+        if "parts" in segs:
+            p_idx = segs.index("parts")
+            scope = "/".join(segs[:p_idx])
+        else:
+            scope = pkg_part
         if not is_unit and len(segs) >= 2 and "." in segs[-1]:
             is_unit = True
             if not role and len(segs) >= 3:
@@ -1065,7 +1069,7 @@ def parse_cleanroom_target(target_str: str) -> tuple[str, str | None, bool]:
         return scope, role, is_unit
 
     # 3. Simple scope or scope#role
-    scope = segs[0] if segs else raw
+    scope = norm_path if norm_path else raw
     return scope, role, False
 
 

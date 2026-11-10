@@ -376,15 +376,18 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
                         if dispatch.dir_scope
                         else ""
                     )
+                    display_scope = os.path.basename(clean_scope) if clean_scope else ""
                     role = dispatch.role_name.strip() if dispatch.role_name else ""
                     role_key = (clean_scope, role)
                     prev_session_id = (
-                        self._active_role_sessions.get(role_key) or saved_sid
+                        self._active_role_sessions.get(role_key)
+                        or self._active_role_sessions.get((display_scope, role))
+                        or saved_sid
                     )
                     if prev_session_id and prev_session_id != new_session_id:
                         dead_title = (
-                            f"[{clean_scope}] dead - {role}"
-                            if clean_scope
+                            f"[{display_scope}] dead - {role}"
+                            if display_scope
                             else (f"dead - {role}" if role else "dead")
                         )
                         try:
@@ -395,18 +398,21 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
                             )
                         except Exception:
                             pass
-                        dead_list = self._dead_role_sessions.setdefault(clean_scope, [])
-                        if not any(
-                            d.get("sessionId") == prev_session_id for d in dead_list
-                        ):
-                            dead_list.append(
-                                {
-                                    "sessionId": prev_session_id,
-                                    "role": role,
-                                    "reason": "superseded",
-                                }
-                            )
+                        dead_entry = {
+                            "sessionId": prev_session_id,
+                            "role": role,
+                            "reason": "superseded",
+                        }
+                        for sc in {clean_scope, display_scope}:
+                            if sc:
+                                dead_list = self._dead_role_sessions.setdefault(sc, [])
+                                if not any(
+                                    d.get("sessionId") == prev_session_id for d in dead_list
+                                ):
+                                    dead_list.append(dead_entry)
                     self._active_role_sessions[role_key] = new_session_id
+                    if display_scope:
+                        self._active_role_sessions[(display_scope, role)] = new_session_id
                     os.makedirs(os.path.dirname(session_file), exist_ok=True)
                     try:
                         with open(session_file, "w", encoding="utf-8") as sf:
@@ -948,6 +954,7 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
         clean_scope = dir_scope.strip("/").strip() if dir_scope else ""
         if not clean_scope:
             return
+        display_scope = os.path.basename(clean_scope) if clean_scope else ""
 
         state_file = os.environ.get("AUTOFAB_STATE_FILE")
         if not state_file:
@@ -956,7 +963,7 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
 
         existing_data: Dict[str, Any] = {
             "scopes": {},
-            "activeScope": clean_scope,
+            "activeScope": display_scope,
             "updatedAt": time.time(),
         }
         if os.path.isfile(state_file):
@@ -968,35 +975,44 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
             except Exception:
                 pass
 
-        existing_data["activeScope"] = clean_scope
+        existing_data["activeScope"] = display_scope
         existing_data["updatedAt"] = time.time()
         scopes_map = existing_data.setdefault("scopes", {})
 
-        scope_obj = scopes_map.setdefault(clean_scope, {})
-        scope_obj["scope"] = clean_scope
+        scope_obj = scopes_map.setdefault(display_scope, {})
+        scope_obj["scope"] = display_scope
+        scope_obj["path"] = clean_scope
         scope_obj["wave"] = wave_count
         scope_obj["converged"] = converged
         scope_obj["status"] = (
             "converged" if converged else ("failed" if failed else "running")
         )
 
-        roles_dict = scope_obj.setdefault("roles", {})
+        roles_dict: Dict[str, Any] = {}
         for r_name in all_scope_roles:
             role_key = (clean_scope, r_name)
-            sid = self._active_role_sessions.get(role_key)
+            sid = self._active_role_sessions.get(role_key) or self._active_role_sessions.get((display_scope, r_name))
             is_running = r_name in active_workers
+            if not sid and not is_running:
+                continue
             status = "running" if is_running else "idle"
             targets = list(assigned_targets.get(r_name, ()))
-            role_entry = roles_dict.setdefault(r_name, {})
-            role_entry["role"] = r_name
+            role_entry: Dict[str, Any] = {
+                "role": r_name,
+                "status": status,
+            }
             if sid:
                 role_entry["sessionId"] = sid
-            role_entry["status"] = status
             if targets:
                 role_entry["targets"] = targets
+            roles_dict[r_name] = role_entry
+        scope_obj["roles"] = roles_dict
 
-        dead_list = self._dead_role_sessions.get(clean_scope, [])
+        dead_list = self._dead_role_sessions.get(display_scope, []) or self._dead_role_sessions.get(clean_scope, [])
         scope_obj["deadSessions"] = list(dead_list)
+
+        if clean_scope != display_scope and clean_scope in scopes_map:
+            scopes_map.pop(clean_scope, None)
 
         try:
             os.makedirs(os.path.dirname(state_file), exist_ok=True)

@@ -45,7 +45,7 @@ When coordinating multi-agent execution:
 
 - The realization manages the dynamic supervision loop, continuing until all units evaluate clean, a round reports failure, or maximum wave iterations are reached, draining or cleanly interrupting in-flight active workers upon termination.
 
-- The realization automatically deletes all provisioned role workspaces in scope upon achieving clean convergence.
+- The realization automatically deletes all provisioned role workspaces in scope upon achieving clean convergence, unless workspace retention is requested (e.g. via AUTOFAB_RETAIN_WORKSPACES).
 
 - The realization interrupts all active workers and automatically deletes all provisioned role workspaces in scope when orchestration is interrupted by system termination or user cancellation signals.
 

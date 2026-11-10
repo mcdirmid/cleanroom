@@ -138,8 +138,8 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
         POSTCONDITIONS:
         - MUST remove all files and directories under unit.unit_dir/lib and unit.unit_dir/tests.
         - MUST mark specifications clean up to specification QA within the flight scope to isolate code and test generation.
-        - MUST purge ephemeral role workspaces associated with the unit.
-        - MUST remove ephemeral flight scopes when present for successful flights, preserving them as <flight_scope>.failed along with associated role workspaces under <flight_scope>.failed/<role_workspaces> (derived from the active role workspaces container) when flights fail verification.
+        - MUST purge ephemeral role workspaces associated with the unit when recycling scope slots.
+        - MUST mark completion metadata (flight_status.json) within the flight scope directory and associated role workspaces upon flight completion, preserving the working tree and role workspaces on disk until recycled by a subsequent benchmark run.
         """
         ...
 
@@ -230,17 +230,17 @@ def __orphan__() -> None:
     - MUST provide benchmark evaluation suites categorized by suite identifiers derived from benchmark part directories.
     - MUST harvest empirical measurements including token counts, step latencies, and role execution rounds from runner log files and transcripts, distinguishing coordinator and baseline developer subagent transcripts from individual role worker transcripts and parent caller sessions.
     - MUST tally role execution rounds exclusively across target role workers based on worker dispatch waves while excluding coordinator sessions from role rounds.
-    - MUST provision a concise sequential ephemeral flight scope directory (e.g. benchmark_1), explicitly configure methodology pipeline as pretense, combined, or standard, rewrite copied benchmark imports, disallow bare parts imports, mark specifications clean up to specification QA, and copy scope methodology configuration.
-    - WHEN an evaluated flight scope index does not exist in the repository root, MUST purge any orphaned role workspaces matching that index to permit sequential reuse.
+    - MUST provision a descriptive sequential flight scope directory under benchmarks/runs/ formatted as benchmarks/runs/<suite>_<model_slug>_<index>, explicitly configure methodology pipeline as pretense, combined, or standard, rewrite copied benchmark imports, disallow bare parts imports, mark specifications clean up to specification QA, and copy scope methodology configuration.
+    - WHEN an evaluated flight scope index does not exist in the repository root or benchmarks/runs/ container, MUST purge any orphaned role workspaces matching that index to permit sequential reuse.
     - MUST clean up orphaned flight scope directories and associated role workspaces from prior flights.
-    - MUST tear down the ephemeral flight scope directory and associated provisioned role workspaces upon flight completion, deleting them for successful flights and preserving the flight scope directory as <flight_scope>.failed along with associated role workspaces under <flight_scope>.failed/<role_workspaces> (derived from the active role workspaces container) on failure.
+    - MUST conclude flight scope lifecycle upon flight completion, writing completion metadata (flight_status.json) into the flight scope directory and associated role workspaces (marking status as finished for successful flights and failed for failed flights), preserving the working tree and role workspaces on disk in-place without moving to a .failed directory, recycling only finished runs on subsequent executions while preserving failed runs for inspection.
     - MUST execute the benchmark evaluator command-line runner within the system lifecycle tier.
     """
     ...
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-19T18:45:00Z
-# LAST_CHANGED: 2026-11-09T23:32:00Z
-# CHANGE: Delete existing conversations matching benchmark_N on flight start
+# LAST_CHANGED: 2026-11-10T08:43:00Z
+# CHANGE: Retain failed benchmark workspaces in-place with failed status without .failed renaming, recycling only finished runs
 # SPEC_QA_AUDIT: 2026-10-19T19:35:00Z
 # --- END CLEANROOM METADATA ---

@@ -1089,6 +1089,9 @@ class DshHarnessImplTest(unittest.TestCase):
                 adapter._active_role_sessions[("scope_test", "role_a")] = (
                     "sid_role_a_123"
                 )
+                adapter._active_role_sessions[("scope_test", "role_b")] = (
+                    "sid_role_b_456"
+                )
                 adapter._dead_role_sessions["scope_test"] = [
                     {"sessionId": "sid_old_1", "role": "role_a", "reason": "superseded"}
                 ]
@@ -1098,7 +1101,7 @@ class DshHarnessImplTest(unittest.TestCase):
                     wave_count=2,
                     active_workers={"role_a": "h_1"},
                     assigned_targets={"role_a": ["parts/a/lib/a.py"]},
-                    all_scope_roles=["role_a", "role_b"],
+                    all_scope_roles=["role_a", "role_b", "role_unrun"],
                     converged=False,
                     failed=False,
                 )
@@ -1119,7 +1122,11 @@ class DshHarnessImplTest(unittest.TestCase):
                 self.assertEqual(role_a.get("targets"), ["parts/a/lib/a.py"])
 
                 role_b = scope_data["roles"]["role_b"]
+                self.assertEqual(role_b.get("sessionId"), "sid_role_b_456")
                 self.assertEqual(role_b.get("status"), "idle")
+
+                # Uninvoked role must NOT be present in state snapshot
+                self.assertNotIn("role_unrun", scope_data["roles"])
 
                 dead_sessions = scope_data.get("deadSessions", [])
                 self.assertEqual(len(dead_sessions), 1)

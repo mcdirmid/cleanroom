@@ -84,9 +84,10 @@ Given: A DAG runner managing registered graph nodes.
 Observed: The runner indicates that cancellation has been signaled via the test-only is_cancelled accessor.
 Realized by: Setting the internal cancellation event flag, which is_cancelled reflects under test inspection.
 
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-21T18:13:00Z
+<!-- AUTOFAB METADATA
+LAST_CLEANED: 2026-11-10T07:51:08Z
 LAST_CHANGED: 2026-11-02T19:55:00Z
 CHANGE: Add scenario for runner cancellation observability
+CODE_HASH: 8d7efef93229
 SPEC_QA_AUDIT: 2026-10-19T23:50:00Z
 -->

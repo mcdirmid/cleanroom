@@ -54,9 +54,9 @@ By factoring memory caching into structured operations for recency updates, over
 - Ordered dictionary mapping, recency promotion algorithms, and overflow eviction mechanics.
   - Deferred: Realized by concrete realization in lru_cache_impl.
 
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-30T18:30:00Z
+<!-- AUTOFAB METADATA
+LAST_CLEANED: 2026-11-10T07:51:09Z
 LAST_CHANGED: 2026-10-30T18:30:00Z
 CHANGE: Author lru_cache interface planning specification
-SPEC_QA_AUDIT: 2026-10-30T18:30:00Z
+SPEC_QA_AUDIT: 2026-11-10T07:51:09Z
 -->

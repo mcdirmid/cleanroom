@@ -43,9 +43,9 @@ By structuring storage around an ordered mapping and updating access recency on 
 - Memory cache models, access recency tracking, and overflow eviction policies.
   - Grounded: [lru_cache: [lru_cache_core_service]]
 
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-30T18:30:00Z
+<!-- AUTOFAB METADATA
+LAST_CLEANED: 2026-11-10T07:51:09Z
 LAST_CHANGED: 2026-10-30T18:30:00Z
 CHANGE: Author lru_cache_impl implementation planning specification
-SPEC_QA_AUDIT: 2026-10-30T18:30:00Z
+SPEC_QA_AUDIT: 2026-11-10T07:51:09Z
 -->

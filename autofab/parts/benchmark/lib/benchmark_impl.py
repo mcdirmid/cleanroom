@@ -226,6 +226,9 @@ def _load_model_catalog(
 # Export default dynamically resolved catalog
 _MODEL_CATALOG: Dict[str, benchmark.ModelSpec] = _load_model_catalog()
 
+# Set of (repo_root, cand) flight scopes allocated within the active process session to avoid collisions across sequential flights
+_SESSION_ALLOCATED_SCOPES: Set[Tuple[str, str]] = set()
+
 
 # ==============================================================================
 # Benchmark Suite & Units Catalog
@@ -1293,6 +1296,7 @@ def _drain_unit_workspace(repo_root: Path, unit: benchmark.BenchmarkUnit) -> Non
             _delete_directory_safely(d)
 
     scope = unit.unit_dir.split("/")[0]
+    runs_dir = repo_root / "benchmarks" / "runs"
     for ws_base in _get_role_workspace_bases(repo_root):
         if ws_base.is_dir():
             try:
@@ -1309,6 +1313,8 @@ def _drain_unit_workspace(repo_root: Path, unit: benchmark.BenchmarkUnit) -> Non
                                 m
                                 and not (repo_root / m.group(0)).exists()
                                 and not (repo_root / f"{m.group(0)}.failed").exists()
+                                and not (runs_dir / m.group(0)).exists()
+                                and not (runs_dir / f"{m.group(0)}.failed").exists()
                             ):
                                 _delete_directory_safely(ws_entry)
             except OSError:
@@ -1346,16 +1352,18 @@ def _cleanup_dsh_scope_conversations(scope: str) -> int:
             return 0
 
 
-# Contract: __orphan__ - MUST provision a concise sequential ephemeral flight scope directory (e.g. benchmark_1), explicitly configure methodology pipeline as pretense, combined, or standard, rewrite copied benchmark imports, disallow bare parts imports, mark specifications clean up to specification QA, and copy scope methodology configuration.
+# Contract: __orphan__ - MUST provision a descriptive sequential flight scope directory under benchmarks/runs/ formatted as benchmarks/runs/<suite>_<model_slug>_<index>, explicitly configure methodology pipeline as pretense, combined, or standard, rewrite copied benchmark imports, disallow bare parts imports, mark specifications clean up to specification QA, and copy scope methodology configuration.
 def _provision_flight_scope(
     repo_root: Path,
     unit: benchmark.BenchmarkUnit,
     flight_id: str,
     pretense: bool = False,
     method: Optional[str] = None,
+    model_identifier: Optional[str] = None,
 ) -> Tuple[str, Path]:
-    """Provisions a concise sequential ephemeral flight scope directory (e.g. benchmark_1)
-    preserving the package structure of the benchmark unit's enclosing scope.
+    """Provisions a descriptive sequential flight scope directory under benchmarks/runs/
+    (e.g. benchmarks/runs/ring_buffer_qwen_moe_1) preserving the package structure of
+    the benchmark unit's enclosing scope.
 
     Returns:
         (flight_scope, flight_unit_dir)
@@ -1364,13 +1372,53 @@ def _provision_flight_scope(
         method if method is not None else ("pretense" if pretense else "standard")
     )
     ws_bases = _get_role_workspace_bases(repo_root)
+
+    suite = (
+        unit.task_id
+        if unit.task_id
+        else (unit.unit_dir.replace("\\", "/").rstrip("/").split("/")[-1] or "bench")
+    )
+    suite_slug = re.sub(r"[^a-zA-Z0-9_]+", "_", suite.lower()).strip("_") or "bench"
+
+    raw_model = model_identifier or "model"
+    model_slug = re.sub(r"[^a-zA-Z0-9_]+", "_", raw_model.lower()).strip("_") or "model"
+
+    prefix = f"{suite_slug}_{model_slug}"
+
+    runs_dir = repo_root / "benchmarks" / "runs"
+    runs_dir.mkdir(parents=True, exist_ok=True)
+    init_py = runs_dir / "__init__.py"
+    if not init_py.is_file():
+        try:
+            init_py.write_text('"""Benchmark flight scopes container."""\n', encoding="utf-8")
+        except OSError:
+            pass
+
+    repo_key = str(repo_root.resolve())
     idx = 1
+    flight_scope = ""
+    flight_scope_dir = runs_dir
     while True:
-        cand = f"benchmark_{idx}"
-        cand_dir = repo_root / cand
-        failed_cand_dir = repo_root / f"{cand}.failed"
-        if not cand_dir.exists() and not failed_cand_dir.exists():
-            # If the main workspace does not exist, any leftover role workspaces can be safely clobbered!
+        cand = f"{prefix}_{idx}"
+        cand_dir = runs_dir / cand
+        failed_cand_dir = runs_dir / f"{cand}.failed"
+
+        can_use = False
+        if (repo_key, cand) not in _SESSION_ALLOCATED_SCOPES:
+            if not cand_dir.exists() and not failed_cand_dir.exists():
+                can_use = True
+            elif cand_dir.is_dir() and not failed_cand_dir.exists():
+                status_file = cand_dir / "flight_status.json"
+                if status_file.is_file():
+                    try:
+                        sdata = json.loads(status_file.read_text(encoding="utf-8"))
+                        if sdata.get("status") == "finished":
+                            can_use = True
+                    except Exception:
+                        pass
+
+        if can_use:
+            # If reusing an old slot or starting fresh, clean up any leftover role workspaces matching cand
             for ws_base in ws_bases:
                 if ws_base.is_dir():
                     try:
@@ -1379,7 +1427,12 @@ def _provision_flight_scope(
                                 _delete_directory_safely(ws_entry)
                     except OSError:
                         pass
-            flight_scope = cand
+            if cand_dir.exists():
+                _delete_directory_safely(cand_dir)
+
+            flight_scope = str(cand_dir.relative_to(repo_root)).replace("\\", "/")
+            flight_scope_dir = cand_dir
+            _SESSION_ALLOCATED_SCOPES.add((repo_key, cand))
             _cleanup_dsh_scope_conversations(flight_scope)
             break
         idx += 1
@@ -1394,7 +1447,6 @@ def _provision_flight_scope(
         original_scope = segs[0]
         parts_rel = "/".join(segs[1:])
 
-    flight_scope_dir = repo_root / flight_scope
     flight_unit_dir = flight_scope_dir / parts_rel
 
     original_scope_dir = repo_root / original_scope
@@ -1477,7 +1529,9 @@ def _provision_flight_scope(
             env_file.write_text(
                 "PYTHONFAULTHANDLER=1\n"
                 "PRETENSE_TIMEOUT=90.0\n"
-                f"{app_info.ENV_PREFIX}_VERIFY_TIMEOUT=90.0\n",
+                f"{app_info.ENV_PREFIX}_VERIFY_TIMEOUT=90.0\n"
+                f"{app_info.ENV_PREFIX}_RETAIN_WORKSPACES=1\n"
+                "AUTOFAB_RETAIN_WORKSPACES=1\n",
                 encoding="utf-8",
             )
         except OSError:
@@ -1489,7 +1543,8 @@ def _provision_flight_scope(
         shutil.copytree(src_unit_dir, flight_unit_dir, dirs_exist_ok=True)
 
     # Rewrite copied source, specification, and config files: replace benchmark. and benchmarks.
-    # with <flight_scope>., and disallow bare parts imports by prefixing them with <flight_scope>.parts.
+    # with <flight_pkg>., and disallow bare parts imports by prefixing them with <flight_pkg>.parts.
+    flight_pkg = flight_scope.replace("/", ".")
     text_extensions = {".py", ".pyi", ".md", ".toml", ".json", ".yaml", ".yml"}
     for root, _, files in os.walk(str(flight_scope_dir)):
         for fname in files:
@@ -1502,13 +1557,17 @@ def _provision_flight_scope(
                 except (OSError, UnicodeDecodeError):
                     continue
                 new_content = content
-                new_content = re.sub(r"\bbenchmarks\.", f"{flight_scope}.", new_content)
-                new_content = re.sub(r"\bbenchmark\.", f"{flight_scope}.", new_content)
+                if original_scope and original_scope not in ("benchmarks", "benchmark"):
+                    new_content = re.sub(
+                        rf"\b{re.escape(original_scope)}\.", f"{flight_pkg}.", new_content
+                    )
+                new_content = re.sub(r"\bbenchmarks\.(?!runs\.)", f"{flight_pkg}.", new_content)
+                new_content = re.sub(r"\bbenchmark\.(?!runs\.)", f"{flight_pkg}.", new_content)
                 new_content = re.sub(
-                    r"\bfrom parts\.", f"from {flight_scope}.parts.", new_content
+                    r"\bfrom parts\.", f"from {flight_pkg}.parts.", new_content
                 )
                 new_content = re.sub(
-                    r"\bimport parts\.", f"import {flight_scope}.parts.", new_content
+                    r"\bimport parts\.", f"import {flight_pkg}.parts.", new_content
                 )
                 if new_content != content:
                     p.write_text(new_content, encoding="utf-8")
@@ -1583,15 +1642,17 @@ def _provision_flight_scope(
     return (flight_scope, flight_unit_dir)
 
 
-# Contract: __orphan__ - MUST tear down the ephemeral flight scope directory and associated provisioned role workspaces upon flight completion, deleting them for successful flights and preserving the flight scope directory as <flight_scope>.failed along with associated role workspaces under <flight_scope>.failed/role_workspaces on failure.
+# Contract: __orphan__ - MUST conclude flight scope lifecycle upon flight completion, writing completion metadata (flight_status.json) into the flight scope directory and associated role workspaces (marking status as finished for successful flights and failed for failed flights), preserving the working tree and role workspaces on disk in-place without moving to a .failed directory, recycling only finished runs on subsequent executions while preserving failed runs for inspection.
 def _teardown_flight_scope(
     repo_root: Path,
     flight_scope: str,
     success: bool = True,
+    flight_id: str = "",
+    suite: str = "",
+    model: str = "",
 ) -> None:
-    """Removes successful flight scope directory and role workspaces, or preserves them under .failed on failure."""
+    """Marks completion metadata in flight scope and role workspaces, preserving workspaces in-place."""
     flight_scope_dir = repo_root / flight_scope
-    failed_dir = repo_root / f"{flight_scope}.failed"
 
     def _normalize_permissions(p: Path) -> None:
         if not p.is_dir():
@@ -1612,85 +1673,51 @@ def _teardown_flight_scope(
                     except OSError:
                         pass
 
-    if success:
-        if flight_scope_dir.is_dir():
-            _delete_directory_safely(flight_scope_dir)
-        for ws_base in _get_role_workspace_bases(repo_root):
-            if ws_base.is_dir():
-                try:
-                    for ws_entry in ws_base.iterdir():
-                        if ws_entry.is_dir() and flight_scope in ws_entry.name:
-                            _delete_directory_safely(ws_entry)
-                except OSError:
-                    pass
-    else:
-        # Preserve failed flight scope directory
-        target_dir = failed_dir
-        if flight_scope_dir.is_dir():
-            if failed_dir.is_dir():
-                _delete_directory_safely(failed_dir)
-            _normalize_permissions(flight_scope_dir)
+    now_iso = datetime.datetime.now(datetime.timezone.utc).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
+    status_payload = {
+        "flight_id": flight_id,
+        "flight_scope": flight_scope,
+        "suite": suite,
+        "model": model,
+        "status": "finished" if success else "failed",
+        "outcome": "PASS" if success else "FAIL",
+        "finished_at": now_iso,
+    }
+    status_str = json.dumps(status_payload, indent=2) + "\n"
+
+    scope_tag = Path(flight_scope).name
+
+    if flight_scope_dir.is_dir():
+        _normalize_permissions(flight_scope_dir)
+        try:
+            (flight_scope_dir / "flight_status.json").write_text(
+                status_str, encoding="utf-8"
+            )
+        except OSError:
+            pass
+
+    for ws_base in _get_role_workspace_bases(repo_root):
+        if ws_base.is_dir():
             try:
-                shutil.move(str(flight_scope_dir), str(failed_dir))
-                target_dir = failed_dir
-            except Exception as move_err:
-                try:
-                    shutil.copytree(
-                        str(flight_scope_dir),
-                        str(failed_dir),
-                        symlinks=True,
-                        dirs_exist_ok=True,
-                    )
-                    _delete_directory_safely(flight_scope_dir)
-                    target_dir = failed_dir
-                except Exception as copy_err:
-                    print(
-                        f"[ERROR] Failed to relocate flight scope '{flight_scope}' to '{failed_dir}': {move_err} / {copy_err}. "
-                        f"Retaining '{flight_scope_dir}' for inspection.",
-                        file=sys.stderr,
-                    )
-                    target_dir = flight_scope_dir
-        elif failed_dir.is_dir():
-            target_dir = failed_dir
-        else:
-            target_dir = repo_root / f"{flight_scope}.failed"
+                for ws_entry in ws_base.iterdir():
+                    if ws_entry.is_dir() and (
+                        flight_scope in ws_entry.name or scope_tag in ws_entry.name
+                    ):
+                        _normalize_permissions(ws_entry)
+                        try:
+                            (ws_entry / "flight_status.json").write_text(
+                                status_str, encoding="utf-8"
+                            )
+                        except OSError:
+                            pass
+            except OSError:
+                pass
 
-        # Preserve associated role workspaces under target_dir / DEFAULT_ROLE_WORKSPACES_CONTAINER
-        target_ws_base = target_dir / app_info.DEFAULT_ROLE_WORKSPACES_CONTAINER
-        for ws_base in _get_role_workspace_bases(repo_root):
-            if ws_base.is_dir():
-                try:
-                    for ws_entry in ws_base.iterdir():
-                        if ws_entry.is_dir() and flight_scope in ws_entry.name:
-                            target_ws_base.mkdir(parents=True, exist_ok=True)
-                            dest_ws = target_ws_base / ws_entry.name
-                            if dest_ws.exists():
-                                _delete_directory_safely(dest_ws)
-                            _normalize_permissions(ws_entry)
-                            try:
-                                shutil.move(str(ws_entry), str(dest_ws))
-                            except Exception:
-                                try:
-                                    shutil.copytree(
-                                        str(ws_entry),
-                                        str(dest_ws),
-                                        symlinks=True,
-                                        dirs_exist_ok=True,
-                                    )
-                                    _delete_directory_safely(ws_entry)
-                                except Exception as ws_err:
-                                    print(
-                                        f"[ERROR] Failed to preserve role workspace '{ws_entry.name}' to '{dest_ws}': {ws_err}",
-                                        file=sys.stderr,
-                                    )
-                except OSError as err:
-                    print(
-                        f"[ERROR] Error scanning role workspaces for flight '{flight_scope}': {err}",
-                        file=sys.stderr,
-                    )
-
+    if not success:
         print(
-            f"[BENCHMARK] Flight failed verification or execution. Preserved failure artifacts at: {target_dir}",
+            f"[BENCHMARK] Flight failed verification or execution. Preserved failure artifacts at: {flight_scope_dir}",
             file=sys.stderr,
         )
 
@@ -1773,30 +1800,33 @@ def _archive_flight_artifacts(
                 src_lib_files.append(p)
 
     if not src_lib_files and flight_scope_dir is not None:
+        try:
+            scope_rel = (
+                str(flight_scope_dir.relative_to(repo_root)).replace("\\", "/")
+                if flight_scope_dir.is_relative_to(repo_root)
+                else flight_scope_dir.name
+            )
+        except ValueError:
+            scope_rel = flight_scope_dir.name
+        scope_tag = flight_scope_dir.name
         for ws_base in cand_ws_bases:
-            for cand_prefix in (
-                f"lib_{flight_scope_dir.name}",
-                f"combined_baseline_{flight_scope_dir.name}",
-                f"pretense_baseline_{flight_scope_dir.name}",
-                f"baseline_{flight_scope_dir.name}",
-                f"{app_info.APP_NAME}_lib_{flight_scope_dir.name}",
-            ):
-                cand_lib = (
-                    ws_base
-                    / cand_prefix
-                    / flight_scope_dir.name
-                    / "parts"
-                    / unit.task_id
-                    / "lib"
-                )
-                if cand_lib.is_dir():
-                    for p in sorted(cand_lib.glob("*.py")):
-                        if not p.name.startswith("__") and p.stat().st_size > 0:
-                            src_lib_files.append(p)
-                if src_lib_files:
-                    break
-            if src_lib_files:
-                break
+            if not ws_base.is_dir():
+                continue
+            try:
+                for ws_entry in ws_base.iterdir():
+                    if ws_entry.is_dir() and scope_tag in ws_entry.name:
+                        for sub_rel in (scope_rel, scope_tag):
+                            cand_lib = ws_entry / sub_rel / "parts" / unit.task_id / "lib"
+                            if cand_lib.is_dir():
+                                for p in sorted(cand_lib.glob("*.py")):
+                                    if not p.name.startswith("__") and p.stat().st_size > 0:
+                                        src_lib_files.append(p)
+                            if src_lib_files:
+                                break
+                    if src_lib_files:
+                        break
+            except OSError:
+                pass
 
     # Find source test files
     src_test_files: List[Path] = []
@@ -1809,29 +1839,35 @@ def _archive_flight_artifacts(
                     src_test_files.append(p)
 
         if not src_test_files and flight_scope_dir is not None:
+            try:
+                scope_rel = (
+                    str(flight_scope_dir.relative_to(repo_root)).replace("\\", "/")
+                    if flight_scope_dir.is_relative_to(repo_root)
+                    else flight_scope_dir.name
+                )
+            except ValueError:
+                scope_rel = flight_scope_dir.name
+            scope_tag = flight_scope_dir.name
             for ws_base in cand_ws_bases:
-                for cand_prefix in (
-                    f"test_{flight_scope_dir.name}",
-                    f"combined_baseline_{flight_scope_dir.name}",
-                    f"baseline_{flight_scope_dir.name}",
-                    f"{app_info.APP_NAME}_test_{flight_scope_dir.name}",
-                ):
-                    cand_test = (
-                        ws_base
-                        / cand_prefix
-                        / flight_scope_dir.name
-                        / "parts"
-                        / unit.task_id
-                        / "tests"
-                    )
-                    if cand_test.is_dir():
-                        for p in sorted(cand_test.glob("*_test.py")):
-                            if p.stat().st_size > 0:
-                                src_test_files.append(p)
-                    if src_test_files:
-                        break
-                if src_test_files:
-                    break
+                if not ws_base.is_dir():
+                    continue
+                try:
+                    for ws_entry in ws_base.iterdir():
+                        if ws_entry.is_dir() and scope_tag in ws_entry.name:
+                            for sub_rel in (scope_rel, scope_tag):
+                                cand_test = (
+                                    ws_entry / sub_rel / "parts" / unit.task_id / "tests"
+                                )
+                                if cand_test.is_dir():
+                                    for p in sorted(cand_test.glob("*_test.py")):
+                                        if p.stat().st_size > 0:
+                                            src_test_files.append(p)
+                                if src_test_files:
+                                    break
+                        if src_test_files:
+                            break
+                except OSError:
+                    pass
 
     if is_combined or is_pretense:
         if pretense_dir.is_dir():
@@ -1840,29 +1876,35 @@ def _archive_flight_artifacts(
                     src_pretense_files.append(p)
 
         if not src_pretense_files and flight_scope_dir is not None:
+            try:
+                scope_rel = (
+                    str(flight_scope_dir.relative_to(repo_root)).replace("\\", "/")
+                    if flight_scope_dir.is_relative_to(repo_root)
+                    else flight_scope_dir.name
+                )
+            except ValueError:
+                scope_rel = flight_scope_dir.name
+            scope_tag = flight_scope_dir.name
             for ws_base in cand_ws_bases:
-                for cand_prefix in (
-                    f"pretense_{flight_scope_dir.name}",
-                    f"combined_baseline_{flight_scope_dir.name}",
-                    f"pretense_baseline_{flight_scope_dir.name}",
-                    f"{app_info.APP_NAME}_pretense_{flight_scope_dir.name}",
-                ):
-                    cand_test = (
-                        ws_base
-                        / cand_prefix
-                        / flight_scope_dir.name
-                        / "parts"
-                        / unit.task_id
-                        / "pretense"
-                    )
-                    if cand_test.is_dir():
-                        for p in sorted(cand_test.glob("*_pretense.py")):
-                            if p.stat().st_size > 0:
-                                src_pretense_files.append(p)
-                    if src_pretense_files:
-                        break
-                if src_pretense_files:
-                    break
+                if not ws_base.is_dir():
+                    continue
+                try:
+                    for ws_entry in ws_base.iterdir():
+                        if ws_entry.is_dir() and scope_tag in ws_entry.name:
+                            for sub_rel in (scope_rel, scope_tag):
+                                cand_pretense = (
+                                    ws_entry / sub_rel / "parts" / unit.task_id / "pretense"
+                                )
+                                if cand_pretense.is_dir():
+                                    for p in sorted(cand_pretense.glob("*_pretense.py")):
+                                        if p.stat().st_size > 0:
+                                            src_pretense_files.append(p)
+                                if src_pretense_files:
+                                    break
+                        if src_pretense_files:
+                            break
+                except OSError:
+                    pass
 
     target_dir = base_res / benchmark_id / folder_name
 
@@ -2198,9 +2240,22 @@ def _execute_flight(
                 f"In a standalone terminal, either run inside Antigravity or use a model configured with a standalone harness (such as 'dsh' or 'simulation')."
             )
 
+        model_name = next(
+            (
+                k
+                for k, v in _MODEL_CATALOG.items()
+                if v.identifier == model.identifier and "." not in k
+            ),
+            model.identifier,
+        )
         # Pre-flight: provision ephemeral flight scope directory preserving scope structure
         flight_scope, flight_unit_dir = _provision_flight_scope(
-            repo_root, unit, flight_id, pretense=is_pretense, method=effective_method
+            repo_root,
+            unit,
+            flight_id,
+            pretense=is_pretense,
+            method=effective_method,
+            model_identifier=model_name,
         )
         flight_scope_dir = repo_root / flight_scope
         flight_unit_rel = str(flight_unit_dir.relative_to(repo_root)).replace("\\", "/")
@@ -2208,14 +2263,7 @@ def _execute_flight(
         flight_success = False
         try:
             # Resolve config profile key from model catalog to pass to autofab clean
-            autofab_model_arg = next(
-                (
-                    k
-                    for k, v in _MODEL_CATALOG.items()
-                    if v.identifier == model.identifier and "." not in k
-                ),
-                model.identifier,
-            )
+            autofab_model_arg = model_name
             fused_role_name: Optional[str] = None
             if baseline and effective_method == "combined":
                 fused_role_name = "combined_baseline"
@@ -2321,9 +2369,15 @@ def _execute_flight(
                 sys.stdout.write("=" * 72 + "\n\n")
                 sys.stdout.flush()
 
+                clean_env = {
+                    **os.environ,
+                    "AUTOFAB_RETAIN_WORKSPACES": "1",
+                    f"{app_info.ENV_PREFIX}_RETAIN_WORKSPACES": "1",
+                }
                 proc = subprocess.Popen(
                     cmd,
                     cwd=repo_root,
+                    env=clean_env,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     text=True,
@@ -2354,8 +2408,17 @@ def _execute_flight(
                     output_lines.append(timeout_msg)
                 output_text = "".join(output_lines)
             else:
+                clean_env = {
+                    **os.environ,
+                    "AUTOFAB_RETAIN_WORKSPACES": "1",
+                    f"{app_info.ENV_PREFIX}_RETAIN_WORKSPACES": "1",
+                }
                 proc = subprocess.run(
-                    cmd, cwd=repo_root, capture_output=True, text=True
+                    cmd,
+                    cwd=repo_root,
+                    env=clean_env,
+                    capture_output=True,
+                    text=True,
                 )
                 output_text = (proc.stdout or "") + (
                     "\n" + proc.stderr if proc.stderr else ""
@@ -2595,7 +2658,14 @@ def _execute_flight(
                     active_flight_file.unlink()
                 except OSError:
                     pass
-            _teardown_flight_scope(repo_root, flight_scope, success=flight_success)
+            _teardown_flight_scope(
+                repo_root,
+                flight_scope,
+                success=flight_success,
+                flight_id=flight_id,
+                suite=unit.suite,
+                model=model.identifier,
+            )
 
 
 def _generate_markdown_report(
@@ -3368,8 +3438,8 @@ if __name__ == "__main__":
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-19T18:45:00Z
-# LAST_CHANGED: 2026-11-09T23:45:00Z
-# CHANGE: Delete DSH conversations matching scope when provisioning benchmark flight
+# LAST_CHANGED: 2026-11-10T08:43:00Z
+# CHANGE: Retain failed benchmark workspaces in-place with failed status without .failed renaming, recycling only finished runs
 # SPEC_QA_AUDIT: 2026-10-19T19:35:00Z
 # --- END CLEANROOM METADATA ---
 

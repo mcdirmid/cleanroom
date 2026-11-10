@@ -61,7 +61,7 @@ Given: scope_a has dirty roles across specification and implementation levels.
 Given: dynamic supervision achieves clean convergence across all evaluated roles in scope_a.
 
 1. The coordinator concludes orchestration.
-   Observed: all provisioned role workspace directories for scope_a are automatically deleted before returning the summary.
+   Observed: all provisioned role workspace directories for scope_a are automatically deleted before returning the summary, unless workspace retention is requested.
 
 ## Scenario 10 — Restricting execution to a target unit and its transitive dependencies
 

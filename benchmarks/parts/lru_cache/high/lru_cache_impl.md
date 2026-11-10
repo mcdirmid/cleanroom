@@ -20,9 +20,9 @@ A system's *concrete least-recently-used cache* realizes the least-recently-used
 
 - Capacity validation and dynamic downsizing, evicting oldest items from the beginning of the ordered mapping when capacity boundaries are exceeded.
 
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-30T18:30:00Z
+<!-- AUTOFAB METADATA
+LAST_CLEANED: 2026-11-10T07:51:09Z
 LAST_CHANGED: 2026-10-30T18:30:00Z
 CHANGE: Author lru_cache_impl implementation component specification
-SPEC_QA_AUDIT: 2026-10-30T18:30:00Z
+SPEC_QA_AUDIT: 2026-11-10T07:51:09Z
 -->

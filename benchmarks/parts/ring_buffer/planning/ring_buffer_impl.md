@@ -42,9 +42,9 @@ By leveraging standard double-ended queue data structures with bounded length, t
 - Bounded circular buffer models and overwrite eviction service.
   - Grounded: [ring_buffer: [ring_buffer_core_service]]
 
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-30T19:25:00Z
+<!-- AUTOFAB METADATA
+LAST_CLEANED: 2026-11-10T07:51:09Z
 LAST_CHANGED: 2026-10-30T19:25:00Z
 CHANGE: Author ring_buffer_impl implementation planning specification
-SPEC_QA_AUDIT: 2026-10-30T19:25:00Z
+SPEC_QA_AUDIT: 2026-11-10T07:51:09Z
 -->

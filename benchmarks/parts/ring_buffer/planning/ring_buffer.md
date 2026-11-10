@@ -52,9 +52,9 @@ By establishing strict capacity bounds, FIFO retrieval ordering, and overwrite e
 - Double-ended queue storage and FIFO pointer mechanics.
   - Deferred: Realized by double-ended queue data structures in ring_buffer_impl.
 
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-30T19:25:00Z
+<!-- AUTOFAB METADATA
+LAST_CLEANED: 2026-11-10T07:51:09Z
 LAST_CHANGED: 2026-10-30T19:25:00Z
 CHANGE: Author ring_buffer interface planning specification
-SPEC_QA_AUDIT: 2026-10-30T19:25:00Z
+SPEC_QA_AUDIT: 2026-11-10T07:51:09Z
 -->

@@ -27,6 +27,10 @@ from autofab.parts.benchmark.lib.benchmark_impl import (  # cleanroom: allow-pri
 class BenchmarkImplTest(unittest.TestCase):
     def setUp(self) -> None:
         self.registry = LifecycleRegistry()
+        experiments.clear_active_experiments()
+
+    def tearDown(self) -> None:
+        experiments.clear_active_experiments()
 
     def test_model_spec_cost_computation(self) -> None:
         """CUJ: Computing financial cost across local, budget, and mid-tier rate cards."""
@@ -724,7 +728,7 @@ class BenchmarkImplTest(unittest.TestCase):
                 repo_root, unit, flight_id
             )
 
-            self.assertEqual(flight_scope, "benchmark_1")
+            self.assertEqual(flight_scope, "benchmarks/runs/sample_part_model_1")
             self.assertTrue(flight_unit_dir.is_dir())
             self.assertTrue((repo_root / flight_scope / ".env").is_file())
             env_text = (repo_root / flight_scope / ".env").read_text(encoding="utf-8")
@@ -739,14 +743,19 @@ class BenchmarkImplTest(unittest.TestCase):
             rewritten_md = (flight_unit_dir / "high" / "sample.md").read_text(
                 encoding="utf-8"
             )
-            self.assertIn("import benchmark_1.parts.foo", rewritten_md)
-            self.assertIn("from benchmark_1.parts.foo import bar", rewritten_md)
-            self.assertNotIn("benchmarks.", rewritten_md)
+            self.assertIn(
+                "import benchmarks.runs.sample_part_model_1.parts.foo", rewritten_md
+            )
+            self.assertIn(
+                "from benchmarks.runs.sample_part_model_1.parts.foo import bar",
+                rewritten_md,
+            )
+            self.assertNotIn("benchmarks.parts.", rewritten_md)
             self.assertNotIn("from parts.", rewritten_md)
 
-            # Sequential allocation for concurrent flight: must allocate benchmark_2
+            # Sequential allocation for concurrent flight: must allocate sample_part_model_2
             scope2, _ = _provision_flight_scope(repo_root, unit, "flight_2")
-            self.assertEqual(scope2, "benchmark_2")
+            self.assertEqual(scope2, "benchmarks/runs/sample_part_model_2")
 
             # Pristine start: lib and tests in flight scope must be drained clean
             self.assertFalse((flight_unit_dir / "lib").is_dir())
@@ -759,17 +768,28 @@ class BenchmarkImplTest(unittest.TestCase):
             role_ws = (
                 repo_root
                 / app_info.DEFAULT_ROLE_WORKSPACES_CONTAINER
-                / f"{app_info.APP_NAME}_lib_{flight_scope}"
+                / f"{app_info.APP_NAME}_lib_sample_part_model_1"
             )
             role_ws.mkdir(parents=True, exist_ok=True)
             (role_ws / "dummy.txt").write_text("dummy", encoding="utf-8")
 
-            # Teardown
-            _teardown_flight_scope(repo_root, flight_scope)
-            _teardown_flight_scope(repo_root, scope2)
-            self.assertFalse((repo_root / flight_scope).is_dir())
-            self.assertFalse((repo_root / scope2).is_dir())
-            self.assertFalse(role_ws.is_dir())
+            # Teardown with success: must retain workspaces and write flight_status.json
+            _teardown_flight_scope(
+                repo_root, flight_scope, success=True, flight_id=flight_id
+            )
+            _teardown_flight_scope(repo_root, scope2, success=True, flight_id="flight_2")
+            self.assertTrue((repo_root / flight_scope).is_dir())
+            self.assertTrue((repo_root / flight_scope / "flight_status.json").is_file())
+            status_data = json.loads(
+                (repo_root / flight_scope / "flight_status.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertEqual(status_data["status"], "finished")
+            self.assertEqual(status_data["outcome"], "PASS")
+            self.assertTrue((repo_root / scope2).is_dir())
+            self.assertTrue(role_ws.is_dir())
+            self.assertTrue((role_ws / "flight_status.json").is_file())
 
             # Provision without any config in orig_scope_dir: guarantees configuration creation
             orig_no_cfg = repo_root / "unconfigured_scope" / "parts" / "sample"
@@ -791,6 +811,7 @@ class BenchmarkImplTest(unittest.TestCase):
             scope3, _ = _provision_flight_scope(
                 repo_root, unit_no_cfg, "flight_3", pretense=False
             )
+            self.assertEqual(scope3, "benchmarks/runs/sample_model_1")
             self.assertTrue(
                 (repo_root / scope3 / app_info.DEFAULT_CONFIG_FILE).is_file()
             )
@@ -800,10 +821,10 @@ class BenchmarkImplTest(unittest.TestCase):
             _teardown_flight_scope(repo_root, scope3)
 
     def test_flight_scope_teardown_on_failure(self) -> None:
-        """CUJ: Preserving failed flight scope as .failed with associated role workspaces on flight failure."""
+        """CUJ: Preserving failed flight scope in-place with status failed and skipping recycling on subsequent runs."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             repo_root = Path(tmp_dir)
-            flight_scope = "benchmark_1"
+            flight_scope = "benchmarks/runs/sample_part_model_1"
             flight_scope_dir = repo_root / flight_scope
             flight_scope_dir.mkdir(parents=True, exist_ok=True)
             (flight_scope_dir / "dirty_code.py").write_text(
@@ -814,7 +835,7 @@ class BenchmarkImplTest(unittest.TestCase):
             role_ws = (
                 repo_root
                 / app_info.DEFAULT_ROLE_WORKSPACES_CONTAINER
-                / f"{app_info.APP_NAME}_lib_{flight_scope}"
+                / f"{app_info.APP_NAME}_lib_sample_part_model_1"
             )
             role_ws.mkdir(parents=True, exist_ok=True)
             (role_ws / "worker.log").write_text("traceback...", encoding="utf-8")
@@ -823,7 +844,7 @@ class BenchmarkImplTest(unittest.TestCase):
             parent_role_ws = (
                 repo_root.parent
                 / app_info.DEFAULT_ROLE_WORKSPACES_CONTAINER
-                / f"{app_info.APP_NAME}_pretense_{flight_scope}"
+                / f"{app_info.APP_NAME}_pretense_sample_part_model_1"
             )
             parent_role_ws.mkdir(parents=True, exist_ok=True)
             (parent_role_ws / "pretense_worker.log").write_text(
@@ -832,30 +853,61 @@ class BenchmarkImplTest(unittest.TestCase):
 
             try:
                 # Teardown with failure
-                _teardown_flight_scope(repo_root, flight_scope, success=False)
-
-                # Original flight scope directory must be relocated, not deleted
-                self.assertFalse(flight_scope_dir.is_dir())
-                failed_dir = repo_root / f"{flight_scope}.failed"
-                self.assertTrue(failed_dir.is_dir())
-                self.assertTrue((failed_dir / "dirty_code.py").is_file())
-
-                # Role workspaces must be relocated under failed_dir / DEFAULT_ROLE_WORKSPACES_CONTAINER, NOT deleted
-                failed_ws = (
-                    failed_dir
-                    / app_info.DEFAULT_ROLE_WORKSPACES_CONTAINER
-                    / f"{app_info.APP_NAME}_lib_{flight_scope}"
+                _teardown_flight_scope(
+                    repo_root, flight_scope, success=False, flight_id="flight_fail"
                 )
-                self.assertTrue(failed_ws.is_dir())
-                self.assertTrue((failed_ws / "worker.log").is_file())
 
-                parent_failed_ws = (
-                    failed_dir
-                    / app_info.DEFAULT_ROLE_WORKSPACES_CONTAINER
-                    / f"{app_info.APP_NAME}_pretense_{flight_scope}"
+                # Original flight scope directory must remain in-place with status=failed
+                self.assertTrue(flight_scope_dir.is_dir())
+                self.assertTrue((flight_scope_dir / "dirty_code.py").is_file())
+                status_file = flight_scope_dir / "flight_status.json"
+                self.assertTrue(status_file.is_file())
+                status_data = json.loads(status_file.read_text(encoding="utf-8"))
+                self.assertEqual(status_data["status"], "failed")
+                self.assertEqual(status_data["outcome"], "FAIL")
+
+                # No .failed directory must be created
+                self.assertFalse((repo_root / f"{flight_scope}.failed").exists())
+
+                # Role workspaces remain in place with flight_status.json
+                self.assertTrue(role_ws.is_dir())
+                self.assertTrue((role_ws / "flight_status.json").is_file())
+                role_status = json.loads(
+                    (role_ws / "flight_status.json").read_text(encoding="utf-8")
                 )
-                self.assertTrue(parent_failed_ws.is_dir())
-                self.assertTrue((parent_failed_ws / "pretense_worker.log").is_file())
+                self.assertEqual(role_status["status"], "failed")
+
+                self.assertTrue(parent_role_ws.is_dir())
+                self.assertTrue((parent_role_ws / "flight_status.json").is_file())
+
+                # Provisioning the same unit/model again must NOT recycle the failed slot 1, but allocate slot 2
+                orig_scope_dir = repo_root / "benchmarks" / "parts"
+                orig_scope_dir.mkdir(parents=True, exist_ok=True)
+                (orig_scope_dir / app_info.DEFAULT_CONFIG_FILE).write_text(
+                    'methodology = "//autofab_py"\n', encoding="utf-8"
+                )
+                unit_dir = orig_scope_dir / "sample_part"
+                unit_dir.mkdir(parents=True, exist_ok=True)
+                (unit_dir / "high").mkdir(parents=True, exist_ok=True)
+                (unit_dir / "high" / "sample.md").write_text("# Spec", encoding="utf-8")
+                unit = benchmark.BenchmarkUnit(
+                    suite="benchmarks",
+                    task_id="sample_part",
+                    archetype="sample",
+                    spec_loc=10,
+                    target_lib_loc=10,
+                    unit_dir="benchmarks/parts/sample_part",
+                    target_address="//benchmarks/parts/sample_part#sample_part",
+                    description="Sample unit for failure recycling",
+                )
+                scope_next, _ = _provision_flight_scope(
+                    repo_root, unit, "flight_retry_model", pretense=False
+                )
+                self.assertEqual(scope_next, "benchmarks/runs/sample_part_model_2")
+                self.assertTrue((repo_root / scope_next).is_dir())
+                _teardown_flight_scope(
+                    repo_root, scope_next, success=True, flight_id="flight_retry"
+                )
             finally:
                 if parent_role_ws.is_dir():
                     shutil.rmtree(parent_role_ws, ignore_errors=True)
@@ -2244,8 +2296,8 @@ class BenchmarkImplTest(unittest.TestCase):
                 description="Sample unit for flight scope cleanup test",
             )
             scope, _ = _provision_flight_scope(repo_root, unit, "flight_cleanup_test")
-            self.assertEqual(scope, "benchmark_1")
-            mock_cleanup.assert_called_with("benchmark_1")
+            self.assertEqual(scope, "benchmarks/runs/sample_task_model_1")
+            mock_cleanup.assert_called_with("benchmarks/runs/sample_task_model_1")
 
 
 if __name__ == "__main__":

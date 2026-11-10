@@ -36,9 +36,9 @@ A *concrete DAG runner* realizes the DAG runner protocol by executing graph wave
 
 Execution advances by iteratively polling the wave scheduler, running unblocked node actions with retry attempts, propagating failure policies when marking node failures in the scheduler, and compiling terminal node outcomes into a consolidated DAG run report with succeeded, failed, skipped, and cancelled node sequences.
 
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-26T20:55:00Z
+<!-- AUTOFAB METADATA
+LAST_CLEANED: 2026-11-10T07:51:09Z
 LAST_CHANGED: 2026-11-02T19:35:00Z
 CHANGE: Specify duplicate node error on add_node for already registered node identifiers
-SPEC_QA_AUDIT: 2026-10-26T20:55:00Z
+SPEC_QA_AUDIT: 2026-11-10T07:51:09Z
 -->

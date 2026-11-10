@@ -54,7 +54,7 @@ When coordinating multi-agent execution:
 
 - The subagent coordinator drives the supervision loop until all units in scope evaluate clean, a role reports failure, or maximum wave limits are reached.
 
-- The subagent coordinator automatically deletes all provisioned role workspaces in scope upon achieving clean convergence.
+- The subagent coordinator automatically deletes all provisioned role workspaces in scope upon achieving clean convergence, unless workspace retention is requested (e.g. via AUTOFAB_RETAIN_WORKSPACES).
 
 - The subagent coordinator interrupts all active workers and automatically deletes all provisioned role workspaces in scope when orchestration is interrupted by system termination or user cancellation signals.
 

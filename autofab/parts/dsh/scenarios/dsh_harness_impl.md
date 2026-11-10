@@ -82,11 +82,11 @@ Given: a previously recorded conversation for a role within a directory scope.
 
 ### Scenario 11 — Publishing authoritative orchestration state snapshots
 
-Given: an active multi-agent orchestration session with active and completed roles.
+Given: an active multi-agent orchestration session with active, completed, and uninvoked roles.
 
 1. The harness adapter receives an orchestration state update.
-   Observed: an authoritative orchestration state snapshot capturing active scopes, current wave counts, active running workers with session identifiers and target files, idle completed workers, dead sessions, and convergence status is persisted to external coordination storage (defaulting to autofab_state.json).
-   Realized by: the harness adapter formatting active role sessions, assigned targets, and superseded sessions, and atomically writing the snapshot JSON file.
+   Observed: an authoritative orchestration state snapshot capturing active scopes, current wave counts, active running workers with session identifiers and target files, idle completed workers (omitting roles that have never been invoked), dead sessions, and convergence status is persisted to external coordination storage (defaulting to autofab_state.json).
+   Realized by: the harness adapter formatting active role sessions, assigned targets, and superseded sessions, filtering out uninvoked roles, and atomically writing the snapshot JSON file.
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-30T19:50:00Z

@@ -64,9 +64,9 @@ By encapsulating adjacency index management, employing Kahn's algorithm for dete
 - Directed acyclic graph protocol, wave scheduler, DAG runner, node lifecycle states, failure policy outcomes, and DAG run report metrics.
   - Grounded: [dag_engine_lite: [dag_engine_lite_core_service]]
 
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-26T20:55:00Z
+<!-- AUTOFAB METADATA
+LAST_CLEANED: 2026-11-10T07:51:09Z
 LAST_CHANGED: 2026-11-02T19:35:00Z
 CHANGE: Specify duplicate node error on add_node for already registered node identifiers
-SPEC_QA_AUDIT: 2026-10-26T20:55:00Z
+SPEC_QA_AUDIT: 2026-11-10T07:51:09Z
 -->

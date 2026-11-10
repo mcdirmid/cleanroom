@@ -548,9 +548,9 @@ class DAGRunner(Singleton[SystemTier], Protocol):
         """
         ...
 
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-26T21:35:31Z
+# --- AUTOFAB METADATA ---
+# LAST_CLEANED: 2026-11-10T07:51:09Z
 # LAST_CHANGED: 2026-11-02T19:55:00Z
 # CHANGE: Add is_cancelled @test_only observability query to DAGRunner
-# SPEC_QA_AUDIT: 2026-10-26T21:35:31Z
-# --- END CLEANROOM METADATA ---
+# SPEC_QA_AUDIT: 2026-11-10T07:51:09Z
+# --- END AUTOFAB METADATA ---

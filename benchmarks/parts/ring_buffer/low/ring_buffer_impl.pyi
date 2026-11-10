@@ -102,10 +102,10 @@ class RingBuffer(ring_buffer.RingBuffer):
         """
         ...
 
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-30T19:25:00Z
+# --- AUTOFAB METADATA ---
+# LAST_CLEANED: 2026-11-10T07:51:09Z
 # LAST_CHANGED: 2026-11-02T19:50:00Z
 # CHANGE: Implement snapshot_items @test_only query in RingBuffer
-# CODE_HASH: 000000000000
-# SPEC_QA_AUDIT: 2026-10-30T19:25:00Z
-# --- END CLEANROOM METADATA ---
+# CODE_HASH: 300e9477b3fa
+# SPEC_QA_AUDIT: 2026-11-10T07:51:09Z
+# --- END AUTOFAB METADATA ---

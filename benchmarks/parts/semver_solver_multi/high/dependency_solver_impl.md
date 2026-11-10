@@ -19,9 +19,9 @@ A system's *concrete dependency solver* realizes the dependency solver protocol 
 
 When an assignment violates constraints or introduces an unsatisfiable dependency, the solver records the conflict in a diagnostic trail and backtracks to evaluate alternative releases. When all possibilities are exhausted without a complete assignment, the solver compiles the conflict trail into an explanation and raises resolution conflict error. If resolution succeeds, the solver compiles selected releases into a resolution outcome.
 
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-30T19:00:00Z
+<!-- AUTOFAB METADATA
+LAST_CLEANED: 2026-11-10T07:51:09Z
 LAST_CHANGED: 2026-10-30T19:00:00Z
 CHANGE: Update imports to semver_core and semver_range
-SPEC_QA_AUDIT: 2026-10-30T19:00:00Z
+SPEC_QA_AUDIT: 2026-11-10T07:51:09Z
 -->

@@ -20,9 +20,9 @@ The buffer supports *popping items*, removing and returning the oldest item from
 
 The buffer supports *clearing*, removing all stored items from the buffer and resetting size to zero while maintaining capacity.
 
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-30T19:25:00Z
+<!-- AUTOFAB METADATA
+LAST_CLEANED: 2026-11-10T07:51:09Z
 LAST_CHANGED: 2026-10-30T19:25:00Z
 CHANGE: Author ring_buffer interface component specification
-SPEC_QA_AUDIT: 2026-10-30T19:25:00Z
+SPEC_QA_AUDIT: 2026-11-10T07:51:09Z
 -->

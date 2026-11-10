@@ -199,10 +199,10 @@ class LRUCache(Protocol):
         """
         ...
 
-# --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-30T18:30:00Z
+# --- AUTOFAB METADATA ---
+# LAST_CLEANED: 2026-11-10T07:51:09Z
 # LAST_CHANGED: 2026-11-02T19:50:00Z
 # CHANGE: Add keys_in_lru_order @test_only observability query to LRUCache
 # CODE_HASH: 25aaf0ad82fd
-# SPEC_QA_AUDIT: 2026-10-30T18:30:00Z
-# --- END CLEANROOM METADATA ---
+# SPEC_QA_AUDIT: 2026-11-10T07:51:09Z
+# --- END AUTOFAB METADATA ---

@@ -16,9 +16,9 @@ A system's *concrete ring buffer* realizes the ring buffer protocol within the s
 
 Pushing appends items to the queue tail. When the queue size reaches capacity, pushing retrieves and removes the oldest item from the queue head before appending the new item, returning the evicted item. Popping removes and returns the oldest item from the queue head, raising buffer empty error when the queue is empty. Clearing purges all elements from the queue.
 
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-30T19:25:00Z
+<!-- AUTOFAB METADATA
+LAST_CLEANED: 2026-11-10T07:51:09Z
 LAST_CHANGED: 2026-10-30T19:25:00Z
 CHANGE: Author ring_buffer_impl implementation component specification
-SPEC_QA_AUDIT: 2026-10-30T19:25:00Z
+SPEC_QA_AUDIT: 2026-11-10T07:51:09Z
 -->

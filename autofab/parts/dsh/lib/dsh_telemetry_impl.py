@@ -285,11 +285,12 @@ def _notify_desktop_session(
 
     try:
         clean_scope = dir_scope.strip("/").strip() if dir_scope else ""
+        display_scope = os.path.basename(clean_scope) if clean_scope else ""
         clean_role = role_name.strip() if role_name else ""
         session_title = (
-            f"[{clean_scope}] {clean_role}"
-            if clean_scope and clean_role
-            else (clean_role or clean_scope or "autofab")
+            f"[{display_scope}] {clean_role}"
+            if display_scope and clean_role
+            else (clean_role or display_scope or "autofab")
         )
 
         # 1. Adopt session directly in role workspace directory
@@ -348,11 +349,12 @@ def _sync_desktop_session(
         os.makedirs(projcache_dir, exist_ok=True)
 
         clean_scope = dir_scope.strip("/").strip() if dir_scope else ""
+        display_scope = os.path.basename(clean_scope) if clean_scope else ""
         clean_role = role_name.strip() if role_name else ""
         title_val = (
-            f"[{clean_scope}] {clean_role}"
-            if clean_scope and clean_role
-            else (clean_role or clean_scope or "autofab")
+            f"[{display_scope}] {clean_role}"
+            if display_scope and clean_role
+            else (clean_role or display_scope or "autofab")
         )
 
         # Look up workspace sessions directory
@@ -781,8 +783,13 @@ class DshTelemetryParser(dsh_telemetry.DshTelemetryParser):
                 )
                 if res and not res.get("isError"):
                     if session_id:
+                        display_scope = (
+                            os.path.basename(clean_scope) if clean_scope else ""
+                        )
                         active_label = (
-                            f"[{clean_scope}] {role_name}" if clean_scope else role_name
+                            f"[{display_scope}] {role_name}"
+                            if display_scope
+                            else role_name
                         )
                         try:
                             self.rename_session(
@@ -805,11 +812,12 @@ class DshTelemetryParser(dsh_telemetry.DshTelemetryParser):
                     }
                     return task_handle
 
+            display_scope = os.path.basename(clean_scope) if clean_scope else ""
             spawn_args: Dict[str, Any] = {
                 "task_name": task_name,
                 "message": prompt_text,
                 "cwd": real_ws,
-                "label": f"[{clean_scope}] {role_name}" if clean_scope else role_name,
+                "label": f"[{display_scope}] {role_name}" if display_scope else role_name,
             }
             if model_name:
                 sel_prov, sel_model, sel_effort = _resolve_dsh_model_selection(
@@ -890,11 +898,12 @@ class DshTelemetryParser(dsh_telemetry.DshTelemetryParser):
 
         # 2. Format conversation title capturing scope and role
         clean_scope = dir_scope.strip("/").strip() if dir_scope else ""
+        display_scope = os.path.basename(clean_scope) if clean_scope else ""
         clean_role = role_name.strip() if role_name else ""
         session_title = (
-            f"[{clean_scope}] {clean_role}"
-            if clean_scope and clean_role
-            else (clean_role or clean_scope or "autofab")
+            f"[{display_scope}] {clean_role}"
+            if display_scope and clean_role
+            else (clean_role or display_scope or "autofab")
         )
 
         # 3. If no existing session found, create one directly in role workspace cwd
@@ -1488,7 +1497,8 @@ class DshTelemetryParser(dsh_telemetry.DshTelemetryParser):
         clean_scope = dir_scope.strip("/").strip()
         if not clean_scope:
             return 0
-        target_tag = f"[{clean_scope}]"
+        display_scope = os.path.basename(clean_scope)
+        target_tags = {f"[{clean_scope}]", f"[{display_scope}]"}
         sessions_to_delete: list[str] = []
 
         bridge = _discover_web_bridge()
@@ -1505,7 +1515,7 @@ class DshTelemetryParser(dsh_telemetry.DshTelemetryParser):
                                 if isinstance(it, dict):
                                     title = it.get("title") or ""
                                     sid = it.get("sessionId")
-                                    if sid and target_tag in title:
+                                    if sid and any(tag in title for tag in target_tags):
                                         if sid not in sessions_to_delete:
                                             sessions_to_delete.append(sid)
                     except Exception:
@@ -1529,7 +1539,7 @@ class DshTelemetryParser(dsh_telemetry.DshTelemetryParser):
                         if isinstance(it, dict):
                             title = it.get("title") or ""
                             sid = it.get("sessionId")
-                            if sid and target_tag in title:
+                            if sid and any(tag in title for tag in target_tags):
                                 if sid not in sessions_to_delete:
                                     sessions_to_delete.append(sid)
 

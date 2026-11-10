@@ -94,7 +94,7 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
           injecting reminder directives into subsequent role dispatches upon unresolved rounds when assigned targets remain unresolved,
           supervising fused role workers with coordinator verification, delivering diagnostics up to 3 retries on failure, and atomically harvesting targets on success,
           emitting real-time telemetry, updating harness orchestration state across dispatch, harvest, and convergence events, and aggregating TokenUsage into OrchestrationSummary.
-        - Upon clean convergence, deletes provisioned role workspace directories for declared roles in scope.
+        - Upon clean convergence, deletes provisioned role workspace directories for declared roles in scope unless workspace retention is requested.
         - When cancelled or interrupted by signals, interrupts active workers via harness.interrupt_role and deletes provisioned role workspace directories in scope.
         """
         ...

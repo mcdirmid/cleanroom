@@ -59,9 +59,9 @@ By maintaining pre-sorted release indices and conducting depth-first backtrackin
 - Version range models, compilation, and satisfiability engine.
   - Grounded: [semver_range: [semver_range_service]]
 
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-30T19:20:00Z
+<!-- AUTOFAB METADATA
+LAST_CLEANED: 2026-11-10T07:51:09Z
 LAST_CHANGED: 2026-10-30T19:20:00Z
 CHANGE: Ground inherited deferred requirements with factored provisions and connect backtracking_solver_ext search heuristics
-SPEC_QA_AUDIT: 2026-10-30T19:20:00Z
+SPEC_QA_AUDIT: 2026-11-10T07:51:09Z
 -->

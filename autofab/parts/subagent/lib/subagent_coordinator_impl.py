@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 import hashlib
 import json
 import os
@@ -909,6 +910,13 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
 
                 # 3. Clean convergence check
                 if not active_workers and all_clean:
+                    retain_ws = (
+                        os.environ.get("AUTOFAB_RETAIN_WORKSPACES") == "1"
+                        or os.environ.get(f"{app_info.ENV_PREFIX}_RETAIN_WORKSPACES") == "1"
+                    )
+                    now_iso = datetime.datetime.now(datetime.timezone.utc).strftime(
+                        "%Y-%m-%dT%H:%M:%SZ"
+                    )
                     for r_entry in all_scope_roles:
                         r_name = (
                             r_entry.role_name
@@ -919,7 +927,25 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
                             r_name, dir_scope=dir_scope, repo_root=root
                         )
                         if os.path.isdir(ws_dir):
-                            shutil.rmtree(ws_dir, ignore_errors=True)
+                            if retain_ws:
+                                try:
+                                    status_file = os.path.join(ws_dir, "flight_status.json")
+                                    with open(status_file, "w", encoding="utf-8") as sf:
+                                        json.dump(
+                                            {
+                                                "status": "finished",
+                                                "scope": dir_scope,
+                                                "role": r_name,
+                                                "outcome": "PASS",
+                                                "finished_at": now_iso,
+                                            },
+                                            sf,
+                                            indent=2,
+                                        )
+                                except Exception:
+                                    pass
+                            else:
+                                shutil.rmtree(ws_dir, ignore_errors=True)
 
                     total_tokens = (
                         cumulative_input + cumulative_cached + cumulative_output

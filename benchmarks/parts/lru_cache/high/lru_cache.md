@@ -34,9 +34,9 @@ A *least-recently-used cache* stores bounded key-value pairs with access recency
 
 - Reporting current capacity, active size, emptiness status, fullness status, and telemetry statistics, as well as resetting operational telemetry counters.
 
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-30T18:30:00Z
+<!-- AUTOFAB METADATA
+LAST_CLEANED: 2026-11-10T07:51:09Z
 LAST_CHANGED: 2026-10-30T18:30:00Z
 CHANGE: Author lru_cache interface component specification
-SPEC_QA_AUDIT: 2026-10-30T18:30:00Z
+SPEC_QA_AUDIT: 2026-11-10T07:51:09Z
 -->

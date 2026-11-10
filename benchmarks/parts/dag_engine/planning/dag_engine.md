@@ -71,9 +71,9 @@ By factoring graph construction, topological sorting, failure propagation polici
 - Graph data structures, topological sort algorithms, cycle detection traversal, and thread pool execution.
   - Deferred: Realized by concrete realization in dag_engine_impl.
 
-<!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-26T21:35:31Z
+<!-- AUTOFAB METADATA
+LAST_CLEANED: 2026-11-10T07:51:09Z
 LAST_CHANGED: 2026-11-02T19:55:00Z
 CHANGE: Specify test-only observe_runner_cancellation contract on DAGRunner
-SPEC_QA_AUDIT: 2026-10-26T21:35:31Z
+SPEC_QA_AUDIT: 2026-11-10T07:51:09Z
 -->
