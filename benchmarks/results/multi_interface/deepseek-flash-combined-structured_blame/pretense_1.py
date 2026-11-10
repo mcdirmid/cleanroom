@@ -190,7 +190,6 @@ import unittest
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -232,7 +231,7 @@ class StreamReaderStateMachine(StateMachine[StreamReaderState]):
         expected: Optional[str] = self.state.items[0] if self.state.items else None
         if self.state.items:
             self.state.items.pop(0)
-        ret: Optional[str] = make_return_value(expected)
+        ret: Optional[str] = self.inner_read()
         assert ret == expected
         return ret
 
@@ -240,7 +239,7 @@ class StreamReaderStateMachine(StateMachine[StreamReaderState]):
     def unread_count(self) -> int:
         require(self.state.initialized)
         expected: int = len(self.state.items)
-        ret: int = make_return_value(expected)
+        ret: int = self.inner_unread_count()
         assert ret == expected
         return ret
 
@@ -248,7 +247,7 @@ class StreamReaderStateMachine(StateMachine[StreamReaderState]):
     def has_data(self) -> bool:
         require(self.state.initialized)
         expected: bool = len(self.state.items) > 0
-        ret: bool = make_return_value(expected)
+        ret: bool = self.inner_has_data()
         assert ret == expected
         return ret
 
@@ -307,7 +306,7 @@ FakeStreamReaderFuzzTest = compile_hypothesis_test_case(
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-08T17:57:53Z
 # LAST_CHANGED: 2026-11-08T17:57:53Z
-# CHANGE: Implemented StreamReader interface pretense: FIFO model state, 1:1 read/unread_count/has_data transitions with make_return_value pivots, synthesized fake + factory, TestStreamReaderFake covering all transitions incl. seed_initial, and FakeStreamReaderFuzzTest compiled from the proto; fixed package-qualified imports and removed the real-SUT test class.
+# CHANGE: Implemented StreamReader interface pretense: FIFO model state, 1:1 read/unread_count/has_data transitions with pivots, synthesized fake + factory, TestStreamReaderFake covering all transitions incl. seed_initial, and FakeStreamReaderFuzzTest compiled from the proto; fixed package-qualified imports and removed the real-SUT test class.
 # --- END AUTOFAB METADATA ---
 
 
@@ -323,7 +322,6 @@ import unittest
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -369,7 +367,7 @@ class StreamWriterStateMachine(StateMachine[StreamReaderState]):
         if len(payload) > 0:
             self.state.items.append(payload)
             self.state.written_count += 1
-        ret = make_return_value()
+        ret = self.inner_write(payload)
         assert ret is None
         return ret
 
@@ -378,7 +376,7 @@ class StreamWriterStateMachine(StateMachine[StreamReaderState]):
         require(self.state.initialized)
         self.state.items.clear()
         self.state.written_count = 0
-        ret = make_return_value()
+        ret = self.inner_clear()
         assert ret is None
         return ret
 
@@ -386,7 +384,7 @@ class StreamWriterStateMachine(StateMachine[StreamReaderState]):
     def written_count(self) -> int:
         require(self.state.initialized)
         expected: int = self.state.written_count
-        ret: int = make_return_value(expected)
+        ret: int = self.inner_written_count()
         assert ret == expected
         return ret
 
@@ -448,5 +446,5 @@ FakeStreamWriterFuzzTest = compile_hypothesis_test_case(
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-08T17:57:59Z
 # LAST_CHANGED: 2026-11-08T17:57:59Z
-# CHANGE: Implemented StreamWriter interface pretense: shared buffer model state, 1:1 write/clear/written_count transitions with empty-payload precondition gated via require_arg and make_return_value pivots, synthesized fake + factory, TestStreamWriterFake covering all transitions incl. seed_initial, and FakeStreamWriterFuzzTest; fixed package-qualified imports and removed the real-SUT test class.
+# CHANGE: Implemented StreamWriter interface pretense: shared buffer model state, 1:1 write/clear/written_count transitions with empty-payload precondition gated via require_arg and pivots, synthesized fake + factory, TestStreamWriterFake covering all transitions incl. seed_initial, and FakeStreamWriterFuzzTest; fixed package-qualified imports and removed the real-SUT test class.
 # --- END AUTOFAB METADATA ---

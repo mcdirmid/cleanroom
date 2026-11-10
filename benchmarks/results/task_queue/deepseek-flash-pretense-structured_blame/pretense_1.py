@@ -261,7 +261,6 @@ import unittest
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -282,7 +281,7 @@ from benchmark_6.parts.task_queue.lib.task_queue import (
 # ==============================================================================
 # NOTE: Transitions model target methods 1:1 (@transition(TargetClass.method)).
 # Operational branches and contracted exceptions (with raises(ExpectedException):
-# make_return_value()) live naturally inside the single transition body.
+# ()) live naturally inside the single transition body.
 # require_arg defines the caller precondition contract.
 # ==============================================================================
 
@@ -316,9 +315,9 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
         require_arg(payload, Domain.type(str), preferred=["payload-a"])
         if not self.state.available:
             with raises(QueueUnavailableException):
-                make_return_value()
+                self.inner_submit(task_id, payload)
             return None
-        ret = make_return_value()
+        ret = self.inner_submit(task_id, payload)
         self.state.pending.append(task_id)
         assert self.state.pending[-1] == task_id
         return ret
@@ -330,11 +329,11 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
         require(len(self.state.pending) > 0)
         if not self.state.available:
             with raises(QueueUnavailableException):
-                make_return_value()
+                self.inner_dispatch()
             return ""
         count = len(self.state.pending)
         oldest = self.state.pending[0]
-        ret = make_return_value(oldest)
+        ret = self.inner_dispatch()
         self.state.pending.pop(0)
         assert len(self.state.pending) == count - 1
         return ret
@@ -349,9 +348,9 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
         require_arg(outcome, Domain.type(str), preferred=["done"])
         if not self.state.available:
             with raises(QueueUnavailableException):
-                make_return_value()
+                self.inner_complete(task_id, outcome)
             return None
-        ret = make_return_value()
+        ret = self.inner_complete(task_id, outcome)
         self.state.outcomes[task_id] = outcome
         assert self.state.outcomes.get(task_id) == outcome
         return ret
@@ -362,14 +361,14 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
         task_id: str,
     ) -> Optional[str]:
         require_arg(task_id, Domain.type(str), preferred=["task-a"])
-        ret = make_return_value(self.state.outcomes.get(task_id))
+        ret = self.inner_get_outcome(task_id)
         return ret
 
     @transition(TaskQueue.clear)
     def clear(
         self,
     ) -> None:
-        ret = make_return_value()
+        ret = self.inner_clear()
         self.state.pending.clear()
         self.state.outcomes.clear()
         assert len(self.state.pending) == 0
@@ -382,14 +381,14 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
         available: bool,
     ) -> None:
         require_arg(available, Domain.type(bool), preferred=[True, False])
-        ret = make_return_value()
+        ret = self.inner_set_available(available)
         self.state.available = available
         assert self.state.available == available
         return ret
 
     @transition(name="pending_count")
     def pending_count(self) -> int:
-        ret = make_return_value(len(self.state.pending))
+        ret = self.inner_pending_count()
         return ret
 
 
@@ -730,7 +729,6 @@ import unittest
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -751,7 +749,7 @@ from benchmark_6.parts.task_queue.lib.task_worker import (
 # ==============================================================================
 # NOTE: Transitions model target methods 1:1 (@transition(TargetClass.method)).
 # Operational branches and contracted exceptions (with raises(ExpectedException):
-# make_return_value()) live naturally inside the single transition body.
+# ()) live naturally inside the single transition body.
 # require_arg defines the caller precondition contract.
 # ==============================================================================
 
@@ -786,10 +784,10 @@ class TaskWorkerStateMachine(StateMachine[TaskWorkerState]):
         require_arg(payload, Domain.type(str), preferred=["payload-a"])
         if task_id in self.state.failing_tasks:
             with raises(WorkerExecutionException):
-                make_return_value()
+                self.inner_execute(task_id, payload)
             return ""
         outcome = f"PROCESSED:{payload.upper()}"
-        ret = make_return_value(outcome)
+        ret = self.inner_execute(task_id, payload)
         self.state.outcomes[task_id] = outcome
         self.state.last_task_id = task_id
         assert self.state.last_task_id == task_id
@@ -800,7 +798,7 @@ class TaskWorkerStateMachine(StateMachine[TaskWorkerState]):
         self,
     ) -> str:
         task_id = f"fetched-{len(self.state.fetched)}"
-        ret = make_return_value(task_id)
+        ret = self.inner_fetch_and_execute()
         self.state.fetched.append(task_id)
         self.state.last_task_id = task_id
         assert self.state.fetched[-1] == task_id
@@ -814,7 +812,7 @@ class TaskWorkerStateMachine(StateMachine[TaskWorkerState]):
     ) -> None:
         require_arg(task_id, Domain.type(str), preferred=["task-a"])
         require_arg(failing, Domain.type(bool), preferred=[True, False])
-        ret = make_return_value()
+        ret = self.inner_set_failing_task(task_id, failing)
         if failing:
             self.state.failing_tasks.add(task_id)
         else:

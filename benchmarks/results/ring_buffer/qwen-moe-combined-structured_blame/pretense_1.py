@@ -207,7 +207,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -258,10 +257,10 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
             evicted = self.state.items[0]
             self.state.items = self.state.items[1:]
             self.state.items.append(item)
-            ret = make_return_value(evicted)
+            ret = self.inner_push(item)
         else:
             self.state.items.append(item)
-            ret = make_return_value()
+            ret = self.inner_push(item)
         assert ret is not None or len(self.state.items) <= self.state.capacity
         return ret
 
@@ -272,7 +271,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
         require(len(self.state.items) > 0, error=BufferEmptyError)
         if len(self.state.items) == 0:
             raise BufferEmptyError
-        ret = make_return_value(self.state.items.pop(0))
+        ret = self.inner_pop()
         return ret
 
     @transition(RingBuffer.clear)
@@ -280,7 +279,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
         self,
     ) -> None:
         self.state.items.clear()
-        ret = make_return_value()
+        ret = self.inner_clear()
         assert ret is None
         return ret
 
@@ -288,31 +287,31 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
     def snapshot_items(
         self,
     ) -> None:
-        ret = make_return_value(list(self.state.items))
+        ret = self.inner_snapshot_items()
         assert ret is not None
         return ret
 
     @transition(name="capacity")
     def capacity(self) -> None:
-        ret = make_return_value(self.state.capacity)
+        ret = self.inner_capacity()
         assert ret is not None
         return ret
 
     @transition(name="size")
     def size(self) -> None:
-        ret = make_return_value(len(self.state.items))
+        ret = self.inner_size()
         assert ret is not None
         return ret
 
     @transition(name="is_empty")
     def is_empty(self) -> None:
-        ret = make_return_value(len(self.state.items) == 0)
+        ret = self.inner_is_empty()
         assert ret is not None
         return ret
 
     @transition(name="is_full")
     def is_full(self) -> None:
-        ret = make_return_value(len(self.state.items) == self.state.capacity)
+        ret = self.inner_is_full()
         assert ret is not None
         return ret
 

@@ -359,7 +359,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -385,7 +384,7 @@ from benchmark_1.parts.semver_solver_multi.lib.dependency_solver import (
 # ==============================================================================
 # NOTE: Transitions model target methods 1:1 (@transition(TargetClass.method)).
 # Operational branches and contracted exceptions (with raises(ExpectedException):
-# make_return_value()) live naturally inside the single transition body
+# ()) live naturally inside the single transition body
 # (multi-transition splitting is prohibited). require_arg defines the caller
 # precondition contract (checked at runtime on real calls).
 #
@@ -442,7 +441,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
             Domain.type(PackageRelease),
             preferred=[SAMPLE_RELEASE, SAMPLE_RELEASE_WITH_DEPS],
         )
-        ret = make_return_value(None)
+        ret = self.inner_register_package(release)
         self.state.packages.setdefault(release.name, []).append(release)
         assert ret is None
         return ret
@@ -455,7 +454,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         require(self.state.initialized)
         require_arg(name, Domain.in_set(set(self.state.packages.keys())))
         fake_ret = list(self.state.packages.get(name, []))
-        ret = make_return_value(fake_ret)
+        ret = self.inner_get_releases(name)
         assert isinstance(ret, list)
         return ret
 
@@ -467,7 +466,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         require(self.state.initialized)
         require_arg(name, Domain.type(str), preferred=["alpha"])
         fake_ret = name in self.state.packages
-        ret = make_return_value(fake_ret)
+        ret = self.inner_has_package(name)
         assert isinstance(ret, bool)
         return ret
 
@@ -477,7 +476,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
     ) -> Set[str]:
         require(self.state.initialized)
         fake_ret = set(self.state.packages.keys())
-        ret = make_return_value(fake_ret)
+        ret = self.inner_all_packages()
         assert isinstance(ret, set)
         return ret
 
@@ -493,7 +492,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
             preferred=[EMPTY_ROOT_DEPENDENCIES],
         )
         fake_ret = EMPTY_RESOLUTION
-        ret = make_return_value(fake_ret)
+        ret = self.inner_resolve(root_dependencies)
         assert isinstance(ret, ResolutionOutcome)
         self.state.resolutions.append(ret)
         return ret
@@ -891,7 +890,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -909,7 +907,7 @@ from benchmark_1.parts.semver_solver_multi.lib.semver_core import Version, Versi
 # ==============================================================================
 # NOTE: Transitions model target methods 1:1 (@transition(TargetClass.method)).
 # Operational branches and contracted exceptions (with raises(ExpectedException):
-# make_return_value()) live naturally inside the single transition body
+# ()) live naturally inside the single transition body
 # (multi-transition splitting is prohibited). require_arg defines the caller
 # precondition contract (checked at runtime on real calls).
 #
@@ -967,7 +965,7 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
     ) -> str:
         require(self.state.initialized)
         fake_ret = FAKE_FORMATTED_VERSION
-        ret = make_return_value(fake_ret)
+        ret = self.inner_format()
         assert isinstance(ret, str)
         return ret
 
@@ -983,7 +981,7 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
             preferred=["1.2.3"],
         )
         fake_ret = FAKE_PARSED_VERSION
-        ret = make_return_value(fake_ret)
+        ret = self.inner_parse_version(text)
         assert isinstance(ret, Version)
         self.state.parsed_versions.append(ret)
         return ret
@@ -998,7 +996,7 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
         require_arg(v1, Domain.type(Version), preferred=[SAMPLE_VERSIONS[1]])
         require_arg(v2, Domain.type(Version), preferred=[SAMPLE_VERSIONS[3]])
         fake_ret = FAKE_COMPARISON
-        ret = make_return_value(fake_ret)
+        ret = self.inner_compare_precedence(v1, v2)
         assert isinstance(ret, int)
         self.state.comparisons.append(ret)
         return ret
@@ -1009,7 +1007,7 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
     ) -> bool:
         require(self.state.initialized)
         fake_ret = FAKE_PRERELEASE
-        ret = make_return_value(fake_ret)
+        ret = self.inner_is_prerelease()
         assert isinstance(ret, bool)
         return ret
 
@@ -1075,7 +1073,7 @@ FakeSemverCoreFuzzTest = compile_hypothesis_test_case(
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-05T16:56:36Z
 # LAST_CHANGED: 2026-11-05T16:56:36Z
-# CHANGE: Implemented SemverCore pretense interface state machine: package-qualified imports, concrete domains (closed valid-version text set for the InvalidVersionError precondition, open Version domain for precedence args), make_return_value oracles for format/parse_version/compare_precedence/is_prerelease, seed_initial seeding transition, singular make_semver_core_fake factory, full fixed fake transition-coverage suite, and FakeSemverCoreFuzzTest compilation.
+# CHANGE: Implemented SemverCore pretense interface state machine: package-qualified imports, concrete domains (closed valid-version text set for the InvalidVersionError precondition, open Version domain for precedence args), oracles for format/parse_version/compare_precedence/is_prerelease, seed_initial seeding transition, singular make_semver_core_fake factory, full fixed fake transition-coverage suite, and FakeSemverCoreFuzzTest compilation.
 # --- END AUTOFAB METADATA ---
 
 
@@ -1427,7 +1425,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -1446,7 +1443,7 @@ from benchmark_1.parts.semver_solver_multi.lib.semver_range import RangeEngine, 
 # ==============================================================================
 # NOTE: Transitions model target methods 1:1 (@transition(TargetClass.method)).
 # Operational branches and contracted exceptions (with raises(ExpectedException):
-# make_return_value()) live naturally inside the single transition body
+# ()) live naturally inside the single transition body
 # (multi-transition splitting is prohibited). require_arg defines the caller
 # precondition contract (checked at runtime on real calls).
 #
@@ -1523,7 +1520,7 @@ class SemverRangeStateMachine(StateMachine[SemverRangeState]):
             preferred=["^1.0.0"],
         )
         fake_ret = FAKE_RANGE
-        ret = make_return_value(fake_ret)
+        ret = self.inner_parse_range(text)
         assert isinstance(ret, VersionRange)
         self.state.parsed_ranges.append(ret)
         return ret
@@ -1544,7 +1541,7 @@ class SemverRangeStateMachine(StateMachine[SemverRangeState]):
         )
         require_arg(include_prerelease, Domain.boolean(), preferred=[False])
         fake_ret = FAKE_SATISFACTION
-        ret = make_return_value(fake_ret)
+        ret = self.inner_satisfies(version, range_constraint, include_prerelease)
         assert isinstance(ret, bool)
         self.state.evaluations.append(ret)
         return ret
@@ -1609,5 +1606,5 @@ FakeSemverRangeFuzzTest = compile_hypothesis_test_case(
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-05T16:56:42Z
 # LAST_CHANGED: 2026-11-05T16:56:42Z
-# CHANGE: Implemented SemverRange pretense interface state machine: package-qualified imports, concrete domains (closed valid range-text set gating the InvalidRangeError precondition, open Version domain, closed parsed-range set, boolean prerelease flag), make_return_value oracles for parse_range/satisfies, seed_initial seeding transition, singular make_semver_range_fake factory, full fixed fake transition-coverage suite, and FakeSemverRangeFuzzTest compilation.
+# CHANGE: Implemented SemverRange pretense interface state machine: package-qualified imports, concrete domains (closed valid range-text set gating the InvalidRangeError precondition, open Version domain, closed parsed-range set, boolean prerelease flag), oracles for parse_range/satisfies, seed_initial seeding transition, singular make_semver_range_fake factory, full fixed fake transition-coverage suite, and FakeSemverRangeFuzzTest compilation.
 # --- END AUTOFAB METADATA ---

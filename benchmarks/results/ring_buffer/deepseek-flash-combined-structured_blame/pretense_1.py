@@ -205,7 +205,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -222,20 +221,20 @@ from benchmark_1.parts.ring_buffer.lib.ring_buffer import BufferEmptyError, Ring
 # 1. State Machine Specification (Model & Transitions)
 # ==============================================================================
 # NOTE: Transitions model target methods 1:1 (@transition(TargetClass.method)).
-# Operational branches and contracted exceptions (with raises(ExpectedException): make_return_value())
+# Operational branches and contracted exceptions (with raises(ExpectedException): ())
 # live naturally inside the single transition body (multi-transition splitting is prohibited).
 # require_arg defines the caller precondition contract (checked at runtime on real calls).
 # Use Domain.type(T) or open domain; use preferred=[...] to cluster/bias fuzz inputs without restricting the contract.
 #
 # REFERENCE PATTERNS:
-#   # 1:1 Transition Pattern with Domain strategies and make_return_value pivot:
+#   # 1:1 Transition Pattern with Domain strategies and inner_transition pivot:
 #   @transition(TargetClass.method)
 #   def method(self, arg1: str, count: int) -> ReturnType:
 #       require(self.state.initialized)
 #       require_arg(arg1, Domain.type(str), preferred=["sample"])
 #       require_arg(count, Domain.range(1, 100), preferred=[10])
 #       fake_ret = ReturnType(...)  # or None / value
-#       ret = make_return_value(fake_ret)
+#       ret = (fake_ret)
 #       self.state.items.append(ret)
 #       assert ret == fake_ret
 #       return ret
@@ -292,7 +291,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
         require_arg(item, Domain.any(), preferred=["alpha", "beta", 0, 1])
         was_full = len(self.state.items) >= self.state.capacity
         evicted: Optional[Any] = self.state.items[0] if was_full else None
-        ret = make_return_value(evicted)
+        ret = self.inner_push(item)
         if was_full:
             self.state.items.pop(0)
         self.state.items.append(item)
@@ -306,10 +305,10 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
         require(self.state.initialized)
         if len(self.state.items) == 0:
             with raises(BufferEmptyError):
-                make_return_value()
+                self.inner_pop()
             return None
         oldest = self.state.items[0]
-        ret = make_return_value(oldest)
+        ret = self.inner_pop()
         self.state.items.pop(0)
         assert ret == oldest
         return ret
@@ -319,7 +318,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
         self,
     ) -> None:
         require(self.state.initialized)
-        ret = make_return_value()
+        ret = self.inner_clear()
         self.state.items.clear()
         assert ret is None
         return ret
@@ -330,7 +329,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
     ) -> List[Any]:
         require(self.state.initialized)
         expected = list(self.state.items)
-        ret = make_return_value(expected)
+        ret = self.inner_snapshot_items()
         assert ret == expected
         return ret
 
@@ -338,7 +337,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
     def capacity(self) -> int:
         require(self.state.initialized)
         expected = self.state.capacity
-        ret = make_return_value(expected)
+        ret = self.inner_capacity()
         assert ret == expected
         return ret
 
@@ -346,7 +345,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
     def size(self) -> int:
         require(self.state.initialized)
         expected = len(self.state.items)
-        ret = make_return_value(expected)
+        ret = self.inner_size()
         assert ret == expected
         return ret
 
@@ -354,7 +353,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
     def is_empty(self) -> bool:
         require(self.state.initialized)
         expected = len(self.state.items) == 0
-        ret = make_return_value(expected)
+        ret = self.inner_is_empty()
         assert ret == expected
         return ret
 
@@ -362,7 +361,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
     def is_full(self) -> bool:
         require(self.state.initialized)
         expected = len(self.state.items) >= self.state.capacity
-        ret = make_return_value(expected)
+        ret = self.inner_is_full()
         assert ret == expected
         return ret
 

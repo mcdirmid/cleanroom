@@ -1455,7 +1455,7 @@ ctx.returns(lambda v, r: v.is_prerelease)
     ) -> None:
         """Requirement: Overridden transitions in an implementation pseudo-state machine MUST execute
         the base interface transition's model state mutations and parameter domains while delegating to the
-        real SUT via make_return_value and call_target during Hypothesis fuzzing."""
+        real SUT via inner transitions during Hypothesis fuzzing."""
 
         @dataclass
         class CounterState:
@@ -1532,7 +1532,7 @@ ctx.returns(lambda v, r: v.is_prerelease)
 
         with self.assertRaises(MultiArgError) as ctx:
             with pretense.raises(MultiArgError):
-                pretense.make_return_value(None)
+                pass
         self.assertEqual(ctx.exception.packages, ())
         self.assertEqual(ctx.exception.raw_text, "<mock_raw_text>")
 
@@ -1572,13 +1572,33 @@ ctx.returns(lambda v, r: v.is_prerelease)
                     pretense.Domain.integers(min_value=1),
                     error=ContractViolationError,
                 )
-                ret = pretense.make_return_value(val)
+                ret = self.inner_set_positive(val)
                 self.state.value = ret
                 return ret
 
+            def inner_set_positive(self, val: int) -> int:
+                return val
+
+        class ServiceImplPseudoStateMachine(ServiceStateMachine):
+            def inner_set_positive(self, val: int) -> int:
+                target = pretense.sut(TargetService)
+                return target.set_positive(val)
+
+        class BrokenTarget:
+            def set_positive(self, val: int) -> int:
+                raise UnexpectedError("internal crash")
+
+        class UnexpectedError(Exception):
+            pass
+
+        class BrokenImplPseudoStateMachine(ServiceStateMachine):
+            def inner_set_positive(self, val: int) -> int:
+                target = pretense.sut(BrokenTarget)
+                return target.set_positive(val)
+
         # 1. Direct call under violating(ContractViolationError)
         sut1 = TargetService()
-        sm1 = ServiceStateMachine()
+        sm1 = ServiceImplPseudoStateMachine()
         checked1 = sm1.bind(sut1)
         # Normal call works
         checked1.set_positive(10)
@@ -1599,7 +1619,7 @@ ctx.returns(lambda v, r: v.is_prerelease)
 
         # 2. Context manager usage with violating(ContractViolationError)
         sut2 = TargetService()
-        sm2 = ServiceStateMachine()
+        sm2 = ServiceImplPseudoStateMachine()
         checked2 = sm2.bind(sut2)
         with checked2.violating(ContractViolationError, match="positive"):
             checked2.set_positive(-1)
@@ -1609,22 +1629,15 @@ ctx.returns(lambda v, r: v.is_prerelease)
 
         # 3. Violating fails if SUT does not raise
         sut3 = TargetService()
-        sm3 = ServiceStateMachine()
+        sm3 = ServiceImplPseudoStateMachine()
         checked3 = sm3.bind(sut3)
         with self.assertRaises(AssertionError) as err_ctx:
             checked3.violating(ContractViolationError).set_positive(5)
         self.assertIn("Expected contract violation", str(err_ctx.exception))
 
         # 4. Violating fails if SUT raises wrong exception type
-        class UnexpectedError(Exception):
-            pass
-
-        class BrokenTarget:
-            def set_positive(self, val: int) -> int:
-                raise UnexpectedError("internal crash")
-
         sut4 = BrokenTarget()
-        sm4 = ServiceStateMachine()
+        sm4 = BrokenImplPseudoStateMachine()
         checked4 = sm4.bind(sut4)
         with self.assertRaises(AssertionError) as err_ctx:
             checked4.violating(ContractViolationError).set_positive(-1)
@@ -1635,7 +1648,7 @@ ctx.returns(lambda v, r: v.is_prerelease)
 
         # 5. Violating fails if match pattern is not in exception message
         sut5 = TargetService()
-        sm5 = ServiceStateMachine()
+        sm5 = ServiceImplPseudoStateMachine()
         checked5 = sm5.bind(sut5)
         with self.assertRaises(AssertionError) as err_ctx:
             checked5.violating(

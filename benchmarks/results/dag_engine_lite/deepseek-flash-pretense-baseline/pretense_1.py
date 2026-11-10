@@ -666,7 +666,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -905,7 +904,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         for dependency in frozen_dependencies:
             self.state.upstream[node_id].add(dependency)
             self.state.downstream.setdefault(dependency, set()).add(node_id)
-        ret = make_return_value()
+        ret = self.inner_add_node(node_id, action, dependencies, priority, retries)
         assert ret is None
 
     @transition(DAG.add_edge)
@@ -919,11 +918,11 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         require_arg(downstream_id, Domain.type(str), preferred=sorted(self.state.nodes)[:3])
         if upstream_id not in self.state.nodes or downstream_id not in self.state.nodes:
             with raises(NodeNotFoundError):
-                make_return_value()
+                self.inner_add_edge(upstream_id, downstream_id)
         else:
             self.state.upstream.setdefault(downstream_id, set()).add(upstream_id)
             self.state.downstream.setdefault(upstream_id, set()).add(downstream_id)
-            ret = make_return_value()
+            ret = self.inner_add_edge(upstream_id, downstream_id)
             assert ret is None
 
     @transition(DAG.remove_node)
@@ -935,7 +934,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         require_arg(node_id, Domain.type(str), preferred=sorted(self.state.nodes)[:3])
         if node_id not in self.state.nodes:
             with raises(NodeNotFoundError):
-                make_return_value()
+                self.inner_remove_node(node_id)
         else:
             for dependency in self.state.upstream.get(node_id, set()):
                 self.state.downstream.get(dependency, set()).discard(node_id)
@@ -944,7 +943,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
             del self.state.nodes[node_id]
             del self.state.upstream[node_id]
             del self.state.downstream[node_id]
-            ret = make_return_value()
+            ret = self.inner_remove_node(node_id)
             assert ret is None
 
     @transition(DAG.has_node)
@@ -954,7 +953,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
     ) -> bool:
         require(self.state.initialized)
         require_arg(node_id, Domain.type(str), preferred=sorted(self.state.nodes)[:3])
-        ret: bool = make_return_value(node_id in self.state.nodes)
+        ret: bool = self.inner_has_node(node_id)
         assert ret == (node_id in self.state.nodes)
         return ret
 
@@ -967,9 +966,9 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         require_arg(node_id, Domain.type(str), preferred=sorted(self.state.nodes)[:3])
         if node_id not in self.state.nodes:
             with raises(NodeNotFoundError):
-                make_return_value()
+                self.inner_get_node(node_id)
             return None
-        ret: NodeDefinition[Any] = make_return_value(self.state.nodes[node_id])
+        ret: NodeDefinition[Any] = self.inner_get_node(node_id)
         assert ret == self.state.nodes[node_id]
         return ret
 
@@ -982,9 +981,9 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         require_arg(node_id, Domain.type(str), preferred=sorted(self.state.nodes)[:3])
         if node_id not in self.state.nodes:
             with raises(NodeNotFoundError):
-                make_return_value()
+                self.inner_get_dependencies(node_id)
             return None
-        ret: Set[str] = make_return_value(set(self.state.upstream[node_id]))
+        ret: Set[str] = self.inner_get_dependencies(node_id)
         assert ret == self.state.upstream[node_id]
         return ret
 
@@ -997,9 +996,9 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         require_arg(node_id, Domain.type(str), preferred=sorted(self.state.nodes)[:3])
         if node_id not in self.state.nodes:
             with raises(NodeNotFoundError):
-                make_return_value()
+                self.inner_get_dependents(node_id)
             return None
-        ret: Set[str] = make_return_value(set(self.state.downstream[node_id]))
+        ret: Set[str] = self.inner_get_dependents(node_id)
         assert ret == self.state.downstream[node_id]
         return ret
 
@@ -1008,7 +1007,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         self,
     ) -> Set[str]:
         require(self.state.initialized)
-        ret: Set[str] = make_return_value(set(self.state.nodes))
+        ret: Set[str] = self.inner_all_nodes()
         assert ret == set(self.state.nodes)
         return ret
 
@@ -1020,12 +1019,12 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         missing = model_first_missing(self.state)
         if missing is not None:
             with raises(NodeNotFoundError):
-                make_return_value()
+                self.inner_validate()
         elif model_cycle(self.state):
             with raises(CycleError):
-                make_return_value()
+                self.inner_validate()
         else:
-            ret = make_return_value()
+            ret = self.inner_validate()
             assert ret is None
 
     @transition(DAG.topological_sort)
@@ -1035,14 +1034,14 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         require(self.state.initialized)
         if model_first_missing(self.state) is not None:
             with raises(NodeNotFoundError):
-                make_return_value()
+                self.inner_topological_sort()
             return None
         if model_cycle(self.state):
             with raises(CycleError):
-                make_return_value()
+                self.inner_topological_sort()
             return None
         expected = model_topological_order(self.state)
-        ret: List[str] = make_return_value(expected)
+        ret: List[str] = self.inner_topological_sort()
         assert ret == expected
         return ret
 
@@ -1052,7 +1051,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
     ) -> Set[str]:
         require(self.state.initialized)
         roots = {node_id for node_id in self.state.nodes if not self.state.upstream[node_id]}
-        ret: Set[str] = make_return_value(roots)
+        ret: Set[str] = self.inner_find_roots()
         assert ret == roots
         return ret
 
@@ -1062,7 +1061,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
     ) -> Set[str]:
         require(self.state.initialized)
         leaves = {node_id for node_id in self.state.nodes if not self.state.downstream[node_id]}
-        ret: Set[str] = make_return_value(leaves)
+        ret: Set[str] = self.inner_find_leaves()
         assert ret == leaves
         return ret
 
@@ -1081,14 +1080,14 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         )
         if model_first_missing(self.state) is not None:
             with raises(NodeNotFoundError):
-                make_return_value()
+                self.inner_compute_critical_path(estimated_durations)
             return None
         if model_cycle(self.state):
             with raises(CycleError):
-                make_return_value()
+                self.inner_compute_critical_path(estimated_durations)
             return None
         expected_path, expected_weight = model_critical_path(self.state, estimated_durations)
-        ret: Tuple[List[str], float] = make_return_value((expected_path, expected_weight))
+        ret: Tuple[List[str], float] = self.inner_compute_critical_path(estimated_durations)
         assert ret[0] == expected_path
         assert abs(ret[1] - expected_weight) < 1e-9
         return ret
@@ -1104,7 +1103,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         require(self.state.initialized)
         model_sync(self.state)
         expected = model_ready_candidates(self.state)
-        ret: List[str] = make_return_value(expected)
+        ret: List[str] = self.inner_next_wave()
         assert all(node_id in self.state.nodes for node_id in ret)
         return ret
 
@@ -1117,7 +1116,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         require_arg(node_id, Domain.in_set(self.state.nodes), preferred=sorted(self.state.nodes)[:3])
         model_sync(self.state)
         self.state.states[node_id] = NodeState.RUNNING
-        ret = make_return_value()
+        ret = self.inner_mark_running(node_id)
         assert ret is None
 
     @transition(WaveScheduler.mark_succeeded)
@@ -1135,7 +1134,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
                 for dependency in self.state.upstream[dependent]
             ):
                 self.state.states[dependent] = NodeState.READY
-        ret = make_return_value()
+        ret = self.inner_mark_succeeded(node_id)
         assert ret is None
 
     @transition(WaveScheduler.mark_failed)
@@ -1157,7 +1156,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
             for dependent in model_transitive_dependents(self.state, node_id):
                 if self.state.states.get(dependent) not in _TERMINAL_STATES:
                     self.state.states[dependent] = NodeState.SKIPPED
-        ret = make_return_value()
+        ret = self.inner_mark_failed(node_id, failure_policy)
         assert ret is None
 
     @transition(WaveScheduler.is_finished)
@@ -1167,14 +1166,14 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         require(self.state.initialized)
         model_sync(self.state)
         if not self.state.states:
-            ret = make_return_value(True)
+            ret = self.inner_is_finished()
             assert ret is True
             return ret
         if all(status in _TERMINAL_STATES for status in self.state.states.values()):
-            ret = make_return_value(True)
+            ret = self.inner_is_finished()
             assert ret is True
             return ret
-        ret = make_return_value(not model_ready_candidates(self.state))
+        ret = self.inner_is_finished()
         assert isinstance(ret, bool)
         return ret
 
@@ -1186,7 +1185,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         require(self.state.initialized)
         require_arg(node_id, Domain.in_set(self.state.nodes), preferred=sorted(self.state.nodes)[:3])
         model_sync(self.state)
-        ret: NodeState = make_return_value(self.state.states[node_id])
+        ret: NodeState = self.inner_get_state(node_id)
         assert isinstance(ret, NodeState)
         return ret
 
@@ -1196,7 +1195,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
     ) -> Mapping[str, NodeState]:
         require(self.state.initialized)
         model_sync(self.state)
-        ret: Mapping[str, NodeState] = make_return_value(dict(self.state.states))
+        ret: Mapping[str, NodeState] = self.inner_get_all_states()
         assert set(ret) <= set(self.state.nodes)
         return ret
 
@@ -1217,7 +1216,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         for node_id in model_topological_order(self.state):
             self.state.states[node_id] = NodeState.SUCCEEDED
         expected = model_completed_report(self.state)
-        ret: DAGRunReport = make_return_value(expected)
+        ret: DAGRunReport = self.inner_run(failure_policy)
         assert ret.total_nodes == len(self.state.nodes)
         return ret
 

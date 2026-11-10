@@ -341,7 +341,6 @@ import unittest
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -586,7 +585,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
             Domain.in_set(self.state.valid_releases),
             preferred=SAMPLE_RELEASES,
         )
-        ret = make_return_value(None)
+        ret = self.inner_register_package(release)
         current = list(self.state.packages.get(release.name, []))
         current.append(release)
         self.state.packages[release.name] = sort_releases_descending(current)
@@ -604,10 +603,10 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         if name not in self.state.packages:
             ret: List[PackageRelease] = []
             with raises(PackageNotFoundError):
-                ret = make_return_value([])
+                ret = self.inner_get_releases(name)
             return ret
         expected = list(self.state.packages[name])
-        ret = make_return_value(expected)
+        ret = self.inner_get_releases(name)
         assert ret == expected
         return ret
 
@@ -620,7 +619,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
             preferred=["core", "lib_a", "lib_b", "app", "missing_pkg"],
         )
         expected = name in self.state.packages
-        ret = make_return_value(expected)
+        ret = self.inner_has_package(name)
         assert ret == expected
         return ret
 
@@ -628,7 +627,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
     def all_packages(self) -> Set[str]:
         require(self.state.initialized)
         expected = set(self.state.packages.keys())
-        ret = make_return_value(expected)
+        ret = self.inner_all_packages()
         assert ret == expected
         return ret
 
@@ -647,17 +646,10 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         if solved is None:
             ret = ResolutionOutcome(selected_versions={}, derivation_steps=())
             with raises(ResolutionConflictError):
-                ret = make_return_value(
-                    ResolutionOutcome(selected_versions={}, derivation_steps=())
-                )
+                ret = self.inner_resolve(root_dependencies)
             return ret
         expected_versions, expected_steps = solved
-        ret = make_return_value(
-            ResolutionOutcome(
-                selected_versions=expected_versions,
-                derivation_steps=expected_steps,
-            )
-        )
+        ret = self.inner_resolve(root_dependencies)
         assert dict(ret.selected_versions) == expected_versions
         assert isinstance(ret.derivation_steps, tuple)
         assert len(ret.derivation_steps) == len(expected_versions)
@@ -998,7 +990,6 @@ import unittest
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -1123,9 +1114,9 @@ class VersionEngineStateMachine(StateMachine[VersionEngineState]):
         if parsed is None:
             ret = Version(0, 0, 0)
             with raises(InvalidVersionError):
-                ret = make_return_value(Version(0, 0, 0))
+                ret = self.inner_parse_version(text)
             return ret
-        ret = make_return_value(parsed)
+        ret = self.inner_parse_version(text)
         self.state.parsed_versions.append(ret)
         assert ret == parsed
         assert ret.major == parsed.major
@@ -1153,7 +1144,7 @@ class VersionEngineStateMachine(StateMachine[VersionEngineState]):
         require_arg(v1, Domain.type(Version), preferred=sample_versions)
         require_arg(v2, Domain.type(Version), preferred=sample_versions)
         expected = _compare_versions(v1, v2)
-        ret = make_return_value(expected)
+        ret = self.inner_compare_precedence(v1, v2)
         if expected < 0:
             assert ret < 0
         elif expected > 0:
@@ -1557,7 +1548,6 @@ import unittest
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -1916,10 +1906,10 @@ class RangeEngineStateMachine(StateMachine[RangeEngineState]):
         if compiled is None:
             ret = VersionRange("")
             with raises(InvalidRangeError):
-                ret = make_return_value(VersionRange(""))
+                ret = self.inner_parse_range(text)
             return ret
         expected = VersionRange(text.strip())
-        ret = make_return_value(expected)
+        ret = self.inner_parse_range(text)
         if ret not in self.state.parsed_ranges:
             self.state.parsed_ranges.append(ret)
         assert isinstance(ret, VersionRange)
@@ -1960,7 +1950,7 @@ class RangeEngineStateMachine(StateMachine[RangeEngineState]):
             preferred=[False, True],
         )
         expected = satisfies_helper(version, range_constraint, include_prerelease)
-        ret = make_return_value(expected)
+        ret = self.inner_satisfies(version, range_constraint, include_prerelease)
         assert ret == expected
         return ret
 

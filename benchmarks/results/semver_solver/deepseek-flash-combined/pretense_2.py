@@ -730,7 +730,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -760,7 +759,7 @@ from benchmark_1.parts.semver_solver.lib.semver_solver import (
 # 1. State Machine Specification (Model & Transitions)
 # ==============================================================================
 # NOTE: Transitions model target methods 1:1 (@transition(TargetClass.method)).
-# Operational branches and contracted exceptions (with raises(ExpectedException): make_return_value())
+# Operational branches and contracted exceptions (with raises(ExpectedException): ())
 # live naturally inside the single transition body (multi-transition splitting is prohibited).
 # require_arg defines the caller precondition contract (checked at runtime on real calls).
 # Use Domain.type(T) or open domain; use preferred=[...] to cluster/bias fuzz inputs without restricting the contract.
@@ -851,7 +850,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         require(self.state.initialized)
         version = _VERSION_SAMPLES[2]
         text = f"{version.major}.{version.minor}.{version.patch}"
-        ret: str = make_return_value(text)
+        ret: str = self.inner_format()
         assert isinstance(ret, str)
         return ret
 
@@ -867,7 +866,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
             preferred=["1.2.3", "2.0.0-alpha.1"],
         )
         version = _VERSION_SAMPLES[2]
-        ret: Version = make_return_value(version)
+        ret: Version = self.inner_parse_version(text)
         self.state.parsed_versions[text] = ret
         assert isinstance(ret, Version)
         return ret
@@ -893,19 +892,19 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         right = (v2.major, v2.minor, v2.patch)
         if left == right:
             if v1.prerelease == v2.prerelease:
-                ret: int = make_return_value(0)
+                ret: int = self.inner_compare_precedence(v1, v2)
             elif not v1.prerelease:
-                ret = make_return_value(1)
+                ret = self.inner_compare_precedence(v1, v2)
             elif not v2.prerelease:
-                ret = make_return_value(-1)
+                ret = self.inner_compare_precedence(v1, v2)
             elif v1.prerelease < v2.prerelease:
-                ret = make_return_value(-1)
+                ret = self.inner_compare_precedence(v1, v2)
             else:
-                ret = make_return_value(1)
+                ret = self.inner_compare_precedence(v1, v2)
         elif left < right:
-            ret = make_return_value(-1)
+            ret = self.inner_compare_precedence(v1, v2)
         else:
-            ret = make_return_value(1)
+            ret = self.inner_compare_precedence(v1, v2)
         assert isinstance(ret, int)
         return ret
 
@@ -922,7 +921,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         )
         trimmed = text.strip()
         version_range = VersionRange(raw_text=trimmed)
-        ret: VersionRange = make_return_value(version_range)
+        ret: VersionRange = self.inner_parse_range(text)
         self.state.parsed_ranges[trimmed] = ret
         assert isinstance(ret, VersionRange)
         return ret
@@ -951,9 +950,9 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
                 f"{version.major}.{version.minor}.{version.patch}-"
                 + ".".join(version.prerelease)
             )
-            ret: bool = make_return_value(range_constraint.raw_text == prerelease_text)
+            ret: bool = self.inner_satisfies(version, range_constraint, include_prerelease)
         else:
-            ret = make_return_value(True)
+            ret = self.inner_satisfies(version, range_constraint, include_prerelease)
         assert isinstance(ret, bool)
         return ret
 
@@ -969,7 +968,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
             preferred=[_RELEASE_SAMPLES[0]],
         )
         self.state.packages.setdefault(release.name, []).append(release)
-        ret = make_return_value(None)
+        ret = self.inner_register_package(release)
         assert ret is None
         return ret
 
@@ -980,7 +979,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     ) -> List[PackageRelease]:
         require(self.state.initialized)
         require_arg(name, Domain.in_set(set(self.state.packages)))
-        ret: List[PackageRelease] = make_return_value(list(self.state.packages[name]))
+        ret: List[PackageRelease] = self.inner_get_releases(name)
         assert isinstance(ret, list)
         return ret
 
@@ -991,7 +990,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     ) -> bool:
         require(self.state.initialized)
         require_arg(name, Domain.type(str), preferred=["demo", "helper"])
-        ret: bool = make_return_value(name in self.state.packages)
+        ret: bool = self.inner_has_package(name)
         assert isinstance(ret, bool)
         return ret
 
@@ -1000,7 +999,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         self,
     ) -> Set[str]:
         require(self.state.initialized)
-        ret: Set[str] = make_return_value(set(self.state.packages))
+        ret: Set[str] = self.inner_all_packages()
         assert isinstance(ret, set)
         return ret
 
@@ -1016,7 +1015,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
             preferred=[()],
         )
         outcome = ResolutionOutcome(selected_versions={}, derivation_steps=())
-        ret: ResolutionOutcome = make_return_value(outcome)
+        ret: ResolutionOutcome = self.inner_resolve(root_dependencies)
         self.state.resolutions.append(outcome)
         assert isinstance(ret, ResolutionOutcome)
         return ret
@@ -1025,7 +1024,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     def is_prerelease(self) -> bool:
         require(self.state.initialized)
         version = _VERSION_SAMPLES[6]
-        ret: bool = make_return_value(len(version.prerelease) > 0)
+        ret: bool = self.inner_is_prerelease()
         assert isinstance(ret, bool)
         return ret
 

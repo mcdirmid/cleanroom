@@ -477,7 +477,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -615,13 +614,13 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
 
     @transition(Version.format)
     def format(self) -> str:
-        ret: str = make_return_value("0.0.1")
+        ret: str = self.inner_format()
         assert ret is not None
         return ret
 
     @transition(name="is_prerelease")
     def is_prerelease(self) -> bool:
-        ret: bool = make_return_value(False)
+        ret: bool = self.inner_is_prerelease()
         assert ret is not None
         return ret
 
@@ -631,7 +630,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         text: str,
     ) -> Version:
         require_arg(text, Domain.sampled_from(VALID_VERSION_TEXTS))
-        ret: Version = make_return_value(SAMPLE_VERSION)
+        ret: Version = self.inner_parse_version(text)
         self.state.versions.append(ret)
         assert ret is not None
         return ret
@@ -644,7 +643,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     ) -> int:
         require_arg(v1, Domain.type(Version))
         require_arg(v2, Domain.type(Version))
-        ret: int = make_return_value(0)
+        ret: int = self.inner_compare_precedence(v1, v2)
         assert ret is not None
         return ret
 
@@ -654,7 +653,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         text: str,
     ) -> VersionRange:
         require_arg(text, Domain.sampled_from(VALID_RANGE_TEXTS))
-        ret: VersionRange = make_return_value(VALID_RANGE_CONSTRAINTS[0])
+        ret: VersionRange = self.inner_parse_range(text)
         self.state.ranges.append(ret)
         assert ret is not None
         return ret
@@ -669,7 +668,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         require_arg(version, Domain.type(Version))
         require_arg(range_constraint, Domain.sampled_from(VALID_RANGE_CONSTRAINTS))
         require_arg(include_prerelease, Domain.boolean(), preferred=[True, False])
-        ret: bool = make_return_value(True)
+        ret: bool = self.inner_satisfies(version, range_constraint, include_prerelease)
         assert ret is not None
         return ret
 
@@ -679,7 +678,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         release: PackageRelease,
     ) -> None:
         require_arg(release, Domain.type(PackageRelease))
-        ret = make_return_value()
+        ret = self.inner_register_package(release)
         releases = self.state.packages.setdefault(release.name, [])
         releases.append(release)
         constraint = VersionRange(
@@ -696,7 +695,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     ) -> List[PackageRelease]:
         require_arg(name, Domain.in_set(tuple(self.state.packages.keys())))
         released = list(self.state.packages[name])
-        ret: List[PackageRelease] = make_return_value(released)
+        ret: List[PackageRelease] = self.inner_get_releases(name)
         assert ret is not None
         return ret
 
@@ -706,13 +705,13 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         name: str,
     ) -> bool:
         require_arg(name, Domain.type(str))
-        ret: bool = make_return_value(name in self.state.packages)
+        ret: bool = self.inner_has_package(name)
         assert ret is not None
         return ret
 
     @transition(PackageRepository.all_packages)
     def all_packages(self) -> Set[str]:
-        ret: Set[str] = make_return_value(set(self.state.packages.keys()))
+        ret: Set[str] = self.inner_all_packages()
         assert ret is not None
         return ret
 
@@ -723,7 +722,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     ) -> ResolutionOutcome:
         require_arg(root_dependencies, Domain.type(Collection[PackageDependency]))
         outcome = ResolutionOutcome(selected_versions={}, derivation_steps=())
-        ret: ResolutionOutcome = make_return_value(outcome)
+        ret: ResolutionOutcome = self.inner_resolve(root_dependencies)
         self.state.outcomes.append(ret)
         assert ret is not None
         return ret

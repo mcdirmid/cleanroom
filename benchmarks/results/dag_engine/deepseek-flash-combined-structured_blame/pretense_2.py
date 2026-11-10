@@ -575,7 +575,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -705,48 +704,48 @@ class DagEngineStateMachine(StateMachine[DagEngineState]):
         timeout_seconds: Optional[float],
         retries: int,
     ) -> Any:
-        return make_return_value(None)
+        return None
 
     def inner_add_edge(self, upstream_id: str, downstream_id: str) -> Any:
-        return make_return_value(None)
+        return None
 
     def inner_remove_node(self, node_id: str) -> Any:
-        return make_return_value(None)
+        return None
 
     def inner_has_node(self, node_id: str) -> Any:
-        return make_return_value(node_id in self.state.nodes)
+        return node_id in self.state.nodes
 
     def inner_get_node(self, node_id: str) -> Any:
-        return make_return_value(self.state.definitions[node_id])
+        return self.state.definitions[node_id]
 
     def inner_get_dependencies(self, node_id: str) -> Any:
-        return make_return_value(set(self.state.upstream[node_id]))
+        return set(self.state.upstream[node_id])
 
     def inner_get_dependents(self, node_id: str) -> Any:
-        return make_return_value(set(self.state.downstream[node_id]))
+        return set(self.state.downstream[node_id])
 
     def inner_all_nodes(self) -> Any:
-        return make_return_value(set(self.state.nodes))
+        return set(self.state.nodes)
 
     def inner_validate(self) -> Any:
-        return make_return_value(None)
+        return None
 
     def inner_topological_sort(self) -> Any:
-        return make_return_value(_model_topological_order(self.state))
+        return _model_topological_order(self.state)
 
     def inner_find_roots(self) -> Any:
         roots = set()
         for node in self.state.nodes:
             if not self.state.upstream.get(node, set()):
                 roots.add(node)
-        return make_return_value(roots)
+        return roots
 
     def inner_find_leaves(self) -> Any:
         leaves = set()
         for node in self.state.nodes:
             if not self.state.downstream.get(node, set()):
                 leaves.add(node)
-        return make_return_value(leaves)
+        return leaves
 
     def inner_compute_critical_path(self, estimated_durations: Optional[Mapping[str, float]]) -> Any:
         order = _model_topological_order(self.state)
@@ -774,7 +773,7 @@ class DagEngineStateMachine(StateMachine[DagEngineState]):
         while last is not None:
             path.insert(0, last)
             last = parent[last]
-        return make_return_value((path, last_weight))
+        return (path, last_weight)
 
     def inner_next_wave(self) -> Any:
         candidates: List[str] = []
@@ -788,29 +787,25 @@ class DagEngineStateMachine(StateMachine[DagEngineState]):
             if not blocked:
                 candidates.append(node)
         ordered = sorted((-self.state.nodes[node], node) for node in candidates)
-        return make_return_value([node for _, node in ordered])
+        return [node for _, node in ordered]
 
     def inner_mark_running(self, node_id: str) -> Any:
-        return make_return_value(None)
+        return None
 
     def inner_mark_succeeded(self, node_id: str) -> Any:
-        return make_return_value(None)
+        return None
 
     def inner_mark_failed(self, node_id: str, failure_policy: FailurePolicy) -> Any:
-        return make_return_value(None)
+        return None
 
     def inner_is_finished(self) -> Any:
-        return make_return_value(
-            all(self.state.states.get(node) in _TERMINAL_STATES for node in self.state.nodes)
-        )
+        return all(self.state.states.get(node) in _TERMINAL_STATES for node in self.state.nodes)
 
     def inner_get_state(self, node_id: str) -> Any:
-        return make_return_value(self.state.states.get(node_id, NodeState.PENDING))
+        return self.state.states.get(node_id, NodeState.PENDING)
 
     def inner_get_all_states(self) -> Any:
-        return make_return_value(
-            {node: self.state.states.get(node, NodeState.PENDING) for node in self.state.nodes}
-        )
+        return {node: self.state.states.get(node, NodeState.PENDING) for node in self.state.nodes}
 
     def inner_run(
         self,
@@ -832,13 +827,13 @@ class DagEngineStateMachine(StateMachine[DagEngineState]):
             critical_path=tuple(_model_topological_order(self.state)),
             results=results,
         )
-        return make_return_value(report)
+        return report
 
     def inner_cancel(self) -> Any:
-        return make_return_value(None)
+        return None
 
     def inner_is_cancelled(self) -> Any:
-        return make_return_value(self.state.cancelled)
+        return self.state.cancelled
 
     # ------------------------------------------------------------------
     # DAG transitions

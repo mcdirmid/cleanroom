@@ -630,7 +630,6 @@ import unittest
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -899,7 +898,7 @@ class DagEngineStateMachine(StateMachine[DagEngineState]):
             self.state.node_states[node_id] = (
                 NodeState.PENDING if resolved else NodeState.READY
             )
-        ret = make_return_value(None)
+        ret = self.inner_add_node(node_id, action, dependencies, priority, timeout_seconds, retries)
         assert ret is None
         assert self.state.definitions[node_id].node_id == node_id
 
@@ -913,7 +912,7 @@ class DagEngineStateMachine(StateMachine[DagEngineState]):
         require_arg(downstream_id, Domain.in_set(self.state.nodes), preferred=["beta"])
         self.state.dependencies.setdefault(downstream_id, set()).add(upstream_id)
         self.state.dependents.setdefault(upstream_id, set()).add(downstream_id)
-        ret = make_return_value(None)
+        ret = self.inner_add_edge(upstream_id, downstream_id)
         assert ret is None
         assert upstream_id in self.state.dependencies[downstream_id]
 
@@ -933,7 +932,7 @@ class DagEngineStateMachine(StateMachine[DagEngineState]):
         self.state.dependents.pop(node_id, None)
         self.state.priorities.pop(node_id, None)
         self.state.node_states.pop(node_id, None)
-        ret = make_return_value(None)
+        ret = self.inner_remove_node(node_id)
         assert ret is None
         assert node_id not in self.state.nodes
 
@@ -943,7 +942,7 @@ class DagEngineStateMachine(StateMachine[DagEngineState]):
         node_id: str,
     ) -> bool:
         require_arg(node_id, Domain.type(str), preferred=["alpha", "beta"])
-        ret: bool = make_return_value(node_id in self.state.nodes)
+        ret: bool = self.inner_has_node(node_id)
         assert isinstance(ret, bool)
         assert ret == (node_id in self.state.nodes)
         return ret
@@ -954,7 +953,7 @@ class DagEngineStateMachine(StateMachine[DagEngineState]):
         node_id: str,
     ) -> NodeDefinition[Any]:
         require_arg(node_id, Domain.in_set(self.state.nodes), preferred=["alpha"])
-        ret: NodeDefinition[Any] = make_return_value(self.state.definitions[node_id])
+        ret: NodeDefinition[Any] = self.inner_get_node(node_id)
         assert isinstance(ret, NodeDefinition)
         return ret
 
@@ -964,7 +963,7 @@ class DagEngineStateMachine(StateMachine[DagEngineState]):
         node_id: str,
     ) -> Set[str]:
         require_arg(node_id, Domain.in_set(self.state.nodes), preferred=["alpha"])
-        ret: Set[str] = make_return_value(set(self.state.dependencies.get(node_id, set())))
+        ret: Set[str] = self.inner_get_dependencies(node_id)
         assert isinstance(ret, set)
         return ret
 
@@ -974,7 +973,7 @@ class DagEngineStateMachine(StateMachine[DagEngineState]):
         node_id: str,
     ) -> Set[str]:
         require_arg(node_id, Domain.in_set(self.state.nodes), preferred=["alpha"])
-        ret: Set[str] = make_return_value(set(self.state.dependents.get(node_id, set())))
+        ret: Set[str] = self.inner_get_dependents(node_id)
         assert isinstance(ret, set)
         return ret
 
@@ -982,7 +981,7 @@ class DagEngineStateMachine(StateMachine[DagEngineState]):
     def all_nodes(
         self,
     ) -> Set[str]:
-        ret: Set[str] = make_return_value(set(self.state.nodes))
+        ret: Set[str] = self.inner_all_nodes()
         assert isinstance(ret, set)
         return ret
 
@@ -992,7 +991,7 @@ class DagEngineStateMachine(StateMachine[DagEngineState]):
     ) -> None:
         require(self.state.graph_complete())
         require(self.state.graph_acyclic())
-        ret = make_return_value(None)
+        ret = self.inner_validate()
         assert ret is None
 
     @transition(DAG.topological_sort)
@@ -1002,7 +1001,7 @@ class DagEngineStateMachine(StateMachine[DagEngineState]):
         require(self.state.graph_complete())
         require(self.state.graph_acyclic())
         ordered = self.state.topological_order()
-        ret: List[str] = make_return_value(list(ordered) if ordered is not None else [])
+        ret: List[str] = self.inner_topological_sort()
         assert isinstance(ret, list)
         return ret
 
@@ -1010,7 +1009,7 @@ class DagEngineStateMachine(StateMachine[DagEngineState]):
     def find_roots(
         self,
     ) -> Set[str]:
-        ret: Set[str] = make_return_value(self.state.find_root_ids())
+        ret: Set[str] = self.inner_find_roots()
         assert isinstance(ret, set)
         return ret
 
@@ -1018,7 +1017,7 @@ class DagEngineStateMachine(StateMachine[DagEngineState]):
     def find_leaves(
         self,
     ) -> Set[str]:
-        ret: Set[str] = make_return_value(self.state.find_leaf_ids())
+        ret: Set[str] = self.inner_find_leaves()
         assert isinstance(ret, set)
         return ret
 
@@ -1035,7 +1034,7 @@ class DagEngineStateMachine(StateMachine[DagEngineState]):
             preferred=[None],
         )
         path, weight = self.state.critical_path(estimated_durations)
-        ret: Tuple[List[str], float] = make_return_value((path, weight))
+        ret: Tuple[List[str], float] = self.inner_compute_critical_path(estimated_durations)
         assert isinstance(ret, tuple)
         assert len(ret) == 2
         return ret
@@ -1044,7 +1043,7 @@ class DagEngineStateMachine(StateMachine[DagEngineState]):
     def next_wave(
         self,
     ) -> List[str]:
-        ret: List[str] = make_return_value(self.state.ready_wave())
+        ret: List[str] = self.inner_next_wave()
         assert isinstance(ret, list)
         return ret
 
@@ -1055,7 +1054,7 @@ class DagEngineStateMachine(StateMachine[DagEngineState]):
     ) -> None:
         require_arg(node_id, Domain.in_set(self.state.nodes), preferred=["alpha"])
         self.state.node_states[node_id] = NodeState.RUNNING
-        ret = make_return_value(None)
+        ret = self.inner_mark_running(node_id)
         assert ret is None
         assert self.state.node_states[node_id] is NodeState.RUNNING
 
@@ -1072,7 +1071,7 @@ class DagEngineStateMachine(StateMachine[DagEngineState]):
                 for dependency in self.state.dependencies.get(dependent, set())
             ):
                 self.state.node_states[dependent] = NodeState.READY
-        ret = make_return_value(None)
+        ret = self.inner_mark_succeeded(node_id)
         assert ret is None
         assert self.state.node_states[node_id] is NodeState.SUCCEEDED
 
@@ -1097,7 +1096,7 @@ class DagEngineStateMachine(StateMachine[DagEngineState]):
             for dependent in self.state._ordered(self.state.descendants(node_id)):
                 if self.state.node_states.get(dependent) not in _TERMINAL_STATES:
                     self.state.node_states[dependent] = NodeState.SKIPPED
-        ret = make_return_value(None)
+        ret = self.inner_mark_failed(node_id, failure_policy)
         assert ret is None
         assert self.state.node_states[node_id] is NodeState.FAILED
 
@@ -1105,7 +1104,7 @@ class DagEngineStateMachine(StateMachine[DagEngineState]):
     def is_finished(
         self,
     ) -> bool:
-        ret: bool = make_return_value(self.state.all_terminal())
+        ret: bool = self.inner_is_finished()
         assert isinstance(ret, bool)
         return ret
 
@@ -1115,9 +1114,7 @@ class DagEngineStateMachine(StateMachine[DagEngineState]):
         node_id: str,
     ) -> NodeState:
         require_arg(node_id, Domain.in_set(self.state.nodes), preferred=["alpha"])
-        ret: NodeState = make_return_value(
-            self.state.node_states.get(node_id, NodeState.PENDING)
-        )
+        ret: NodeState = self.inner_get_state(node_id)
         assert isinstance(ret, NodeState)
         return ret
 
@@ -1125,7 +1122,7 @@ class DagEngineStateMachine(StateMachine[DagEngineState]):
     def get_all_states(
         self,
     ) -> Mapping[str, NodeState]:
-        ret: Mapping[str, NodeState] = make_return_value(dict(self.state.node_states))
+        ret: Mapping[str, NodeState] = self.inner_get_all_states()
         assert isinstance(ret, dict)
         return ret
 
@@ -1146,7 +1143,7 @@ class DagEngineStateMachine(StateMachine[DagEngineState]):
             preferred=[FailurePolicy.CONTINUE_ON_ERROR],
         )
         require_arg(max_concurrency, Domain.range(1, 4), preferred=[1])
-        ret: DAGRunReport = make_return_value(self.state.run_report())
+        ret: DAGRunReport = self.inner_run(timeout_seconds, failure_policy, max_concurrency)
         assert isinstance(ret, DAGRunReport)
         assert ret.total_nodes >= 0
         return ret
@@ -1156,7 +1153,7 @@ class DagEngineStateMachine(StateMachine[DagEngineState]):
         self,
     ) -> None:
         self.state.cancelled = True
-        ret = make_return_value(None)
+        ret = self.inner_cancel()
         assert ret is None
         assert self.state.cancelled
 
@@ -1164,7 +1161,7 @@ class DagEngineStateMachine(StateMachine[DagEngineState]):
     def is_cancelled(
         self,
     ) -> bool:
-        ret: bool = make_return_value(self.state.cancelled)
+        ret: bool = self.inner_is_cancelled()
         assert isinstance(ret, bool)
         return ret
 

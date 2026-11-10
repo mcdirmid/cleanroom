@@ -367,7 +367,6 @@ import unittest
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -416,25 +415,25 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
 
     @transition(name="capacity")
     def capacity(self) -> int:
-        ret = make_return_value(self.state.capacity)
+        ret = self.inner_capacity()
         assert ret == self.state.capacity
         return ret
 
     @transition(name="size")
     def size(self) -> int:
-        ret = make_return_value(len(self.state.items))
+        ret = self.inner_size()
         assert ret == len(self.state.items)
         return ret
 
     @transition(name="is_empty")
     def is_empty(self) -> bool:
-        ret = make_return_value(len(self.state.items) == 0)
+        ret = self.inner_is_empty()
         assert ret == (len(self.state.items) == 0)
         return ret
 
     @transition(name="is_full")
     def is_full(self) -> bool:
-        ret = make_return_value(len(self.state.items) >= self.state.capacity)
+        ret = self.inner_is_full()
         assert ret == (len(self.state.items) >= self.state.capacity)
         return ret
 
@@ -444,7 +443,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         capacity: int,
     ) -> None:
         require_arg(capacity, Domain.range(1, 100), preferred=PREFERRED_CAPACITIES)
-        ret = make_return_value()
+        ret = self.inner_configure(capacity)
         self.state.capacity = capacity
         excess = len(self.state.items) - capacity
         doomed_keys = list(self.state.items.keys())[:max(0, excess)]
@@ -466,7 +465,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         require_arg(default, Domain.any())
         present = key in self.state.items
         fake_ret = self.state.items[key] if present else default
-        ret = make_return_value(fake_ret)
+        ret = self.inner_get(key, default)
         if present:
             value = self.state.items.pop(key)
             self.state.items[key] = value
@@ -495,7 +494,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         else:
             fake_ret = None
             evicted_key = None
-        ret = make_return_value(fake_ret)
+        ret = self.inner_put(key, value)
         if key in self.state.items:
             assert ret is None
             self.state.items.pop(key)
@@ -527,7 +526,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         order_before = list(self.state.items.keys())
         stats_before = CacheStats(self.state.hits, self.state.misses, self.state.evictions)
         fake_ret = self.state.items[key] if key in self.state.items else default
-        ret = make_return_value(fake_ret)
+        ret = self.inner_peek(key, default)
         assert ret == fake_ret
         assert list(self.state.items.keys()) == order_before
         assert CacheStats(self.state.hits, self.state.misses, self.state.evictions) == stats_before
@@ -541,7 +540,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         require(len(self.state.items) > 0)
         require_arg(key, Domain.in_set(list(self.state.items.keys())))
         fake_ret = self.state.items[key]
-        ret = make_return_value(fake_ret)
+        ret = self.inner_remove(key)
         del self.state.items[key]
         assert ret == fake_ret
         assert key not in self.state.items
@@ -552,7 +551,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         self,
     ) -> None:
         stats_before = CacheStats(self.state.hits, self.state.misses, self.state.evictions)
-        ret = make_return_value()
+        ret = self.inner_clear()
         self.state.items.clear()
         assert ret is None
         assert len(self.state.items) == 0
@@ -564,7 +563,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         self,
     ) -> CacheStats:
         expected = CacheStats(self.state.hits, self.state.misses, self.state.evictions)
-        ret = make_return_value(expected)
+        ret = self.inner_get_stats()
         assert ret == expected
         return ret
 
@@ -573,7 +572,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         self,
     ) -> None:
         size_before = len(self.state.items)
-        ret = make_return_value()
+        ret = self.inner_reset_stats()
         self.state.hits = 0
         self.state.misses = 0
         self.state.evictions = 0
@@ -589,7 +588,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         self,
     ) -> List[str]:
         fake_ret = list(self.state.items.keys())
-        ret = make_return_value(fake_ret)
+        ret = self.inner_keys_in_lru_order()
         assert ret == fake_ret
         return ret
 
@@ -739,5 +738,5 @@ FakeLruCacheFuzzTest = compile_hypothesis_test_case(
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-08T17:47:42Z
 # LAST_CHANGED: 2026-11-08T17:47:42Z
-# CHANGE: Implement LRUCache interface pretense state machine (model state with recency-ordered items, 1:1 transitions for all 8 operations + 4 properties, arg/state preconditions, make_return_value pivots), synthesize the fake, fixed fake coverage tests, and fake Hypothesis fuzz suite.
+# CHANGE: Implement LRUCache interface pretense state machine (model state with recency-ordered items, 1:1 transitions for all 8 operations + 4 properties, arg/state preconditions, pivots), synthesize the fake, fixed fake coverage tests, and fake Hypothesis fuzz suite.
 # --- END AUTOFAB METADATA ---

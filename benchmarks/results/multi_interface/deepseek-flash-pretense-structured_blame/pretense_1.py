@@ -216,7 +216,6 @@ import unittest
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -261,21 +260,21 @@ class StreamReaderStateMachine(StateMachine[StreamReaderState]):
         oldest: Optional[str] = (
             self.state.items.pop(0) if len(self.state.items) > 0 else None
         )
-        ret: Optional[str] = make_return_value(oldest)
+        ret: Optional[str] = self.inner_read()
         assert ret == oldest
         return ret
 
     @transition(name="unread_count")
     def unread_count(self) -> int:
         """Return the number of unread payloads remaining in the stream."""
-        ret: int = make_return_value(len(self.state.items))
+        ret: int = self.inner_unread_count()
         assert ret == len(self.state.items)
         return ret
 
     @transition(name="has_data")
     def has_data(self) -> bool:
         """Return whether unread payloads remain available in the stream."""
-        ret: bool = make_return_value(len(self.state.items) > 0)
+        ret: bool = self.inner_has_data()
         assert ret == (len(self.state.items) > 0)
         return ret
 
@@ -350,7 +349,7 @@ StreamReaderFakeFuzzTest = compile_hypothesis_test_case(
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-08T17:53:47Z
 # LAST_CHANGED: 2026-11-08T17:53:47Z
-# CHANGE: Implemented StreamReader interface pretense: items-list model state with 1:1 read/unread_count/has_data transitions using make_return_value pivots, seed_payload seeding transition, synthesized FakeStreamReader plus fixed TestStreamReaderFake covering all transitions/seeding, and StreamReaderFakeFuzzTest hypothesis suite; package-qualified imports.
+# CHANGE: Implemented StreamReader interface pretense: items-list model state with 1:1 read/unread_count/has_data transitions using pivots, seed_payload seeding transition, synthesized FakeStreamReader plus fixed TestStreamReaderFake covering all transitions/seeding, and StreamReaderFakeFuzzTest hypothesis suite; package-qualified imports.
 # --- END AUTOFAB METADATA ---
 
 
@@ -366,7 +365,6 @@ import unittest
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -416,7 +414,7 @@ class StreamWriterStateMachine(StateMachine[StreamWriterState]):
     def write(self, payload: str) -> None:
         """Buffer a non-empty payload; an empty payload is never buffered."""
         require_arg(payload, Domain.type(str))
-        ret = make_return_value()
+        ret = self.inner_write(payload)
         assert ret is None
         if len(payload) == 0:
             return ret
@@ -429,14 +427,14 @@ class StreamWriterStateMachine(StateMachine[StreamWriterState]):
         """Purge all buffered payloads and reset the written payload count."""
         self.state.items.clear()
         self.state.written.clear()
-        ret = make_return_value()
+        ret = self.inner_clear()
         assert ret is None
         return ret
 
     @transition(name="written_count")
     def written_count(self) -> int:
         """Return the cumulative count of payloads written since the last clear."""
-        ret: int = make_return_value(len(self.state.written))
+        ret: int = self.inner_written_count()
         assert ret == len(self.state.written)
         return ret
 
@@ -510,5 +508,5 @@ StreamWriterFakeFuzzTest = compile_hypothesis_test_case(
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-08T17:58:47Z
 # LAST_CHANGED: 2026-11-08T17:58:47Z
-# CHANGE: Resolved empty-payload state-model feedback: StreamWriter.write now evaluates its make_return_value pivot and returns immediately for an empty payload so nothing is appended to the modeled items/written lists, keeping model state and derived written_count/unread_count/has_data/read observations consistent with the SUT for the contracted empty-payload branch; seed_written sibling transition audited and given the same empty-payload guard.
+# CHANGE: Resolved empty-payload state-model feedback: StreamWriter.write now evaluates its inner_transition pivot and returns immediately for an empty payload so nothing is appended to the modeled items/written lists, keeping model state and derived written_count/unread_count/has_data/read observations consistent with the SUT for the contracted empty-payload branch; seed_written sibling transition audited and given the same empty-payload guard.
 # --- END AUTOFAB METADATA ---

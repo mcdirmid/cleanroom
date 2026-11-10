@@ -352,7 +352,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -592,7 +591,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         if not placed:
             updated.append(release)
         self.state.packages[release.name] = tuple(updated)
-        ret: None = make_return_value(None)
+        ret: None = self.inner_register_package(release)
         assert ret is None
         return ret
 
@@ -605,10 +604,10 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         if name not in self.state.packages:
             missing: List[PackageRelease] = []
             with raises(PackageNotFoundError):
-                missing = make_return_value([])
+                missing = self.inner_get_releases(name)
             return missing
         releases = list(self.state.packages[name])
-        ret: List[PackageRelease] = make_return_value(releases)
+        ret: List[PackageRelease] = self.inner_get_releases(name)
         assert ret == releases
         return ret
 
@@ -619,14 +618,14 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
     ) -> bool:
         require_arg(name, Domain.type(str), preferred=["alpha"])
         fake_ret = name in self.state.packages
-        ret: bool = make_return_value(fake_ret)
+        ret: bool = self.inner_has_package(name)
         assert ret == fake_ret
         return ret
 
     @transition(PackageRepository.all_packages)
     def all_packages(self) -> set[str]:
         fake_ret = set(self.state.packages.keys())
-        ret: set[str] = make_return_value(fake_ret)
+        ret: set[str] = self.inner_all_packages()
         assert ret == fake_ret
         return ret
 
@@ -648,9 +647,9 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
                 selected_versions={}, derivation_steps=()
             )
             with raises(ResolutionConflictError):
-                conflicted = make_return_value(conflicted)
+                conflicted = self.inner_resolve(root_dependencies)
             return conflicted
-        ret: ResolutionOutcome = make_return_value(resolved)
+        ret: ResolutionOutcome = self.inner_resolve(root_dependencies)
         self.state.resolution_count += 1
         assert ret == resolved
         return ret
@@ -998,7 +997,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -1202,7 +1200,7 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
     def format(self) -> str:
         reference = self.state.reference_version or REFERENCE_VERSION
         fake_ret = _format_version(reference)
-        ret: str = make_return_value(fake_ret)
+        ret: str = self.inner_format()
         self.state.formatted_texts.append(ret)
         assert ret == fake_ret
         return ret
@@ -1211,7 +1209,7 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
     def is_prerelease(self) -> bool:
         reference = self.state.reference_version or REFERENCE_VERSION
         fake_ret = len(reference.prerelease) > 0
-        ret: bool = make_return_value(fake_ret)
+        ret: bool = self.inner_is_prerelease()
         assert ret == fake_ret
         return ret
 
@@ -1224,10 +1222,10 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
         if not _is_valid_version_text(text):
             invalid: Version = INVALID_VERSION_PLACEHOLDER
             with raises(InvalidVersionError):
-                invalid = make_return_value(invalid)
+                invalid = self.inner_parse_version(text)
             return invalid
         fake_ret = _parse_version_text(text)
-        ret: Version = make_return_value(fake_ret)
+        ret: Version = self.inner_parse_version(text)
         self.state.parsed_version_texts.append(text)
         assert ret == fake_ret
         return ret
@@ -1241,7 +1239,7 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
         require_arg(v1, Domain.sampled_from(REFERENCE_VERSIONS))
         require_arg(v2, Domain.sampled_from(REFERENCE_VERSIONS))
         fake_ret = _compare_precedence(v1, v2)
-        ret: int = make_return_value(fake_ret)
+        ret: int = self.inner_compare_precedence(v1, v2)
         self.state.comparison_count += 1
         assert ret == fake_ret
         return ret
@@ -1634,7 +1632,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -2142,10 +2139,10 @@ class SemverRangeStateMachine(StateMachine[SemverRangeState]):
         if not _is_valid_range_text(text):
             invalid: VersionRange = INVALID_RANGE_PLACEHOLDER
             with raises(InvalidRangeError):
-                invalid = make_return_value(invalid)
+                invalid = self.inner_parse_range(text)
             return invalid
         fake_ret = VersionRange(raw_text=text.strip())
-        ret: VersionRange = make_return_value(fake_ret)
+        ret: VersionRange = self.inner_parse_range(text)
         self.state.parsed_range_texts.append(fake_ret.raw_text)
         assert ret == fake_ret
         return ret
@@ -2161,7 +2158,7 @@ class SemverRangeStateMachine(StateMachine[SemverRangeState]):
         require_arg(range_constraint, Domain.sampled_from(RANGE_SAMPLES))
         require_arg(include_prerelease, Domain.boolean())
         fake_ret = range_satisfies(version, range_constraint.raw_text, include_prerelease)
-        ret: bool = make_return_value(fake_ret)
+        ret: bool = self.inner_satisfies(version, range_constraint, include_prerelease)
         self.state.satisfaction_checks += 1
         assert ret == fake_ret
         return ret

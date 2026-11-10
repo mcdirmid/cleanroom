@@ -286,7 +286,7 @@ class PretenseLintTest(unittest.TestCase):
             "from dataclasses import dataclass\n"
             "from typing import Any\n"
             "import unittest\n"
-            "from pretense import StateMachine, transition, Domain, make_return_value\n"
+            "from pretense import StateMachine, transition, Domain\n"
             "@dataclass\n"
             "class SvcState:\n"
             "    initialized: bool = True\n"
@@ -295,12 +295,16 @@ class PretenseLintTest(unittest.TestCase):
             "class SvcMachine(StateMachine[SvcState]):\n"
             "    @transition(SvcProto.compute)\n"
             "    def compute_pos(self, x: int) -> None:\n"
-            "        ret = make_return_value(x)\n"
+            "        ret = self.inner_compute_pos(x)\n"
             "        assert ret is not None\n"
+            "    def inner_compute_pos(self, x: int) -> int:\n"
+            "        return x\n"
             "    @transition(SvcProto.compute)\n"
             "    def compute_neg(self, x: int) -> None:\n"
-            "        ret = make_return_value(-x)\n"
+            "        ret = self.inner_compute_neg(x)\n"
             "        assert ret is not None\n"
+            "    def inner_compute_neg(self, x: int) -> int:\n"
+            "        return -x\n"
             "class TestSvcUnit(unittest.TestCase):\n"
             "    pass\n"
         )
@@ -578,7 +582,7 @@ class PretenseLintTest(unittest.TestCase):
     ) -> None:
         iface_code = (
             "from dataclasses import dataclass\n"
-            "from pretense import Domain, StateMachine, transition, make_return_value\n"
+            "from pretense import Domain, StateMachine, transition\n"
             "@dataclass\n"
             "class RegState:\n"
             "    items: set[str]\n"
@@ -587,8 +591,9 @@ class PretenseLintTest(unittest.TestCase):
             "class RegSM(StateMachine[RegState]):\n"
             "    @transition(Reg.add)\n"
             "    def add(self, k: str) -> None:\n"
-            "        ret = make_return_value(True)\n"
+            "        ret = self.inner_add(k)\n"
             "        assert ret is not None\n"
+            "    def inner_add(self, k: str) -> bool: return True\n"
         )
         iface_tree = ast.parse(iface_code)
         self.assertFalse(is_uninitialized_pretense_module(iface_code))
@@ -786,7 +791,7 @@ class PretenseLintTest(unittest.TestCase):
             "    require(self.state.initialized)\n"
             "    require_arg(x, Domain.range(1, 10), preferred=[5])\n"
             "    self.state.x = x\n"
-            "    ret: int = make_return_value(x)\n"
+            "    ret: int = self.inner_method(x)\n"
             "    assert ret == x\n"
         )
         tree = ast.parse(valid_code)
@@ -794,11 +799,23 @@ class PretenseLintTest(unittest.TestCase):
         assert isinstance(fn_node, (ast.FunctionDef, ast.AsyncFunctionDef))
         self.assertEqual(len(check_pretense_next_transition(fn_node, "test.py")), 0)
 
+        # PN_IFACE_INNER_TRANSITION_REQUIRED: missing inner transition call
+        bad_no_inner = (
+            "@transition(Target.method)\n"
+            "def method(self, x: int) -> None:\n"
+            "    ret = x\n"
+        )
+        tree = ast.parse(bad_no_inner)
+        fn_node_bad_no_inner = tree.body[0]
+        assert isinstance(fn_node_bad_no_inner, (ast.FunctionDef, ast.AsyncFunctionDef))
+        errs = check_pretense_next_transition(fn_node_bad_no_inner, "test.py")
+        self.assertTrue(any("PN_IFACE_INNER_TRANSITION_REQUIRED" in e for e in errs))
+
         # PN008: Default parameter rejected
         bad_default = (
             "@transition(Target.method)\n"
             "def method(self, x: int = 1) -> None:\n"
-            "    ret = make_return_value(x)\n"
+            "    ret = self.inner_method(x)\n"
         )
         tree = ast.parse(bad_default)
         fn_node_bad_default = tree.body[0]
@@ -810,7 +827,7 @@ class PretenseLintTest(unittest.TestCase):
         bad_target = (
             "@transition(Target.method)\n"
             "def method(self, target: Target, x: int) -> None:\n"
-            "    ret = make_return_value(x)\n"
+            "    ret = self.inner_method(x)\n"
         )
         tree = ast.parse(bad_target)
         fn_node_bad_target = tree.body[0]
@@ -822,7 +839,7 @@ class PretenseLintTest(unittest.TestCase):
         bad_ensure = (
             "@transition(Target.method)\n"
             "def method(self, x: int) -> None:\n"
-            "    ret = make_return_value(x)\n"
+            "    ret = self.inner_method(x)\n"
             "    ensure(ret == x)\n"
         )
         tree = ast.parse(bad_ensure)
@@ -898,11 +915,18 @@ class PretenseLintTest(unittest.TestCase):
 
         # Interface SM imports and require_arg are valid
         valid_iface_import = (
-            "from pretense import StateMachine, make_return_value, require_arg\n"
+            "from pretense import StateMachine, require_arg\n"
         )
         self.assertEqual(
             len(check_pretense_imports(valid_iface_import, is_impl=False)), 0
         )
+
+        # ensure_ret import is rejected in interface
+        bad_iface_import = (
+            "from pretense import StateMachine, ensure_ret\n"
+        )
+        errs = check_pretense_imports(bad_iface_import, is_impl=False)
+        self.assertTrue(any("PN_NO_LEGACY_IMPORT" in e for e in errs))
 
     def test_banned_skips_rejected(self) -> None:
         from autofab_py.support.lib.build_lint_common import check_banned_skips
@@ -1385,16 +1409,16 @@ class PretenseLintTest(unittest.TestCase):
     def test_check_no_raises_for_errors(self) -> None:
         """Verify check_no_raises_for_errors rejects raises(*Error) while permitting raises(*Exception)."""
         bad_code = (
-            "from pretense import StateMachine, transition, raises, make_return_value\n\n"
+            "from pretense import StateMachine, transition, raises\n\n"
             "class MyStateMachine(StateMachine):\n"
             "    @transition(Target.method1)\n"
             "    def method1(self) -> None:\n"
             "        with raises(NodeNotFoundError):\n"
-            "            make_return_value(None)\n"
+            "            self.inner_method1()\n"
             "    @transition(Target.method2)\n"
             "    def method2(self) -> None:\n"
             "        with raises((KeyError, CycleError)):\n"
-            "            make_return_value(None)\n"
+            "            self.inner_method2()\n"
         )
         bad_tree = ast.parse(bad_code)
         errs = check_no_raises_for_errors(bad_tree, "bad_sm.py")
@@ -1404,12 +1428,12 @@ class PretenseLintTest(unittest.TestCase):
         self.assertTrue(all("DO NOT rename or redefine" in e for e in errs))
 
         good_code = (
-            "from pretense import StateMachine, transition, raises, make_return_value\n\n"
+            "from pretense import StateMachine, transition, raises\n\n"
             "class MyStateMachine(StateMachine):\n"
             "    @transition(Target.method1)\n"
             "    def method1(self) -> None:\n"
             "        with raises(VaultInactiveException):\n"
-            "            make_return_value(None)\n"
+            "            self.inner_method1()\n"
         )
         good_tree = ast.parse(good_code)
         good_errs = check_no_raises_for_errors(good_tree, "good_sm.py")

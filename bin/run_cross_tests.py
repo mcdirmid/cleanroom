@@ -248,6 +248,7 @@ def run_cross_test(
             flags=re.MULTILINE,
         )
         normalized = re.sub(r"benchmark_\d+", "benchmark_1", normalized)
+        normalized = re.sub(r"benchmarks\.runs\.[a-zA-Z0-9_]+", "benchmark_1", normalized)
         if fname == f"{suite_name}_impl.py" and "__initialize__" not in normalized:
             normalized += f"""
 
@@ -356,6 +357,7 @@ _initialize_ = __initialize__
     target_test_paths: List[Path] = []
     for fname, fcontent in test_files.items():
         test_normalized = re.sub(r"benchmark_\d+", "benchmark_1", fcontent)
+        test_normalized = re.sub(r"benchmarks\.runs\.[a-zA-Z0-9_]+", "benchmark_1", test_normalized)
         # Normalize relative imports to be resilient
         test_normalized = re.sub(
             rf"^from (?:lib|\.) import {suite_name}",

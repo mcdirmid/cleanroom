@@ -282,7 +282,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -382,7 +381,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         require_arg(release, Domain.type(PackageRelease))
         self.state.packages.setdefault(release.name, []).append(release)
         self.state.packages[release.name].sort(key=_release_key, reverse=True)
-        ret: None = make_return_value(None)
+        ret: None = self.inner_register_package(release)
         assert ret is None
         return ret
 
@@ -394,7 +393,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         require(self.state.initialized)
         require_arg(name, Domain.in_set(list(self.state.packages)), preferred=["alpha", "beta", "gamma"])
         fake_releases = list(self.state.packages[name])
-        ret: List[PackageRelease] = make_return_value(fake_releases)
+        ret: List[PackageRelease] = self.inner_get_releases(name)
         assert [release.name for release in ret] == [release.name for release in fake_releases]
         return ret
 
@@ -406,7 +405,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         require(self.state.initialized)
         require_arg(name, Domain.type(str), preferred=["alpha", "beta"])
         fake_member = name in self.state.packages
-        ret: bool = make_return_value(fake_member)
+        ret: bool = self.inner_has_package(name)
         assert ret == fake_member
         return ret
 
@@ -414,7 +413,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
     def all_packages(self) -> Set[str]:
         require(self.state.initialized)
         fake_names = set(self.state.packages)
-        ret: Set[str] = make_return_value(fake_names)
+        ret: Set[str] = self.inner_all_packages()
         assert ret == fake_names
         return ret
 
@@ -428,7 +427,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         selected = _model_selection(self.state.packages, root_dependencies)
         steps = tuple(f"Select {name} {version.major}.{version.minor}.{version.patch}" for name, version in sorted(selected.items()))
         fake_outcome = ResolutionOutcome(selected_versions=selected, derivation_steps=steps)
-        ret: ResolutionOutcome = make_return_value(fake_outcome)
+        ret: ResolutionOutcome = self.inner_resolve(root_dependencies)
         self.state.resolutions.append((len(root_dependencies), len(ret.selected_versions)))
         assert all(
             dependency.name in ret.selected_versions
@@ -715,7 +714,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -818,7 +816,7 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
         require(self.state.initialized)
         require_arg(text, Domain.regex(_VERSION_TEXT_PATTERN))
         fake_version = _parse_version_text(text)
-        ret: Version = make_return_value(fake_version)
+        ret: Version = self.inner_parse_version(text)
         self.state.parsed_texts.append(text)
         assert ret == fake_version
         return ret
@@ -833,7 +831,7 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
         require_arg(v1, Domain.type(Version))
         require_arg(v2, Domain.type(Version))
         fake_comparison = _compare_versions(v1, v2)
-        ret: int = make_return_value(fake_comparison)
+        ret: int = self.inner_compare_precedence(v1, v2)
         self.state.compared.append((v1, v2, ret))
         assert (ret > 0) == (fake_comparison > 0)
         assert (ret < 0) == (fake_comparison < 0)
@@ -1231,7 +1229,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -1537,7 +1534,7 @@ class SemverRangeStateMachine(StateMachine[SemverRangeState]):
         require(self.state.initialized)
         require_arg(text, Domain.regex(_RANGE_TEXT_PATTERN))
         fake_range = _make_range(text.strip())
-        ret: VersionRange = make_return_value(fake_range)
+        ret: VersionRange = self.inner_parse_range(text)
         self.state.parsed[text] = ret
         assert ret.raw_text == text.strip()
         return ret
@@ -1554,7 +1551,7 @@ class SemverRangeStateMachine(StateMachine[SemverRangeState]):
         require_arg(range_constraint, Domain.in_set(list(self.state.parsed.values())))
         require_arg(include_prerelease, Domain.boolean())
         fake_match = _range_satisfies(version, range_constraint.raw_text, include_prerelease)
-        ret: bool = make_return_value(fake_match)
+        ret: bool = self.inner_satisfies(version, range_constraint, include_prerelease)
         self.state.matches.append((range_constraint.raw_text, version, include_prerelease, ret))
         assert isinstance(ret, bool)
         return ret

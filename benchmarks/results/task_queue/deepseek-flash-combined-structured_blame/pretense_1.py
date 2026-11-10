@@ -274,7 +274,6 @@ from typing import Any, Dict, List, Optional, Tuple
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -325,10 +324,10 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
         require_arg(payload, Domain.type(str), preferred=["payload"])
         if not self.state.available:
             with raises(QueueUnavailableException):
-                ret = make_return_value()
+                ret = self.inner_submit(task_id, payload)
                 raise QueueUnavailableException()
             raise QueueUnavailableException()
-        ret = make_return_value()
+        ret = self.inner_submit(task_id, payload)
         self.state.pending_tasks.append((task_id, payload))
         assert len(self.state.pending_tasks) > 0
         return ret
@@ -340,16 +339,16 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
         """Pops the oldest pending task and returns its identifier."""
         if not self.state.available:
             with raises(QueueUnavailableException):
-                ret = make_return_value("")
+                ret = self.inner_dispatch()
                 raise QueueUnavailableException()
             raise QueueUnavailableException()
         if len(self.state.pending_tasks) == 0:
             with raises(QueueEmptyError):
-                ret = make_return_value("")
+                ret = self.inner_dispatch()
                 raise QueueEmptyError()
             raise QueueEmptyError()
         task_id, payload = self.state.pending_tasks.pop(0)
-        ret = make_return_value(task_id)
+        ret = self.inner_dispatch()
         modeled_outcome = f"PROCESSED:{payload.upper()}"
         self.state.outcomes[task_id] = modeled_outcome
         assert self.state.outcomes[task_id] == modeled_outcome
@@ -367,10 +366,10 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
         require_arg(outcome, Domain.type(str), preferred=["done"])
         if not self.state.available:
             with raises(QueueUnavailableException):
-                ret = make_return_value()
+                ret = self.inner_complete(task_id, outcome)
                 raise QueueUnavailableException()
             raise QueueUnavailableException()
-        ret = make_return_value()
+        ret = self.inner_complete(task_id, outcome)
         self.state.outcomes[task_id] = outcome
         assert self.state.outcomes[task_id] == outcome
         return ret
@@ -383,7 +382,7 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
         """Returns the recorded outcome for a task, else None."""
         require_arg(task_id, Domain.type(str), preferred=["task-1"])
         recorded = self.state.outcomes.get(task_id)
-        ret = make_return_value(recorded)
+        ret = self.inner_get_outcome(task_id)
         assert ret == recorded
         return ret
 
@@ -392,7 +391,7 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
         self,
     ) -> None:
         """Purges all pending tasks and recorded outcomes."""
-        ret = make_return_value()
+        ret = self.inner_clear()
         self.state.pending_tasks.clear()
         self.state.outcomes.clear()
         assert len(self.state.pending_tasks) == 0
@@ -406,7 +405,7 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
     ) -> None:
         """Test-only hook toggling queue availability."""
         require_arg(available, Domain.boolean())
-        ret = make_return_value()
+        ret = self.inner_set_available(available)
         self.state.available = available
         assert self.state.available == available
         return ret
@@ -415,7 +414,7 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
     def pending_count(self) -> int:
         """Returns the current number of pending tasks."""
         expected = len(self.state.pending_tasks)
-        ret = make_return_value(expected)
+        ret = self.inner_pending_count()
         assert ret == expected
         return ret
 
@@ -732,7 +731,6 @@ from typing import Any, Dict, Optional
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -783,11 +781,11 @@ class TaskWorkerStateMachine(StateMachine[TaskWorkerState]):
         require_arg(payload, Domain.type(str), preferred=["payload"])
         if self.state.failing_tasks.get(task_id, False):
             with raises(WorkerExecutionException):
-                ret = make_return_value("")
+                ret = self.inner_execute(task_id, payload)
                 raise WorkerExecutionException()
             raise WorkerExecutionException()
         outcome = f"PROCESSED:{payload.upper()}"
-        ret = make_return_value(outcome)
+        ret = self.inner_execute(task_id, payload)
         assert ret == outcome
         self.state.processed_count += 1
         self.state.last_task_id = task_id
@@ -799,7 +797,7 @@ class TaskWorkerStateMachine(StateMachine[TaskWorkerState]):
     ) -> str:
         """Fetches the next queued task and executes it, returning its identifier."""
         dispatched = "task-1"
-        ret = make_return_value(dispatched)
+        ret = self.inner_fetch_and_execute()
         assert ret == dispatched
         self.state.processed_count += 1
         self.state.last_task_id = dispatched
@@ -814,7 +812,7 @@ class TaskWorkerStateMachine(StateMachine[TaskWorkerState]):
         """Configures whether a designated task fails on execution."""
         require_arg(task_id, Domain.type(str), preferred=["task-1"])
         require_arg(failing, Domain.boolean())
-        ret = make_return_value()
+        ret = self.inner_set_failing_task(task_id, failing)
         self.state.failing_tasks[task_id] = failing
         assert self.state.failing_tasks.get(task_id, False) == failing
         return ret

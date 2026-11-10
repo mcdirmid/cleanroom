@@ -248,7 +248,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -304,7 +303,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
             Domain.type(PackageRelease),
         )
         self.state.registered_names.append(release.name)
-        ret = make_return_value(None)
+        ret = self.inner_register_package(release)
         return ret
 
     @transition(PackageRepository.get_releases)
@@ -318,7 +317,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
             Domain.type(str),
             preferred=["pkg"],
         )
-        ret: List[PackageRelease] = make_return_value([])
+        ret: List[PackageRelease] = self.inner_get_releases(name)
         return ret
 
     @transition(PackageRepository.has_package)
@@ -332,7 +331,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
             Domain.type(str),
             preferred=["pkg"],
         )
-        ret: bool = make_return_value(self.state.last_has_package)
+        ret: bool = self.inner_has_package(name)
         return ret
 
     @transition(PackageRepository.all_packages)
@@ -340,7 +339,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         self,
     ) -> Set[str]:
         require(self.state.initialized)
-        ret: Set[str] = make_return_value(set(self.state.registered_names))
+        ret: Set[str] = self.inner_all_packages()
         return ret
 
     @transition(DependencySolver.resolve)
@@ -354,7 +353,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
             Domain.type(Collection[PackageDependency]),
         )
         self.state.resolved_names.add("resolved")
-        ret: ResolutionOutcome = make_return_value(None)
+        ret: ResolutionOutcome = self.inner_resolve(root_dependencies)
         return ret
 
     @transition.seeding
@@ -638,7 +637,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -681,7 +679,7 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
     ) -> str:
         require(self.state.initialized)
         fake_text = "1.2.3-alpha.1+build.7"
-        ret: str = make_return_value(fake_text)
+        ret: str = self.inner_format()
         return ret
 
     @transition(VersionEngine.parse_version)
@@ -695,7 +693,7 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
             Domain.type(str),
             preferred=["1.0.0", "1.2.3-alpha.1+build.7"],
         )
-        ret: Version = make_return_value(None)
+        ret: Version = self.inner_parse_version(text)
         self.state.parsed_versions.append(ret)
         return ret
 
@@ -714,14 +712,14 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
             v2,
             Domain.type(Version),
         )
-        ret: int = make_return_value(0)
+        ret: int = self.inner_compare_precedence(v1, v2)
         self.state.last_comparison = ret
         return ret
 
     @transition(name="is_prerelease")
     def is_prerelease(self) -> bool:
         require(self.state.initialized)
-        ret: bool = make_return_value(self.state.prerelease_flag)
+        ret: bool = self.inner_is_prerelease()
         return ret
 
     @transition.seeding
@@ -1099,7 +1097,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -1148,7 +1145,7 @@ class SemverRangeStateMachine(StateMachine[SemverRangeState]):
             preferred=["1.0.0", ">=1.0.0 <2.0.0", "1.x", "1.0.0 - 2.0.0", "^1.2.3", "~1.2.3"],
         )
         self.state.parsed_ranges.append(text)
-        ret: VersionRange = make_return_value(None)
+        ret: VersionRange = self.inner_parse_range(text)
         return ret
 
     @transition(RangeEngine.satisfies)
@@ -1171,7 +1168,7 @@ class SemverRangeStateMachine(StateMachine[SemverRangeState]):
             include_prerelease,
             Domain.boolean(),
         )
-        ret: bool = make_return_value(self.state.last_match)
+        ret: bool = self.inner_satisfies(version, range_constraint, include_prerelease)
         return ret
 
     @transition.seeding

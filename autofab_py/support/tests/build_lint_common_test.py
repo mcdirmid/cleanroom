@@ -635,7 +635,7 @@ class BuildLintCommonNoErrorTestingTest(unittest.TestCase):
             "from pretense import raises\n"
             "def test_trans():\n"
             "    with raises(CustomError):\n"
-            "        make_return_value()\n"
+            "        self.inner_foo()\n"
         )
         tree = ast.parse(source)
         errors = check_no_error_testing("test.py", tree=tree)
@@ -647,7 +647,7 @@ class BuildLintCommonNoErrorTestingTest(unittest.TestCase):
             "from pretense import raises\n"
             "def test_trans():\n"
             "    with raises(TimeoutException):\n"
-            "        make_return_value()\n"
+            "        self.inner_foo()\n"
         )
         tree = ast.parse(source)
         errors = check_no_error_testing("test.py", tree=tree)

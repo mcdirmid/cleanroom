@@ -643,7 +643,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -908,19 +907,19 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     # -- Inner transition oracles (overridden by the implementation pseudo machine) --
 
     def inner_format(self) -> Any:
-        return make_return_value(_format_version(self.state.parsed[-1]))
+        return _format_version(self.state.parsed[-1])
 
     def inner_is_prerelease(self) -> Any:
-        return make_return_value(bool(self.state.parsed[-1].prerelease))
+        return bool(self.state.parsed[-1].prerelease)
 
     def inner_parse_version(self, text: str) -> Any:
-        return make_return_value(self.state.version_table[text])
+        return self.state.version_table[text]
 
     def inner_compare_precedence(self, v1: Version, v2: Version) -> Any:
-        return make_return_value(_model_precedence(v1, v2))
+        return _model_precedence(v1, v2)
 
     def inner_parse_range(self, text: str) -> Any:
-        return make_return_value(self.state.range_table[text])
+        return self.state.range_table[text]
 
     def inner_satisfies(
         self,
@@ -928,27 +927,25 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         range_constraint: VersionRange,
         include_prerelease: bool,
     ) -> Any:
-        return make_return_value(bool(include_prerelease))
+        return bool(include_prerelease)
 
     def inner_register_package(self, release: PackageRelease) -> Any:
-        return make_return_value(None)
+        return None
 
     def inner_get_releases(self, name: str) -> Any:
-        return make_return_value(list(self.state.releases_by_name[name]))
+        return list(self.state.releases_by_name[name])
 
     def inner_has_package(self, name: str) -> Any:
-        return make_return_value(name in self.state.releases_by_name)
+        return name in self.state.releases_by_name
 
     def inner_all_packages(self) -> Any:
-        return make_return_value(set(self.state.releases_by_name.keys()))
+        return set(self.state.releases_by_name.keys())
 
     def inner_resolve(
         self,
         root_dependencies: Collection[PackageDependency],
     ) -> Any:
-        return make_return_value(
-            _model_outcome(self.state.releases_by_name, root_dependencies)
-        )
+        return _model_outcome(self.state.releases_by_name, root_dependencies)
 
     # -- 1:1 transitions --
 

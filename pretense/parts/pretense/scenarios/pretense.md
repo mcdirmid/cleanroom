@@ -43,7 +43,7 @@ Given: a state transition method decorated with `@transition(TargetClass.method)
 2. The caller evaluates the transition when the `requires` condition is not met.
    Observed: the requirement check raises `PretenseSpecificationError` (or the contracted error when specified positionally or via keyword `error`), failing verification; in fixed scenario tests with an optional error parameter, the requirement check throws the specified error upon contract violation.
 
-3. The caller evaluates an exception transition using `with raises(ExpectedException): make_return_value(None)`.
+3. The caller evaluates an exception transition using `with raises(ExpectedException): self.inner_method(...)`.
    Observed: in verification mode, the context manager asserts that the target call raised `ExpectedException` and propagates the exception to callers and test runners; in Fake mode, it synthesizes and raises `ExpectedException` (including multi-argument or structured exception classes) to emulate interface failure semantics.
 
 4. The caller defines pre-state and post-state assertions.

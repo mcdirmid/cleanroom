@@ -697,7 +697,6 @@ import unittest
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -1091,7 +1090,7 @@ def _solve(
 # ==============================================================================
 # NOTE: Transitions model target methods 1:1 (@transition(TargetClass.method)).
 # Operational branches and contracted exceptions (with raises(ExpectedException):
-# make_return_value()) live naturally inside the single transition body
+# ()) live naturally inside the single transition body
 # (multi-transition splitting is prohibited).
 # require_arg defines the caller precondition contract (checked at runtime on real
 # calls).  require(...) inspects only model state.
@@ -1123,7 +1122,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     ) -> str:
         require(self.state.initialized)
         formatted = _format_version(VALUE_SURFACE_VERSION)
-        ret = make_return_value(formatted)
+        ret = self.inner_format()
         assert ret == formatted
         return ret
 
@@ -1140,7 +1139,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         )
         version = PARSED_VERSIONS.get(text, VALUE_SURFACE_VERSION)
         self.state.versions[text] = version
-        ret = make_return_value(version)
+        ret = self.inner_parse_version(text)
         assert ret.major == version.major
         assert ret.minor == version.minor
         assert ret.patch == version.patch
@@ -1162,7 +1161,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
             result = -1
         elif key1 > key2:
             result = 1
-        ret = make_return_value(result)
+        ret = self.inner_compare_precedence(v1, v2)
         assert (ret < 0) == (result < 0)
         assert (ret > 0) == (result > 0)
         return ret
@@ -1181,7 +1180,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         trimmed = text.strip()
         range_constraint = VersionRange(raw_text=trimmed)
         self.state.ranges[trimmed] = range_constraint
-        ret = make_return_value(range_constraint)
+        ret = self.inner_parse_range(text)
         assert ret.raw_text == trimmed
         return ret
 
@@ -1209,7 +1208,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
             version,
             include_prerelease,
         )
-        ret = make_return_value(satisfied)
+        ret = self.inner_satisfies(version, range_constraint, include_prerelease)
         assert ret == satisfied
         return ret
 
@@ -1225,7 +1224,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
             preferred=list(CANONICAL_RELEASES),
         )
         self.state.packages.setdefault(release.name, []).append(release)
-        ret = make_return_value(None)
+        ret = self.inner_register_package(release)
         assert release.name in self.state.packages
         return ret
 
@@ -1241,7 +1240,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
             preferred=["alpha", "beta"],
         )
         releases = _sorted_releases(list(self.state.packages[name]))
-        ret = make_return_value(releases)
+        ret = self.inner_get_releases(name)
         assert all(release.name == name for release in ret)
         return ret
 
@@ -1253,7 +1252,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         require(self.state.initialized)
         require_arg(name, Domain.type(str), preferred=["alpha", "beta"])
         result = name in self.state.packages
-        ret = make_return_value(result)
+        ret = self.inner_has_package(name)
         assert ret == result
         return ret
 
@@ -1263,7 +1262,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     ) -> Set[str]:
         require(self.state.initialized)
         names = set(self.state.packages.keys())
-        ret = make_return_value(names)
+        ret = self.inner_all_packages()
         assert ret == names
         return ret
 
@@ -1292,7 +1291,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
             selected_versions=selected,
             derivation_steps=tuple(steps),
         )
-        ret = make_return_value(outcome)
+        ret = self.inner_resolve(root_dependencies)
         assert resolved
         assert ret.selected_versions == selected
         return ret
@@ -1301,7 +1300,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     def is_prerelease(self) -> bool:
         require(self.state.initialized)
         flag = len(VALUE_SURFACE_VERSION.prerelease) > 0
-        ret = make_return_value(flag)
+        ret = self.inner_is_prerelease()
         assert ret == flag
         return ret
 

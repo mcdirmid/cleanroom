@@ -312,7 +312,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -363,7 +362,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
             with raises(CacheCapacityError):
                 raise CacheCapacityError(f"capacity must be greater than zero, got {capacity}")
         require(self.state.initialized)
-        ret = make_return_value(None)
+        ret = self.inner_configure(capacity)
         assert ret is None
         self.state.capacity = capacity
         if capacity > 0 and len(self.state.items) > capacity:
@@ -385,12 +384,12 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
             self.state.access_order.remove(key)
             self.state.access_order.append(key)
             self.state.hits += 1
-            ret = make_return_value(self.state.items[key])
+            ret = self.inner_get(key, default)
             assert ret == self.state.items[key]
             return ret
         else:
             self.state.misses += 1
-            ret = make_return_value(default)
+            ret = self.inner_get(key, default)
             assert ret == default
             return ret
 
@@ -403,7 +402,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
             self.state.items[key] = value
             self.state.access_order.remove(key)
             self.state.access_order.append(key)
-            ret = make_return_value(None)
+            ret = self.inner_put(key, value)
             assert ret is None
             return ret
         if len(self.state.items) >= self.state.capacity and self.state.capacity > 0:
@@ -412,12 +411,12 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
             self.state.evictions += 1
             self.state.items[key] = value
             self.state.access_order.append(key)
-            ret = make_return_value((lru_key, evicted_value))
+            ret = self.inner_put(key, value)
             assert ret == (lru_key, evicted_value)
             return ret
         self.state.items[key] = value
         self.state.access_order.append(key)
-        ret = make_return_value(None)
+        ret = self.inner_put(key, value)
         assert ret is None
         return ret
 
@@ -427,12 +426,12 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         require_arg(key, Domain.type(str), preferred=["peek_key"])
         require_arg(default, Domain.type(object), preferred=[None])
         if key in self.state.items:
-            ret = make_return_value(self.state.items[key])
+            ret = self.inner_peek(key, default)
             assert ret == self.state.items[key]
             assert key in self.state.access_order
             return ret
         else:
-            ret = make_return_value(default)
+            ret = self.inner_peek(key, default)
             assert ret == default
             return ret
 
@@ -442,12 +441,12 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         require_arg(key, Domain.type(str), preferred=["remove_key"])
         if key not in self.state.items:
             with raises(CacheKeyNotFoundError):
-                ret = make_return_value(None)
+                ret = self.inner_remove(key)
                 assert ret is None
                 return ret
         value = self.state.items.pop(key)
         self.state.access_order.remove(key)
-        ret = make_return_value(value)
+        ret = self.inner_remove(key)
         assert ret == value
         return ret
 
@@ -456,18 +455,14 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         require(self.state.initialized)
         self.state.items.clear()
         self.state.access_order.clear()
-        ret = make_return_value(None)
+        ret = self.inner_clear()
         assert ret is None
         return ret
 
     @transition(LRUCache.get_stats)
     def get_stats(self) -> CacheStats:
         require(self.state.initialized)
-        ret = make_return_value(CacheStats(
-            hits=self.state.hits,
-            misses=self.state.misses,
-            evictions=self.state.evictions,
-        ))
+        ret = self.inner_get_stats()
         assert isinstance(ret, CacheStats)
         return ret
 
@@ -477,42 +472,42 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         self.state.hits = 0
         self.state.misses = 0
         self.state.evictions = 0
-        ret = make_return_value(None)
+        ret = self.inner_reset_stats()
         assert ret is None
         return ret
 
     @transition(LRUCache.keys_in_lru_order)
     def keys_in_lru_order(self) -> List[str]:
         require(self.state.initialized)
-        ret = make_return_value(list(self.state.access_order))
+        ret = self.inner_keys_in_lru_order()
         assert ret == list(self.state.access_order)
         return ret
 
     @transition(name="capacity")
     def capacity(self) -> int:
         require(self.state.initialized)
-        ret = make_return_value(self.state.capacity)
+        ret = self.inner_capacity()
         assert ret == self.state.capacity
         return ret
 
     @transition(name="size")
     def size(self) -> int:
         require(self.state.initialized)
-        ret = make_return_value(len(self.state.items))
+        ret = self.inner_size()
         assert ret == len(self.state.items)
         return ret
 
     @transition(name="is_empty")
     def is_empty(self) -> bool:
         require(self.state.initialized)
-        ret = make_return_value(len(self.state.items) == 0)
+        ret = self.inner_is_empty()
         assert isinstance(ret, bool)
         return ret
 
     @transition(name="is_full")
     def is_full(self) -> bool:
         require(self.state.initialized)
-        ret = make_return_value(len(self.state.items) >= self.state.capacity and self.state.capacity > 0)
+        ret = self.inner_is_full()
         assert isinstance(ret, bool)
         return ret
 

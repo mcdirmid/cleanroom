@@ -183,7 +183,6 @@ import unittest
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -234,15 +233,15 @@ class InterInterfaceStateMachine(StateMachine[InterInterfaceState]):
         require_arg(amount, Domain.type(int), preferred=[1, 10, 100])
         if amount <= 0:
             with raises(AllocationLimitError):
-                make_return_value()
+                self.inner_allocate(amount)
             return None
         if amount > self.state.vault_reserves:
             with raises(AllocationLimitError):
-                make_return_value()
+                self.inner_allocate(amount)
             return None
         self.state.vault_reserves -= amount
         self.state.allocated += amount
-        ret = make_return_value()
+        ret = self.inner_allocate(amount)
         assert self.state.allocated >= amount
         return ret
 
@@ -255,18 +254,18 @@ class InterInterfaceStateMachine(StateMachine[InterInterfaceState]):
         require_arg(amount, Domain.type(int), preferred=[1, 5, 10])
         if amount <= 0 or amount > self.state.allocated:
             with raises(AllocationLimitError):
-                make_return_value()
+                self.inner_release(amount)
             return None
         self.state.allocated -= amount
         self.state.vault_reserves += amount
-        ret = make_return_value()
+        ret = self.inner_release(amount)
         assert self.state.allocated >= 0
         return ret
 
     @transition(name="allocated")
     def allocated(self) -> int:
         """Current amount of cumulative funds actively allocated."""
-        ret = make_return_value(self.state.allocated)
+        ret = self.inner_allocated()
         assert ret == self.state.allocated
         return ret
 
@@ -548,7 +547,6 @@ import unittest
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -596,14 +594,14 @@ class VaultStateMachine(StateMachine[VaultState]):
         require_arg(amount, Domain.type(int), preferred=[1, 10, 100])
         if amount <= 0:
             with raises(InsufficientFundsError):
-                make_return_value()
+                self.inner_deposit(amount)
             return None
         if not self.state.is_active:
             with raises(VaultInactiveException):
-                make_return_value()
+                self.inner_deposit(amount)
             return None
         self.state.balance += amount
-        ret = make_return_value()
+        ret = self.inner_deposit(amount)
         assert self.state.balance >= amount
         return ret
 
@@ -616,14 +614,14 @@ class VaultStateMachine(StateMachine[VaultState]):
         require_arg(amount, Domain.type(int), preferred=[1, 5, 10])
         if amount <= 0 or amount > self.state.balance:
             with raises(InsufficientFundsError):
-                make_return_value()
+                self.inner_withdraw(amount)
             return None
         if not self.state.is_active:
             with raises(VaultInactiveException):
-                make_return_value()
+                self.inner_withdraw(amount)
             return None
         self.state.balance -= amount
-        ret = make_return_value()
+        ret = self.inner_withdraw(amount)
         assert self.state.balance >= 0
         return ret
 
@@ -635,21 +633,21 @@ class VaultStateMachine(StateMachine[VaultState]):
         """Test-only hook toggling vault availability."""
         require_arg(active, Domain.boolean())
         self.state.is_active = active
-        ret = make_return_value()
+        ret = self.inner_set_active(active)
         assert self.state.is_active == active
         return ret
 
     @transition(name="balance")
     def balance(self) -> int:
         """Current asset balance held in the vault."""
-        ret = make_return_value(self.state.balance)
+        ret = self.inner_balance()
         assert ret == self.state.balance
         return ret
 
     @transition(name="is_active")
     def is_active(self) -> bool:
         """Indicates whether the vault service is currently active."""
-        ret = make_return_value(self.state.is_active)
+        ret = self.inner_is_active()
         assert ret == self.state.is_active
         return ret
 

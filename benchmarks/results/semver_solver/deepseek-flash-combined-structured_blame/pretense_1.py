@@ -585,7 +585,6 @@ import unittest
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -999,7 +998,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
             text = f"{text}-{'.'.join(version.prerelease)}"
         if version.build:
             text = f"{text}+{'.'.join(version.build)}"
-        ret: str = make_return_value(text)
+        ret: str = self.inner_format()
         assert ret == text
         return ret
 
@@ -1008,7 +1007,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         """Parses a canonical SemVer string into an immutable model version."""
         require(self.state.initialized)
         require_arg(text, Domain.in_set(VALID_VERSION_TEXTS))
-        ret: Version = make_return_value(PARSED_VERSIONS[text])
+        ret: Version = self.inner_parse_version(text)
         self.state.parsed.append(ret)
         assert ret == PARSED_VERSIONS[text]
         assert ret.major >= 0
@@ -1023,7 +1022,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         require_arg(v2, Domain.in_set(CORPUS_VERSIONS))
         result = _precedence(v1, v2)
         reverse = _precedence(v2, v1)
-        ret: int = make_return_value(result)
+        ret: int = self.inner_compare_precedence(v1, v2)
         assert (ret < 0) == (result < 0)
         assert (ret > 0) == (result > 0)
         assert (ret < 0) == (reverse > 0)
@@ -1035,7 +1034,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         """Parses a contract-conforming range expression into an immutable record."""
         require(self.state.initialized)
         require_arg(text, Domain.in_set(VALID_RANGE_TEXTS))
-        ret: VersionRange = make_return_value(PARSED_RANGES[text])
+        ret: VersionRange = self.inner_parse_range(text)
         self.state.ranges.append(ret)
         assert ret.raw_text == text
         return ret
@@ -1053,7 +1052,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         require_arg(range_constraint, Domain.in_set(SATISFIES_RANGES))
         require_arg(include_prerelease, Domain.boolean())
         result = _satisfies_range(version, range_constraint.raw_text, include_prerelease)
-        ret: bool = make_return_value(result)
+        ret: bool = self.inner_satisfies(version, range_constraint, include_prerelease)
         assert ret == result
         assert isinstance(ret, bool)
         return ret
@@ -1063,7 +1062,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         """Registers a release in descending precedence order and derives its request."""
         require(self.state.initialized)
         require_arg(release, Domain.in_set(CANONICAL_RELEASES))
-        ret = make_return_value()
+        ret = self.inner_register_package(release)
         releases = self.state.packages.setdefault(release.name, [])
         position = len(releases)
         for index, existing in enumerate(releases):
@@ -1086,7 +1085,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         require(self.state.initialized)
         require_arg(name, Domain.in_set(self.state.packages))
         releases = list(self.state.packages[name])
-        ret: List[PackageRelease] = make_return_value(releases)
+        ret: List[PackageRelease] = self.inner_get_releases(name)
         assert all(release.name == name for release in ret)
         for index in range(len(ret) - 1):
             assert _precedence(ret[index].version, ret[index + 1].version) >= 0
@@ -1097,7 +1096,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         """Reports whether a package name is present in the repository index."""
         require(self.state.initialized)
         require_arg(name, Domain.type(str))
-        ret: bool = make_return_value(name in self.state.packages)
+        ret: bool = self.inner_has_package(name)
         assert ret == (name in self.state.packages)
         return ret
 
@@ -1105,7 +1104,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     def all_packages(self) -> Set[str]:
         """Returns the set of every registered package name."""
         require(self.state.initialized)
-        ret: Set[str] = make_return_value(set(self.state.packages))
+        ret: Set[str] = self.inner_all_packages()
         assert set(ret) == set(self.state.packages)
         return ret
 
@@ -1139,13 +1138,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
                 )
             else:
                 steps.append(f"cannot satisfy {dependency.name}")
-        ret: ResolutionOutcome = make_return_value(
-            replace(
-                EMPTY_OUTCOME,
-                selected_versions=selected,
-                derivation_steps=tuple(steps),
-            )
-        )
+        ret: ResolutionOutcome = self.inner_resolve(root_dependencies)
         self.state.outcomes.append(ret)
         assert dict(ret.selected_versions) == selected
         assert all(
@@ -1158,7 +1151,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     def is_prerelease(self) -> bool:
         """Reports whether the modeled version carries pre-release identifiers."""
         require(self.state.initialized)
-        ret: bool = make_return_value(len(self.state.current.prerelease) > 0)
+        ret: bool = self.inner_is_prerelease()
         assert ret == (len(self.state.current.prerelease) > 0)
         return ret
 

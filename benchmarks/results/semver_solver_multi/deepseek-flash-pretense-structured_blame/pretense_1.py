@@ -306,7 +306,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -333,18 +332,18 @@ from benchmark_3.parts.semver_solver_multi.lib.dependency_solver import (
 # 1. State Machine Specification (Model & Transitions)
 # ==============================================================================
 # NOTE: Transitions model target methods 1:1 (@transition(TargetClass.method)).
-# Operational branches and contracted exceptions (with raises(ExpectedException): make_return_value())
+# Operational branches and contracted exceptions (with raises(ExpectedException): ())
 # live naturally inside the single transition body (multi-transition splitting is prohibited).
 # require_arg defines the caller precondition contract (checked at runtime on real calls).
 #
 # REFERENCE PATTERNS:
-#   # 1:1 Transition Pattern with Domain strategies and make_return_value pivot:
+#   # 1:1 Transition Pattern with Domain strategies and inner_transition pivot:
 #   @transition(TargetClass.method)
 #   def method(self, arg1: str, count: int) -> ReturnType:
 #       require(self.state.initialized)
 #       require_arg(arg1, Domain.type(str), preferred=["sample"])
 #       fake_ret = ReturnType(...)
-#       ret = make_return_value(fake_ret)
+#       ret = (fake_ret)
 #       self.state.items.append(ret)
 #       assert ret == fake_ret
 #       return ret
@@ -404,7 +403,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         require(self.state.initialized)
         require_arg(release, Domain.type(PackageRelease), preferred=SAMPLE_RELEASES)
         fake_ret = None
-        ret = make_return_value(fake_ret)
+        ret = self.inner_register_package(release)
         self.state.packages.setdefault(release.name, []).append(release)
         assert release.name in self.state.packages
         assert ret is None
@@ -415,7 +414,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         require(self.state.initialized)
         require_arg(name, Domain.type(str))
         fake_ret = list(self.state.packages.get(name, []))
-        ret = make_return_value(fake_ret)
+        ret = self.inner_get_releases(name)
         assert all(release.name == name for release in ret)
         return ret
 
@@ -424,7 +423,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         require(self.state.initialized)
         require_arg(name, Domain.type(str))
         fake_ret = name in self.state.packages
-        ret = make_return_value(fake_ret)
+        ret = self.inner_has_package(name)
         assert isinstance(ret, bool)
         return ret
 
@@ -432,7 +431,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
     def all_packages(self) -> Set[str]:
         require(self.state.initialized)
         fake_ret = set(self.state.packages.keys())
-        ret = make_return_value(fake_ret)
+        ret = self.inner_all_packages()
         assert isinstance(ret, set)
         return ret
 
@@ -441,7 +440,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         require(self.state.initialized)
         require_arg(root_dependencies, Domain.type(Collection[PackageDependency]))
         fake_ret = ResolutionOutcome(selected_versions={}, derivation_steps=())
-        ret = make_return_value(fake_ret)
+        ret = self.inner_resolve(root_dependencies)
         self.state.resolutions.append(ret)
         assert isinstance(ret, ResolutionOutcome)
         return ret
@@ -747,7 +746,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -768,18 +766,18 @@ from benchmark_3.parts.semver_solver_multi.lib.semver_core import (
 # 1. State Machine Specification (Model & Transitions)
 # ==============================================================================
 # NOTE: Transitions model target methods 1:1 (@transition(TargetClass.method)).
-# Operational branches and contracted exceptions (with raises(ExpectedException): make_return_value())
+# Operational branches and contracted exceptions (with raises(ExpectedException): ())
 # live naturally inside the single transition body (multi-transition splitting is prohibited).
 # require_arg defines the caller precondition contract (checked at runtime on real calls).
 #
 # REFERENCE PATTERNS:
-#   # 1:1 Transition Pattern with Domain strategies and make_return_value pivot:
+#   # 1:1 Transition Pattern with Domain strategies and inner_transition pivot:
 #   @transition(TargetClass.method)
 #   def method(self, arg1: str, count: int) -> ReturnType:
 #       require(self.state.initialized)
 #       require_arg(arg1, Domain.type(str), preferred=["sample"])
 #       fake_ret = ReturnType(...)
-#       ret = make_return_value(fake_ret)
+#       ret = (fake_ret)
 #       self.state.items.append(ret)
 #       assert ret == fake_ret
 #       return ret
@@ -895,7 +893,7 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
         require(self.state.initialized)
         require_arg(text, Domain.type(str), preferred=_VALID_VERSION_TEXTS)
         fake_ret = _parse_model_version(text)
-        ret = make_return_value(fake_ret)
+        ret = self.inner_parse_version(text)
         self.state.parsed_versions[text] = ret
         assert isinstance(ret, Version)
         return ret
@@ -906,7 +904,7 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
         require_arg(v1, Domain.type(Version), preferred=_SAMPLE_VERSIONS)
         require_arg(v2, Domain.type(Version), preferred=_SAMPLE_VERSIONS)
         fake_ret = _compare_model_versions(v1, v2)
-        ret = make_return_value(fake_ret)
+        ret = self.inner_compare_precedence(v1, v2)
         self.state.comparison_log.append((v1, v2, ret))
         assert ret in (-1, 0, 1)
         return ret
@@ -1365,7 +1363,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -1383,18 +1380,18 @@ from benchmark_3.parts.semver_solver_multi.lib.semver_range import InvalidRangeE
 # 1. State Machine Specification (Model & Transitions)
 # ==============================================================================
 # NOTE: Transitions model target methods 1:1 (@transition(TargetClass.method)).
-# Operational branches and contracted exceptions (with raises(ExpectedException): make_return_value())
+# Operational branches and contracted exceptions (with raises(ExpectedException): ())
 # live naturally inside the single transition body (multi-transition splitting is prohibited).
 # require_arg defines the caller precondition contract (checked at runtime on real calls).
 #
 # REFERENCE PATTERNS:
-#   # 1:1 Transition Pattern with Domain strategies and make_return_value pivot:
+#   # 1:1 Transition Pattern with Domain strategies and inner_transition pivot:
 #   @transition(TargetClass.method)
 #   def method(self, arg1: str, count: int) -> ReturnType:
 #       require(self.state.initialized)
 #       require_arg(arg1, Domain.type(str), preferred=["sample"])
 #       fake_ret = ReturnType(...)
-#       ret = make_return_value(fake_ret)
+#       ret = (fake_ret)
 #       self.state.items.append(ret)
 #       assert ret == fake_ret
 #       return ret
@@ -1533,7 +1530,7 @@ class SemverRangeStateMachine(StateMachine[SemverRangeState]):
         require(self.state.initialized)
         require_arg(text, Domain.type(str), preferred=_PARSE_RANGE_TEXTS)
         fake_ret = VersionRange(raw_text=text.strip())
-        ret = make_return_value(fake_ret)
+        ret = self.inner_parse_range(text)
         self.state.parsed_ranges[text] = ret
         self.state.current_range = ret
         assert text in self.state.parsed_ranges
@@ -1551,7 +1548,7 @@ class SemverRangeStateMachine(StateMachine[SemverRangeState]):
         require_arg(range_constraint, Domain.type(VersionRange), preferred=_SAMPLE_RANGES)
         require_arg(include_prerelease, Domain.boolean())
         fake_ret = isinstance(range_constraint.raw_text, str)
-        ret = make_return_value(fake_ret)
+        ret = self.inner_satisfies(version, range_constraint, include_prerelease)
         self.state.match_history.append(ret)
         assert isinstance(ret, bool)
         return ret

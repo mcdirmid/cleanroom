@@ -264,15 +264,11 @@ def check_pretense_imports(
                         ):
                             errors.append(
                                 f"{prefix}{node.lineno}: error [PN_NO_LEGACY_IMPORT]: Importing legacy Pretense symbol '{alias.name}' is strictly prohibited in Pretense 1 Next. "
-                                "Use 'make_return_value', 'call_target', 'raises', 'assert', 'sut', 'sut_state', or 'require'."
+                                "Use 'call_target', 'raises', 'assert', 'sut', 'sut_state', 'require', or inner transitions ('self.inner_<name>(...)')."
                             )
                         elif is_impl and alias.name == "require_arg":
                             errors.append(
                                 f"{prefix}{node.lineno}: error [PN_IMPL_NO_REQUIRE_ARG_IMPORT]: Importing 'require_arg' is strictly prohibited in implementation pretense modules (*_impl_pretense.py). Domain constraints belong exclusively to the interface state machine."
-                            )
-                        elif is_impl and alias.name == "make_return_value":
-                            errors.append(
-                                f"{prefix}{node.lineno}: error [PN_IMPL_NO_MAKE_RETURN_VALUE_IMPORT]: Importing 'make_return_value' is strictly prohibited in implementation pretense modules (*_impl_pretense.py). Implementation pseudo-state machines must use 'call_target(...)', not 'make_return_value()'."
                             )
                         elif is_impl and alias.name == "transition":
                             errors.append(
@@ -510,11 +506,11 @@ def check_pretense_next_transition(
                 )
             elif func_id == "ensure_ret":
                 errors.append(
-                    f"{file_path}:{child.lineno}: error [PRE_LINT_NO_LEGACY_ENSURE_RET]: 'ensure_ret(...)' is obsolete in Pretense 1 Next. In interface SM, use 'ret = make_return_value(...)'; in impl pseudo-SM, use 'ret = call_target()'."
+                    f"{file_path}:{child.lineno}: error [PRE_LINT_NO_LEGACY_ENSURE_RET]: 'ensure_ret(...)' is obsolete in Pretense 1 Next. In interface SM, use inner transitions ('ret = self.inner_<name>(...)'); in impl pseudo-SM, override 'inner_<name>' and use 'target.method(...)'.",
                 )
             elif func_id == "ensure_raises":
                 errors.append(
-                    f"{file_path}:{child.lineno}: error [PRE_LINT_NO_LEGACY_ENSURE_RAISES]: 'ensure_raises(...)' is obsolete in Pretense 1 Next. Use 'with raises(ExpectedException): make_return_value()' or 'with raises(ExpectedException): call_target()'."
+                    f"{file_path}:{child.lineno}: error [PRE_LINT_NO_LEGACY_ENSURE_RAISES]: 'ensure_raises(...)' is obsolete in Pretense 1 Next. Use 'with raises(ExpectedException): self.inner_<name>(...)'."
                 )
             elif func_id == "require_arg":
                 if is_impl:
@@ -545,17 +541,6 @@ def check_pretense_next_transition(
 
     # Pivot Node Verification (only for non-seeding transitions)
     if not is_seeding:
-        has_make_return_value = any(
-            isinstance(c, ast.Call)
-            and (
-                (isinstance(c.func, ast.Name) and c.func.id == "make_return_value")
-                or (
-                    isinstance(c.func, ast.Attribute)
-                    and c.func.attr == "make_return_value"
-                )
-            )
-            for c in ast.walk(node)
-        )
         has_inner_call = any(
             isinstance(c, ast.Call)
             and isinstance(c.func, ast.Attribute)
@@ -641,10 +626,6 @@ def check_pretense_next_transition(
                             f"{file_path}:{child.lineno}: error [PN_IMPL_NO_STATE_MUTATION]: Transition '{fn_name}' in implementation pseudo-state machine must not mutate 'self.state' (calling '{child.func.attr}()' on self.state). Model state transitions are already executed by the inherited interface transition before delegating to 'call_target(...)'. Implementation transitions must only invoke 'call_target(...)' and assert postconditions."
                         )
 
-            if has_make_return_value:
-                errors.append(
-                    f"{file_path}:{node.lineno}: error [PN_IMPL_NO_MAKE_RETURN_VALUE]: Transition '{fn_name}' in implementation pseudo-state machine must not call 'make_return_value()'. Use 'ret = call_target(target.method(...))' and 'return ret'."
-                )
             if not has_call_target and not has_inner_call:
                 errors.append(
                     f"{file_path}:{node.lineno}: error [PN_IMPL_CALL_TARGET_REQUIRED]: Transition '{fn_name}' in implementation pseudo-state machine must invoke target method via 'call_target(target.method(...))' or 'call_target(ReturnType)'."
@@ -656,9 +637,9 @@ def check_pretense_next_transition(
                             f"{file_path}:{ct.lineno}: error [PN_IMPL_CALL_TARGET_ARG_REQUIRED]: 'call_target()' requires an argument wrapping the target invocation (e.g. 'call_target(target.method(...))') or expected return type. Zero-argument 'call_target()' is strictly prohibited."
                         )
         else:
-            if not has_make_return_value and not has_inner_call:
+            if not has_inner_call:
                 errors.append(
-                    f"{file_path}:{node.lineno}: error [PN_IFACE_MAKE_RETURN_VALUE_REQUIRED]: Transition '{fn_name}' in interface state machine must call an inner transition ('self.inner_{fn_name}(...)') or define an AST pivot via 'make_return_value(...)'. For void methods returning None, invoke an inner transition returning None."
+                    f"{file_path}:{node.lineno}: error [PN_IFACE_INNER_TRANSITION_REQUIRED]: Transition '{fn_name}' in interface state machine must call an inner transition ('ret = self.inner_{fn_name}(...)'). For void methods returning None, invoke an inner transition returning None."
                 )
 
     return errors
@@ -691,10 +672,6 @@ def _check_inner_transition_body(
             elif func_id == "require":
                 errors.append(
                     f"{file_path}:{child.lineno}: error [PN_IMPL_NO_REQUIRE]: 'require(...)' is strictly prohibited in implementation inner transitions. Preconditions belong exclusively to the interface state machine outer transition."
-                )
-            elif func_id == "make_return_value":
-                errors.append(
-                    f"{file_path}:{node.lineno}: error [PN_IMPL_NO_MAKE_RETURN_VALUE]: Inner transition '{fn_name}' in implementation pseudo-state machine must not call 'make_return_value()'. Use 'ret = call_target(target.method(...))' (or 'ret = target.method(...)') and 'return ret'."
                 )
             elif func_id == "call_target":
                 if len(child.args) == 0 and len(child.keywords) == 0:
@@ -778,7 +755,7 @@ def check_impl_pseudo_state_machines(
     Prohibits:
     1. Declaring @transition on any method in implementation pretense modules (PN_IMPL_NO_OUTER_TRANSITION).
     2. Overriding outer transitions directly (methods not starting with 'inner_') (PN_IMPL_NO_OUTER_TRANSITION).
-    3. Mutating self.state, calling require/require_arg, or calling make_return_value inside inner transitions.
+    3. Mutating self.state or calling require/require_arg inside inner transitions.
     """
     errors: list[str] = []
 
@@ -2473,7 +2450,6 @@ def generate_pretense_scaffold(
             "from pretense import (",
             "    Domain,",
             "    StateMachine,",
-            "    make_return_value,",
             "    raises,",
             "    require,",
             "    require_arg,",
@@ -2503,22 +2479,23 @@ def generate_pretense_scaffold(
                 "# ==============================================================================",
                 "# NOTE: Transitions model target methods 1:1 (@transition(TargetClass.method)).",
                 "# Contract violations (*Error, e.g. NodeNotFoundError) are preconditions: use require_arg(arg, Domain.in_set(self.state.items), error=ExpectedError) or require(condition, error=ExpectedError). NEVER use with raises(...) for *Error!",
-                "# with raises(ExpectedException): make_return_value() is reserved exclusively for operational exceptions (*Exception).",
+                "# with raises(ExpectedException): self.inner_method(...) is reserved exclusively for operational exceptions (*Exception).",
                 "# require_arg defines the caller precondition contract (checked at runtime on real calls).",
                 "# Use Domain.type(T) or open domain; use preferred=[...] to cluster/bias fuzz inputs without restricting the contract.",
                 "#",
                 "# REFERENCE PATTERNS:",
-                "#   # 1:1 Transition Pattern with Domain strategies and make_return_value pivot:",
+                "#   # 1:1 Transition Pattern with Domain strategies and inner transition delegation:",
                 "#   @transition(TargetClass.method)",
                 "#   def method(self, arg1: str, count: int) -> ReturnType:",
                 "#       require(self.state.initialized)",
                 '#       require_arg(arg1, Domain.type(str), preferred=["sample"])',
                 "#       require_arg(count, Domain.range(1, 100), preferred=[10])",
-                "#       fake_ret = ReturnType(...)  # or None / value",
-                "#       ret = make_return_value(fake_ret)",
+                "#       ret = self.inner_method(arg1, count)",
                 "#       self.state.items.append(ret)",
-                "#       assert ret == fake_ret",
                 "#       return ret",
+                "#",
+                "#   def inner_method(self, arg1: str, count: int) -> ReturnType:",
+                "#       return ReturnType(...)  # or None / fake value",
                 "#",
                 "#   # Seeding Transition (sets up state dynamically outside default __init__):",
                 "#   @transition.seeding",
@@ -2609,10 +2586,11 @@ def generate_pretense_scaffold(
                 for ai in arg_info:
                     dom_expr = _default_domain_arg(ai["name"], ai.get("type", ""))
                     lines.append(f"        require_arg({ai['name']}, {dom_expr})")
+                call_args = ", ".join(ai["name"] for ai in arg_info)
                 if ret_type in ("None", "NoneType"):
                     lines.extend(
                         [
-                            "        ret = make_return_value()",
+                            f"        ret = self.inner_{fn_name}({call_args})",
                             "        assert ret is None",
                             "        return ret",
                         ]
@@ -2620,9 +2598,33 @@ def generate_pretense_scaffold(
                 else:
                     lines.extend(
                         [
-                            f"        ret: {ret_type} = make_return_value(_unimplemented_transition('{fn_name}'))",
+                            f"        ret: {ret_type} = self.inner_{fn_name}({call_args})",
                             "        assert ret is not None",
                             "        return ret",
+                        ]
+                    )
+                lines.extend(
+                    [
+                        "",
+                        f"    def inner_{fn_name}(",
+                        "        self,",
+                    ]
+                )
+                for ai in arg_info:
+                    atype = ai["type"] if ai["type"] else "Any"
+                    lines.append(f"        {ai['name']}: {atype},")
+                if ret_type in ("None", "NoneType"):
+                    lines.extend(
+                        [
+                            "    ) -> None:",
+                            "        return None",
+                        ]
+                    )
+                else:
+                    lines.extend(
+                        [
+                            f"    ) -> {ret_type}:",
+                            f"        return _unimplemented_transition('{fn_name}')",
                         ]
                     )
 
@@ -2636,11 +2638,14 @@ def generate_pretense_scaffold(
                     [
                         "",
                         f'    @transition(name="{prop}")',
-                        f"    def {fn_name}(self) -> None:",
+                        f"    def {fn_name}(self) -> Any:",
                         "        require(self.state.initialized)",
-                        f"        ret: Any = make_return_value(_unimplemented_transition('{fn_name}'))",
+                        f"        ret: Any = self.inner_{fn_name}()",
                         "        assert ret is not None",
                         "        return ret",
+                        "",
+                        f"    def inner_{fn_name}(self) -> Any:",
+                        f"        return _unimplemented_transition('{fn_name}')",
                     ]
                 )
 
@@ -3132,7 +3137,6 @@ def generate_pretense_scaffold(
         "    Domain,",
         "    StateMachine,",
         "    call_target,",
-        "    make_return_value,",
         "    raises,",
         "    require,",
         "    require_arg,",
@@ -3176,7 +3180,7 @@ def generate_pretense_scaffold(
             "# ==============================================================================",
             "# NOTE: Transitions model target methods 1:1 (@transition(TargetClass.method)).",
             "# Contract violations (*Error, e.g. NodeNotFoundError) are preconditions: use require_arg(arg, Domain.in_set(self.state.items), error=ExpectedError) or require(condition, error=ExpectedError). NEVER use with raises(...) for *Error!",
-            "# with raises(ExpectedException): make_return_value() is reserved exclusively for operational exceptions (*Exception).",
+            "# with raises(ExpectedException): self.inner_method(...) is reserved exclusively for operational exceptions (*Exception).",
             "# require_arg defines the caller precondition contract (checked at runtime on real calls).",
             "# Use Domain.type(T) or open domain; use preferred=[...] to cluster/bias fuzz inputs without restricting the contract.",
             "",
@@ -3310,7 +3314,7 @@ def generate_pretense_scaffold(
             if ret_type in ("None", "NoneType"):
                 lines.extend(
                     [
-                        "        ret = make_return_value()",
+                        f"        ret = self.inner_{fn_name}({call_args})",
                         "        assert ret is None",
                         "        return ret",
                     ]
@@ -3318,9 +3322,33 @@ def generate_pretense_scaffold(
             else:
                 lines.extend(
                     [
-                        f"        ret: {ret_type} = make_return_value(_unimplemented_transition('{fn_name}'))",
+                        f"        ret: {ret_type} = self.inner_{fn_name}({call_args})",
                         "        assert ret is not None",
                         "        return ret",
+                    ]
+                )
+            lines.extend(
+                [
+                    "",
+                    f"    def inner_{fn_name}(",
+                    "        self,",
+                ]
+            )
+            for ai in arg_info:
+                atype = ai["type"] if ai["type"] else "Any"
+                lines.append(f"        {ai['name']}: {atype},")
+            if ret_type in ("None", "NoneType"):
+                lines.extend(
+                    [
+                        "    ) -> None:",
+                        "        return None",
+                    ]
+                )
+            else:
+                lines.extend(
+                    [
+                        f"    ) -> {ret_type}:",
+                        f"        return _unimplemented_transition('{fn_name}')",
                     ]
                 )
             transition_counter += 1
@@ -3334,11 +3362,14 @@ def generate_pretense_scaffold(
                 [
                     "",
                     f'    @transition(name="{prop}")',
-                    f"    def {fn_name}(self) -> None:",
+                    f"    def {fn_name}(self) -> Any:",
                     "        require(self.state.initialized)",
-                    f"        ret: Any = make_return_value(_unimplemented_transition('{fn_name}'))",
+                    f"        ret: Any = self.inner_{fn_name}()",
                     "        assert ret is not None",
                     "        return ret",
+                    "",
+                    f"    def inner_{fn_name}(self) -> Any:",
+                    f"        return _unimplemented_transition('{fn_name}')",
                 ]
             )
             transition_counter += 1

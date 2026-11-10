@@ -617,7 +617,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -1145,7 +1144,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     def format(self) -> str:
         require(self.state.initialized)
         version = self.state.current_version
-        ret = make_return_value(_format_version(version))
+        ret = self.inner_format()
         assert ret == _format_version(version)
         assert len(ret) > 0
         return ret
@@ -1154,7 +1153,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     def is_prerelease(self) -> bool:
         require(self.state.initialized)
         version = self.state.current_version
-        ret = make_return_value(len(version.prerelease) > 0)
+        ret = self.inner_is_prerelease()
         assert ret == (len(version.prerelease) > 0)
         return ret
 
@@ -1162,7 +1161,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     def parse_version(self, text: str) -> Version:
         require(self.state.initialized)
         require_arg(text, Domain.sampled_from(_VERSION_TEXTS))
-        ret = make_return_value(_parse_version_text(text))
+        ret = self.inner_parse_version(text)
         self.state.parsed_versions.append(ret)
         self.state.current_version = ret
         assert ret.major >= 0
@@ -1178,7 +1177,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         require(self.state.initialized)
         require_arg(v1, Domain.sampled_from(_SAMPLE_VERSIONS))
         require_arg(v2, Domain.sampled_from(_SAMPLE_VERSIONS))
-        ret = make_return_value(_compare_versions(v1, v2))
+        ret = self.inner_compare_precedence(v1, v2)
         numeric1 = (v1.major, v1.minor, v1.patch)
         numeric2 = (v2.major, v2.minor, v2.patch)
         if numeric1 != numeric2:
@@ -1192,7 +1191,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     def parse_range(self, text: str) -> VersionRange:
         require(self.state.initialized)
         require_arg(text, Domain.sampled_from(_RANGE_TEXTS))
-        ret = make_return_value(_parse_range_text(text))
+        ret = self.inner_parse_range(text)
         self.state.parsed_ranges.append(ret)
         assert ret.raw_text == text.strip()
         assert ret == self.state.parsed_ranges[-1]
@@ -1210,7 +1209,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         require_arg(range_constraint, Domain.sampled_from(_SAMPLE_RANGES))
         require_arg(include_prerelease, Domain.boolean())
         expected = _satisfies(version, range_constraint, include_prerelease)
-        ret = make_return_value(expected)
+        ret = self.inner_satisfies(version, range_constraint, include_prerelease)
         if version.prerelease and not include_prerelease:
             assert ret is False
         assert ret == expected
@@ -1220,7 +1219,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     def register_package(self, release: PackageRelease) -> None:
         require(self.state.initialized)
         require_arg(release, Domain.sampled_from(_SAMPLE_RELEASES))
-        ret = make_return_value(None)
+        ret = self.inner_register_package(release)
         self.state.releases.append(release)
         if release.name not in self.state.packages:
             self.state.packages.append(release.name)
@@ -1232,9 +1231,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     def get_releases(self, name: str) -> List[PackageRelease]:
         require(self.state.initialized)
         require_arg(name, Domain.in_set(self.state.packages))
-        ret = make_return_value(
-            _lookup_releases(self.state.packages, self.state.releases, name)
-        )
+        ret = self.inner_get_releases(name)
         assert all(release.name == name for release in ret)
         assert all(
             _compare_versions(ret[index].version, ret[index + 1].version) >= 0
@@ -1246,14 +1243,14 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     def has_package(self, name: str) -> bool:
         require(self.state.initialized)
         require_arg(name, Domain.sampled_from(_SAMPLE_PACKAGE_NAMES))
-        ret = make_return_value(name in self.state.packages)
+        ret = self.inner_has_package(name)
         assert ret == (name in self.state.packages)
         return ret
 
     @transition(PackageRepository.all_packages)
     def all_packages(self) -> Set[str]:
         require(self.state.initialized)
-        ret = make_return_value(set(self.state.packages))
+        ret = self.inner_all_packages()
         assert all(name in ret for name in self.state.packages)
         assert all(isinstance(name, str) for name in ret)
         return ret
@@ -1267,13 +1264,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
             root_dependencies,
             Domain.sampled_from(_SAMPLE_DEPENDENCY_COLLECTIONS),
         )
-        ret = make_return_value(
-            _resolve_dependencies(
-                self.state.releases,
-                self.state.packages,
-                root_dependencies,
-            )
-        )
+        ret = self.inner_resolve(root_dependencies)
         self.state.selected_versions = dict(ret.selected_versions)
         assert all(name in self.state.packages for name in ret.selected_versions)
         assert all(isinstance(step, str) for step in ret.derivation_steps)

@@ -151,9 +151,7 @@ _last_contracted_exception_type: ContextVar[Optional[Type[BaseException]]] = Con
 _disable_preconditions: ContextVar[bool] = ContextVar(
     "_disable_preconditions", default=False
 )
-_in_make_return_value: ContextVar[bool] = ContextVar(
-    "_in_make_return_value", default=False
-)
+
 
 
 class raises:
@@ -197,56 +195,6 @@ class raises:
             raise inst
 
 
-def make_return_value(fake_val: Any = None) -> Any:
-    """Pivot in an interface state machine transition (legacy helper)."""
-    if _is_verification.get():
-        target = _current_target.get()
-        method_name = _current_method.get()
-        args = _current_args.get()
-        kwargs = _current_kwargs.get()
-        sm = _current_sm.get()
-
-        # Check if implementation pseudo state machine overrides this method (legacy pattern)
-        if (
-            sm is not None
-            and method_name is not None
-            and type(sm) is not StateMachine
-            and not _in_make_return_value.get()
-        ):
-            sm_cls = type(sm)
-            base_cls = None
-            for c in sm_cls.__mro__:
-                if (
-                    c is not sm_cls
-                    and issubclass(c, StateMachine)
-                    and hasattr(c, method_name)
-                ):
-                    base_cls = c
-                    break
-            if base_cls is not None:
-                override_fn = getattr(sm_cls, method_name, None)
-                base_fn = getattr(base_cls, method_name, None)
-                if override_fn is not None and override_fn is not base_fn:
-                    target_override = getattr(override_fn, "__target_fn__", override_fn)
-                    tok = _in_make_return_value.set(True)
-                    try:
-                        res = target_override(sm, *args, **kwargs)
-                        _last_ensured_ret.set(res)
-                        return res
-                    finally:
-                        _in_make_return_value.reset(tok)
-
-        if (
-            target is not None
-            and method_name is not None
-            and hasattr(target, method_name)
-        ):
-            method = getattr(target, method_name)
-            res = method(*args, **kwargs) if callable(method) else method
-            _last_ensured_ret.set(res)
-            return res
-    _last_ensured_ret.set(fake_val)
-    return fake_val
 
 
 @overload
@@ -3631,6 +3579,37 @@ class StateMachine(Generic[StateT]):
         )
 
     def __getattr__(self, name: str) -> Any:
+        if name.startswith("inner_"):
+            mname = name[len("inner_") :]
+            cls = type(self)
+            override_fn = getattr(cls, mname, None)
+            base_fn = None
+            for base in cls.__mro__[1:]:
+                if hasattr(base, mname):
+                    base_fn = getattr(base, mname)
+                    break
+
+            def inner_dispatcher(*a: Any, **kw: Any) -> Any:
+                fake_val = kw.pop("__fake__", kw.pop("fake_val", None))
+                call_args = a if a else (_current_args.get() or ())
+                call_kw = kw if kw else (_current_kwargs.get() or {})
+                if override_fn is not None and override_fn is not base_fn:
+                    target_override = getattr(override_fn, "__target_fn__", override_fn)
+                    res = target_override(self, *call_args, **call_kw)
+                    _last_ensured_ret.set(res)
+                    return res
+                if _is_verification.get():
+                    target = _current_target.get()
+                    if target is not None and hasattr(target, mname):
+                        method = getattr(target, mname)
+                        res = method(*call_args, **call_kw) if callable(method) else method
+                        _last_ensured_ret.set(res)
+                        return res
+                _last_ensured_ret.set(fake_val)
+                return fake_val
+
+            return inner_dispatcher
+
         # Check if attribute corresponds to a seeding transition
         transitions = self.__dict__.get("transitions")
         if transitions:

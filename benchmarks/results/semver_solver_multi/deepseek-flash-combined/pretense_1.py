@@ -293,7 +293,6 @@ import unittest
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -534,7 +533,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         require(self.state.initialized)
         require_arg(release, Domain.sampled_from(SAMPLE_RELEASES))
         fake_return = None
-        ret = make_return_value(fake_return)
+        ret = self.inner_register_package(release)
         registered = self.state.packages.get(release.name)
         if registered is None:
             self.state.packages[release.name] = [release]
@@ -581,7 +580,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         require(self.state.initialized)
         require_arg(name, Domain.in_set(self.state.packages.keys()))
         fake_return = ordered_releases(self.state.packages.get(name, []))
-        ret = make_return_value(fake_return)
+        ret = self.inner_get_releases(name)
         assert ret == fake_return
         return ret
 
@@ -593,7 +592,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         require(self.state.initialized)
         require_arg(name, Domain.type(str), preferred=SAMPLE_NAMES)
         fake_return = name in self.state.packages
-        ret = make_return_value(fake_return)
+        ret = self.inner_has_package(name)
         assert ret == fake_return
         return ret
 
@@ -603,7 +602,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
     ) -> Set[str]:
         require(self.state.initialized)
         fake_return = set(self.state.packages.keys())
-        ret = make_return_value(fake_return)
+        ret = self.inner_all_packages()
         assert ret == fake_return
         return ret
 
@@ -622,7 +621,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
             self.state.packages,
         )
         fake_return = ResolutionOutcome(selected_versions=selected_versions, derivation_steps=derivation_steps)
-        ret = make_return_value(fake_return)
+        ret = self.inner_resolve(root_dependencies)
         self.state.outcomes.append(fake_return)
         assert ret == fake_return
         return ret
@@ -892,7 +891,6 @@ import unittest
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -968,7 +966,7 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
             prerelease=prerelease,
             build=build,
         )
-        ret = make_return_value(fake_return)
+        ret = self.inner_parse_version(text)
         self.state.parsed_versions.append(fake_return)
         assert ret == fake_return
         return ret
@@ -1020,7 +1018,7 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
                 if matched and len(left) != len(right):
                     comparison = 1 if len(left) > len(right) else -1
         fake_return = comparison
-        ret = make_return_value(fake_return)
+        ret = self.inner_compare_precedence(v1, v2)
         self.state.comparison_count += 1
         assert ret == fake_return
         return ret
@@ -1350,7 +1348,6 @@ import unittest
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -1728,7 +1725,7 @@ class SemverRangeStateMachine(StateMachine[SemverRangeState]):
         require(self.state.initialized)
         require_arg(text, Domain.sampled_from(RANGE_SAMPLES))
         fake_return = VersionRange(raw_text=validate_range_text(text))
-        ret = make_return_value(fake_return)
+        ret = self.inner_parse_range(text)
         self.state.parsed_ranges.append(fake_return)
         assert ret == fake_return
         return ret
@@ -1745,7 +1742,7 @@ class SemverRangeStateMachine(StateMachine[SemverRangeState]):
         require_arg(range_constraint, Domain.sampled_from(RANGE_CONSTRAINTS))
         require_arg(include_prerelease, Domain.boolean())
         fake_return = version_satisfies_text(version, range_constraint.raw_text, include_prerelease)
-        ret = make_return_value(fake_return)
+        ret = self.inner_satisfies(version, range_constraint, include_prerelease)
         self.state.satisfaction_checks += 1
         assert ret == fake_return
         return ret

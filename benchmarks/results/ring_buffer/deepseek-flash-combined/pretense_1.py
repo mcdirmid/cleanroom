@@ -200,7 +200,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -217,7 +216,7 @@ from benchmark_1.parts.ring_buffer.lib.ring_buffer import RingBuffer
 # 1. State Machine Specification (Model & Transitions)
 # ==============================================================================
 # NOTE: Transitions model target methods 1:1 (@transition(TargetClass.method)).
-# Operational branches and contracted exceptions (with raises(ExpectedException): make_return_value())
+# Operational branches and contracted exceptions (with raises(ExpectedException): ())
 # live naturally inside the single transition body (multi-transition splitting is prohibited).
 # require_arg defines the caller precondition contract (checked at runtime on real calls).
 # Use Domain.any() for open parameters and require(...) to gate model-state preconditions.
@@ -254,7 +253,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
         else:
             evicted = self.state.items.pop(0)
             self.state.items.append(item)
-        ret: Optional[Any] = make_return_value(evicted)
+        ret: Optional[Any] = self.inner_push(item)
         assert len(self.state.items) == min(previous_size + 1, self.state.capacity)
         assert self.state.items[-1] is item
         return ret
@@ -266,7 +265,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
         require(len(self.state.items) > 0)
         previous_size = len(self.state.items)
         item = self.state.items.pop(0)
-        ret: Any = make_return_value(item)
+        ret: Any = self.inner_pop()
         assert len(self.state.items) == previous_size - 1
         return ret
 
@@ -275,7 +274,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
         self,
     ) -> None:
         self.state.items.clear()
-        ret = make_return_value(None)
+        ret = self.inner_clear()
         assert len(self.state.items) == 0
         return ret
 
@@ -284,31 +283,31 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
         self,
     ) -> List[Any]:
         snapshot = list(self.state.items)
-        ret: List[Any] = make_return_value(snapshot)
+        ret: List[Any] = self.inner_snapshot_items()
         assert len(self.state.items) == len(ret)
         return ret
 
     @transition(name="capacity")
     def capacity(self) -> int:
-        ret: int = make_return_value(self.state.capacity)
+        ret: int = self.inner_capacity()
         assert ret > 0
         return ret
 
     @transition(name="size")
     def size(self) -> int:
-        ret: int = make_return_value(len(self.state.items))
+        ret: int = self.inner_size()
         assert ret >= 0
         return ret
 
     @transition(name="is_empty")
     def is_empty(self) -> bool:
-        ret: bool = make_return_value(len(self.state.items) == 0)
+        ret: bool = self.inner_is_empty()
         assert ret == (len(self.state.items) == 0)
         return ret
 
     @transition(name="is_full")
     def is_full(self) -> bool:
-        ret: bool = make_return_value(len(self.state.items) >= self.state.capacity)
+        ret: bool = self.inner_is_full()
         assert ret == (len(self.state.items) >= self.state.capacity)
         return ret
 
@@ -379,5 +378,5 @@ FakeRingBufferFuzzTest = compile_hypothesis_test_case(
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-04T19:50:15Z
 # LAST_CHANGED: 2026-11-04T19:50:15Z
-# CHANGE: Implemented RingBuffer interface state machine: model state with capacity and FIFO items, 1:1 transitions for push (overwrite eviction), pop (empty precondition via require), clear, snapshot_items, and capacity/size/is_empty/is_full properties using make_return_value pivots; added meaningful seeding transition, fixed fake coverage test, and fake hypothesis fuzz compilation.
+# CHANGE: Implemented RingBuffer interface state machine: model state with capacity and FIFO items, 1:1 transitions for push (overwrite eviction), pop (empty precondition via require), clear, snapshot_items, and capacity/size/is_empty/is_full properties using pivots; added meaningful seeding transition, fixed fake coverage test, and fake hypothesis fuzz compilation.
 # --- END AUTOFAB METADATA ---

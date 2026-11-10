@@ -1,6 +1,6 @@
 """Comprehensive verification of Pretense 1 Next architecture.
 
-Tests 1:1 transitions, AST pivots (make_return_value, call_target), single-argument assert,
+Tests 1:1 transitions, inner transitions, single-argument assert,
 concentric onion execution pipeline, synthesized fakes, and Hypothesis fuzzing.
 """
 
@@ -16,7 +16,6 @@ from pretense import (
     StateMachine,
     call_target,
     compile_hypothesis_test_case,
-    make_return_value,
     raises,
     require_arg,
     requires,

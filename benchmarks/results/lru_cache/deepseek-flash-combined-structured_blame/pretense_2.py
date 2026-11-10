@@ -302,7 +302,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -365,58 +364,56 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
     # --------------------------------------------------------------------------
 
     def inner_configure(self, capacity: int) -> None:
-        return make_return_value()
+        return None
 
     def inner_get(self, key: str, default: Optional[Any]) -> Any:
         if key in self.state.items:
-            return make_return_value(self.state.items[key])
-        return make_return_value(default)
+            return self.state.items[key]
+        return default
 
     def inner_put(self, key: str, value: Any) -> Optional[Tuple[str, Any]]:
         if key in self.state.items:
-            return make_return_value()
+            return None
         if len(self.state.items) >= self.state.capacity:
             oldest = next(iter(self.state.items))
-            return make_return_value((oldest, self.state.items[oldest]))
-        return make_return_value()
+            return (oldest, self.state.items[oldest])
+        return None
 
     def inner_peek(self, key: str, default: Optional[Any]) -> Any:
         if key in self.state.items:
-            return make_return_value(self.state.items[key])
-        return make_return_value(default)
+            return self.state.items[key]
+        return default
 
     def inner_remove(self, key: str) -> Any:
-        return make_return_value(self.state.items[key])
+        return self.state.items[key]
 
     def inner_clear(self) -> None:
-        return make_return_value()
+        return None
 
     def inner_get_stats(self) -> CacheStats:
-        return make_return_value(
-            CacheStats(
+        return CacheStats(
                 hits=self.state.hits,
                 misses=self.state.misses,
                 evictions=self.state.evictions,
             )
-        )
 
     def inner_reset_stats(self) -> None:
-        return make_return_value()
+        return None
 
     def inner_keys_in_lru_order(self) -> List[str]:
-        return make_return_value(list(self.state.items.keys()))
+        return list(self.state.items.keys())
 
     def inner_capacity(self) -> int:
-        return make_return_value(self.state.capacity)
+        return self.state.capacity
 
     def inner_size(self) -> int:
-        return make_return_value(len(self.state.items))
+        return len(self.state.items)
 
     def inner_is_empty(self) -> bool:
-        return make_return_value(len(self.state.items) == 0)
+        return len(self.state.items) == 0
 
     def inner_is_full(self) -> bool:
-        return make_return_value(len(self.state.items) >= self.state.capacity)
+        return len(self.state.items) >= self.state.capacity
 
     # --------------------------------------------------------------------------
     # 1:1 transitions.

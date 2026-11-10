@@ -350,7 +350,6 @@ from pretense import (
     Domain,
     StateMachine,
     call_target,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -832,9 +831,9 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         expected = _model_parse_version(text)
         if expected is None:
             with raises(InvalidVersionError):
-                ret = make_return_value(Version(0, 0, 0))
+                ret = self.inner_parse_version(text)
             return Version(0, 0, 0)
-        ret = make_return_value(expected)
+        ret = self.inner_parse_version(text)
         assert ret == expected
         assert ret.major >= 0
         assert ret.minor >= 0
@@ -847,7 +846,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         require_arg(v1, Domain.in_set(self.state.valid_versions), preferred=_SAMPLE_VERSIONS[:5])
         require_arg(v2, Domain.in_set(self.state.valid_versions), preferred=_SAMPLE_VERSIONS[:5])
         expected = _model_compare_precedence(v1, v2)
-        ret = make_return_value(expected)
+        ret = self.inner_compare_precedence(v1, v2)
         if expected < 0:
             assert ret < 0
         elif expected > 0:
@@ -866,10 +865,10 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         )
         if _model_compile_range(text) is None:
             with raises(InvalidRangeError):
-                ret = make_return_value(VersionRange(""))
+                ret = self.inner_parse_range(text)
             return VersionRange("")
         expected = VersionRange(raw_text=text.strip())
-        ret = make_return_value(expected)
+        ret = self.inner_parse_range(text)
         assert ret.raw_text == text.strip()
         return ret
 
@@ -889,7 +888,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         )
         require_arg(include_prerelease, Domain.type(bool), preferred=[False, True])
         expected = _model_satisfies(version, range_constraint, include_prerelease)
-        ret = make_return_value(expected)
+        ret = self.inner_satisfies(version, range_constraint, include_prerelease)
         assert ret == expected
         return ret
 
@@ -901,7 +900,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
             Domain.in_set(self.state.valid_releases),
             preferred=_SAMPLE_RELEASES[:4],
         )
-        ret = make_return_value(None)
+        ret = self.inner_register_package(release)
         releases = self.state.packages.setdefault(release.name, [])
         releases.append(release)
         releases.sort(key=_RELEASE_SORT_KEY, reverse=True)
@@ -918,10 +917,10 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         )
         if name not in self.state.packages:
             with raises(PackageNotFoundError):
-                ret = make_return_value([])
+                ret = self.inner_get_releases(name)
             return []
         expected = list(self.state.packages[name])
-        ret = make_return_value(expected)
+        ret = self.inner_get_releases(name)
         assert ret == expected
         return ret
 
@@ -930,7 +929,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         require(self.state.initialized)
         require_arg(name, Domain.type(str), preferred=["core", "app", "missing"])
         expected = name in self.state.packages
-        ret = make_return_value(expected)
+        ret = self.inner_has_package(name)
         assert ret == expected
         return ret
 
@@ -938,7 +937,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     def all_packages(self) -> Set[str]:
         require(self.state.initialized)
         expected = set(self.state.packages.keys())
-        ret = make_return_value(expected)
+        ret = self.inner_all_packages()
         assert ret == expected
         return ret
 
@@ -960,9 +959,9 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         expected = _model_resolve(self.state.packages, root_dependencies)
         if expected is None:
             with raises(ResolutionConflictError):
-                ret = make_return_value(ResolutionOutcome({}, ()))
+                ret = self.inner_resolve(root_dependencies)
             return ResolutionOutcome({}, ())
-        ret = make_return_value(expected)
+        ret = self.inner_resolve(root_dependencies)
         assert ret.selected_versions == expected.selected_versions
         for dep in root_dependencies:
             assert dep.name in ret.selected_versions

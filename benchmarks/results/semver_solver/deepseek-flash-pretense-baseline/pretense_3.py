@@ -392,7 +392,6 @@ import unittest
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -547,7 +546,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     def parse_version(self, text: str) -> Version:
         require(self.state.initialized)
         require_arg(text, Domain.sampled_from(list(_VERSION_TEXTS)), preferred=["1.2.3", "1.0.0-alpha"])
-        ret = make_return_value(_VERSION_SAMPLES[4])
+        ret = self.inner_parse_version(text)
         assert ret is not None
         return ret
 
@@ -556,7 +555,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         require(self.state.initialized)
         require_arg(v1, Domain.sampled_from(list(_VERSION_SAMPLES)))
         require_arg(v2, Domain.sampled_from(list(_VERSION_SAMPLES)))
-        ret = make_return_value(0)
+        ret = self.inner_compare_precedence(v1, v2)
         assert ret is not None
         return ret
 
@@ -564,7 +563,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     def parse_range(self, text: str) -> VersionRange:
         require(self.state.initialized)
         require_arg(text, Domain.sampled_from(list(_RANGE_TEXTS)), preferred=[">=1.0.0", "^1.2.3"])
-        ret = make_return_value(_RANGE_SAMPLES[0])
+        ret = self.inner_parse_range(text)
         assert ret is not None
         return ret
 
@@ -574,7 +573,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         require_arg(version, Domain.sampled_from(list(_VERSION_SAMPLES)))
         require_arg(range_constraint, Domain.sampled_from(list(_RANGE_SAMPLES)))
         require_arg(include_prerelease, Domain.boolean())
-        ret = make_return_value(True)
+        ret = self.inner_satisfies(version, range_constraint, include_prerelease)
         assert ret is not None
         return ret
 
@@ -582,7 +581,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     def register_package(self, release: PackageRelease) -> None:
         require(self.state.initialized)
         require_arg(release, Domain.sampled_from(list(_RELEASE_SAMPLES)), preferred=[_RELEASE_SAMPLES[0]])
-        ret = make_return_value()
+        ret = self.inner_register_package(release)
         self.state.packages.add(release.name)
         self.state.releases.add((release.name, release.version))
         assert ret is None
@@ -595,7 +594,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         # repository cannot raise a missing-package contract violation.
         require(self.state.packages >= _REQUIRED_PACKAGES)
         require_arg(name, Domain.sampled_from(["app", "lib"]), preferred=["lib"])
-        ret = make_return_value([release for release in _RELEASE_SAMPLES if release.name == name])
+        ret = self.inner_get_releases(name)
         assert ret is not None
         return ret
 
@@ -603,14 +602,14 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     def has_package(self, name: str) -> bool:
         require(self.state.initialized)
         require_arg(name, Domain.type(str), preferred=["app", "lib"])
-        ret = make_return_value(name in self.state.packages)
+        ret = self.inner_has_package(name)
         assert ret is not None
         return ret
 
     @transition(PackageRepository.all_packages)
     def all_packages(self) -> Set[str]:
         require(self.state.initialized)
-        ret = make_return_value(set(self.state.packages))
+        ret = self.inner_all_packages()
         assert ret is not None
         return ret
 
@@ -621,7 +620,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         # requirements always admit a compatible assignment instead of a conflict.
         require(self.state.releases >= _REQUIRED_RELEASES)
         require_arg(root_dependencies, Domain.sampled_from(list(_RESOLVE_DOMAINS)), preferred=[()])
-        ret = make_return_value(ResolutionOutcome(selected_versions={}, derivation_steps=()))
+        ret = self.inner_resolve(root_dependencies)
         assert ret is not None
         return ret
 

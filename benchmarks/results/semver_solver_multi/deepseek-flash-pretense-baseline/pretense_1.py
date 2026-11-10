@@ -287,7 +287,6 @@ import unittest
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -331,7 +330,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
     def register_package(self, release: PackageRelease) -> None:
         require_arg(release, Domain.type(PackageRelease))
         # Postcondition: the registered release becomes retrievable by its package name.
-        ret = make_return_value(None)
+        ret = self.inner_register_package(release)
         self.state.packages.setdefault(release.name, []).append(release)
         assert release in self.state.packages[release.name]
         return ret
@@ -341,7 +340,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         require(self.state.packages)
         require_arg(name, Domain.type(str))
         # Postcondition: releases are returned in descending precedence order for a known package.
-        ret = make_return_value(self.state.packages.get(name, []))
+        ret = self.inner_get_releases(name)
         assert name in self.state.packages
         return ret
 
@@ -349,14 +348,14 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
     def has_package(self, name: str) -> bool:
         require_arg(name, Domain.type(str))
         # Postcondition: membership reflects whether the package is registered.
-        ret = make_return_value(name in self.state.packages)
+        ret = self.inner_has_package(name)
         assert ret == (name in self.state.packages)
         return ret
 
     @transition(PackageRepository.all_packages)
     def all_packages(self) -> Set[str]:
         # Postcondition: the package name set matches the registered package keys.
-        ret = make_return_value(set(self.state.packages.keys()))
+        ret = self.inner_all_packages()
         assert ret == set(self.state.packages.keys())
         return ret
 
@@ -369,7 +368,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
             Domain.type(Collection[PackageDependency]),
         )
         # Postcondition: a successful resolution yields selected versions and derivation steps.
-        ret: Any = make_return_value(ResolutionOutcome)
+        ret: Any = self.inner_resolve(root_dependencies)
         self.state.outcomes.append(ret)
         assert self.state.outcomes[-1] == ret
         return ret
@@ -377,7 +376,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
     @transition.seeding
     def seed_package(self) -> None:
         """Seeds a documented release into the blank package model state."""
-        release: Any = make_return_value(PackageRelease)
+        release: Any = self.inner_seed_package()
         self.state.packages.setdefault("sample", []).append(release)
 
 
@@ -587,7 +586,6 @@ import unittest
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -624,7 +622,7 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
     @transition(Version.format)
     def format(self) -> str:
         # Postcondition: formatting yields the canonical SemVer string representation.
-        ret = make_return_value("0.0.0")
+        ret = self.inner_format()
         self.state.formatted.append(ret)
         assert self.state.formatted[-1] == ret
         return ret
@@ -632,7 +630,7 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
     @transition(name="is_prerelease")
     def is_prerelease(self) -> bool:
         # Postcondition: a version is a prerelease exactly when it carries prerelease identifiers.
-        ret = make_return_value(False)
+        ret = self.inner_is_prerelease()
         self.state.prerelease_flags.append(ret)
         assert self.state.prerelease_flags[-1] == ret
         return ret
@@ -645,7 +643,7 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
             preferred=["1.0.0", "2.0.0-alpha.1+build.5"],
         )
         # Postcondition: parsing a grammatically valid version yields an immutable Version record.
-        ret: Any = make_return_value(Version)
+        ret: Any = self.inner_parse_version(text)
         self.state.parsed.append(ret)
         assert self.state.parsed[-1] == ret
         return ret
@@ -655,7 +653,7 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
         require_arg(v1, Domain.type(Version))
         require_arg(v2, Domain.type(Version))
         # Postcondition: precedence comparison yields a signed ordering integer.
-        ret = make_return_value(0)
+        ret = self.inner_compare_precedence(v1, v2)
         self.state.comparisons.append((v1, v2, ret))
         assert self.state.comparisons[-1] == (v1, v2, ret)
         return ret
@@ -947,7 +945,6 @@ import unittest
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -992,7 +989,7 @@ class SemverRangeStateMachine(StateMachine[SemverRangeState]):
             preferred=["1.0.0", "^1.2.3", "~1.2.3", ">=1.0.0 <2.0.0"],
         )
         # Postcondition: parsing well-formed range text yields an immutable VersionRange record.
-        ret: Any = make_return_value(VersionRange)
+        ret: Any = self.inner_parse_range(text)
         self.state.parsed.append(ret)
         assert self.state.parsed[-1] == ret
         return ret
@@ -1008,7 +1005,7 @@ class SemverRangeStateMachine(StateMachine[SemverRangeState]):
         require_arg(range_constraint, Domain.type(VersionRange))
         require_arg(include_prerelease, Domain.boolean())
         # Postcondition: satisfaction yields a boolean verdict for the candidate version.
-        ret = make_return_value(False)
+        ret = self.inner_satisfies(version, range_constraint, include_prerelease)
         self.state.matches.append((version, range_constraint, ret))
         assert self.state.matches[-1] == (version, range_constraint, ret)
         return ret

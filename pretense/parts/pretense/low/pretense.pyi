@@ -255,13 +255,6 @@ class ensure:
 
 
 @data_type
-class make_return_value:
-    """Pivot in an interface state machine transition."""
-    def __new__(cls, fake_val: Optional[Any] = None) -> Any: ...
-    def __call__(self, fake_val: Optional[Any] = None) -> Any: ...
-
-
-@data_type
 class call_target(Generic[R]):
     """Pivot in an implementation pseudo state machine transition."""
     @overload

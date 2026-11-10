@@ -25,7 +25,7 @@ Static verification diagnostics (`pretense_lint`, `pyright`) state syntax, typin
 - [ ] Multi-interface implementation pseudo-state machines inherit from all implemented interface state machines (`PRE_LINT_MULTI_INTERFACE_INHERITANCE`)
 - [ ] Direct mutation or mutating method calls on `.state` in tests is prohibited (`PRE_LINT_NO_STATE_POKING`); state changes occur via transitions
 - [ ] Loops and state arguments in `make_sut()` are prohibited (`PRE_LINT_NO_PRE_SEEDING`); components start in blank default states
-- [ ] Interface pretense modules import `StateMachine`, `transition`, `make_return_value`, `raises`, `require`, `require_arg`, `sut`, `sut_state`, `synthesize_fake`, and `Domain`
+- [ ] Interface pretense modules import `StateMachine`, `transition`, `raises`, `require`, `require_arg`, `sut`, `sut_state`, `synthesize_fake`, and `Domain`
 - [ ] Legacy symbols `ensure`, `ensure_ret`, `ensure_raises`, `TransitionContext`, and `Expr` are never imported (`PN_NO_LEGACY_IMPORT`)
 - [ ] Top-level probe statements (try/except, raise, while, for, assert, \_PROBE) and executing test suites during authoring are prohibited (`PRE_LINT_NO_TOP_LEVEL_PROBE`)
 - [ ] Modules import target classes and initialization functions directly from companion library implementations using package-qualified paths

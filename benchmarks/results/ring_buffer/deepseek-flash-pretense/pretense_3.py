@@ -218,7 +218,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -272,7 +271,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
         else:
             self.state.items.append(item)
         assert len(self.state.items) <= self.state.capacity
-        ret: Optional[Any] = make_return_value(evicted)
+        ret: Optional[Any] = self.inner_push(item)
         return ret
 
     @transition(RingBuffer.pop)
@@ -281,7 +280,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
     ) -> Any:
         require(self.state.initialized)
         require(len(self.state.items) > 0)
-        ret: Any = make_return_value(self.state.items.pop(0))
+        ret: Any = self.inner_pop()
         assert len(self.state.items) < self.state.capacity
         return ret
 
@@ -292,7 +291,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
         require(self.state.initialized)
         self.state.items.clear()
         assert len(self.state.items) == 0
-        ret = make_return_value()
+        ret = self.inner_clear()
         assert ret is None
         return ret
 
@@ -301,7 +300,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
         self,
     ) -> List[Any]:
         require(self.state.initialized)
-        ret: List[Any] = make_return_value(list(self.state.items))
+        ret: List[Any] = self.inner_snapshot_items()
         assert list(self.state.items) == ret
         assert len(self.state.items) <= self.state.capacity
         return ret
@@ -309,7 +308,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
     @transition(name="capacity")
     def capacity(self) -> int:
         require(self.state.initialized)
-        ret: int = make_return_value(self.state.capacity)
+        ret: int = self.inner_capacity()
         assert self.state.capacity > 0
         assert ret == self.state.capacity
         return ret
@@ -317,7 +316,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
     @transition(name="size")
     def size(self) -> int:
         require(self.state.initialized)
-        ret: int = make_return_value(len(self.state.items))
+        ret: int = self.inner_size()
         assert ret == len(self.state.items)
         assert len(self.state.items) <= self.state.capacity
         return ret
@@ -325,14 +324,14 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
     @transition(name="is_empty")
     def is_empty(self) -> bool:
         require(self.state.initialized)
-        ret: bool = make_return_value(len(self.state.items) == 0)
+        ret: bool = self.inner_is_empty()
         assert ret == (len(self.state.items) == 0)
         return ret
 
     @transition(name="is_full")
     def is_full(self) -> bool:
         require(self.state.initialized)
-        ret: bool = make_return_value(len(self.state.items) >= self.state.capacity)
+        ret: bool = self.inner_is_full()
         assert ret == (len(self.state.items) >= self.state.capacity)
         return ret
 
@@ -372,5 +371,5 @@ FakeRingBufferFuzzTest = compile_hypothesis_test_case(
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-03T17:26:28Z
 # LAST_CHANGED: 2026-11-03T17:26:28Z
-# CHANGE: Model bounded ring buffer state (capacity 10, FIFO items) with 1:1 transitions for push (eviction on saturation), pop (gated non-empty precondition), clear, snapshot_items, and capacity/size/is_empty/is_full property queries using make_return_value pivots; expose FakeRingBuffer and FakeRingBufferFuzzTest.
+# CHANGE: Model bounded ring buffer state (capacity 10, FIFO items) with 1:1 transitions for push (eviction on saturation), pop (gated non-empty precondition), clear, snapshot_items, and capacity/size/is_empty/is_full property queries using pivots; expose FakeRingBuffer and FakeRingBufferFuzzTest.
 # --- END AUTOFAB METADATA ---

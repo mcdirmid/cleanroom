@@ -610,7 +610,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -725,7 +724,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     def parse_version(self, text: str) -> Version:
         require_arg(text, Domain.sampled_from(SAMPLE_VERSION_TEXTS))
         parsed = Version(major=0, minor=0, patch=0)
-        ret: Version = make_return_value(parsed)
+        ret: Version = self.inner_parse_version(text)
         self.state.parsed_versions.append(ret)
         assert len(self.state.parsed_versions) > 0
         return ret
@@ -734,7 +733,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     def compare_precedence(self, v1: Version, v2: Version) -> int:
         require_arg(v1, Domain.sampled_from(SAMPLE_VERSIONS))
         require_arg(v2, Domain.sampled_from(SAMPLE_VERSIONS))
-        ret: int = make_return_value(0)
+        ret: int = self.inner_compare_precedence(v1, v2)
         assert isinstance(ret, int)
         return ret
 
@@ -742,7 +741,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     def parse_range(self, text: str) -> VersionRange:
         require_arg(text, Domain.sampled_from(SAMPLE_RANGE_TEXTS))
         parsed = VersionRange(raw_text=text.strip())
-        ret: VersionRange = make_return_value(parsed)
+        ret: VersionRange = self.inner_parse_range(text)
         self.state.parsed_ranges.append(ret)
         assert ret.raw_text == text.strip()
         return ret
@@ -757,14 +756,14 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         require_arg(version, Domain.sampled_from(SAMPLE_VERSIONS))
         require_arg(range_constraint, Domain.sampled_from(SAMPLE_RANGES))
         require_arg(include_prerelease, Domain.boolean())
-        ret: bool = make_return_value(False)
+        ret: bool = self.inner_satisfies(version, range_constraint, include_prerelease)
         assert isinstance(ret, bool)
         return ret
 
     @transition(PackageRepository.register_package)
     def register_package(self, release: PackageRelease) -> None:
         require_arg(release, Domain.sampled_from(SAMPLE_RELEASES))
-        ret = make_return_value(None)
+        ret = self.inner_register_package(release)
         self.state.registered.setdefault(release.name, []).append(release)
         no_dependencies: Tuple[PackageDependency, ...] = ()
         if no_dependencies not in self.state.dependency_options:
@@ -782,20 +781,20 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         require(len(self.state.registered) > 0)
         require_arg(name, Domain.in_set(self.state.registered.keys()))
         ordered = sorted(self.state.registered[name], key=_release_key, reverse=True)
-        ret: List[PackageRelease] = make_return_value(ordered)
+        ret: List[PackageRelease] = self.inner_get_releases(name)
         assert all(release.name == name for release in ret)
         return ret
 
     @transition(PackageRepository.has_package)
     def has_package(self, name: str) -> bool:
         require_arg(name, Domain.type(str), preferred=["alpha", "beta"])
-        ret: bool = make_return_value(name in self.state.registered)
+        ret: bool = self.inner_has_package(name)
         assert isinstance(ret, bool)
         return ret
 
     @transition(PackageRepository.all_packages)
     def all_packages(self) -> Set[str]:
-        ret: Set[str] = make_return_value(set(self.state.registered.keys()))
+        ret: Set[str] = self.inner_all_packages()
         assert ret == set(self.state.registered.keys())
         return ret
 
@@ -807,7 +806,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
             selected_versions={},
             derivation_steps=(),
         )
-        ret: ResolutionOutcome = make_return_value(resolved)
+        ret: ResolutionOutcome = self.inner_resolve(root_dependencies)
         self.state.resolutions.append(ret)
         assert isinstance(ret, ResolutionOutcome)
         return ret

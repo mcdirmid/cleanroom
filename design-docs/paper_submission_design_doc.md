@@ -1620,7 +1620,7 @@ $$\mathbf{Cov}(P, V) = \frac{|\text{ExecutedStatements}(\mathcal{N}(P), V)|}{|\t
 
 #### Pretense AST Chopping & Static Validation (`pretense_lint.py`)
 In stateful property fuzzing, evaluating state-transition differentials ($Lib \equiv Fake$) historically introduced severe runtime overhead and macro fragility. Pretense Next eliminates this through **Compile-Time AST Chopping** and strict static AST linting:
-1. **The Pivot Point & AST Chopping**: Each 1:1 transition method (`@transition(TargetClass.method)`) contains a unique invocation pivot—`ret = call_target()` in implementation pseudo-state machines, or `ret = make_return_value(...)` in interface state machines. The AST chopper statically parses the transition AST, separating it into:
+1. **The Pivot Point & Inner Transition Delegation**: Each 1:1 transition method (`@transition(TargetClass.method)`) contains an inner transition invocation—overridden in implementation pseudo-state machines to invoke the target, or delegating to `ret = self.inner_<method>(...)` in interface state machines. Static analysis parses the transition AST, separating it into:
    - *Pre-Pivot Setup*: Statements executed before the pivot, capturing local variable snapshots ($\sigma_{\text{pre}}$) prior to state mutation;
    - *Target Invocation*: The isolated method call on the concrete library ($P$) or fake;
    - *Post-Pivot Invariants*: Assertions evaluating state differentials and return value equivalence against $\sigma_{\text{pre}}$.

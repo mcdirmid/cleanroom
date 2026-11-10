@@ -640,7 +640,6 @@ import unittest
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -1150,9 +1149,9 @@ class SemVerSolverStateMachine(StateMachine[SemVerSolverState]):
         expected = _model_parse_version(text)
         if expected is None:
             with raises(InvalidVersionError):
-                ret = make_return_value(Version(0, 0, 0))
+                ret = self.inner_parse_version(text)
             return Version(0, 0, 0)
-        ret = make_return_value(expected)
+        ret = self.inner_parse_version(text)
         assert ret == expected
         return ret
 
@@ -1169,7 +1168,7 @@ class SemVerSolverStateMachine(StateMachine[SemVerSolverState]):
             preferred=[Version(2, 0, 0), Version(1, 0, 0)],
         )
         expected = _model_compare_precedence(v1, v2)
-        ret = make_return_value(expected)
+        ret = self.inner_compare_precedence(v1, v2)
         if expected < 0:
             assert ret < 0
         elif expected > 0:
@@ -1196,9 +1195,9 @@ class SemVerSolverStateMachine(StateMachine[SemVerSolverState]):
         expected = _model_parse_range(text)
         if expected is None:
             with raises(InvalidRangeError):
-                ret = make_return_value(VersionRange(""))
+                ret = self.inner_parse_range(text)
             return VersionRange("")
-        ret = make_return_value(expected)
+        ret = self.inner_parse_range(text)
         assert ret.raw_text == ret.raw_text.strip()
         assert [c.strip() for c in ret.raw_text.split("||")] == [
             c.strip() for c in expected.raw_text.split("||")
@@ -1224,7 +1223,7 @@ class SemVerSolverStateMachine(StateMachine[SemVerSolverState]):
         )
         require_arg(include_prerelease, Domain.type(bool), preferred=[False, True])
         expected = _model_satisfies(version, range_constraint, include_prerelease)
-        ret = make_return_value(expected)
+        ret = self.inner_satisfies(version, range_constraint, include_prerelease)
         assert ret == expected
         return ret
 
@@ -1235,7 +1234,7 @@ class SemVerSolverStateMachine(StateMachine[SemVerSolverState]):
             Domain.sampled_from(SAMPLE_RELEASES),
             preferred=[SAMPLE_RELEASES[0], SAMPLE_RELEASES[1], SAMPLE_RELEASES[2]],
         )
-        ret = make_return_value(None)
+        ret = self.inner_register_package(release)
         existing = list(self.state.packages.get(release.name, []))
         existing.append(release)
         existing.sort(key=_RELEASE_SORT_KEY)
@@ -1252,10 +1251,10 @@ class SemVerSolverStateMachine(StateMachine[SemVerSolverState]):
         )
         if name not in self.state.packages:
             with raises(PackageNotFoundError):
-                ret = make_return_value([])
+                ret = self.inner_get_releases(name)
             return []
         expected = list(self.state.packages[name])
-        ret = make_return_value(expected)
+        ret = self.inner_get_releases(name)
         assert ret == expected
         return ret
 
@@ -1267,14 +1266,14 @@ class SemVerSolverStateMachine(StateMachine[SemVerSolverState]):
             preferred=["pkg_a", "pkg_b", "unknown_pkg"],
         )
         expected = name in self.state.packages
-        ret = make_return_value(expected)
+        ret = self.inner_has_package(name)
         assert ret == expected
         return ret
 
     @transition(PackageRepository.all_packages)
     def all_packages(self) -> Set[str]:
         expected = set(self.state.packages.keys())
-        ret = make_return_value(expected)
+        ret = self.inner_all_packages()
         assert ret == expected
         return ret
 
@@ -1294,9 +1293,9 @@ class SemVerSolverStateMachine(StateMachine[SemVerSolverState]):
         outcome, _, _ = _model_resolve(root_dependencies, self.state.packages)
         if outcome is None:
             with raises(ResolutionConflictError):
-                ret = make_return_value(ResolutionOutcome({}, ()))
+                ret = self.inner_resolve(root_dependencies)
             return ResolutionOutcome({}, ())
-        ret = make_return_value(outcome)
+        ret = self.inner_resolve(root_dependencies)
         assert ret.selected_versions == outcome.selected_versions
         return ret
 

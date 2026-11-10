@@ -1011,7 +1011,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -1038,7 +1037,7 @@ from benchmark_2.parts.semver_solver.lib.semver_solver import (
 # ==============================================================================
 # The state machine models the abstract outcome of each operation. These helpers
 # compute that outcome from model state and transition arguments; the pivot
-# (`make_return_value`) realizes the concrete target result during checked and
+# (``) realizes the concrete target result during checked and
 # fuzz execution, so transitions never compare a realized return with an
 # abstract stand-in.
 
@@ -1417,7 +1416,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         parsed = _model_parse_version(text)
         if parsed is None:
             parsed = Version(0, 0, 0)
-        ret = make_return_value(parsed)
+        ret = self.inner_parse_version(text)
         self.state.parsed_versions.append(parsed)
         return ret
 
@@ -1431,7 +1430,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         require_arg(v1, Domain.type(Version), preferred=[Version(1, 0, 0)])
         require_arg(v2, Domain.type(Version), preferred=[Version(2, 0, 0)])
         ordering = _model_compare_versions(v1, v2)
-        ret = make_return_value(ordering)
+        ret = self.inner_compare_precedence(v1, v2)
         return ret
 
     @transition(VersionEngine.parse_range)
@@ -1443,7 +1442,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         require_arg(text, Domain.type(str), preferred=[">=1.0.0", "^1.2.0"])
         trimmed = text.strip()
         parsed = VersionRange(trimmed)
-        ret = make_return_value(parsed)
+        ret = self.inner_parse_range(text)
         self.state.parsed_ranges.append(parsed)
         return ret
 
@@ -1463,7 +1462,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         )
         require_arg(include_prerelease, Domain.boolean(), preferred=[False])
         matched = _model_satisfies(version, range_constraint, include_prerelease)
-        ret = make_return_value(matched)
+        ret = self.inner_satisfies(version, range_constraint, include_prerelease)
         self.state.prerelease_flags.append(include_prerelease)
         return ret
 
@@ -1481,7 +1480,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         bucket = self.state.packages.setdefault(release.name, [])
         bucket.append(release)
         bucket[:] = _model_sorted_releases(bucket)
-        ret = make_return_value()
+        ret = self.inner_register_package(release)
         return ret
 
     @transition(PackageRepository.get_releases)
@@ -1492,7 +1491,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         require(self.state.initialized)
         require_arg(name, Domain.type(str), preferred=["alpha"])
         releases = _model_sorted_releases(self.state.packages.get(name, []))
-        ret = make_return_value(releases)
+        ret = self.inner_get_releases(name)
         return ret
 
     @transition(PackageRepository.has_package)
@@ -1503,7 +1502,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         require(self.state.initialized)
         require_arg(name, Domain.type(str), preferred=["alpha"])
         present = name in self.state.packages
-        ret = make_return_value(present)
+        ret = self.inner_has_package(name)
         return ret
 
     @transition(PackageRepository.all_packages)
@@ -1512,7 +1511,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     ) -> Set[str]:
         require(self.state.initialized)
         names = set(self.state.packages.keys())
-        ret = make_return_value(names)
+        ret = self.inner_all_packages()
         return ret
 
     @transition(DependencySolver.resolve)
@@ -1527,7 +1526,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
             preferred=[[PackageDependency("alpha", VersionRange(">=1.0.0"))]],
         )
         outcome = _model_resolve(self.state.packages, root_dependencies)
-        ret = make_return_value(outcome)
+        ret = self.inner_resolve(root_dependencies)
         self.state.outcomes.append(outcome)
         return ret
 
@@ -1645,5 +1644,5 @@ FakeSemverSolverFuzzTest = compile_hypothesis_test_case(
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-04T22:04:43Z
 # LAST_CHANGED: 2026-11-04T22:04:43Z
-# CHANGE: Remove self-referential conformance assertions from interface transitions; model abstract outcomes instead: SemVer parsing/identifier extraction, precedence ordering, whitespace-trimmed ranges, union/comparator/caret/tilde/wildcard/hyphen satisfies evaluation, descending-precedence release retrieval, and highest-compatible MRV dependency resolution with derivation steps. Pivots now hand abstract outcomes to make_return_value without comparing realized returns.
+# CHANGE: Remove self-referential conformance assertions from interface transitions; model abstract outcomes instead: SemVer parsing/identifier extraction, precedence ordering, whitespace-trimmed ranges, union/comparator/caret/tilde/wildcard/hyphen satisfies evaluation, descending-precedence release retrieval, and highest-compatible MRV dependency resolution with derivation steps. Pivots now hand abstract outcomes to inner_transition without comparing realized returns.
 # --- END AUTOFAB METADATA ---

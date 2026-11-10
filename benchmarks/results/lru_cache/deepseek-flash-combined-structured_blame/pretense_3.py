@@ -370,7 +370,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -450,7 +449,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
     ) -> None:
         require(self.state.initialized)
         require_arg(capacity, Domain.range(1, 64), preferred=[1, 2, 3, 8], error=CacheCapacityError)
-        ret = make_return_value(None)
+        ret = self.inner_configure(capacity)
         assert ret is None
         for _ in range(self.state.size - capacity):
             evicted_key = self.state.keys[0]
@@ -472,7 +471,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         require_arg(default, Domain.any())
         if key in self.state.entries:
             cached = self.state.entries[key]
-            hit: Any = make_return_value(cached)
+            hit: Any = self.inner_get(key, default)
             assert hit == cached
             del self.state.entries[key]
             self.state.entries[key] = cached
@@ -480,7 +479,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
             assert sut(LRUCache).size == self.state.size
             assert sut(LRUCache).keys_in_lru_order() == self.state.keys
             return hit
-        missed: Any = make_return_value(default)
+        missed: Any = self.inner_get(key, default)
         assert missed == default
         self.state.misses += 1
         assert sut(LRUCache).size == self.state.size
@@ -496,7 +495,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         require_arg(key, Domain.type(str), preferred=["alpha", "beta", "gamma"])
         require_arg(value, Domain.any())
         if key in self.state.entries:
-            updated: Optional[Tuple[str, Any]] = make_return_value(None)
+            updated: Optional[Tuple[str, Any]] = self.inner_put(key, value)
             assert updated is None
             del self.state.entries[key]
             self.state.entries[key] = value
@@ -506,14 +505,14 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
             evicted_key = self.state.keys[0]
             evicted_value = self.state.entries[evicted_key]
             evicted: Optional[Tuple[str, Any]] = (evicted_key, evicted_value)
-            eviction_result = make_return_value(evicted)
+            eviction_result = self.inner_put(key, value)
             assert eviction_result == evicted
             del self.state.entries[evicted_key]
             self.state.evictions += 1
             self.state.entries[key] = value
             assert sut(LRUCache).size == self.state.size
             return eviction_result
-        inserted: Optional[Tuple[str, Any]] = make_return_value(None)
+        inserted: Optional[Tuple[str, Any]] = self.inner_put(key, value)
         assert inserted is None
         self.state.entries[key] = value
         assert sut(LRUCache).size == self.state.size
@@ -529,7 +528,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         require_arg(key, Domain.type(str), preferred=["alpha", "beta", "gamma"])
         require_arg(default, Domain.any())
         expected = self.state.entries.get(key, default)
-        inspected: Any = make_return_value(expected)
+        inspected: Any = self.inner_peek(key, default)
         assert inspected == expected
         assert sut(LRUCache).get_stats() == self.state.stats
         assert sut(LRUCache).keys_in_lru_order() == self.state.keys
@@ -544,7 +543,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         require(bool(self.state.entries), error=CacheKeyNotFoundError)
         require_arg(key, Domain.in_set(self.state.keys), error=CacheKeyNotFoundError)
         expected = self.state.entries.get(key)
-        removed: Any = make_return_value(expected)
+        removed: Any = self.inner_remove(key)
         assert removed == expected
         del self.state.entries[key]
         assert sut(LRUCache).size == self.state.size
@@ -556,7 +555,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
     ) -> None:
         require(self.state.initialized)
         stats_before = self.state.stats
-        ret = make_return_value(None)
+        ret = self.inner_clear()
         assert ret is None
         self.state.entries.clear()
         assert sut(LRUCache).is_empty
@@ -568,7 +567,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
     ) -> CacheStats:
         require(self.state.initialized)
         expected = self.state.stats
-        reported: CacheStats = make_return_value(expected)
+        reported: CacheStats = self.inner_get_stats()
         assert reported == expected
         return reported
 
@@ -578,7 +577,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
     ) -> None:
         require(self.state.initialized)
         size_before = self.state.size
-        ret = make_return_value(None)
+        ret = self.inner_reset_stats()
         assert ret is None
         self.state.hits = 0
         self.state.misses = 0
@@ -592,7 +591,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
     ) -> List[str]:
         require(self.state.initialized)
         expected = self.state.keys
-        ordered: List[str] = make_return_value(expected)
+        ordered: List[str] = self.inner_keys_in_lru_order()
         assert ordered == expected
         assert sut(LRUCache).size == self.state.size
         return ordered
@@ -601,7 +600,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
     def capacity(self) -> int:
         require(self.state.initialized)
         expected = self.state.capacity
-        configured: int = make_return_value(expected)
+        configured: int = self.inner_capacity()
         assert configured == expected
         return configured
 
@@ -609,7 +608,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
     def size(self) -> int:
         require(self.state.initialized)
         expected = self.state.size
-        counted: int = make_return_value(expected)
+        counted: int = self.inner_size()
         assert counted == expected
         return counted
 
@@ -617,7 +616,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
     def is_empty(self) -> bool:
         require(self.state.initialized)
         expected = self.state.size == 0
-        empty: bool = make_return_value(expected)
+        empty: bool = self.inner_is_empty()
         assert empty == expected
         return empty
 
@@ -625,7 +624,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
     def is_full(self) -> bool:
         require(self.state.initialized)
         expected = self.state.size >= self.state.capacity
-        full: bool = make_return_value(expected)
+        full: bool = self.inner_is_full()
         assert full == expected
         return full
 

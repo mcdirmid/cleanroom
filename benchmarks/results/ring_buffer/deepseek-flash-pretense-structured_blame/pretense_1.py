@@ -224,7 +224,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -242,13 +241,13 @@ from benchmark_2.parts.ring_buffer.lib.ring_buffer import BufferEmptyError, Ring
 # ==============================================================================
 # Model state mirrors the bounded circular storage: a fixed capacity and the
 # active items kept in FIFO arrival order (oldest first). Transitions model
-# target members 1:1 and pivot through make_return_value(...) so the same body
+# target members 1:1 and pivot through (...) so the same body
 # can be re-executed as an onion against the real implementation.
 #
 #   @transition(RingBuffer.push)
 #   def push(self, item: Any) -> Optional[Any]:
 #       ...
-#       ret = make_return_value(evicted)
+#       ret = (evicted)
 #       return ret
 
 @dataclass
@@ -281,7 +280,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
         if before >= self.state.capacity:
             evicted = self.state.items.pop(0)
         self.state.items.append(item)
-        ret = make_return_value(evicted)
+        ret = self.inner_push(item)
         assert len(self.state.items) == min(before + 1, self.state.capacity)
         assert ret == evicted
         return ret
@@ -293,10 +292,10 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
         ret: Any = None
         if len(self.state.items) == 0:
             with raises(BufferEmptyError):
-                ret = make_return_value(None)
+                ret = self.inner_pop()
             return ret
         removed = self.state.items.pop(0)
-        ret = make_return_value(removed)
+        ret = self.inner_pop()
         assert len(self.state.items) < self.state.capacity
         assert ret == removed
         return ret
@@ -306,7 +305,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
         self,
     ) -> None:
         self.state.items.clear()
-        ret = make_return_value(None)
+        ret = self.inner_clear()
         assert self.state.items == []
         assert ret is None
         return ret
@@ -316,14 +315,14 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
         self,
     ) -> List[Any]:
         snapshot = list(self.state.items)
-        ret = make_return_value(snapshot)
+        ret = self.inner_snapshot_items()
         assert self.state.items == snapshot
         assert ret == snapshot
         return ret
 
     @transition(name="capacity")
     def capacity(self) -> int:
-        ret = make_return_value(self.state.capacity)
+        ret = self.inner_capacity()
         assert ret == self.state.capacity
         assert ret > 0
         return ret
@@ -331,21 +330,21 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
     @transition(name="size")
     def size(self) -> int:
         expected = len(self.state.items)
-        ret = make_return_value(expected)
+        ret = self.inner_size()
         assert ret == expected
         return ret
 
     @transition(name="is_empty")
     def is_empty(self) -> bool:
         expected = len(self.state.items) == 0
-        ret = make_return_value(expected)
+        ret = self.inner_is_empty()
         assert ret == expected
         return ret
 
     @transition(name="is_full")
     def is_full(self) -> bool:
         expected = len(self.state.items) >= self.state.capacity
-        ret = make_return_value(expected)
+        ret = self.inner_is_full()
         assert ret == expected
         return ret
 

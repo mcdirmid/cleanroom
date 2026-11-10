@@ -210,7 +210,6 @@ from typing import Any, List, Optional
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -257,13 +256,13 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
         if len(self.state.items) == self.state.capacity:
             evicted = self.state.items.pop(0)
             self.state.items.append(item)
-            ret: Optional[Any] = make_return_value(evicted)
+            ret: Optional[Any] = self.inner_push(item)
             assert ret == evicted
             return ret
         # POSTCONDITIONS: WHEN size is less than capacity, MUST store item,
         # increment size by 1, and return None.
         self.state.items.append(item)
-        ret = make_return_value(None)
+        ret = self.inner_push(item)
         assert ret is None
         return ret
 
@@ -275,7 +274,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
         # POSTCONDITIONS: WHEN size is greater than zero, MUST remove oldest item,
         # decrement size by 1, and return the removed item.
         removed = self.state.items.pop(0)
-        ret: Any = make_return_value(removed)
+        ret: Any = self.inner_pop()
         assert ret == removed
         return ret
 
@@ -283,7 +282,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
     def clear(self) -> None:
         # POSTCONDITIONS: MUST remove all items from the buffer and reset size to zero.
         self.state.items.clear()
-        ret = make_return_value()
+        ret = self.inner_clear()
         assert not self.state.items
         assert ret is None
         return ret
@@ -292,32 +291,32 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
     def snapshot_items(self) -> List[Any]:
         # POSTCONDITIONS: MUST return all stored items in FIFO arrival order without
         # modifying the buffer contents, size, capacity, or operational state.
-        ret: List[Any] = make_return_value(list(self.state.items))
+        ret: List[Any] = self.inner_snapshot_items()
         assert ret == list(self.state.items)
         assert len(self.state.items) <= self.state.capacity
         return ret
 
     @transition(name="capacity")
     def capacity(self) -> int:
-        ret: int = make_return_value(self.state.capacity)
+        ret: int = self.inner_capacity()
         assert ret == self.state.capacity
         return ret
 
     @transition(name="size")
     def size(self) -> int:
-        ret: int = make_return_value(len(self.state.items))
+        ret: int = self.inner_size()
         assert ret == len(self.state.items)
         return ret
 
     @transition(name="is_empty")
     def is_empty(self) -> bool:
-        ret: bool = make_return_value(len(self.state.items) == 0)
+        ret: bool = self.inner_is_empty()
         assert ret == (len(self.state.items) == 0)
         return ret
 
     @transition(name="is_full")
     def is_full(self) -> bool:
-        ret: bool = make_return_value(len(self.state.items) >= self.state.capacity)
+        ret: bool = self.inner_is_full()
         assert ret == (len(self.state.items) >= self.state.capacity)
         return ret
 

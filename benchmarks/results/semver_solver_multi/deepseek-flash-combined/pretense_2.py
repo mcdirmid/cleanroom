@@ -312,7 +312,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -431,7 +430,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
                     if dependency.name not in self.state.packages:
                         resolvable = False
         self.state.resolvable = resolvable
-        ret = make_return_value(None)
+        ret = self.inner_register_package(release)
         assert ret is None
         return ret
 
@@ -443,7 +442,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         require(self.state.initialized)
         require_arg(name, Domain.in_set(self.state.packages.keys()))
         releases = list(self.state.packages[name])
-        ret = make_return_value(releases)
+        ret = self.inner_get_releases(name)
         assert len(ret) > 0
         for released in ret:
             assert released.name == name
@@ -457,7 +456,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         require(self.state.initialized)
         require_arg(name, Domain.type(str), preferred=["core", "app", "util", "missing"])
         expected = name in self.state.packages
-        ret = make_return_value(expected)
+        ret = self.inner_has_package(name)
         assert ret == expected
         return ret
 
@@ -465,7 +464,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
     def all_packages(self) -> Set[str]:
         require(self.state.initialized)
         expected = set(self.state.packages.keys())
-        ret = make_return_value(expected)
+        ret = self.inner_all_packages()
         assert ret == expected
         return ret
 
@@ -492,7 +491,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
                     f"{chosen.version.major}.{chosen.version.minor}.{chosen.version.patch}"
                 )
         fake_outcome = _build_outcome(selected, steps)
-        ret = make_return_value(fake_outcome)
+        ret = self.inner_resolve(root_dependencies)
         assert ret is not None
         return ret
 
@@ -558,7 +557,7 @@ FakeDependencySolverFuzzTest = compile_hypothesis_test_case(
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-07T02:16:19Z
 # LAST_CHANGED: 2026-11-07T02:00:06Z
-# CHANGE: Implement repository/solver pretense state machine: model package store with descending precedence ordering, root dependency candidates and resolvability gating, all five 1:1 transitions with make_return_value pivots, synthesized fake plus factory, full fake coverage test, and fake Hypothesis fuzz case.
+# CHANGE: Implement repository/solver pretense state machine: model package store with descending precedence ordering, root dependency candidates and resolvability gating, all five 1:1 transitions with inner_transition pivots, synthesized fake plus factory, full fake coverage test, and fake Hypothesis fuzz case.
 # --- END AUTOFAB METADATA ---
 
 
@@ -878,7 +877,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -1014,7 +1012,7 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
     @transition(Version.format)
     def format(self) -> str:
         formatted = _format_version(self.state.current)
-        ret = make_return_value(formatted)
+        ret = self.inner_format()
         self.state.formatted.append(ret)
         assert ret == formatted
         return ret
@@ -1027,7 +1025,7 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
         require(self.state.initialized)
         require_arg(text, Domain.sampled_from(VERSION_TEXTS), preferred=["1.2.3", "1.0.0-alpha"])
         parsed = PARSED_VERSIONS[text.strip()]
-        ret = make_return_value(parsed)
+        ret = self.inner_parse_version(text)
         self.state.parsed.append(ret)
         assert ret == parsed
         return ret
@@ -1042,7 +1040,7 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
         require_arg(v1, Domain.sampled_from(SAMPLE_VERSIONS), preferred=[SAMPLE_VERSIONS[1]])
         require_arg(v2, Domain.sampled_from(SAMPLE_VERSIONS), preferred=[SAMPLE_VERSIONS[4]])
         fake_ret = _precedence_sign(v1, v2)
-        ret = make_return_value(fake_ret)
+        ret = self.inner_compare_precedence(v1, v2)
         self.state.comparisons.append(ret)
         assert ret == fake_ret
         return ret
@@ -1051,7 +1049,7 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
     def is_prerelease(self) -> bool:
         require(self.state.initialized)
         fake_result = len(self.state.current.prerelease) > 0
-        ret = make_return_value(fake_result)
+        ret = self.inner_is_prerelease()
         assert ret == fake_result
         return ret
 
@@ -1440,7 +1438,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -1754,7 +1751,7 @@ class SemverRangeStateMachine(StateMachine[SemverRangeState]):
         require(self.state.initialized)
         require_arg(text, Domain.sampled_from(RANGE_TEXTS), preferred=["^1.2.3", ">=1.0.0 <2.0.0"])
         parsed = PARSED_RANGES[text]
-        ret = make_return_value(parsed)
+        ret = self.inner_parse_range(text)
         self.state.parsed_ranges.append(ret)
         assert ret == parsed
         return ret
@@ -1771,7 +1768,7 @@ class SemverRangeStateMachine(StateMachine[SemverRangeState]):
         require_arg(range_constraint, Domain.sampled_from(SAMPLE_RANGES), preferred=[SAMPLE_RANGES[11]])
         require_arg(include_prerelease, Domain.boolean())
         fake_result = _satisfies_text(version, range_constraint.raw_text, include_prerelease)
-        ret = make_return_value(fake_result)
+        ret = self.inner_satisfies(version, range_constraint, include_prerelease)
         self.state.matches.append(ret)
         assert ret == fake_result
         return ret

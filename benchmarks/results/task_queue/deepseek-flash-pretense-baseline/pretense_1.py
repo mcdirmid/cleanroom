@@ -230,7 +230,6 @@ import unittest
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -278,10 +277,10 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
         require_arg(payload, Domain.type(str), preferred=["payload"])
         # WHEN queue is unavailable, MUST raise QueueUnavailableException.
         if not self.state.available:
-            ret = make_return_value(None)
+            ret = self.inner_submit(task_id, payload)
             return ret
         # WHEN queue is available, MUST append the task to the tail (pending_count grows by one).
-        ret = make_return_value(None)
+        ret = self.inner_submit(task_id, payload)
         self.state.pending.append((task_id, payload))
         assert len(self.state.pending) <= self.state.capacity
         return ret
@@ -293,12 +292,12 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
         require(len(self.state.pending) > 0)
         # WHEN queue is unavailable, MUST raise QueueUnavailableException.
         if not self.state.available:
-            ret = make_return_value(self.state.pending[0][0])
+            ret = self.inner_dispatch()
             return ret
         # WHEN pending_count is greater than 0, MUST pop the oldest task and return its identifier.
         task_id, payload = self.state.pending.pop(0)
         self.state.outcomes[task_id] = f"PROCESSED:{payload.upper()}"
-        ret = make_return_value(task_id)
+        ret = self.inner_dispatch()
         assert ret == task_id
         return ret
 
@@ -309,10 +308,10 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
         require_arg(outcome, Domain.type(str), preferred=["DONE"])
         # WHEN queue is unavailable, MUST raise QueueUnavailableException.
         if not self.state.available:
-            ret = make_return_value(None)
+            ret = self.inner_complete(task_id, outcome)
             return ret
         # WHEN queue is available, MUST record the outcome for task_id.
-        ret = make_return_value(None)
+        ret = self.inner_complete(task_id, outcome)
         self.state.outcomes[task_id] = outcome
         assert self.state.outcomes[task_id] == outcome
         return ret
@@ -323,7 +322,7 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
         require_arg(task_id, Domain.type(str), preferred=["task-1"])
         # WHEN task_id has a recorded outcome, return it; otherwise return None.
         expected = self.state.outcomes.get(task_id)
-        ret = make_return_value(expected)
+        ret = self.inner_get_outcome(task_id)
         assert ret == expected
         return ret
 
@@ -331,7 +330,7 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
     def clear(self) -> None:
         require(self.state.initialized)
         # MUST purge all pending tasks and all recorded outcomes.
-        ret = make_return_value(None)
+        ret = self.inner_clear()
         self.state.pending.clear()
         self.state.outcomes.clear()
         assert len(self.state.pending) == 0
@@ -341,7 +340,7 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
     def set_available(self, available: bool) -> None:
         require(self.state.initialized)
         require_arg(available, Domain.boolean(), preferred=[True])
-        ret = make_return_value(None)
+        ret = self.inner_set_available(available)
         self.state.available = available
         assert self.state.available == available
         return ret
@@ -350,7 +349,7 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
     def pending_count(self) -> int:
         require(self.state.initialized)
         expected = len(self.state.pending)
-        ret = make_return_value(expected)
+        ret = self.inner_pending_count()
         assert ret == expected
         return ret
 
@@ -618,7 +617,6 @@ import unittest
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -672,7 +670,7 @@ class TaskWorkerStateMachine(StateMachine[TaskWorkerState]):
         # WHEN execution succeeds, MUST return the computed outcome string and record telemetry.
         expected = f"PROCESSED:{payload.upper()}"
         self.state.is_busy = True
-        ret = make_return_value(expected)
+        ret = self.inner_execute(task_id, payload)
         self.state.is_busy = False
         return ret
 
@@ -683,7 +681,7 @@ class TaskWorkerStateMachine(StateMachine[TaskWorkerState]):
         require(len(self.state.queue_pending) > 0)
         # WHEN collaborator dispatch succeeds, MUST execute the dispatched task and return its identifier.
         expected = self.state.queue_pending[0][0]
-        ret = make_return_value(expected)
+        ret = self.inner_fetch_and_execute()
         return ret
 
     @transition(TaskWorker.set_failing_task)
@@ -691,7 +689,7 @@ class TaskWorkerStateMachine(StateMachine[TaskWorkerState]):
         require(self.state.initialized)
         require_arg(task_id, Domain.type(str), preferred=["task-1"])
         require_arg(failing, Domain.boolean(), preferred=[True])
-        ret = make_return_value(None)
+        ret = self.inner_set_failing_task(task_id, failing)
         self.state.failing_tasks[task_id] = failing
         assert self.state.failing_tasks.get(task_id, False) == failing
         return ret

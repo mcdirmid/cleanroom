@@ -435,7 +435,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -462,7 +461,7 @@ from benchmark_3.parts.semver_solver.lib.semver_solver import (
 # 1. State Machine Specification (Model & Transitions)
 # ==============================================================================
 # NOTE: Transitions model target methods 1:1 (@transition(TargetClass.method)).
-# Operational branches and contracted exceptions (with raises(ExpectedException): make_return_value())
+# Operational branches and contracted exceptions (with raises(ExpectedException): ())
 # live naturally inside the single transition body (multi-transition splitting is prohibited).
 # require_arg defines the caller precondition contract (checked at runtime on real calls).
 
@@ -608,7 +607,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     @transition(VersionEngine.parse_version)
     def parse_version(self, text: str) -> Version:
         require_arg(text, Domain.sampled_from(_VERSION_TEXTS))
-        ret: Version = make_return_value(_FAKE_VERSION)
+        ret: Version = self.inner_parse_version(text)
         assert ret.major >= 0
         return ret
 
@@ -616,14 +615,14 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     def compare_precedence(self, v1: Version, v2: Version) -> int:
         require_arg(v1, Domain.sampled_from(_VERSIONS))
         require_arg(v2, Domain.sampled_from(_VERSIONS))
-        ret: int = make_return_value(0)
+        ret: int = self.inner_compare_precedence(v1, v2)
         assert isinstance(ret, int)
         return ret
 
     @transition(VersionEngine.parse_range)
     def parse_range(self, text: str) -> VersionRange:
         require_arg(text, Domain.sampled_from(_RANGE_TEXTS))
-        ret: VersionRange = make_return_value(_FAKE_RANGE)
+        ret: VersionRange = self.inner_parse_range(text)
         assert isinstance(ret.raw_text, str)
         return ret
 
@@ -637,7 +636,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         require_arg(version, Domain.sampled_from(_VERSIONS))
         require_arg(range_constraint, Domain.sampled_from(_RANGES))
         require_arg(include_prerelease, Domain.boolean())
-        ret: bool = make_return_value(False)
+        ret: bool = self.inner_satisfies(version, range_constraint, include_prerelease)
         assert isinstance(ret, bool)
         return ret
 
@@ -647,7 +646,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         self.state.packages.setdefault(release.name, []).append(release)
         self.state.registered.add((release.name, release.version))
         self.state.ready = _RELEASE_KEYS.issubset(self.state.registered)
-        ret = make_return_value()
+        ret = self.inner_register_package(release)
         assert ret is None
         return ret
 
@@ -656,7 +655,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         require(self.state.packages)
         require_arg(name, Domain.in_set(tuple(self.state.packages.keys())))
         releases = list(self.state.packages[name])
-        ret: List[PackageRelease] = make_return_value(releases)
+        ret: List[PackageRelease] = self.inner_get_releases(name)
         assert all(release.name == name for release in ret)
         return ret
 
@@ -664,14 +663,14 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     def has_package(self, name: str) -> bool:
         require_arg(name, Domain.type(str))
         present = name in self.state.packages
-        ret: bool = make_return_value(present)
+        ret: bool = self.inner_has_package(name)
         assert ret is present
         return ret
 
     @transition(PackageRepository.all_packages)
     def all_packages(self) -> Set[str]:
         names = set(self.state.packages.keys())
-        ret: Set[str] = make_return_value(names)
+        ret: Set[str] = self.inner_all_packages()
         assert isinstance(ret, set)
         return ret
 
@@ -682,7 +681,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
             root_dependencies,
             cast(Any, Domain.list_of(Domain.sampled_from(_DEPENDENCIES))),
         )
-        ret: ResolutionOutcome = make_return_value(_FAKE_OUTCOME)
+        ret: ResolutionOutcome = self.inner_resolve(root_dependencies)
         assert isinstance(ret, ResolutionOutcome)
         return ret
 

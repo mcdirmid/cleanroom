@@ -303,7 +303,6 @@ import unittest
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -360,7 +359,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         require_arg(capacity, Domain.range(1, 100), preferred=[2, 5])
         excess = len(self.state.entries) - capacity
         victims: List[str] = list(self.state.entries)[:excess] if excess > 0 else []
-        ret = make_return_value()
+        ret = self.inner_configure(capacity)
         if excess > 0:
             for victim in victims:
                 del self.state.entries[victim]
@@ -378,7 +377,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         require_arg(key, Domain.type(str), preferred=["alpha", "beta"])
         require_arg(default, Domain.optional(Domain.any()), preferred=[None])
         expected = self.state.entries.get(key, default)
-        ret = make_return_value(expected)
+        ret = self.inner_get(key, default)
         if key in self.state.entries:
             value = self.state.entries.pop(key)
             self.state.entries[key] = value
@@ -400,7 +399,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         if key not in self.state.entries and len(self.state.entries) >= self.state.capacity:
             victim = self._oldest_key
             expected = (victim, self.state.entries[victim])
-        ret = make_return_value(expected)
+        ret = self.inner_put(key, value)
         if key in self.state.entries:
             del self.state.entries[key]
             self.state.entries[key] = value
@@ -422,7 +421,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         require_arg(key, Domain.type(str), preferred=["alpha", "beta"])
         require_arg(default, Domain.optional(Domain.any()), preferred=[None])
         expected = self.state.entries.get(key, default)
-        ret = make_return_value(expected)
+        ret = self.inner_peek(key, default)
         assert ret == expected
         return ret
 
@@ -433,7 +432,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
     ) -> Any:
         require_arg(key, Domain.in_set(self.state.entries))
         expected = self.state.entries[key]
-        ret = make_return_value(expected)
+        ret = self.inner_remove(key)
         del self.state.entries[key]
         assert ret == expected
         return ret
@@ -442,7 +441,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
     def clear(
         self,
     ) -> None:
-        ret = make_return_value()
+        ret = self.inner_clear()
         self.state.entries.clear()
         assert ret is None
         return ret
@@ -456,7 +455,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
             misses=self.state.misses,
             evictions=self.state.evictions,
         )
-        ret = make_return_value(expected)
+        ret = self.inner_get_stats()
         assert ret == expected
         return ret
 
@@ -464,7 +463,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
     def reset_stats(
         self,
     ) -> None:
-        ret = make_return_value()
+        ret = self.inner_reset_stats()
         self.state.hits = 0
         self.state.misses = 0
         self.state.evictions = 0
@@ -476,35 +475,35 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         self,
     ) -> List[str]:
         expected = list(self.state.entries)
-        ret = make_return_value(expected)
+        ret = self.inner_keys_in_lru_order()
         assert ret == expected
         return ret
 
     @transition(name="capacity")
     def capacity(self) -> int:
         expected = self.state.capacity
-        ret = make_return_value(expected)
+        ret = self.inner_capacity()
         assert ret == expected
         return ret
 
     @transition(name="size")
     def size(self) -> int:
         expected = len(self.state.entries)
-        ret = make_return_value(expected)
+        ret = self.inner_size()
         assert ret == expected
         return ret
 
     @transition(name="is_empty")
     def is_empty(self) -> bool:
         expected = not self.state.entries
-        ret = make_return_value(expected)
+        ret = self.inner_is_empty()
         assert ret == expected
         return ret
 
     @transition(name="is_full")
     def is_full(self) -> bool:
         expected = len(self.state.entries) >= self.state.capacity
-        ret = make_return_value(expected)
+        ret = self.inner_is_full()
         assert ret == expected
         return ret
 

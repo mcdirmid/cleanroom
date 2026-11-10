@@ -7,7 +7,7 @@ domains, overriding transitions to invoke the concrete deque-backed SUT at the
 model state captured before delegation. Overrides are observation-only: they
 never mutate `self.state`, because model bookkeeping is performed by the
 inherited interface transition that delegates into these overrides through
-`make_return_value` under the checked adapter. The real suite drives the
+`inner_transition` under the checked adapter. The real suite drives the
 concrete ring buffer through the checked adapter, covering the push-with-space,
 push-with-eviction, pop, clear, snapshot, and empty-pop error branches.
 """
@@ -230,7 +230,7 @@ RingBufferFuzzTest = compile_hypothesis_test_case(
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-02T23:33:54Z
 # LAST_CHANGED: 2026-11-02T23:33:08Z
-# CHANGE: Remove duplicate model bookkeeping from RingBufferImplPseudoStateMachine overrides: push/pop/clear no longer mutate self.state.items, so each checked call performs model bookkeeping exactly once (in the inherited interface transition that delegates through make_return_value). Overrides now only call_target the SUT and assert contracted returns/postconditions against model state captured before delegation (push evicted-vs-None, pop oldest item, clear void return, snapshot FIFO copy, capacity/size/is_empty/is_full observations). This fixes the reported size drift (size dropping by two) and restores the size/snapshot_items postconditions.
+# CHANGE: Remove duplicate model bookkeeping from RingBufferImplPseudoStateMachine overrides: push/pop/clear no longer mutate self.state.items, so each checked call performs model bookkeeping exactly once (in the inherited interface transition that delegates through ). Overrides now only call_target the SUT and assert contracted returns/postconditions against model state captured before delegation (push evicted-vs-None, pop oldest item, clear void return, snapshot FIFO copy, capacity/size/is_empty/is_full observations). This fixes the reported size drift (size dropping by two) and restores the size/snapshot_items postconditions.
 # PRETENSE_COVERAGE_AUDIT: 2026-11-02T23:33:54Z
 # PRETENSE_QA_AUDIT: 2026-11-02T23:33:33Z
 # --- END AUTOFAB METADATA ---
@@ -254,7 +254,6 @@ from typing import Any, List, Optional
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -300,7 +299,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
         was_full: bool = len(self.state.items) >= self.state.capacity
         oldest: Optional[Any] = self.state.items[0] if self.state.items else None
         evicted: Optional[Any] = oldest if was_full else None
-        ret: Optional[Any] = make_return_value(evicted)
+        ret: Optional[Any] = self.inner_push(item)
         if was_full:
             self.state.items.pop(0)
         self.state.items.append(item)
@@ -317,11 +316,11 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
     def pop(self) -> Any:
         if not self.state.items:
             with raises(BufferEmptyError):
-                make_return_value()
+                self.inner_pop()
             raise BufferEmptyError
         oldest: Any = self.state.items[0]
         before: int = len(self.state.items)
-        ret: Any = make_return_value(oldest)
+        ret: Any = self.inner_pop()
         self.state.items.pop(0)
         assert ret == oldest
         assert len(self.state.items) == before - 1
@@ -330,7 +329,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
 
     @transition(RingBuffer.clear)
     def clear(self) -> None:
-        ret = make_return_value()
+        ret = self.inner_clear()
         self.state.items.clear()
         assert ret is None
         assert len(self.state.items) == 0
@@ -339,7 +338,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
     @transition(RingBuffer.snapshot_items)
     def snapshot_items(self) -> List[Any]:
         snapshot: List[Any] = list(self.state.items)
-        ret: List[Any] = make_return_value(snapshot)
+        ret: List[Any] = self.inner_snapshot_items()
         assert ret == snapshot
         assert len(ret) == len(self.state.items)
         assert list(self.state.items) == snapshot
@@ -347,14 +346,14 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
 
     @transition(name="capacity")
     def capacity(self) -> int:
-        ret: int = make_return_value(self.state.capacity)
+        ret: int = self.inner_capacity()
         assert ret == self.state.capacity
         assert ret >= 1
         return ret
 
     @transition(name="size")
     def size(self) -> int:
-        ret: int = make_return_value(len(self.state.items))
+        ret: int = self.inner_size()
         assert ret == len(self.state.items)
         assert 0 <= ret <= self.state.capacity
         return ret
@@ -362,14 +361,14 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
     @transition(name="is_empty")
     def is_empty(self) -> bool:
         expected_empty: bool = len(self.state.items) == 0
-        ret: bool = make_return_value(expected_empty)
+        ret: bool = self.inner_is_empty()
         assert ret == expected_empty
         return ret
 
     @transition(name="is_full")
     def is_full(self) -> bool:
         expected_full: bool = len(self.state.items) >= self.state.capacity
-        ret: bool = make_return_value(expected_full)
+        ret: bool = self.inner_is_full()
         assert ret == expected_full
         return ret
 
@@ -404,5 +403,5 @@ FakeRingBufferFuzzTest = compile_hypothesis_test_case(
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-02T23:33:12Z
 # LAST_CHANGED: 2026-11-02T23:33:12Z
-# CHANGE: Reorder RingBufferStateMachine.push so all model bookkeeping happens after the make_return_value pivot: was_full/oldest/evicted are computed non-destructively before the pivot, and the eviction pop plus append occur afterwards. This keeps model pre-state pristine at the pivot so a delegating implementation override observes the true pre-call state (e.g. push to a full buffer correctly expects the oldest item as the evicted return), without changing fake transition semantics.
+# CHANGE: Reorder RingBufferStateMachine.push so all model bookkeeping happens after the pivot: was_full/oldest/evicted are computed non-destructively before the pivot, and the eviction pop plus append occur afterwards. This keeps model pre-state pristine at the pivot so a delegating implementation override observes the true pre-call state (e.g. push to a full buffer correctly expects the oldest item as the evicted return), without changing fake transition semantics.
 # --- END AUTOFAB METADATA ---

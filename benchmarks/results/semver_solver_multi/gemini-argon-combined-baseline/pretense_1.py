@@ -288,7 +288,6 @@ import unittest
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -507,7 +506,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
                 ),
             ],
         )
-        ret = make_return_value(None)
+        ret = self.inner_register_package(release)
         releases = self.state.packages.setdefault(release.name, [])
         releases.append(release)
         _sort_releases(releases)
@@ -524,10 +523,10 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         )
         if name not in self.state.packages:
             with raises(PackageNotFoundError):
-                ret = make_return_value([])
+                ret = self.inner_get_releases(name)
             return []
         expected = list(self.state.packages[name])
-        ret = make_return_value(expected)
+        ret = self.inner_get_releases(name)
         assert ret == expected
         return ret
 
@@ -540,7 +539,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
             preferred=["core", "app", "util", "missing"],
         )
         expected = name in self.state.packages
-        ret = make_return_value(expected)
+        ret = self.inner_has_package(name)
         assert ret == expected
         return ret
 
@@ -548,7 +547,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
     def all_packages(self) -> Set[str]:
         require(self.state.initialized)
         expected = set(self.state.packages.keys())
-        ret = make_return_value(expected)
+        ret = self.inner_all_packages()
         assert ret == expected
         return ret
 
@@ -570,12 +569,10 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         outcome = _model_resolve(self.state.packages, root_dependencies)
         if outcome is None:
             with raises(ResolutionConflictError):
-                ret = make_return_value(
-                    ResolutionOutcome(selected_versions={}, derivation_steps=())
-                )
+                ret = self.inner_resolve(root_dependencies)
             return ResolutionOutcome(selected_versions={}, derivation_steps=())
 
-        ret = make_return_value(outcome)
+        ret = self.inner_resolve(root_dependencies)
         assert ret.selected_versions == outcome.selected_versions
         assert ret.derivation_steps == outcome.derivation_steps
         return ret
@@ -798,7 +795,6 @@ import unittest
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -924,9 +920,9 @@ class VersionEngineStateMachine(StateMachine[VersionEngineState]):
         expected = model_parse_version(text)
         if expected is None:
             with raises(InvalidVersionError):
-                ret = make_return_value(Version(0, 0, 0))
+                ret = self.inner_parse_version(text)
             return Version(0, 0, 0)
-        ret = make_return_value(expected)
+        ret = self.inner_parse_version(text)
         self.state.parsed_versions.append(ret)
         assert ret == expected
         assert ret.is_prerelease == (len(expected.prerelease) > 0)
@@ -957,7 +953,7 @@ class VersionEngineStateMachine(StateMachine[VersionEngineState]):
             ],
         )
         expected = model_compare_precedence(v1, v2)
-        ret = make_return_value(expected)
+        ret = self.inner_compare_precedence(v1, v2)
         if expected < 0:
             assert ret < 0
         elif expected > 0:
@@ -1208,7 +1204,6 @@ import unittest
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -1420,11 +1415,11 @@ class RangeEngineStateMachine(StateMachine[RangeEngineState]):
         compiled = model_compile_range(text)
         if compiled is None:
             with raises(InvalidRangeError):
-                ret = make_return_value(VersionRange(""))
+                ret = self.inner_parse_range(text)
             return VersionRange("")
         trimmed, _ = compiled
         expected = VersionRange(raw_text=trimmed)
-        ret = make_return_value(expected)
+        ret = self.inner_parse_range(text)
         self.state.parsed_ranges.append(ret)
         assert ret == expected
         assert str(ret) == expected.raw_text
@@ -1468,7 +1463,7 @@ class RangeEngineStateMachine(StateMachine[RangeEngineState]):
         compiled = model_compile_range(range_constraint.raw_text)
         clauses = compiled[1] if compiled is not None else []
         expected = model_satisfies(version, clauses, include_prerelease)
-        ret = make_return_value(expected)
+        ret = self.inner_satisfies(version, range_constraint, include_prerelease)
         assert ret == expected
         return ret
 

@@ -196,7 +196,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -238,7 +237,7 @@ class InterInterfaceStateMachine(StateMachine[InterInterfaceState]):
     ) -> None:
         require(self.state.initialized)
         require_arg(amount, Domain.range(1, 1000), preferred=[1, 10, 100])
-        ret = make_return_value(None)
+        ret = self.inner_allocate(amount)
         self.state.allocated = self.state.allocated + amount
         assert self.state.allocated >= amount
         return ret
@@ -255,7 +254,7 @@ class InterInterfaceStateMachine(StateMachine[InterInterfaceState]):
             Domain.range(1, self.state.allocated + 1),
             preferred=[1, 5, self.state.allocated],
         )
-        ret = make_return_value(None)
+        ret = self.inner_release(amount)
         self.state.allocated = self.state.allocated - amount
         assert self.state.allocated >= 0
         return ret
@@ -263,7 +262,7 @@ class InterInterfaceStateMachine(StateMachine[InterInterfaceState]):
     @transition(name="allocated")
     def allocated(self) -> int:
         require(self.state.initialized)
-        ret = make_return_value(self.state.allocated)
+        ret = self.inner_allocated()
         return ret
 
     @transition.seeding
@@ -519,7 +518,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -569,9 +567,9 @@ class VaultStateMachine(StateMachine[VaultState]):
         ret: Any = None
         if not self.state.is_active:
             with raises(VaultInactiveException):
-                ret = make_return_value(None)
+                ret = self.inner_deposit(amount)
             return ret
-        ret = make_return_value(None)
+        ret = self.inner_deposit(amount)
         self.state.balance = self.state.balance + amount
         assert self.state.balance >= amount
         return ret
@@ -591,9 +589,9 @@ class VaultStateMachine(StateMachine[VaultState]):
         ret: Any = None
         if not self.state.is_active:
             with raises(VaultInactiveException):
-                ret = make_return_value(None)
+                ret = self.inner_withdraw(amount)
             return ret
-        ret = make_return_value(None)
+        ret = self.inner_withdraw(amount)
         self.state.balance = self.state.balance - amount
         assert self.state.balance >= 0
         return ret
@@ -605,20 +603,20 @@ class VaultStateMachine(StateMachine[VaultState]):
     ) -> None:
         require(self.state.initialized)
         require_arg(active, Domain.boolean())
-        ret = make_return_value(None)
+        ret = self.inner_set_active(active)
         self.state.is_active = active
         return ret
 
     @transition(name="balance")
     def balance(self) -> int:
         require(self.state.initialized)
-        ret = make_return_value(self.state.balance)
+        ret = self.inner_balance()
         return ret
 
     @transition(name="is_active")
     def is_active(self) -> bool:
         require(self.state.initialized)
-        ret = make_return_value(self.state.is_active)
+        ret = self.inner_is_active()
         return ret
 
     @transition.seeding

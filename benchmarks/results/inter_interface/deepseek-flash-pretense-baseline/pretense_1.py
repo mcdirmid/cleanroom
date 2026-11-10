@@ -194,7 +194,6 @@ from pretense import (
     Domain,
     PretenseError,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -247,7 +246,7 @@ class InterInterfaceStateMachine(StateMachine[InterInterfaceState]):
             Domain.range(1, _available_reserves() + 1),
             preferred=[10],
         )
-        ret = make_return_value()
+        ret = self.inner_allocate(amount)
         # POSTCONDITION: a successful allocation increments the allocated total by amount.
         self.state.allocated += amount
         assert self.state.allocated >= amount
@@ -262,7 +261,7 @@ class InterInterfaceStateMachine(StateMachine[InterInterfaceState]):
             Domain.range(1, self.state.allocated + 1),
             preferred=[1],
         )
-        ret = make_return_value()
+        ret = self.inner_release(amount)
         # POSTCONDITION: a successful release decrements the allocated total by amount.
         self.state.allocated -= amount
         assert self.state.allocated >= 0
@@ -271,7 +270,7 @@ class InterInterfaceStateMachine(StateMachine[InterInterfaceState]):
     @transition(name="allocated")
     def allocated(self) -> int:
         # POSTCONDITION: the current modelled allocation total is exposed.
-        ret = make_return_value(self.state.allocated)
+        ret = self.inner_allocated()
         assert ret == self.state.allocated
         return ret
 
@@ -506,7 +505,6 @@ import unittest
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -549,10 +547,10 @@ class VaultStateMachine(StateMachine[VaultState]):
         if not self.state.is_active:
             # POSTCONDITION: an inactive vault raises VaultInactiveException.
             with raises(VaultInactiveException):
-                make_return_value()
+                self.inner_deposit(amount)
                 raise VaultInactiveException("Vault is inactive")
             return None
-        ret = make_return_value()
+        ret = self.inner_deposit(amount)
         # POSTCONDITION: an active vault increments the balance by amount.
         self.state.balance += amount
         assert self.state.balance >= amount
@@ -566,10 +564,10 @@ class VaultStateMachine(StateMachine[VaultState]):
         if not self.state.is_active:
             # POSTCONDITION: an inactive vault raises VaultInactiveException.
             with raises(VaultInactiveException):
-                make_return_value()
+                self.inner_withdraw(amount)
                 raise VaultInactiveException("Vault is inactive")
             return None
-        ret = make_return_value()
+        ret = self.inner_withdraw(amount)
         # POSTCONDITION: an active vault decrements the balance by amount.
         self.state.balance -= amount
         assert self.state.balance >= 0
@@ -578,7 +576,7 @@ class VaultStateMachine(StateMachine[VaultState]):
     @transition(Vault.set_active)
     def set_active(self, active: bool) -> None:
         require_arg(active, Domain.boolean())
-        ret = make_return_value()
+        ret = self.inner_set_active(active)
         # POSTCONDITION: the availability flag is updated to the requested value.
         self.state.is_active = active
         assert self.state.is_active == active
@@ -587,14 +585,14 @@ class VaultStateMachine(StateMachine[VaultState]):
     @transition(name="balance")
     def balance(self) -> int:
         # POSTCONDITION: the current modelled balance is exposed.
-        ret = make_return_value(self.state.balance)
+        ret = self.inner_balance()
         assert ret == self.state.balance
         return ret
 
     @transition(name="is_active")
     def is_active(self) -> bool:
         # POSTCONDITION: the current modelled availability flag is exposed.
-        ret = make_return_value(self.state.is_active)
+        ret = self.inner_is_active()
         assert ret == self.state.is_active
         return ret
 

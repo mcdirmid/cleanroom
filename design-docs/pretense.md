@@ -365,16 +365,16 @@ flowchart TD
         A1["Abstract State: <Iface>State"]
         A2["Seeding Transitions: @transition.seeding"]
         A3["1:1 Method Transitions: @transition(Target.method)"]
-        A4["AST Pivot: ret = make_return_value(fake_val)"]
+        A4["Inner Transition: ret = self.inner_<method>(...)"]
     end
 
     subgraph S2["2. Dual-Mode Execution"]
         B1["Mode A: Fake Mode (synthesize_fake)"]
         B2["Mode B: Impl Verification Mode"]
-        A4 -->|Fake Synthesis| B1
-        A4 -->|SUT Binding| B2
-        B1 --> C1["Executes fake logic; verifies assert against Fake"]
-        B2 --> C2["Runner calls target.method(); binds real ret"]
+        A4 -->|Fake Mode: inner computes fake| B1
+        A4 -->|Impl Mode: pseudo-SM overrides inner| B2
+        B1 --> C1["Executes fake inner method; verifies assert against Fake"]
+        B2 --> C2["Overridden inner method calls target.method()"]
     end
 
     subgraph S3["3. Universal Verification & Observability"]
@@ -401,14 +401,17 @@ Instead of splitting a method across multiple transitions, **a single transition
 def remove(self, key: str) -> Any:
     require_arg(key, Domain.text())
     if key in self.state.items:
-        fake_val = self.state.items.pop(key)
-        ret = make_return_value(fake_val)
-        assert ret == fake_val
+        ret = self.inner_remove(key)
+        expected = self.state.items.pop(key)
+        assert ret == expected
         return ret
     else:
         with raises(CacheKeyNotFoundError):
-            make_return_value(None)
+            self.inner_remove(key)
         raise CacheKeyNotFoundError()
+
+def inner_remove(self, key: str) -> Any:
+    return self.state.items[key]
 ```
 
 ### Principle 3: The Epistemic Boundary of Interface State Machines
@@ -451,42 +454,43 @@ FakeLRUCacheFuzzTest = compile_hypothesis_test_case(LRUCacheStateMachine, FakeLR
 ```
 Fuzzing explores thousands of random transition sequences against `Fake<Target>`, guaranteeing that downstream components receive a certified, fully verified in-memory fake.
 
-### Principle 8: Pre-State Snapshots & Differentials via AST Chopping
+### Principle 8: Pre-State Snapshots & Differentials via Inner Transitions
 Many formal postconditions are state differentials ($\Delta = \text{new} - \text{old}$):
 ```python
 @transition(LRUCache.get)
 def get(self, key: str, default: Optional[Any] = None) -> Any:
-    # 1. PRE-CALL SLICE (Evaluates BEFORE SUT runs)
+    # 1. PRE-CALL SLICE (Evaluates BEFORE inner transition runs)
     assert sut(LRUCache).size == len(self.state.items)
     old_hits = sut(LRUCache).hits
     
-    # 2. THE AST PIVOT (Split point for AST Chopper)
-    fake_val = self.state.items.get(key, default)
-    ret = make_return_value(fake_val)
+    # 2. INNER TRANSITION INVOCATION (Polymorphic Delegation)
+    ret = self.inner_get(key, default)
     
-    # 3. POST-CALL SLICE (Evaluates AFTER SUT runs)
+    # 3. POST-CALL SLICE (Evaluates AFTER inner transition runs)
     if key in self.state.items:
         self.state.hits += 1
         assert sut(LRUCache).hits == old_hits + 1
         
     return ret
-```
-The AST compiler automatically slices pre-pivot statements into `_pre_<method>`, invokes the target, and slices post-pivot statements into `_post_<method>`.
 
-### Principle 9: The Implementation Pseudo State Machine (`call_target`)
+def inner_get(self, key: str, default: Optional[Any] = None) -> Any:
+    return self.state.items.get(key, default)
+```
+Pre-transition statements capture snapshots, the inner transition computes the return value, and post-transition statements evaluate differentials.
+
+### Principle 9: The Implementation Pseudo State Machine (`inner_<method>`)
 The implementation layer is termed an **Implementation Pseudo State Machine** (`<Impl>PseudoStateMachine`):
 - Owns **zero state variables of its own** and defines no independent state transitions.
 - Shares `<Iface>State` directly.
 - Contains **zero `require_arg` statements**; all parameter domains and strategies are inherited from the interface state machine (`PN_IMPL_NO_REQUIRE_ARG`).
-- Does **never mutate `self.state` directly** (`PN_IMPL_NO_STATE_MUTATION`). The runtime linear transition execution automatically runs the base interface transition first to evaluate preconditions, generate domain values, and mutate model state, delegating via `make_return_value` to the implementation override.
-- Uses `ret = call_target(target.method(*args))` as the AST pivot to capture private SUT pre-state snapshots and verify private differentials:
+- Does **never mutate `self.state` directly** (`PN_IMPL_NO_STATE_MUTATION`). When an implementation pseudo state machine transition executes, domain constraints, preconditions, and model state updates are inherited from the parent interface state machine, invoking the overridden inner transition directly through standard method polymorphism without onion wrappers.
+- Overrides `inner_<method>(self, *args)` to invoke the concrete target and return the real return value:
 ```python
 class LRUCacheImplPseudoStateMachine(LRUCacheStateMachine):
-    @transition(LRUCache.put)
-    def put(self, key: str, value: Any) -> Any:
+    def inner_put(self, key: str, value: Any) -> Any:
         target: LRUCache = sut(LRUCache)
         old_nodes = len(target._items)
-        ret = call_target(target.put(key, value))
+        ret = target.put(key, value)
         assert len(target._items) == len(self.state.items)
         return ret
 ```
@@ -509,11 +513,11 @@ In `pretense_qa.md`, failures during cross-testing or state machine execution ar
 2. **Library Defect (Blame `lib`)**: Violation of explicit contracts mandated by `low/*.pyi`.
 3. **Prohibition on Blaming Passing Targets**: When test suites pass (100%), the auditor is strictly forbidden from blaming either role based on speculative prose.
 
-### Principle 13: AST Chopping & Compile-Time Validation
+### Principle 13: Inner Transition Structure & Compile-Time Validation
 Original Pretense's speculative `_run_pass1` is replaced with **static AST analysis** in `pretense_lint.py`:
 - Parses transition functions at edit time.
-- Chops the AST at pivot nodes (`make_return_value` in interface; `call_target()` in impl pseudo state machine).
-- Validates that `requires` and `require_arg` appear before the pivot, snapshots `old_*` are assigned before the pivot, and assertions conform to single-argument rules.
+- Validates that transitions delegate to inner transition methods (`self.inner_<name>` in interface; overridden `inner_<name>` in impl pseudo state machine).
+- Validates that `requires` and `require_arg` appear before `self.inner_<name>`, snapshots `old_*` are assigned before calling the inner transition, and assertions conform to single-argument rules.
 
 ### Principle 14: Prohibition of Pre-Seeding & Blank Initial State Invariant
 In multi-component architectures, components under test interact with external collaborator singletons. A recurring failure mode in early benchmarks was **static pre-seeding**: test authors populated collaborator states inside `make_sut()` or `setUp()` fixtures (e.g., pre-enqueuing 10 tasks into a collaborator queue so that `TaskWorker.fetch_and_execute()` would not encounter an empty queue).
@@ -596,15 +600,16 @@ Interface pretense modules (`pretense/<name>_pretense.py`) must provide a verifi
 1. **Mandatory Fixed Fake Test Suite**: Interface modules define `Test<Target>Fake(unittest.TestCase)` exercising 100% of declared `@transition` and `@transition.seeding` methods against `make_<target>_fake()`.
 2. **Linter Enforcement (`[PRE_LINT_INTERFACE_TRANSITION_COVERAGE]`)**: `pretense_lint.py` inspects `Test<Target>Fake` and verifies that every transition and seeding transition is invoked. If a transition is missing, the linter emits a failure:
    `error: [PRE_LINT_INTERFACE_TRANSITION_COVERAGE] interface transition 'TargetStateMachine.<method>' is not covered in 'Test<Target>Fake'. Advice: Ensure its required conditions can be properly reached by existing transitions, or add seeding transitions if coverage is difficult.`
-3. **Prohibition of `call_target` in Interface Modules (`[PRE_LINT_NO_CALL_TARGET_IN_INTERFACE]`)**: Interface state machines use `ret = make_return_value(...)`. `call_target` is reserved exclusively for implementation pseudo-state machines.
+3. **Prohibition of `call_target` in Interface Modules (`[PRE_LINT_NO_CALL_TARGET_IN_INTERFACE]`)**: Interface state machines delegate to inner transitions (`ret = self.inner_<name>(...)`). `call_target` is reserved exclusively for implementation pseudo-state machines.
 
-### Principle 20: Base Interface Transition Delegation & Onion Dispatch
+### Principle 20: Base Interface Transition Delegation & Method Polymorphism
 To eliminate duplication and prevent cognitive desynchronization between interface state machines and implementation pseudo-state machines:
-1. **Automatic Runtime Transition Wrapping**: In `pretense.py`, the engine (`_build_linear_transition`) detects when an implementation pseudo-state machine overrides a base interface transition. It wraps the override in an onion wrapper:
+1. **Standard Python Polymorphic Delegation**: When an implementation pseudo-state machine is driven by a checked adapter:
    - When the transition is invoked, the base interface transition executes first.
-   - The base transition evaluates `requires(...)` caller preconditions, draws parameter domains (`require_arg`), and applies reference model mutations (`self.state`).
-   - Upon encountering `ret = make_return_value(...)` in the base transition, control pivots to the implementation override.
-   - The implementation override evaluates pre-state differentials, invokes the real SUT via `call_target(target.method(*args))`, and checks private SUT assertions.
+   - The base transition evaluates `requires(...)` caller preconditions and draws parameter domains (`require_arg`).
+   - The base transition invokes `ret = self.inner_<name>(*args)`, which dispatches via standard Python polymorphism to the implementation override.
+   - The implementation override evaluates pre-state differentials, invokes the real SUT via `target.method(*args)` (or `call_target(target.method(*args))`), and checks private SUT assertions.
+   - Control returns to the base transition to apply reference model mutations (`self.state`) and verify postconditions.
 2. **Zero Duplication in Implementation Pseudo-State Machines**:
    - Implementation pseudo-state machines **must NOT duplicate `require(...)` preconditions**; these are evaluated by the base class.
    - Implementation pseudo-state machines **must NOT declare `require_arg(...)` parameter domains** (`PN_IMPL_NO_REQUIRE_ARG`); domains are inherited from the base class.
@@ -691,7 +696,7 @@ While generative fuzz testing stays strictly within valid operational paths, sta
   require_arg(text, len(text) > 0, error=InvalidRangeError)
   ```
 - **The Precondition Short-Circuit Defect**:
-  Historically, when a fixed test attempted to verify a contract violation via `checked.method(...)`, Pretense evaluated `require(...)` *before* the AST pivot (`make_return_value` / `call_target`). When the precondition failed, Pretense raised the error immediately, short-circuiting the call before the real SUT was ever invoked. Consequently, the library's `raise InvalidVersionError(...)` statement was never executed, leaving error handling branches persistently uncovered and triggering coverage audit deadlocks.
+  Historically, when a fixed test attempted to verify a contract violation via `checked.method(...)`, Pretense evaluated `require(...)` *before* delegating to the inner transition. When the precondition failed, Pretense raised the error immediately, short-circuiting the call before the real SUT was ever invoked. Consequently, the library's `raise InvalidVersionError(...)` statement was never executed, leaving error handling branches persistently uncovered and triggering coverage audit deadlocks.
 - **The Architectural Solution (`checked.violating(...)`)**:
   Fixed scenario tests verify contracted error outcomes on the SUT using `checked.violating(ExpectedError, match="...")` (or context manager `with checked.violating(ExpectedError):`):
   ```python
@@ -898,8 +903,8 @@ Authored alongside the interface specification:
 Authored alongside the library implementation:
 1. `<Impl>PseudoStateMachine` inheriting from `<Iface>StateMachine` (or multiple interface state machines if implementing multiple interfaces):
    - **Defines ZERO state dataclasses of its own.**
-   - Uses `call_target(target.method(*args))` as the AST pivot to capture pre-state snapshots and verify private internal invariants.
-   - **Never mutates `self.state` directly (`PN_IMPL_NO_STATE_MUTATION`)**; runtime onion dispatch executes the inherited base interface transition to evaluate preconditions, generate domain values, and mutate model state, delegating through `make_return_value` to the override.
+   - Overrides `inner_<method>(self, *args)` to invoke `target.method(*args)` on `target = sut(TargetClass)`.
+   - **Never mutates `self.state` directly (`PN_IMPL_NO_STATE_MUTATION`)**; runtime dispatch executes the inherited base interface transition to evaluate preconditions, generate domain values, and mutate model state, delegating through `self.inner_<name>` to the override.
    - Contains **zero `require_arg` declarations** (`PN_IMPL_NO_REQUIRE_ARG`); domain constraints and generation strategies are inherited from the interface state machine.
    - Asserts postconditions across both SUT and collaborator fakes via `sut(CollabClass)` and `sut_state(CollabState)`.
 2. `Test<Impl>Real(unittest.TestCase)` driving targeted lifecycle scenarios through `self.checked = self.sm.as_checked(TargetClass, self.real)` to achieve 100% statement coverage.
@@ -1059,7 +1064,6 @@ from typing import Any, Optional, Tuple
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require_arg,
     requires,
@@ -1093,32 +1097,26 @@ class LRUCacheStateMachine(StateMachine[LRUCacheState]):
     @transition(LRUCache.configure)
     def configure(self, capacity: int) -> None:
         require_arg(capacity, Domain.integers(min_value=1))
-        old_size = len(self.state.items)
-        
-        make_return_value(None)
-        
+        self.inner_configure(capacity)
         self.state.capacity = capacity
         while len(self.state.items) > self.state.capacity:
             self.state.items.popitem(last=False)
             self.state.evictions += 1
-            
         assert sut(LRUCache).capacity == capacity
         assert sut(LRUCache).size <= capacity
+
+    def inner_configure(self, capacity: int) -> None:
+        return None
 
     @transition(LRUCache.get)
     def get(self, key: str, default: Optional[Any] = None) -> Any:
         require_arg(key, Domain.text())
         require_arg(default, Domain.any(), preferred=[None])
-        
         assert sut(LRUCache).size == len(self.state.items)
         assert sut(LRUCache).is_empty == (len(self.state.items) == 0)
-        
         old_hits = sut(LRUCache).hits
         old_misses = sut(LRUCache).misses
-        
-        fake_val = self.state.items.get(key, default)
-        ret = make_return_value(fake_val)
-        
+        ret = self.inner_get(key, default)
         if key in self.state.items:
             self.state.hits += 1
             self.state.items.move_to_end(key)
@@ -1130,24 +1128,18 @@ class LRUCacheStateMachine(StateMachine[LRUCacheState]):
             assert ret == default
             assert sut(LRUCache).misses == old_misses + 1
             assert sut(LRUCache).hits == old_hits
-            
         return ret
+
+    def inner_get(self, key: str, default: Optional[Any] = None) -> Any:
+        return self.state.items.get(key, default)
 
     @transition(LRUCache.put)
     def put(self, key: str, value: Any) -> Optional[Tuple[str, Any]]:
         require_arg(key, Domain.text())
         require_arg(value, Domain.any())
-        
         assert sut(LRUCache).size <= sut(LRUCache).capacity
-        
         old_evictions = sut(LRUCache).eviction_count
-        if key not in self.state.items and len(self.state.items) >= self.state.capacity:
-            fake_evicted = next(iter(self.state.items.items()))
-        else:
-            fake_evicted = None
-            
-        evicted = make_return_value(fake_evicted)
-        
+        evicted = self.inner_put(key, value)
         if evicted is not None:
             evicted_k, _ = evicted
             if evicted_k in self.state.items:
@@ -1156,29 +1148,34 @@ class LRUCacheStateMachine(StateMachine[LRUCacheState]):
                 assert sut(LRUCache).eviction_count == old_evictions + 1
         else:
             assert sut(LRUCache).eviction_count == old_evictions
-            
         self.state.items[key] = value
         self.state.items.move_to_end(key)
-        
         assert sut(LRUCache).size == len(self.state.items)
         assert sut(LRUCache).is_empty == (len(self.state.items) == 0)
         return evicted
+
+    def inner_put(self, key: str, value: Any) -> Optional[Tuple[str, Any]]:
+        if key not in self.state.items and len(self.state.items) >= self.state.capacity:
+            return next(iter(self.state.items.items()))
+        return None
 
     @transition(LRUCache.remove)
     def remove(self, key: str) -> Any:
         require_arg(key, Domain.text())
         assert sut(LRUCache).size == len(self.state.items)
-        
         if key in self.state.items:
-            fake_val = self.state.items.pop(key)
-            ret = make_return_value(fake_val)
-            assert ret == fake_val
+            ret = self.inner_remove(key)
+            expected = self.state.items.pop(key)
+            assert ret == expected
             assert sut(LRUCache).size == len(self.state.items)
             return ret
         else:
             with raises(CacheKeyNotFoundError):
-                make_return_value(None)
+                self.inner_remove(key)
             raise CacheKeyNotFoundError()
+
+    def inner_remove(self, key: str) -> Any:
+        return self.state.items[key]
 
 FakeLRUCache = synthesize_fake(LRUCacheStateMachine)
 
@@ -1244,7 +1241,7 @@ LRUCacheFuzzTest = compile_hypothesis_test_case(LRUCacheImplPseudoStateMachine, 
 
 ### AST Chopping & Compilation Pipeline
 The Pretense runtime parses state machine transition bodies using Python's `ast` module:
-1. Locates the pivot call (`make_return_value` in interface; `call_target` in impl).
+1. Locates the inner transition call (`self.inner_<name>` in interface; `inner_<name>` override in impl).
 2. Extracts statements occurring before the pivot into `_pre_<method>`, validating that `old_*` assignments and pre-assertions do not reference post-call identifiers.
 3. Generates the SUT invocation call on the active target.
 4. Extracts post-pivot statements into `_post_<method>`, binding the return value.
@@ -1331,7 +1328,7 @@ These benchmarks demonstrate that Pretense reliably scales from single-component
 | **Branching & Exceptions** | Mutually exclusive `@transition` definitions | **Standard Python `if/else` and `with raises`** |
 | **Error Handling Contract** | Untyped exception catching | **Contracted Errors (`low/*.pyi`) vs Uncontracted Caller Preconditions** |
 | **Error Testing Rule** | Fuzzing caught `*Error` freely | **Fuzzing generates valid inputs by construction; fixed scenario tests verify contracted errors via `require(..., error=...)`** |
-| **Return Value Handling** | Magic `ensure_ret(...)` macro | **`ret = make_return_value(...)` / `call_target()`** |
+| **Return Value Handling** | Magic `ensure_ret(...)` macro | **Inner Transition Methods (`self.inner_<name>` / inner override)** |
 | **Pre-State Snapshots** | Not supported | **AST Chopper preserves locals before pivot** |
 | **Impl State Machine** | Duplicate `<Impl>State` with parallel syncing | **Implementation Pseudo State Machine (Zero state)** |
 | **Contract Invariants** | Ad-hoc `ensure(...)` crashing on dummy contexts | **Universal native `assert` on SUT and Fake** |

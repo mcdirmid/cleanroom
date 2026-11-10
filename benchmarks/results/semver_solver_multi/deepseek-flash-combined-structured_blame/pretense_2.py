@@ -299,7 +299,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -479,23 +478,23 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
     # ------------------------------------------------------------------
 
     def inner_register_package(self, release: PackageRelease) -> Any:
-        return make_return_value()
+        return None
 
     def inner_get_releases(self, name: str) -> Any:
-        return make_return_value(list(self.state.packages[name]))
+        return list(self.state.packages[name])
 
     def inner_has_package(self, name: str) -> Any:
-        return make_return_value(name in self.state.packages)
+        return name in self.state.packages
 
     def inner_all_packages(self) -> Any:
-        return make_return_value(set(self.state.packages.keys()))
+        return set(self.state.packages.keys())
 
     def inner_resolve(
         self,
         root_dependencies: Collection[PackageDependency],
     ) -> Any:
         selected = {dependency.name: _make_version(1, 0, 0) for dependency in root_dependencies}
-        return make_return_value(_make_outcome(selected, ("resolve",)))
+        return _make_outcome(selected, ("resolve",))
 
     # ------------------------------------------------------------------
     # 1:1 transitions.
@@ -807,7 +806,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -885,16 +883,16 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
     # ------------------------------------------------------------------
 
     def inner_format(self) -> Any:
-        return make_return_value(_FAKE_FORMATTED_VERSION)
+        return _FAKE_FORMATTED_VERSION
 
     def inner_is_prerelease(self) -> Any:
-        return make_return_value(False)
+        return False
 
     def inner_parse_version(self, text: str) -> Any:
-        return make_return_value(_FAKE_PARSED_VERSION)
+        return _FAKE_PARSED_VERSION
 
     def inner_compare_precedence(self, v1: Version, v2: Version) -> Any:
-        return make_return_value(0)
+        return 0
 
     # ------------------------------------------------------------------
     # 1:1 transitions.
@@ -1624,7 +1622,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -1754,7 +1751,7 @@ class SemverRangeStateMachine(StateMachine[SemverRangeState]):
     # ------------------------------------------------------------------
 
     def inner_parse_range(self, text: str) -> Any:
-        return make_return_value(_make_range(text))
+        return _make_range(text)
 
     def inner_satisfies(
         self,
@@ -1762,7 +1759,7 @@ class SemverRangeStateMachine(StateMachine[SemverRangeState]):
         range_constraint: VersionRange,
         include_prerelease: bool,
     ) -> Any:
-        return make_return_value(True)
+        return True
 
     # ------------------------------------------------------------------
     # 1:1 transitions.

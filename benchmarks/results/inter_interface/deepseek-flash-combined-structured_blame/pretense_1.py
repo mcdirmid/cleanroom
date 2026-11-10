@@ -205,7 +205,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -255,16 +254,16 @@ class AllocatorStateMachine(StateMachine[AllocatorState]):
         ret: Any = None
         if amount <= 0 or amount > before_reserves:
             with raises(AllocationLimitError):
-                ret = make_return_value()
+                ret = self.inner_allocate(amount)
             assert self.state.allocated == before_allocated
         elif self.state.vault_active:
-            ret = make_return_value()
+            ret = self.inner_allocate(amount)
             self.state.reserves = before_reserves - amount
             self.state.allocated = before_allocated + amount
             assert self.state.allocated == before_allocated + amount
         else:
             with raises(VaultInactiveException):
-                ret = make_return_value()
+                ret = self.inner_allocate(amount)
             assert self.state.allocated == before_allocated
         assert ret is None
         return ret
@@ -278,16 +277,16 @@ class AllocatorStateMachine(StateMachine[AllocatorState]):
         ret: Any = None
         if amount <= 0 or amount > before_allocated:
             with raises(AllocationLimitError):
-                ret = make_return_value()
+                ret = self.inner_release(amount)
             assert self.state.allocated == before_allocated
         elif self.state.vault_active:
-            ret = make_return_value()
+            ret = self.inner_release(amount)
             self.state.allocated = before_allocated - amount
             self.state.reserves = before_reserves + amount
             assert self.state.allocated == before_allocated - amount
         else:
             with raises(VaultInactiveException):
-                ret = make_return_value()
+                ret = self.inner_release(amount)
             assert self.state.allocated == before_allocated
         assert ret is None
         return ret
@@ -295,7 +294,7 @@ class AllocatorStateMachine(StateMachine[AllocatorState]):
     @transition(name="allocated")
     def allocated(self) -> int:
         """Reports the cumulative amount of funds actively allocated."""
-        ret = make_return_value(self.state.allocated)
+        ret = self.inner_allocated()
         assert ret == self.state.allocated
         return ret
 
@@ -574,7 +573,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -622,15 +620,15 @@ class VaultStateMachine(StateMachine[VaultState]):
         ret: Any = None
         if amount <= 0:
             with raises(InsufficientFundsError):
-                ret = make_return_value()
+                ret = self.inner_deposit(amount)
             assert self.state.balance == before
         elif self.state.is_active:
-            ret = make_return_value()
+            ret = self.inner_deposit(amount)
             self.state.balance = before + amount
             assert self.state.balance == before + amount
         else:
             with raises(VaultInactiveException):
-                ret = make_return_value()
+                ret = self.inner_deposit(amount)
             assert self.state.balance == before
         assert ret is None
         return ret
@@ -643,15 +641,15 @@ class VaultStateMachine(StateMachine[VaultState]):
         ret: Any = None
         if amount <= 0 or amount > before:
             with raises(InsufficientFundsError):
-                ret = make_return_value()
+                ret = self.inner_withdraw(amount)
             assert self.state.balance == before
         elif self.state.is_active:
-            ret = make_return_value()
+            ret = self.inner_withdraw(amount)
             self.state.balance = before - amount
             assert self.state.balance == before - amount
         else:
             with raises(VaultInactiveException):
-                ret = make_return_value()
+                ret = self.inner_withdraw(amount)
             assert self.state.balance == before
         assert ret is None
         return ret
@@ -660,7 +658,7 @@ class VaultStateMachine(StateMachine[VaultState]):
     def set_active(self, active: bool) -> None:
         """Toggles vault availability."""
         require_arg(active, Domain.boolean(), preferred=[True])
-        ret = make_return_value()
+        ret = self.inner_set_active(active)
         self.state.is_active = active
         assert self.state.is_active == active
         assert ret is None
@@ -669,14 +667,14 @@ class VaultStateMachine(StateMachine[VaultState]):
     @transition(name="balance")
     def balance(self) -> int:
         """Reports the balance currently held by the vault."""
-        ret = make_return_value(self.state.balance)
+        ret = self.inner_balance()
         assert ret == self.state.balance
         return ret
 
     @transition(name="is_active")
     def is_active(self) -> bool:
         """Reports whether the vault is currently active."""
-        ret = make_return_value(self.state.is_active)
+        ret = self.inner_is_active()
         assert ret == self.state.is_active
         return ret
 

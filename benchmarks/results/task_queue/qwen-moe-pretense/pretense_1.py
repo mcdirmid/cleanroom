@@ -231,7 +231,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -249,20 +248,20 @@ from benchmark_4.parts.task_queue.lib.task_queue import (
 # 1. State Machine Specification (Model & Transitions)
 # ==============================================================================
 # NOTE: Transitions model target methods 1:1 (@transition(TargetClass.method)).
-# Operational branches and contracted exceptions (with raises(ExpectedException): make_return_value())
+# Operational branches and contracted exceptions (with raises(ExpectedException): ())
 # live naturally inside the single transition body (multi-transition splitting is prohibited).
 # require_arg defines the caller precondition contract (checked at runtime on real calls).
 # Use Domain.type(T) or open domain; use preferred=[...] to cluster/bias fuzz inputs without restricting the contract.
 #
 # REFERENCE PATTERNS:
-#   # 1:1 Transition Pattern with Domain strategies and make_return_value pivot:
+#   # 1:1 Transition Pattern with Domain strategies and inner_transition pivot:
 #   @transition(TargetClass.method)
 #   def method(self, arg1: str, count: int) -> ReturnType:
 #       require(self.state.initialized)
 #       require_arg(arg1, Domain.type(str), preferred=["sample"])
 #       require_arg(count, Domain.range(1, 100), preferred=[10])
 #       fake_ret = ReturnType(...)  # or None / value
-#       ret = make_return_value(fake_ret)
+#       ret = (fake_ret)
 #       self.state.items.append(ret)
 #       assert ret == fake_ret
 #       return ret
@@ -315,7 +314,7 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
         require(self.state.is_available)
         require_arg(task_id, Domain.type(str), preferred=["task_001"])
         require_arg(payload, Domain.type(str), preferred=["work_001"])
-        ret = make_return_value(None)
+        ret = self.inner_submit(task_id, payload)
         self.state.pending_count = self.state.pending_count + 1
         self.state.is_empty = self.state.pending_count == 0
         assert ret is None
@@ -327,7 +326,7 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
     ) -> str:
         require(self.state.is_available)
         require(not self.state.is_empty)
-        ret: str = make_return_value("task_001")
+        ret: str = self.inner_dispatch()
         self.state.pending_count = max(0, self.state.pending_count - 1)
         self.state.is_empty = self.state.pending_count == 0
         assert ret is not None
@@ -342,7 +341,7 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
         require(self.state.is_available)
         require_arg(task_id, Domain.type(str), preferred=["task_001"])
         require_arg(outcome, Domain.type(str), preferred=["success"])
-        ret = make_return_value()
+        ret = self.inner_complete(task_id, outcome)
         assert ret is None
         return ret
 
@@ -352,7 +351,7 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
         task_id: str,
     ) -> Optional[str]:
         require_arg(task_id, Domain.type(str), preferred=["task_001"])
-        ret: Optional[str] = make_return_value("outcome_001")
+        ret: Optional[str] = self.inner_get_outcome(task_id)
         return ret
 
     @transition(TaskQueue.clear)
@@ -360,7 +359,7 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
         self,
     ) -> None:
         require(self.state.is_available)
-        ret = make_return_value()
+        ret = self.inner_clear()
         self.state.pending_count = 0
         self.state.is_empty = True
         assert ret is None
@@ -372,14 +371,14 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
         available: bool,
     ) -> None:
         require_arg(available, Domain.boolean())
-        ret = make_return_value()
+        ret = self.inner_set_available(available)
         self.state.is_available = available
         assert ret is None
         return ret
 
     @transition(name="pending_count")
     def pending_count(self) -> int:
-        ret: int = make_return_value(self.state.pending_count)
+        ret: int = self.inner_pending_count()
         return ret
 
     @transition.seeding
@@ -662,7 +661,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -681,20 +679,20 @@ from benchmark_4.parts.task_queue.lib.task_worker import (
 # 1. State Machine Specification (Model & Transitions)
 # ==============================================================================
 # NOTE: Transitions model target methods 1:1 (@transition(TargetClass.method)).
-# Operational branches and contracted exceptions (with raises(ExpectedException): make_return_value())
+# Operational branches and contracted exceptions (with raises(ExpectedException): ())
 # live naturally inside the single transition body (multi-transition splitting is prohibited).
 # require_arg defines the caller precondition contract (checked at runtime on real calls).
 # Use Domain.type(T) or open domain; use preferred=[...] to cluster/bias fuzz inputs without restricting the contract.
 #
 # REFERENCE PATTERNS:
-#   # 1:1 Transition Pattern with Domain strategies and make_return_value pivot:
+#   # 1:1 Transition Pattern with Domain strategies and inner_transition pivot:
 #   @transition(TargetClass.method)
 #   def method(self, arg1: str, count: int) -> ReturnType:
 #       require(self.state.initialized)
 #       require_arg(arg1, Domain.type(str), preferred=["sample"])
 #       require_arg(count, Domain.range(1, 100), preferred=[10])
 #       fake_ret = ReturnType(...)  # or None / value
-#       ret = make_return_value(fake_ret)
+#       ret = (fake_ret)
 #       self.state.items.append(ret)
 #       assert ret == fake_ret
 #       return ret
@@ -746,7 +744,7 @@ class TaskWorkerStateMachine(StateMachine[TaskWorkerState]):
         require(self.state.initialized)
         require_arg(task_id, Domain.in_set(self.state.valid_task_ids), preferred=["task_001"])
         require_arg(payload, Domain.type(str), preferred=["work_001"])
-        ret: str = make_return_value("PROCESSED:WORK_001")
+        ret: str = self.inner_execute(task_id, payload)
         assert ret is not None
         return ret
 
@@ -755,7 +753,7 @@ class TaskWorkerStateMachine(StateMachine[TaskWorkerState]):
         self,
     ) -> str:
         require(self.state.initialized)
-        ret: str = make_return_value("task_001")
+        ret: str = self.inner_fetch_and_execute()
         assert ret is not None
         return ret
 
@@ -768,7 +766,7 @@ class TaskWorkerStateMachine(StateMachine[TaskWorkerState]):
         require(self.state.initialized)
         require_arg(task_id, Domain.type(str), preferred=["task_001"])
         require_arg(failing, Domain.boolean())
-        ret = make_return_value()
+        ret = self.inner_set_failing_task(task_id, failing)
         assert ret is None
         if failing:
             self.state.failing_tasks.add(task_id)

@@ -267,7 +267,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -324,12 +323,12 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
         if self.state.available:
             before = len(self.state.pending)
             self.state.pending.append((task_id, payload))
-            ret = make_return_value(None)
+            ret = self.inner_submit(task_id, payload)
             assert len(self.state.pending) == before + 1
             return ret
         ret: Any = None
         with raises(QueueUnavailableException):
-            ret = make_return_value(None)
+            ret = self.inner_submit(task_id, payload)
         return ret
 
     @transition(TaskQueue.dispatch)
@@ -339,12 +338,12 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
         if not self.state.available:
             ret: str = ""
             with raises(QueueUnavailableException):
-                ret = make_return_value("")
+                ret = self.inner_dispatch()
             return ret
         require(len(self.state.pending) > 0)
         task_id, payload = self.state.pending.pop(0)
         self.state.outcomes[task_id] = f"PROCESSED:{payload.upper()}"
-        ret = make_return_value(task_id)
+        ret = self.inner_dispatch()
         assert ret == task_id
         return ret
 
@@ -358,12 +357,12 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
         require_arg(outcome, Domain.type(str), preferred=["PROCESSED:PAYLOAD"])
         if self.state.available:
             self.state.outcomes[task_id] = outcome
-            ret = make_return_value(None)
+            ret = self.inner_complete(task_id, outcome)
             assert self.state.outcomes.get(task_id) == outcome
             return ret
         ret: Any = None
         with raises(QueueUnavailableException):
-            ret = make_return_value(None)
+            ret = self.inner_complete(task_id, outcome)
         return ret
 
     @transition(TaskQueue.get_outcome)
@@ -373,7 +372,7 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
     ) -> Optional[str]:
         require_arg(task_id, Domain.type(str), preferred=["task-1", "task-2"])
         expected = self.state.outcomes.get(task_id)
-        ret = make_return_value(expected)
+        ret = self.inner_get_outcome(task_id)
         assert ret == expected
         return ret
 
@@ -383,7 +382,7 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
     ) -> None:
         self.state.pending.clear()
         self.state.outcomes.clear()
-        ret = make_return_value(None)
+        ret = self.inner_clear()
         assert len(self.state.pending) == 0
         assert len(self.state.outcomes) == 0
         return ret
@@ -395,14 +394,14 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
     ) -> None:
         require_arg(available, Domain.boolean(), preferred=[True])
         self.state.available = available
-        ret = make_return_value(None)
+        ret = self.inner_set_available(available)
         assert self.state.available == available
         return ret
 
     @transition(name="pending_count")
     def pending_count(self) -> int:
         expected = len(self.state.pending)
-        ret = make_return_value(expected)
+        ret = self.inner_pending_count()
         assert ret == expected
         return ret
 
@@ -730,7 +729,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -786,10 +784,10 @@ class TaskWorkerStateMachine(StateMachine[TaskWorkerState]):
         if task_id in self.state.failing_tasks:
             ret: str = ""
             with raises(WorkerExecutionException):
-                ret = make_return_value("")
+                ret = self.inner_execute(task_id, payload)
             return ret
         outcome = f"PROCESSED:{payload.upper()}"
-        ret = make_return_value(outcome)
+        ret = self.inner_execute(task_id, payload)
         assert ret == outcome
         return ret
 
@@ -798,7 +796,7 @@ class TaskWorkerStateMachine(StateMachine[TaskWorkerState]):
         self,
     ) -> str:
         dispatched = "dispatched-task"
-        ret = make_return_value(dispatched)
+        ret = self.inner_fetch_and_execute()
         assert ret == dispatched
         return ret
 
@@ -814,7 +812,7 @@ class TaskWorkerStateMachine(StateMachine[TaskWorkerState]):
             self.state.failing_tasks.add(task_id)
         else:
             self.state.failing_tasks.discard(task_id)
-        ret = make_return_value(None)
+        ret = self.inner_set_failing_task(task_id, failing)
         assert (task_id in self.state.failing_tasks) == failing
         return ret
 

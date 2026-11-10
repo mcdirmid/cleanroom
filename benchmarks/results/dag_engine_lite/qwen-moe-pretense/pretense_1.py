@@ -650,7 +650,6 @@ from hypothesis import given, settings, strategies as st
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -711,7 +710,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         require_arg(dependencies, Domain.type(Optional[Collection[str]]))
         require_arg(priority, Domain.type(int))
         require_arg(retries, Domain.type(int))
-        ret = make_return_value()
+        ret = self.inner_add_node(node_id, action, dependencies, priority, retries)
         self.state.nodes.add(node_id)
         self.state.dependencies[node_id] = frozenset(dependencies or [])
         for dep in dependencies or []:
@@ -732,7 +731,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         require(self.state.initialized)
         require_arg(upstream_id, Domain.in_set(self.state.nodes))
         require_arg(downstream_id, Domain.in_set(self.state.nodes))
-        ret = make_return_value()
+        ret = self.inner_add_edge(upstream_id, downstream_id)
         self.state.dependents.setdefault(upstream_id, set()).add(downstream_id)
         if downstream_id not in self.state.dependencies:
             self.state.dependencies[downstream_id] = frozenset()
@@ -746,7 +745,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
     ) -> None:
         require(self.state.initialized)
         require_arg(node_id, Domain.in_set(self.state.nodes))
-        ret = make_return_value()
+        ret = self.inner_remove_node(node_id)
         self.state.nodes.discard(node_id)
         self.state.dependencies.pop(node_id, None)
         for dep in list(self.state.dependents.get(node_id, set())):
@@ -761,7 +760,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
     ) -> bool:
         require(self.state.initialized)
         require_arg(node_id, Domain.type(str))
-        ret = make_return_value(node_id in self.state.nodes)
+        ret = self.inner_has_node(node_id)
         return ret
 
     @transition(DAG.get_node)
@@ -771,15 +770,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
     ) -> NodeDefinition[Any]:
         require(self.state.initialized)
         require_arg(node_id, Domain.in_set(self.state.nodes))
-        ret = make_return_value(
-            NodeDefinition(
-                node_id=node_id,
-                action=_default_node_action,
-                dependencies=self.state.dependencies.get(node_id, frozenset()),
-                priority=0,
-                retries=0,
-            )
-        )
+        ret = self.inner_get_node(node_id)
         return ret
 
     @transition(DAG.get_dependencies)
@@ -789,7 +780,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
     ) -> Set[str]:
         require(self.state.initialized)
         require_arg(node_id, Domain.in_set(self.state.nodes))
-        ret = make_return_value(set(self.state.dependencies.get(node_id, frozenset())))
+        ret = self.inner_get_dependencies(node_id)
         return ret
 
     @transition(DAG.get_dependents)
@@ -799,7 +790,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
     ) -> Set[str]:
         require(self.state.initialized)
         require_arg(node_id, Domain.in_set(self.state.nodes))
-        ret = make_return_value(set(self.state.dependents.get(node_id, set())))
+        ret = self.inner_get_dependents(node_id)
         return ret
 
     @transition(DAG.all_nodes)
@@ -807,7 +798,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         self,
     ) -> Set[str]:
         require(self.state.initialized)
-        ret = make_return_value(set(self.state.nodes))
+        ret = self.inner_all_nodes()
         return ret
 
     @transition(DAG.validate)
@@ -815,7 +806,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         self,
     ) -> None:
         require(self.state.initialized)
-        ret = make_return_value()
+        ret = self.inner_validate()
         return ret
 
     @transition(DAG.topological_sort)
@@ -823,7 +814,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         self,
     ) -> List[str]:
         require(self.state.initialized)
-        ret = make_return_value(sorted(self.state.nodes))
+        ret = self.inner_topological_sort()
         return ret
 
     @transition(DAG.find_roots)
@@ -831,10 +822,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         self,
     ) -> Set[str]:
         require(self.state.initialized)
-        ret = make_return_value(
-            set(n for n in self.state.nodes
-                if not self.state.dependencies.get(n, frozenset()))
-        )
+        ret = self.inner_find_roots()
         return ret
 
     @transition(DAG.find_leaves)
@@ -842,10 +830,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         self,
     ) -> Set[str]:
         require(self.state.initialized)
-        ret = make_return_value(
-            set(n for n in self.state.nodes
-                if not self.state.dependents.get(n, set()))
-        )
+        ret = self.inner_find_leaves()
         return ret
 
     @transition(DAG.compute_critical_path)
@@ -857,7 +842,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         require_arg(estimated_durations, Domain.type(Optional[Mapping[str, float]]))
         nodes_list = sorted(self.state.nodes)
         total = float(len(nodes_list))
-        ret = make_return_value((nodes_list, total))
+        ret = self.inner_compute_critical_path(estimated_durations)
         return ret
 
     @transition(WaveScheduler.next_wave)
@@ -869,7 +854,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
             n for n in self.state.nodes
             if self.state.node_states.get(n) == NodeState.READY
         ]
-        ret = make_return_value(sorted(ready))
+        ret = self.inner_next_wave()
         return ret
 
     @transition(WaveScheduler.mark_running)
@@ -879,7 +864,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
     ) -> None:
         require(self.state.initialized)
         require_arg(node_id, Domain.type(str))
-        ret = make_return_value()
+        ret = self.inner_mark_running(node_id)
         self.state.node_states[node_id] = NodeState.RUNNING
         return ret
 
@@ -890,7 +875,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
     ) -> None:
         require(self.state.initialized)
         require_arg(node_id, Domain.type(str))
-        ret = make_return_value()
+        ret = self.inner_mark_succeeded(node_id)
         self.state.node_states[node_id] = NodeState.SUCCEEDED
         for dependent in self.state.dependents.get(node_id, set()):
             if self.state.node_states.get(dependent) == NodeState.PENDING:
@@ -911,7 +896,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         require(self.state.initialized)
         require_arg(node_id, Domain.type(str))
         require_arg(failure_policy, Domain.type(FailurePolicy))
-        ret = make_return_value()
+        ret = self.inner_mark_failed(node_id, failure_policy)
         self.state.node_states[node_id] = NodeState.FAILED
         if failure_policy == FailurePolicy.FAIL_FAST:
             for n in self.state.nodes:
@@ -955,7 +940,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         all_terminal = all(
             s in terminal for s in self.state.node_states.values()
         ) if self.state.node_states else True
-        ret = make_return_value(all_terminal)
+        ret = self.inner_is_finished()
         return ret
 
     @transition(WaveScheduler.get_state)
@@ -965,9 +950,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
     ) -> NodeState:
         require(self.state.initialized)
         require_arg(node_id, Domain.in_set(self.state.nodes))
-        ret = make_return_value(
-            self.state.node_states.get(node_id, NodeState.PENDING)
-        )
+        ret = self.inner_get_state(node_id)
         return ret
 
     @transition(WaveScheduler.get_all_states)
@@ -975,7 +958,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         self,
     ) -> Mapping[str, NodeState]:
         require(self.state.initialized)
-        ret = make_return_value(dict(self.state.node_states))
+        ret = self.inner_get_all_states()
         return ret
 
     @transition(DAGRunner.run)
@@ -985,18 +968,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
     ) -> DAGRunReport:
         require(self.state.initialized)
         require_arg(failure_policy, Domain.type(FailurePolicy))
-        ret = make_return_value(
-            DAGRunReport(
-                total_nodes=len(self.state.nodes),
-                succeeded_nodes=tuple(),
-                failed_nodes=tuple(),
-                skipped_nodes=tuple(),
-                cancelled_nodes=tuple(),
-                wall_clock_seconds=0.0,
-                critical_path=tuple(),
-                results=dict(),
-            )
-        )
+        ret = self.inner_run(failure_policy)
         return ret
 
     @transition.seeding

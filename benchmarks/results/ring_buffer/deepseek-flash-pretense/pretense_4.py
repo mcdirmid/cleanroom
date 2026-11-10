@@ -222,7 +222,6 @@ from typing import Any, List, Optional
 from pretense import (
     Domain,
     StateMachine,
-    make_return_value,
     raises,
     require,
     require_arg,
@@ -278,7 +277,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
         if was_full:
             evicted = self.state.items.pop(0)
         self.state.items.append(item)
-        ret: Optional[Any] = make_return_value(evicted)
+        ret: Optional[Any] = self.inner_push(item)
         if was_full:
             assert len(self.state.items) == self.state.capacity
             assert ret == evicted
@@ -295,7 +294,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
         require(self.state.initialized)
         require(len(self.state.items) > 0)
         oldest = self.state.items[0]
-        ret: Any = make_return_value(self.state.items.pop(0))
+        ret: Any = self.inner_pop()
         assert ret == oldest
         assert len(self.state.items) <= self.state.capacity
         return ret
@@ -307,7 +306,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
         """Remove every stored item, resetting the size to zero."""
         require(self.state.initialized)
         self.state.items.clear()
-        ret = make_return_value()
+        ret = self.inner_clear()
         assert ret is None
         assert len(self.state.items) == 0
         return ret
@@ -319,7 +318,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
         """Return a non-destructive FIFO-ordered snapshot of active items."""
         require(self.state.initialized)
         expected = list(self.state.items)
-        ret: List[Any] = make_return_value(list(self.state.items))
+        ret: List[Any] = self.inner_snapshot_items()
         assert ret == expected
         assert len(self.state.items) == len(expected)
         return ret
@@ -328,7 +327,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
     def capacity(self) -> int:
         """Maximum number of items permitted in the circular buffer."""
         require(self.state.initialized)
-        ret: int = make_return_value(self.state.capacity)
+        ret: int = self.inner_capacity()
         assert ret > 0
         return ret
 
@@ -337,7 +336,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
         """Current number of items stored in the circular buffer."""
         require(self.state.initialized)
         expected = len(self.state.items)
-        ret: int = make_return_value(expected)
+        ret: int = self.inner_size()
         assert ret == expected
         return ret
 
@@ -346,7 +345,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
         """Whether the circular buffer contains zero items."""
         require(self.state.initialized)
         expected = len(self.state.items) == 0
-        ret: bool = make_return_value(expected)
+        ret: bool = self.inner_is_empty()
         assert ret == expected
         return ret
 
@@ -355,7 +354,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
         """Whether the circular buffer has reached its capacity limit."""
         require(self.state.initialized)
         expected = len(self.state.items) >= self.state.capacity
-        ret: bool = make_return_value(expected)
+        ret: bool = self.inner_is_full()
         assert ret == expected
         return ret
 
