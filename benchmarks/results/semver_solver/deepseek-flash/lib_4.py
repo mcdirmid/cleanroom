@@ -331,7 +331,7 @@ def _wildcard_upper(components: _Components) -> Optional[semver_solver.Version]:
                 numbers[position] = 0
             return semver_solver.Version(major=numbers[0], minor=numbers[1], patch=numbers[2])
     # Unreachable by the wildcard grammar: every wildcard target retains an unresolved component.
-    return None  # pragma: no cover (assumption: wildcard targets always retain an unresolved component)
+    return None  # unreachable (assumption: wildcard targets always retain an unresolved component)
 
 
 def _parse_target(token: str, raw_range: str) -> Tuple[_Components, Optional[semver_solver.Version]]:
@@ -461,7 +461,7 @@ def _expand_comparator(operator: Optional[str], token: str, raw_range: str) -> L
         if upper is None:
             return [('always', '', None, None)]
         return [('cmp', '<', upper, None)]
-    raise semver_solver.InvalidRangeError(  # pragma: no cover (assumption: comparator operator set is closed)
+    raise semver_solver.InvalidRangeError(  # unreachable (assumption: comparator operator set is closed)
         message=f"Unsupported comparator {op!r} for {token!r}",
         raw_range=raw_range,
     )
@@ -845,7 +845,7 @@ _initialize_ = __initialize__
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-07T19:40:23Z
 # LAST_CHANGED: 2026-11-07T19:34:39Z
-# CHANGE: Prune unreachable spans per spec closure: removed LifecycleError fallbacks (collaborators now resolved strictly via get_singleton inside active phase scopes, per contract), dropped the module-level _default_repository global and its constructor assignment, annotated the wildcard upper-bound fall-through with '# pragma: no cover (assumption: wildcard targets always retain an unresolved component)', and eliminated other always-true guard branches in caret/tilde expansion and the empty-clause guard
+# CHANGE: Prune unreachable spans per spec closure: removed LifecycleError fallbacks (collaborators now resolved strictly via get_singleton inside active phase scopes, per contract), dropped the module-level _default_repository global and its constructor assignment, annotated the wildcard upper-bound fall-through with '# unreachable (assumption: wildcard targets always retain an unresolved component)', and eliminated other always-true guard branches in caret/tilde expansion and the empty-clause guard
 # COVERAGE_AUDIT: 2026-11-07T19:40:23Z
 # QA_AUDIT: 2026-11-07T19:39:40Z
 # --- END AUTOFAB METADATA ---

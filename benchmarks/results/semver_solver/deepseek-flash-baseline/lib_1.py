@@ -461,30 +461,30 @@ def _parse_clause(clause: str, raw_range: str) -> List[List[_Comparator]]:
             ]
         ]
     matches = list(_COMPARATOR_RE.finditer(clause))
-    if not matches:  # pragma: no cover (assumption: precondition enforced by caller)
+    if not matches:  # unreachable (assumption: precondition enforced by caller)
         raise semver_solver.InvalidRangeError(f"Malformed range clause: {clause!r}", raw_range=raw_range)
     result: List[List[_Comparator]] = [[]]
     position = 0
     for match in matches:
         gap = clause[position:match.start()]
-        if gap.strip() or (position and not gap):  # pragma: no cover (assumption: precondition enforced by caller)
+        if gap.strip() or (position and not gap):  # unreachable (assumption: precondition enforced by caller)
             raise semver_solver.InvalidRangeError(f"Malformed range clause: {clause!r}", raw_range=raw_range)
         terms = _expand_term(match.group(1), match.group(2))
         result = [prefix + term for prefix in result for term in terms]
         position = match.end()
-    if clause[position:].strip():  # pragma: no cover (assumption: precondition enforced by caller)
+    if clause[position:].strip():  # unreachable (assumption: precondition enforced by caller)
         raise semver_solver.InvalidRangeError(f"Malformed range clause: {clause!r}", raw_range=raw_range)
     return result
 
 
 def _split_clauses(text: str) -> List[str]:
     stripped = text.strip()
-    if not stripped:  # pragma: no cover (assumption: precondition enforced by caller)
+    if not stripped:  # unreachable (assumption: precondition enforced by caller)
         raise semver_solver.InvalidRangeError(f"Empty range expression: {text!r}", raw_range=text)
     clauses: List[str] = []
     for part in stripped.split("||"):
         clause = part.strip()
-        if not clause:  # pragma: no cover (assumption: precondition enforced by caller)
+        if not clause:  # unreachable (assumption: precondition enforced by caller)
             raise semver_solver.InvalidRangeError(f"Empty range clause in {text!r}", raw_range=text)
         clauses.append(clause)
     return clauses
@@ -524,7 +524,7 @@ class VersionEngine(semver_solver.VersionEngine):
     def parse_version(self, text: str) -> semver_solver.Version:
         """Parses a version string conforming to SemVer 2.0.0."""
         match = _VERSION_RE.fullmatch(text)
-        if match is None:  # pragma: no cover (assumption: precondition enforced by caller)
+        if match is None:  # unreachable (assumption: precondition enforced by caller)
             raise semver_solver.InvalidVersionError(
                 f"Invalid semantic version: {text!r}",
                 raw_text=text,
@@ -600,7 +600,7 @@ class PackageRepository(semver_solver.PackageRepository):
     def get_releases(self, name: str) -> List[semver_solver.PackageRelease]:
         """Retrieves registered releases for a package ordered descending."""
         releases = self._packages.get(name)
-        if releases is None:  # pragma: no cover (assumption: precondition enforced by caller)
+        if releases is None:  # unreachable (assumption: precondition enforced by caller)
             raise semver_solver.PackageNotFoundError(
                 f"Package not registered: {name!r}",
                 package_name=name,
@@ -710,7 +710,7 @@ class DependencySolver(semver_solver.DependencySolver):
                 derivation_steps.pop()
             return False
 
-        if not backtrack():  # pragma: no cover (assumption: dependencies are satisfiable)
+        if not backtrack():  # unreachable (assumption: dependencies are satisfiable)
             raise semver_solver.ResolutionConflictError(
                 f"Unable to resolve dependencies: {'; '.join(conflict_trail)}",
                 tuple(sorted(conflicting_packages)),

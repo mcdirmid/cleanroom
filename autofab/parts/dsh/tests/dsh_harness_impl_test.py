@@ -348,12 +348,11 @@ class DshHarnessImplTest(unittest.TestCase):
             self.assertFalse(os.path.exists(sess_file))
 
     def test_worker_session_recycling_after_n_rounds(self) -> None:
-        """Requirement: MUST recycle session ID and baselines after N=4 completed rounds."""
+        """Requirement: MUST recycle session ID and baselines after N=8 completed rounds."""
         with enter_phase(agent_session.agent_session, registry=self.registry):
             adapter = DshHarnessAdapter(
                 model_name="DeepSeek-V41-Flash",
                 simulation_mode=True,
-                max_rounds_per_worker=4,
             )
 
             state_dir = app_info.resolve_state_dir(self.test_dir)
@@ -369,8 +368,8 @@ class DshHarnessImplTest(unittest.TestCase):
                 task_prompt="",
             )
 
-            # Rounds 1 to 3: session persists
-            for i in range(1, 4):
+            # Rounds 1 to 7: session persists
+            for i in range(1, 8):
                 self.work_mgr.set_pending_work(self.test_dir, ["lib/unit_a.py"])
                 with open(sess_file, "w", encoding="utf-8") as f:
                     f.write("persistent-session-456\n")
@@ -383,7 +382,7 @@ class DshHarnessImplTest(unittest.TestCase):
                 )
                 self.assertEqual(adapter._worker_round_counts[self.test_dir], i)
 
-            # Round 4: completes round 4 and recycles session (removes session file and resets count to 0)
+            # Round 8: completes round 8 and recycles session (removes session file and resets count to 0)
             self.work_mgr.set_pending_work(self.test_dir, ["lib/unit_a.py"])
             handle = adapter.dispatch_role(dispatch)
             self.work_mgr.remove_pending_target(self.test_dir, "lib/unit_a.py")
@@ -391,7 +390,7 @@ class DshHarnessImplTest(unittest.TestCase):
             self.assertEqual(res.status, "clean")
             self.assertFalse(
                 os.path.exists(sess_file),
-                "Session must be recycled and removed after round 4",
+                "Session must be recycled and removed after round 8",
             )
             self.assertEqual(adapter._worker_round_counts[self.test_dir], 0)
 

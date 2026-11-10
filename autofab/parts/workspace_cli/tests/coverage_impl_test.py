@@ -64,7 +64,7 @@ class ToolCoverageImplTest(unittest.TestCase):
                 """Function docstring."""
                 if arg1 > 0:
                     return True
-                else:  # pragma: no cover
+                with unreachable:
                     return False
             '''
         ).strip()
@@ -73,13 +73,14 @@ class ToolCoverageImplTest(unittest.TestCase):
             temp_path = f.name
         try:
             non_exec = self.evaluator.get_non_executable_lines(temp_path)
-            # Lines 1 (module docstring), 5-7 (signature continuation), 8 (function docstring), 11 (pragma)
+            # Lines 1 (module docstring), 5-7 (signature continuation), 8 (function docstring), 11-12 (with unreachable)
             self.assertIn(1, non_exec)
             self.assertIn(5, non_exec)
             self.assertIn(6, non_exec)
             self.assertIn(7, non_exec)
             self.assertIn(8, non_exec)
             self.assertIn(11, non_exec)
+            self.assertIn(12, non_exec)
             self.assertNotIn(9, non_exec)  # 'if arg1 > 0:' is executable
         finally:
             Path(temp_path).unlink(missing_ok=True)

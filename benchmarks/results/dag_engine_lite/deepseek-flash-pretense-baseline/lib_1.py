@@ -620,7 +620,7 @@ class DAGRunner(dag_engine_lite.DAGRunner):
         while not self._scheduler.is_finished():
             wave = self._scheduler.next_wave()
             # Halts the wave loop when no nodes can be scheduled.
-            if not wave:  # pragma: no cover (assumption: is_finished guarantees a runnable wave)
+            if not wave:  # unreachable (assumption: is_finished guarantees a runnable wave)
                 break
             for node_id in wave:
                 definition = self._dag.get_node(node_id)

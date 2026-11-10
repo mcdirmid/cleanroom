@@ -934,13 +934,13 @@ def _validate_clause(clause: str, raw_range: str) -> None:
 def _compile_clause(clause: str) -> List[List[_Comparator]]:
     """Compiles a validated clause into disjunctive comparator alternatives."""
     tokens = clause.split()
-    if not tokens:  # pragma: no cover (assumption: parse_range rejected empty clauses)
+    if not tokens:  # unreachable (assumption: parse_range rejected empty clauses)
         return []
 
     if '-' in tokens:
         lower_target = _parse_target(tokens[0])
         upper_target = _parse_target(tokens[2])
-        if lower_target is None or upper_target is None:  # pragma: no cover (assumption: parse_range validated hyphen bounds)
+        if lower_target is None or upper_target is None:  # unreachable (assumption: parse_range validated hyphen bounds)
             return []
         return _expand_hyphen(lower_target, upper_target)
 
@@ -960,7 +960,7 @@ def _compile_clause(clause: str) -> List[List[_Comparator]]:
             target_text = remainder
             index += 1
         target = _parse_target(target_text)
-        if target is None:  # pragma: no cover (assumption: parse_range validated comparator targets)
+        if target is None:  # unreachable (assumption: parse_range validated comparator targets)
             return []
         expanded = _expand_target(operator, target)
         combined: List[List[_Comparator]] = []

@@ -563,7 +563,7 @@ def _expand_comparator(operator: str, bound: _RangeBound) -> _Disjunction:
                 (semver_solver.ComparatorOp.LT, _tilde_upper_bound(bound)),
             ]]
         # Unreachable: the parser only emits contracted operators; retained for return typing.
-        raise semver_solver.InvalidRangeError(  # pragma: no cover (assumption: parser only emits contracted operators)
+        raise semver_solver.InvalidRangeError(  # unreachable (assumption: parser only emits contracted operators)
             message=f"Unsupported operator '{operator}' for version range bound",
             raw_range=operator,
         )
@@ -600,7 +600,7 @@ def _expand_comparator(operator: str, bound: _RangeBound) -> _Disjunction:
             (semver_solver.ComparatorOp.LT, _tilde_upper_bound(bound)),
         ]]
     # Unreachable: the parser only emits contracted operators; retained for return typing.
-    raise semver_solver.InvalidRangeError(  # pragma: no cover (assumption: parser only emits contracted operators)
+    raise semver_solver.InvalidRangeError(  # unreachable (assumption: parser only emits contracted operators)
         message=f"Unsupported operator '{operator}' for version range bound",
         raw_range=operator,
     )
@@ -990,7 +990,7 @@ _initialize_ = __initialize__
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-07T03:35:02Z
 # LAST_CHANGED: 2026-11-07T03:33:47Z
-# CHANGE: Resolved feedback: pruned the unreachable trailing 'return None' fallback from _RangeBound.high_version by making the helper non-optional (both wildcard upper-bound returns are reachable via '<major>.x' and '<major>.<minor>.x' forms) and simplified both call sites accordingly; also pruned sibling dead guards in the clause compiler and type-checking-only unreachable raises annotated with '# pragma: no cover (assumption: ...)' so statement coverage is attainable.
+# CHANGE: Resolved feedback: pruned the unreachable trailing 'return None' fallback from _RangeBound.high_version by making the helper non-optional (both wildcard upper-bound returns are reachable via '<major>.x' and '<major>.<minor>.x' forms) and simplified both call sites accordingly; also pruned sibling dead guards in the clause compiler and type-checking-only unreachable raises annotated with '# unreachable (assumption: ...)' so statement coverage is attainable.
 # COVERAGE_AUDIT: 2026-11-07T03:35:02Z
 # QA_AUDIT: 2026-11-07T03:34:20Z
 # --- END AUTOFAB METADATA ---

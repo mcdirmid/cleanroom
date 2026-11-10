@@ -309,12 +309,12 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
             f"AGENT GUIDANCE / COVERAGE ARBITER REMINDER [EXPLAIN FEEDBACK IN TERMS OF SPECIFICATION]:\n"
             f"• Differentiate contracted operational errors from uncontracted caller preconditions:\n"
             f"  - Contracted operational errors (documented under Raises: in low/*.pyi) are test-owned deficits ([TEST-COVERAGE-DEFICIT]). Tests MUST assert these error conditions.\n"
-            f"  - Uncontracted caller precondition guards or unreachable defensive checks are library-owned ([LIB-PRAGMA-REQUIRED]). Instruct the library to prune dead code or annotate with '# pragma: no cover (assumption: precondition enforced by caller)'.\n"
+            f"  - Uncontracted caller precondition guards or unreachable defensive checks are library-owned ([LIB-PRAGMA-REQUIRED]). Instruct the library to prune dead code or wrap in 'with unreachable:' (or 'unreachable()').\n"
             f"• Blame feedback MUST be provided in terms of how the file being blamed is not compliant with the common source of truth specification.\n"
             f"• Line numbers MAY be mentioned ONLY IF they reference the file being blamed.\n"
             f"• DO NOT expose details (line numbers, code snippets, or internal symbols) of other files.\n"
             f"• Translate contracted positive-path postconditions, invariants, or success branches into missing unit test cases.\n"
-            f"• If an uncovered branch is an unreachable defensive check or caller assumption guaranteed by the specification, instruct the implementation author to prune it or mark it as unreachable (# pragma: no cover) according to the methodology.\n"
+            f"• If an uncovered branch is an unreachable defensive check or caller assumption guaranteed by the specification, instruct the implementation author to prune it or mark it as unreachable (with unreachable: or unreachable()) according to the methodology.\n"
             f"• If an uncovered span persists after tests were updated or across multiple rounds, deeply examine the library implementation: trace control flow and invariants to determine whether the span is structurally or logically unreachable; if so, blame the library rather than repeating blame to tests.\n"
             f"• If 100% coverage appears unreachable without either testing an uncontracted precondition violation or deleting contracted behavior, use bin/fail — do not reinterpret an uncontracted *Error span as a test requirement.\n"
             f"================================================================================\n"
@@ -389,6 +389,36 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
                     non_exec.add(ln)
 
         non_exec.update(pragma_lines)
+
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.With, ast.AsyncWith)):
+                is_unreachable = False
+                for item in node.items:
+                    expr = item.context_expr
+                    if isinstance(expr, ast.Name) and expr.id == "unreachable":
+                        is_unreachable = True
+                        break
+                    elif isinstance(expr, ast.Call):
+                        fn = expr.func
+                        name = fn.id if isinstance(fn, ast.Name) else getattr(fn, "attr", "")
+                        if name == "unreachable":
+                            is_unreachable = True
+                            break
+                if is_unreachable:
+                    start = getattr(node, "lineno", None)
+                    end = getattr(node, "end_lineno", start)
+                    if start is not None:
+                        for ln in range(start, (end or start) + 1):
+                            non_exec.add(ln)
+            elif isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
+                fn = node.value.func
+                name = fn.id if isinstance(fn, ast.Name) else getattr(fn, "attr", "")
+                if name == "unreachable":
+                    start = getattr(node, "lineno", None)
+                    end = getattr(node, "end_lineno", start)
+                    if start is not None:
+                        for ln in range(start, (end or start) + 1):
+                            non_exec.add(ln)
 
         def _is_error_stmt(stmt: ast.stmt) -> bool:
             if isinstance(stmt, ast.Raise):

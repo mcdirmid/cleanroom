@@ -847,8 +847,8 @@ class DAGRunner(dag_engine_lite.DAGRunner):
 
         while not self._scheduler.is_finished():
             wave = self._scheduler.next_wave()
-            if not wave:  # pragma: no cover (assumption: halt wave loop when next wave is empty per grounding)
-                break  # pragma: no cover (assumption: halt wave loop when next wave is empty per grounding)
+            if not wave:  # unreachable (assumption: halt wave loop when next wave is empty per grounding)
+                break  # unreachable (assumption: halt wave loop when next wave is empty per grounding)
             for node_id in wave:
                 self._scheduler.mark_running(node_id)
                 defn = self._dag.get_node(node_id)

@@ -24,7 +24,7 @@ A *state transition* defines a single atomic operation step within a state machi
 
 - An *inner transition* executes the core operation and yields its return value to the outer transition. In an interface state machine, the transition method delegates to an inner transition method (`inner_<method>`) that computes and returns the fake return value. In an implementation pseudo state machine, the inner transition method is overridden to evaluate additional pre-assertions on the target, invoke the concrete implementation under test, evaluate additional post-assertions on target state, and return the real return value to the outer transition (ignoring any fake return value returned by calling the super inner transition).
 
-- A *post-call slice* updates model state and verifies postconditions, state differentials, and contract invariants via native single-argument `assert condition` statements. Assertions evaluate uniformly in both verification mode (against the real target) and Fake mode (against the synthesized fake). Impossible defensive branches are marked with `unreachable(reason)` and excluded from test coverage.
+- A *post-call slice* updates model state and verifies postconditions, state differentials, and contract invariants via native single-argument `assert condition` statements. Assertions evaluate uniformly in both verification mode (against the real target) and Fake mode (against the synthesized fake). Impossible defensive branches are marked with `with unreachable:` or `unreachable(reason)` and excluded from test coverage.
 
 - A *test-only query* (`@test_only`) declares an observability accessor on an interface specification for black-box state verification, forbidden from production library calls by linters.
 

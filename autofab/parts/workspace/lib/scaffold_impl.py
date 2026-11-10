@@ -880,7 +880,7 @@ Any library files under `lib/*.py` imported from role dependencies in this works
 - **Coverage Arbiter Semantic Closure Audit**:
   - Never write synthetic tests solely to exercise defensive branches that are unreachable under valid contract inputs.
   - When unreachable defensive code exists, delete the dead code from the implementation.
-  - Only annotate legitimately unreachable platform or fatal conditions with `# pragma: no cover`."""
+  - Only wrap legitimately unreachable platform or fatal conditions with `with unreachable:` or `unreachable()`."""
         resolution_rules = f"""- **Verification on All Constituent Gates**: You MUST run {fused_bins_cmds} until all checks pass with 100% statement and branch coverage.
 - **Arbiter Self-Audit**: Before concluding, you MUST audit your implementation and tests against the QA and Coverage guides in `guides/` (zero uncontracted defensive branches, zero unmandated test assertions).
 - **Prune Uncontracted Defensive Code**: When verification reports missing coverage on defensive branches, fallback checks, or error paths for uncontracted conditions, prune and delete the unreachable defensive code from your implementation rather than writing elaborate uncontracted tests.

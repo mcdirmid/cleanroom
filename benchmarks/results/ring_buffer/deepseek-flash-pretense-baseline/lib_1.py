@@ -202,7 +202,7 @@ class RingBuffer(ring_buffer.RingBuffer):
     def pop(self) -> Any:
         # POSTCONDITIONS: WHEN size equals zero, raise BufferEmptyError. Conforming
         # callers never violate this precondition, so the error branch is unobservable.
-        if self.is_empty:  # pragma: no cover (assumption: precondition enforced by caller)
+        if self.is_empty:  # unreachable (assumption: precondition enforced by caller)
             raise ring_buffer.BufferEmptyError("cannot pop from an empty ring buffer")
         # POSTCONDITIONS: remove and return the oldest item, decrementing size by 1.
         return self._buffer.popleft()

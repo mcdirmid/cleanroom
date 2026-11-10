@@ -26,6 +26,7 @@ __all__ = [
     "variant",
     "operation",
     "override",
+    "unreachable",
 ]
 
 T = TypeVar("T")
@@ -133,3 +134,29 @@ def operation(func: F) -> F:
     Operations define preconditions (PRECONDITIONS:) and postconditions (POSTCONDITIONS:).
     """
     return func
+
+
+class _Unreachable:
+    """Marks unreachable code blocks and branches.
+
+    Supports both context manager syntax:
+        with unreachable:
+            ...
+        with unreachable("reason"):
+            ...
+    and call syntax:
+        unreachable()
+        unreachable("reason")
+    """
+
+    def __call__(self, reason: str = "Unreachable code executed") -> Any:
+        raise AssertionError(f"Unreachable: {reason}")
+
+    def __enter__(self) -> None:
+        raise AssertionError("Unreachable: block reached")
+
+    def __exit__(self, *args: Any) -> None:
+        pass
+
+
+unreachable = _Unreachable()

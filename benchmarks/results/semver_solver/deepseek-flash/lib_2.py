@@ -522,7 +522,7 @@ def _wildcard_bounds(
 def _caret_upper(parts: _Parts, raw_range: str) -> semver_solver.Version:
     """Expands a caret prefix using the first non-zero component boundary."""
     major, minor, patch = parts
-    if major is None:  # pragma: no cover (assumption: caller rejects unbounded wildcard operands)
+    if major is None:  # unreachable (assumption: caller rejects unbounded wildcard operands)
         raise _invalid_range(raw_range, "caret range requires a bounded operand")
     if major > 0:
         return semver_solver.Version(major=major + 1, minor=0, patch=0)
@@ -538,7 +538,7 @@ def _caret_upper(parts: _Parts, raw_range: str) -> semver_solver.Version:
 def _tilde_upper(parts: _Parts, raw_range: str) -> semver_solver.Version:
     """Expands a tilde prefix into the next minor boundary."""
     major, minor, _ = parts
-    if major is None:  # pragma: no cover (assumption: caller rejects unbounded wildcard operands)
+    if major is None:  # unreachable (assumption: caller rejects unbounded wildcard operands)
         raise _invalid_range(raw_range, "tilde range requires a bounded operand")
     if minor is None:
         return semver_solver.Version(major=major + 1, minor=0, patch=0)
@@ -610,7 +610,7 @@ def _compile_atom(atom: str, raw_range: str) -> List[_Comparator]:
 
     # Every operator produced by the clause tokenizer is handled above; this
     # guard exists only to satisfy the static return contract.
-    raise _invalid_range(  # pragma: no cover (assumption: operator comes from the _OPERATORS tokenizer)
+    raise _invalid_range(  # unreachable (assumption: operator comes from the _OPERATORS tokenizer)
         raw_range, f"unsupported operator {operator!r}"
     )
 
@@ -1048,7 +1048,7 @@ _initialize_ = __initialize__
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-05T00:51:39Z
 # LAST_CHANGED: 2026-11-05T00:51:03Z
-# CHANGE: Addressed coverage feedback: pruned the unreachable missing-operand guard in _compile_atom, the redundant empty-clause guard in _compile_clause, and the dead empty-conflict-trail fallback in resolve; removed the uncontracted relational unbounded-wildcard no-op acceptance so '>=*', '>*', '<*', '<=*' are rejected as malformed range syntax via the bounded-operand guard; annotated the caret/tilde operand-boundary guards and the unsupported-operator fallthrough with '# pragma: no cover (assumption: ...)' where static typing/invariants require them.
+# CHANGE: Addressed coverage feedback: pruned the unreachable missing-operand guard in _compile_atom, the redundant empty-clause guard in _compile_clause, and the dead empty-conflict-trail fallback in resolve; removed the uncontracted relational unbounded-wildcard no-op acceptance so '>=*', '>*', '<*', '<=*' are rejected as malformed range syntax via the bounded-operand guard; annotated the caret/tilde operand-boundary guards and the unsupported-operator fallthrough with '# unreachable (assumption: ...)' where static typing/invariants require them.
 # COVERAGE_AUDIT: 2026-11-05T00:51:39Z
 # QA_AUDIT: 2026-11-05T00:51:26Z
 # --- END AUTOFAB METADATA ---

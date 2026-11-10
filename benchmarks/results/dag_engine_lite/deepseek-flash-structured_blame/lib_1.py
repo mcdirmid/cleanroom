@@ -765,7 +765,7 @@ class DAG(dag_engine_lite.DAG):
                 terminal = node_id
                 total_weight = earliest[node_id]
         # Invariant: a non-empty acyclic graph always contains at least one leaf.
-        if terminal is None:  # pragma: no cover (assumption: acyclic graph has a leaf)
+        if terminal is None:  # unreachable (assumption: acyclic graph has a leaf)
             terminal = order[-1]
             total_weight = earliest[terminal]
         # POSTCONDITION longest_path: backtrack through the maximizing predecessors.
@@ -985,7 +985,7 @@ class DAGRunner(dag_engine_lite.DAGRunner):
         # POSTCONDITION sequential_waves: execute wave after wave until finished.
         while not scheduler.is_finished() and not halted:
             wave = scheduler.next_wave()
-            if not wave:  # pragma: no cover (assumption: a validated graph is not mutated while waves execute, so an unfinished scheduler always yields a non-empty wave)
+            if not wave:  # unreachable (assumption: a validated graph is not mutated while waves execute, so an unfinished scheduler always yields a non-empty wave)
                 break
             for node_id in wave:
                 definition = dag.get_node(node_id)
@@ -1114,7 +1114,7 @@ _initialize_ = __initialize__
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-08T06:13:05Z
 # LAST_CHANGED: 2026-11-08T06:12:28Z
-# CHANGE: Annotated the wave-loop empty-wave stall guard with '# pragma: no cover (assumption: a validated graph is not mutated while waves execute, so an unfinished scheduler always yields a non-empty wave)' rather than deleting it, resolving the unexercisable defensive guard feedback.
+# CHANGE: Annotated the wave-loop empty-wave stall guard with '# unreachable (assumption: a validated graph is not mutated while waves execute, so an unfinished scheduler always yields a non-empty wave)' rather than deleting it, resolving the unexercisable defensive guard feedback.
 # COVERAGE_AUDIT: 2026-11-08T06:13:05Z
 # QA_AUDIT: 2026-11-08T06:12:50Z
 # --- END AUTOFAB METADATA ---

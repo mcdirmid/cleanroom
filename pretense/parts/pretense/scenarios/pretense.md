@@ -49,8 +49,8 @@ Given: a state transition method decorated with `@transition(TargetClass.method)
 4. The caller defines pre-state and post-state assertions.
    Observed: assertions are written using native Python single-argument `assert condition` syntax without custom string messages.
 
-5. The caller defines an impossible branch marked with `unreachable(reason)`.
-   Observed: the line is excluded from test coverage and raises an AssertionError if executed during fuzzing.
+5. The caller defines an impossible branch or block marked with `with unreachable:` or `unreachable(reason)`.
+   Observed: the line or block is excluded from test coverage and raises an AssertionError if executed during fuzzing.
 
 6. The caller constrains an argument using `Domain.type` with a subscripted generic type annotation (such as `Callable[[], Any]` or `Collection[str]`).
    Observed: `Domain.type` extracts the runtime origin to validate value conformity and generate valid samples without raising `TypeError` for subscripted generics.

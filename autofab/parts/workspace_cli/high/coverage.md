@@ -14,7 +14,7 @@ A *module coverage* record reports the test coverage metrics of a single library
 
 A system's *coverage evaluator* coordinates statement coverage measurement and report generation.
 
-The coverage evaluator discovers the implementation and test file pairs across the part packages of a repository, and extracts candidate executable lines from implementation source files by filtering out docstrings, function and class signature continuation lines, and pragma exclusion annotations.
+The coverage evaluator discovers the implementation and test file pairs across the part packages of a repository, and extracts candidate executable lines from implementation source files by filtering out docstrings, function and class signature continuation lines, and unreachable blocks and annotations.
 
 The coverage evaluator measures single-target statement coverage by executing the corresponding unit test suite using the unified test runner (pytest) under coverage tracking, isolating test execution errors and recording covered line hits.
 

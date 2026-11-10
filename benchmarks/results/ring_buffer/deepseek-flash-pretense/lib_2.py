@@ -142,7 +142,7 @@ class RingBuffer(ring_buffer.RingBuffer):
     def pop(self) -> Any:
         # PRECONDITION: caller must not pop an empty buffer; enforced defensively.
         if self.is_empty:
-            raise ring_buffer.BufferEmptyError()  # pragma: no cover (assumption: precondition enforced by caller)
+            raise ring_buffer.BufferEmptyError()  # unreachable (assumption: precondition enforced by caller)
         # POSTCONDITION: WHEN size is greater than zero, remove and return oldest.
         return self._buffer.popleft()
 
@@ -172,7 +172,7 @@ _initialize_ = __initialize__
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-03T04:51:07Z
 # LAST_CHANGED: 2026-11-03T04:50:44Z
-# CHANGE: Annotate the unreachable pop precondition branch (raise BufferEmptyError) with '# pragma: no cover (assumption: precondition enforced by caller)' so the defensive caller-precondition guard is excluded from coverage per the coverage methodology
+# CHANGE: Annotate the unreachable pop precondition branch (raise BufferEmptyError) with '# unreachable (assumption: precondition enforced by caller)' so the defensive caller-precondition guard is excluded from coverage per the coverage methodology
 # PRETENSE_COVERAGE_AUDIT: 2026-11-03T04:51:07Z
 # PRETENSE_QA_AUDIT: 2026-11-03T04:50:57Z
 # --- END AUTOFAB METADATA ---

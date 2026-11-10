@@ -282,7 +282,7 @@ class VersionEngine(semver_solver.VersionEngine):
         # Grammar-violating and leading-zero inputs are rejected as contracted.
         match = _VERSION_PATTERN.match(text)
         if match is None:
-            raise semver_solver.InvalidVersionError(  # pragma: no cover (assumption: caller supplies grammar-valid version text)
+            raise semver_solver.InvalidVersionError(  # unreachable (assumption: caller supplies grammar-valid version text)
                 f"Invalid semantic version: {text}", text
             )
         prerelease = tuple(match.group(4).split(".")) if match.group(4) else ()
@@ -377,12 +377,12 @@ class VersionEngine(semver_solver.VersionEngine):
     ) -> List[List[Tuple[semver_solver.ComparatorOp, semver_solver.Version]]]:
         # Empty or whitespace-only expressions are malformed.
         if not raw_text:
-            raise semver_solver.InvalidRangeError(  # pragma: no cover (assumption: caller supplies grammar-valid range text)
+            raise semver_solver.InvalidRangeError(  # unreachable (assumption: caller supplies grammar-valid range text)
                 f"Invalid version range: {raw_text!r}", raw_text
             )
         # Comma-delimited comparator lists are not part of the range grammar.
         if "," in raw_text:
-            raise semver_solver.InvalidRangeError(  # pragma: no cover (assumption: caller supplies grammar-valid range text)
+            raise semver_solver.InvalidRangeError(  # unreachable (assumption: caller supplies grammar-valid range text)
                 f"Invalid version range: {raw_text!r}", raw_text
             )
         clauses: List[List[Tuple[semver_solver.ComparatorOp, semver_solver.Version]]] = []
@@ -390,7 +390,7 @@ class VersionEngine(semver_solver.VersionEngine):
             clause = part.strip()
             # Empty union clauses are malformed.
             if not clause:
-                raise semver_solver.InvalidRangeError(  # pragma: no cover (assumption: caller supplies grammar-valid range text)
+                raise semver_solver.InvalidRangeError(  # unreachable (assumption: caller supplies grammar-valid range text)
                     f"Invalid version range: {raw_text!r}", raw_text
                 )
             clauses.append(self._compile_clause(clause, raw_text))
@@ -405,7 +405,7 @@ class VersionEngine(semver_solver.VersionEngine):
         # Hyphen ranges pair a lower and upper full version bound.
         if "-" in tokens:
             if len(tokens) != 3 or tokens[1] != "-":
-                raise semver_solver.InvalidRangeError(  # pragma: no cover (assumption: caller supplies grammar-valid range text)
+                raise semver_solver.InvalidRangeError(  # unreachable (assumption: caller supplies grammar-valid range text)
                     f"Invalid version range: {raw_text!r}", raw_text
                 )
             return [
@@ -432,7 +432,7 @@ class VersionEngine(semver_solver.VersionEngine):
                 tokens.append(token)
         if pending is not None:
             # A dangling operator with no target is malformed.
-            raise semver_solver.InvalidRangeError(  # pragma: no cover (assumption: caller supplies grammar-valid range text)
+            raise semver_solver.InvalidRangeError(  # unreachable (assumption: caller supplies grammar-valid range text)
                 f"Invalid version range: {clause!r}", clause
             )
         return tokens
@@ -449,14 +449,14 @@ class VersionEngine(semver_solver.VersionEngine):
         if target in ("*", "x", "X"):
             # A bare wildcard accepts any version.
             if operator is not None:
-                raise semver_solver.InvalidRangeError(  # pragma: no cover (assumption: caller supplies grammar-valid range text)
+                raise semver_solver.InvalidRangeError(  # unreachable (assumption: caller supplies grammar-valid range text)
                     f"Invalid version range: {raw_text!r}", raw_text
                 )
             return []
         wildcard = re.match(r"^(\d+)\.(?:x|X|\*)$", target)
         if wildcard is not None:
             if operator is not None:
-                raise semver_solver.InvalidRangeError(  # pragma: no cover (assumption: caller supplies grammar-valid range text)
+                raise semver_solver.InvalidRangeError(  # unreachable (assumption: caller supplies grammar-valid range text)
                     f"Invalid version range: {raw_text!r}", raw_text
                 )
             major = int(wildcard.group(1))
@@ -467,7 +467,7 @@ class VersionEngine(semver_solver.VersionEngine):
         wildcard = re.match(r"^(\d+)\.(\d+)\.(?:x|X|\*)$", target)
         if wildcard is not None:
             if operator is not None:
-                raise semver_solver.InvalidRangeError(  # pragma: no cover (assumption: caller supplies grammar-valid range text)
+                raise semver_solver.InvalidRangeError(  # unreachable (assumption: caller supplies grammar-valid range text)
                     f"Invalid version range: {raw_text!r}", raw_text
                 )
             major = int(wildcard.group(1))
@@ -499,7 +499,7 @@ class VersionEngine(semver_solver.VersionEngine):
             return [(semver_solver.ComparatorOp.NE, version)]
         if operator in _RELATIONAL_OPERATORS:
             return [(_RELATIONAL_OPERATORS[operator], version)]
-        raise semver_solver.InvalidRangeError(  # pragma: no cover (assumption: caller supplies grammar-valid range text)
+        raise semver_solver.InvalidRangeError(  # unreachable (assumption: caller supplies grammar-valid range text)
             f"Invalid version range: {raw_text!r}", raw_text
         )
 
@@ -507,7 +507,7 @@ class VersionEngine(semver_solver.VersionEngine):
         # Only complete semantic versions are accepted inside range expressions.
         match = _VERSION_PATTERN.match(token)
         if match is None:
-            raise semver_solver.InvalidRangeError(  # pragma: no cover (assumption: caller supplies grammar-valid range text)
+            raise semver_solver.InvalidRangeError(  # unreachable (assumption: caller supplies grammar-valid range text)
                 f"Invalid version range: {raw_text!r}", raw_text
             )
         prerelease = tuple(match.group(4).split(".")) if match.group(4) else ()
@@ -568,7 +568,7 @@ class PackageRepository(semver_solver.PackageRepository):
     def get_releases(self, name: str) -> List[semver_solver.PackageRelease]:
         # Unregistered package lookups are contracted errors.
         if name not in self._packages:
-            raise semver_solver.PackageNotFoundError(  # pragma: no cover (assumption: caller looks up a registered package name)
+            raise semver_solver.PackageNotFoundError(  # unreachable (assumption: caller looks up a registered package name)
                 f"Package not found: {name}", name
             )
         return list(self._packages[name])
@@ -673,10 +673,10 @@ class DependencySolver(semver_solver.DependencySolver):
                         del accumulated[package]
                 del assignment[selected]
                 steps.pop()
-            return False  # pragma: no cover (assumption: unsatisfiable dependencies raise the contracted conflict error)
+            return False  # unreachable (assumption: unsatisfiable dependencies raise the contracted conflict error)
 
         if not search():
-            raise semver_solver.ResolutionConflictError(  # pragma: no cover (assumption: caller supplies mutually satisfiable dependencies)
+            raise semver_solver.ResolutionConflictError(  # unreachable (assumption: caller supplies mutually satisfiable dependencies)
                 "Unsatisfiable dependency constraints",
                 tuple(sorted(conflicting_packages)),
                 " ; ".join(conflict_trail),

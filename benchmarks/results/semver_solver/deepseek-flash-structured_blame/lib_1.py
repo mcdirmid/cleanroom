@@ -503,7 +503,7 @@ def _expand_operator(operator: Optional[str], pattern: _VersionPattern) -> _Cons
             return [[]]
         return [[(ge, lower), (lt, upper)]]
 
-    return []  # pragma: no cover (assumption: operator is restricted by the range clause grammar)
+    return []  # unreachable (assumption: operator is restricted by the range clause grammar)
 
 
 def _compile_clause(clause: str, raw_range: str) -> _Clause:
@@ -914,7 +914,7 @@ _initialize_ = __initialize__
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-08T02:14:45Z
 # LAST_CHANGED: 2026-11-08T02:14:09Z
-# CHANGE: Address feedback (2 items): (1) pruned the structurally unreachable GT comparator evaluation branch in _evaluate_comparator together with the unused GT alias (and the equally unused LE alias) in _expand_operator, since greater-than comparators normalize to the next GE boundary during range compilation and hyphen-range full upper bounds are the sole LE producer, leaving GE as the final fallthrough with a comment documenting the normalization; (2) moved the exclusion annotation onto the return statement line itself: 'return []  # pragma: no cover (assumption: operator is restricted by the range clause grammar)', so the fallback is properly excluded while preserving the declared non-Optional return type
+# CHANGE: Address feedback (2 items): (1) pruned the structurally unreachable GT comparator evaluation branch in _evaluate_comparator together with the unused GT alias (and the equally unused LE alias) in _expand_operator, since greater-than comparators normalize to the next GE boundary during range compilation and hyphen-range full upper bounds are the sole LE producer, leaving GE as the final fallthrough with a comment documenting the normalization; (2) moved the exclusion annotation onto the return statement line itself: 'return []  # unreachable (assumption: operator is restricted by the range clause grammar)', so the fallback is properly excluded while preserving the declared non-Optional return type
 # COVERAGE_AUDIT: 2026-11-08T02:14:45Z
 # QA_AUDIT: 2026-11-08T02:14:32Z
 # --- END AUTOFAB METADATA ---

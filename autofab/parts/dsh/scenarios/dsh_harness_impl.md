@@ -13,7 +13,7 @@ Given: a role dispatch directive for role_a with prompt and ready targets in wor
 Given: an active round for role_a completes with zero exit code and recorded session telemetry.
 
 1. The harness adapter awaits round completion.
-   Observed: a role round result is returned with clean status, submitted targets derived from in-memory pending differences or action records across workspace root and scoped event logs, scraped and persisted session identifier for continuity (recycled after N rounds defaulting to 4 rounds with clean session reset, reset upon failed outcomes, preserved across blamed rounds), and token telemetry reflecting input and output tokens.
+   Observed: a role round result is returned with clean status, submitted targets derived from in-memory pending differences or action records across workspace root and scoped event logs, scraped and persisted session identifier for continuity (recycled after N rounds defaulting to 8 rounds with clean session reset, reset upon failed outcomes, preserved across blamed rounds), and token telemetry reflecting input and output tokens.
    Realized by: telemetry extraction delegated to dsh_telemetry, session id extraction and file persistence, discovering submitted targets from in-memory pending diffs and candidate event logs across workspace root and scoped directories matching change, clean, submitted, and audit records appended beyond pre-dispatch file offsets, and querying event streams or session storage archives for token counts.
 
 ### Scenario 3 — Handling blamed targets from blame buffer and workspace log
@@ -90,7 +90,7 @@ Given: an active multi-agent orchestration session with active, completed, and u
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-30T19:50:00Z
-LAST_CHANGED: 2026-11-09T22:10:00Z
-CHANGE: Authoritative orchestration state snapshot publishing to external coordination storage
+LAST_CHANGED: 2026-11-10T20:30:00Z
+CHANGE: Increase default worker session recycling threshold from 4 rounds to 8 rounds
 SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->

@@ -529,7 +529,7 @@ class DAG(dag_engine_lite.DAG):
         retries: int,
     ) -> None:
         # PRECONDITION: node_id must not already be registered.
-        if node_id in self._nodes:  # pragma: no cover (assumption: duplicate registration is a caller contract violation the specification declares untestable)
+        if node_id in self._nodes:  # unreachable (assumption: duplicate registration is a caller contract violation the specification declares untestable)
             raise dag_engine_lite.DuplicateNodeError(
                 f"Node '{node_id}' is already registered in the DAG", node_id
             )
@@ -552,11 +552,11 @@ class DAG(dag_engine_lite.DAG):
 
     def add_edge(self, upstream_id: str, downstream_id: str) -> None:
         # PRECONDITION: both endpoints must be registered.
-        if upstream_id not in self._nodes:  # pragma: no cover (assumption: endpoint existence is a caller contract violation the specification declares untestable)
+        if upstream_id not in self._nodes:  # unreachable (assumption: endpoint existence is a caller contract violation the specification declares untestable)
             raise dag_engine_lite.NodeNotFoundError(
                 f"Node '{upstream_id}' is not registered in the DAG", upstream_id
             )
-        if downstream_id not in self._nodes:  # pragma: no cover (assumption: endpoint existence is a caller contract violation the specification declares untestable)
+        if downstream_id not in self._nodes:  # unreachable (assumption: endpoint existence is a caller contract violation the specification declares untestable)
             raise dag_engine_lite.NodeNotFoundError(
                 f"Node '{downstream_id}' is not registered in the DAG", downstream_id
             )
@@ -574,7 +574,7 @@ class DAG(dag_engine_lite.DAG):
 
     def remove_node(self, node_id: str) -> None:
         # PRECONDITION: the node must be registered.
-        if node_id not in self._nodes:  # pragma: no cover (assumption: node existence on removal is a caller contract violation the specification declares untestable)
+        if node_id not in self._nodes:  # unreachable (assumption: node existence on removal is a caller contract violation the specification declares untestable)
             raise dag_engine_lite.NodeNotFoundError(
                 f"Node '{node_id}' is not registered in the DAG", node_id
             )
@@ -593,7 +593,7 @@ class DAG(dag_engine_lite.DAG):
 
     def get_node(self, node_id: str) -> dag_engine_lite.NodeDefinition[Any]:
         # PRECONDITION: the node must be registered.
-        if node_id not in self._nodes:  # pragma: no cover (assumption: node existence on retrieval is a caller contract violation the specification declares untestable)
+        if node_id not in self._nodes:  # unreachable (assumption: node existence on retrieval is a caller contract violation the specification declares untestable)
             raise dag_engine_lite.NodeNotFoundError(
                 f"Node '{node_id}' is not registered in the DAG", node_id
             )
@@ -601,7 +601,7 @@ class DAG(dag_engine_lite.DAG):
 
     def get_dependencies(self, node_id: str) -> Set[str]:
         # PRECONDITION: the node must be registered.
-        if node_id not in self._nodes:  # pragma: no cover (assumption: node existence on retrieval is a caller contract violation the specification declares untestable)
+        if node_id not in self._nodes:  # unreachable (assumption: node existence on retrieval is a caller contract violation the specification declares untestable)
             raise dag_engine_lite.NodeNotFoundError(
                 f"Node '{node_id}' is not registered in the DAG", node_id
             )
@@ -609,7 +609,7 @@ class DAG(dag_engine_lite.DAG):
 
     def get_dependents(self, node_id: str) -> Set[str]:
         # PRECONDITION: the node must be registered.
-        if node_id not in self._nodes:  # pragma: no cover (assumption: node existence on retrieval is a caller contract violation the specification declares untestable)
+        if node_id not in self._nodes:  # unreachable (assumption: node existence on retrieval is a caller contract violation the specification declares untestable)
             raise dag_engine_lite.NodeNotFoundError(
                 f"Node '{node_id}' is not registered in the DAG", node_id
             )
@@ -622,7 +622,7 @@ class DAG(dag_engine_lite.DAG):
         # Returns the first referenced dependency absent from the graph, if any.
         for node_id in sorted(self._nodes):
             for dependency in sorted(self._upstream.get(node_id, set())):
-                if dependency not in self._nodes:  # pragma: no cover (assumption: dependency existence is a caller contract violation the specification declares untestable)
+                if dependency not in self._nodes:  # unreachable (assumption: dependency existence is a caller contract violation the specification declares untestable)
                     return dependency
         return None
 
@@ -637,14 +637,14 @@ class DAG(dag_engine_lite.DAG):
             active.add(node_id)
             path.append(node_id)
             for downstream_id in sorted(self._downstream.get(node_id, set())):
-                if downstream_id not in self._nodes:  # pragma: no cover (assumption: dependency existence is enforced before cycle detection)
+                if downstream_id not in self._nodes:  # unreachable (assumption: dependency existence is enforced before cycle detection)
                     continue
-                if downstream_id in active:  # pragma: no cover (assumption: cyclic graphs are a caller contract violation the specification declares untestable)
+                if downstream_id in active:  # unreachable (assumption: cyclic graphs are a caller contract violation the specification declares untestable)
                     start = path.index(downstream_id)
                     return tuple(path[start:])
                 if downstream_id not in visited:
                     found = visit(downstream_id)
-                    if found is not None:  # pragma: no cover (assumption: cyclic graphs are a caller contract violation the specification declares untestable)
+                    if found is not None:  # unreachable (assumption: cyclic graphs are a caller contract violation the specification declares untestable)
                         return found
             path.pop()
             active.discard(node_id)
@@ -653,20 +653,20 @@ class DAG(dag_engine_lite.DAG):
         for node_id in sorted(self._nodes):
             if node_id not in visited:
                 found = visit(node_id)
-                if found is not None:  # pragma: no cover (assumption: cyclic graphs are a caller contract violation the specification declares untestable)
+                if found is not None:  # unreachable (assumption: cyclic graphs are a caller contract violation the specification declares untestable)
                     return found
         return ()
 
     def validate(self) -> None:
         # PRECONDITION: every referenced dependency must exist in the graph.
         missing = self._missing_dependency()
-        if missing is not None:  # pragma: no cover (assumption: dependency existence is a caller contract violation the specification declares untestable)
+        if missing is not None:  # unreachable (assumption: dependency existence is a caller contract violation the specification declares untestable)
             raise dag_engine_lite.NodeNotFoundError(
                 f"Dependency '{missing}' is not registered in the DAG", missing
             )
         # PRECONDITION: the graph must be acyclic.
         cycle = self._cycle_path()
-        if cycle:  # pragma: no cover (assumption: cyclic graphs are a caller contract violation the specification declares untestable)
+        if cycle:  # unreachable (assumption: cyclic graphs are a caller contract violation the specification declares untestable)
             cycle_closed = cycle + (cycle[0],)
             raise dag_engine_lite.CycleError(
                 "Dependency cycle detected: " + " -> ".join(cycle_closed), cycle
@@ -675,7 +675,7 @@ class DAG(dag_engine_lite.DAG):
     def topological_sort(self) -> List[str]:
         # Deferred dependency existence check.
         missing = self._missing_dependency()
-        if missing is not None:  # pragma: no cover (assumption: dependency existence is a caller contract violation the specification declares untestable)
+        if missing is not None:  # unreachable (assumption: dependency existence is a caller contract violation the specification declares untestable)
             raise dag_engine_lite.NodeNotFoundError(
                 f"Dependency '{missing}' is not registered in the DAG", missing
             )
@@ -689,14 +689,14 @@ class DAG(dag_engine_lite.DAG):
             candidate = ready.pop(0)
             order.append(candidate)
             for downstream_id in sorted(self._downstream.get(candidate, set())):
-                if downstream_id not in self._nodes:  # pragma: no cover (assumption: dependencies are validated before in-degrees are decremented)
+                if downstream_id not in self._nodes:  # unreachable (assumption: dependencies are validated before in-degrees are decremented)
                     continue
                 in_degree[downstream_id] -= 1
                 if in_degree[downstream_id] == 0:
                     ready.append(downstream_id)
                     ready.sort(key=lambda node_id: (-self._nodes[node_id].priority, node_id))
         # PRECONDITION: the graph must be acyclic.
-        if len(order) != len(self._nodes):  # pragma: no cover (assumption: cyclic graphs are a caller contract violation the specification declares untestable)
+        if len(order) != len(self._nodes):  # unreachable (assumption: cyclic graphs are a caller contract violation the specification declares untestable)
             cycle = self._cycle_path()
             cycle_closed = cycle + (cycle[0],) if cycle else cycle
             raise dag_engine_lite.CycleError(
@@ -859,7 +859,7 @@ class WaveScheduler(dag_engine_lite.WaveScheduler):
 
     def get_state(self, node_id: str) -> dag_engine_lite.NodeState:
         # PRECONDITION: the node must be registered in the scheduled DAG.
-        if not self._dag.has_node(node_id):  # pragma: no cover (assumption: node existence on state query is a caller contract violation the specification declares untestable)
+        if not self._dag.has_node(node_id):  # unreachable (assumption: node existence on state query is a caller contract violation the specification declares untestable)
             raise dag_engine_lite.NodeNotFoundError(
                 f"Node '{node_id}' is not registered in the DAG", node_id
             )
@@ -929,7 +929,7 @@ class DAGRunner(dag_engine_lite.DAGRunner):
         stop_execution = False
         while not self._scheduler.is_finished():
             wave = self._scheduler.next_wave()
-            if not wave:  # pragma: no cover (assumption: an unfinished run always yields a non-empty ready wave)
+            if not wave:  # unreachable (assumption: an unfinished run always yields a non-empty ready wave)
                 break
             for node_id in wave:
                 self._scheduler.mark_running(node_id)

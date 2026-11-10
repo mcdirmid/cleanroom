@@ -737,7 +737,7 @@ class DAG(dag_engine.DAG):
             if len(order) != len(self._nodes):
                 # An incomplete ordering after reference validation implies a cycle.
                 cycle = self._find_cycle()
-                if cycle is None:  # pragma: no cover (assumption: verified references make an incomplete ordering a cycle)
+                if cycle is None:  # unreachable (assumption: verified references make an incomplete ordering a cycle)
                     raise dag_engine.CycleError(
                         "Dependency cycle detected in the graph", ()
                     )

@@ -321,9 +321,20 @@ def test_only(fn: T) -> T:
     return fn
 
 
-def unreachable(reason: str = "Unreachable code executed") -> Any:
+class _Unreachable:
     """Marks an unreachable code path, impossible branch, or defensive dead-end."""
-    raise AssertionError(f"Unreachable: {reason}")
+
+    def __call__(self, reason: str = "Unreachable code executed") -> Any:
+        raise AssertionError(f"Unreachable: {reason}")
+
+    def __enter__(self) -> None:
+        raise AssertionError("Unreachable: block reached")
+
+    def __exit__(self, *args: Any) -> None:
+        pass
+
+
+unreachable = _Unreachable()
 
 
 def get_current_draw() -> Optional[Callable[..., Any]]:

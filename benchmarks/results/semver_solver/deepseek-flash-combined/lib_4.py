@@ -469,7 +469,7 @@ def _spec_upper(spec: _Spec) -> Optional[semver_solver.Version]:
         return semver_solver.Version(major=major + 1, minor=0, patch=0)
     if patch is None:
         return semver_solver.Version(major=major, minor=minor + 1, patch=0)
-    return None  # pragma: no cover (assumption: a wildcard specification always leaves a component unspecified)
+    return None  # unreachable (assumption: a wildcard specification always leaves a component unspecified)
 
 
 def _spec_lower_bound(spec: _Spec) -> semver_solver.Version:
@@ -518,7 +518,7 @@ def _caret_upper_wildcard(spec: _Spec) -> Optional[semver_solver.Version]:
         return semver_solver.Version(major=0, minor=minor + 1, patch=0)
     if patch is None:
         return semver_solver.Version(major=0, minor=1, patch=0)
-    return semver_solver.Version(major=0, minor=0, patch=patch + 1)  # pragma: no cover (assumption: fully concrete caret targets use the exact branch)
+    return semver_solver.Version(major=0, minor=0, patch=patch + 1)  # unreachable (assumption: fully concrete caret targets use the exact branch)
 
 
 def _tilde_upper_wildcard(spec: _Spec) -> Optional[semver_solver.Version]:
@@ -581,7 +581,7 @@ def _expand_comparator(operator: str, spec: _Spec, raw_range: str) -> List[List[
         if operator == "~":
             # POSTCONDITIONS: ~1.2.3 expands to >=1.2.3 <1.3.0.
             return [[(semver_solver.ComparatorOp.GE, exact), (semver_solver.ComparatorOp.LT, _tilde_upper(exact))]]
-        raise _invalid_range(raw_range, f"unsupported operator '{operator}'")  # pragma: no cover (assumption: tokenizer emits only contracted operators for full versions)
+        raise _invalid_range(raw_range, f"unsupported operator '{operator}'")  # unreachable (assumption: tokenizer emits only contracted operators for full versions)
 
     # Wildcard targets normalize into concrete boundary comparators.
     lower = _spec_floor(spec)
@@ -623,7 +623,7 @@ def _expand_comparator(operator: str, spec: _Spec, raw_range: str) -> List[List[
         if tilde_upper is None:
             return [[]]
         return [[(semver_solver.ComparatorOp.GE, lower), (semver_solver.ComparatorOp.LT, tilde_upper)]]
-    raise _invalid_range(raw_range, f"unsupported operator '{operator}'")  # pragma: no cover (assumption: the tokenizer only emits contracted comparator operators)
+    raise _invalid_range(raw_range, f"unsupported operator '{operator}'")  # unreachable (assumption: the tokenizer only emits contracted comparator operators)
 
 
 def _expand_clause(clause: str, raw_range: str) -> List[List[_Comparator]]:
@@ -639,7 +639,7 @@ def _expand_clause(clause: str, raw_range: str) -> List[List[_Comparator]]:
         return [comparators]
     tokens = _tokenize_clause(clause, raw_range)
     if not tokens:
-        raise _invalid_range(raw_range, "empty clause")  # pragma: no cover (assumption: empty union clauses are rejected before clause expansion)
+        raise _invalid_range(raw_range, "empty clause")  # unreachable (assumption: empty union clauses are rejected before clause expansion)
     alternatives: List[List[_Comparator]] = [[]]
     for operator, specification in tokens:
         spec = _parse_spec(specification, raw_range)
@@ -963,7 +963,7 @@ _initialize_ = __initialize__
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-07T01:29:59Z
 # LAST_CHANGED: 2026-11-07T00:56:07Z
-# CHANGE: Resolved unreachable-statement feedback by attaching effective inline '# pragma: no cover (assumption: ...)' annotations directly to the five structurally unreachable statements: the wildcard upper-bound helper's final return None, the fully concrete caret-wildcard fallback bound, both unsupported-operator fallbacks, and the empty-clause guard. No behavioral logic changed; static checks pass.
+# CHANGE: Resolved unreachable-statement feedback by attaching effective inline '# unreachable (assumption: ...)' annotations directly to the five structurally unreachable statements: the wildcard upper-bound helper's final return None, the fully concrete caret-wildcard fallback bound, both unsupported-operator fallbacks, and the empty-clause guard. No behavioral logic changed; static checks pass.
 # COVERAGE_AUDIT: 2026-11-07T01:04:21Z
 # PRETENSE_COVERAGE_AUDIT: 2026-11-07T01:29:59Z
 # PRETENSE_QA_AUDIT: 2026-11-07T01:29:19Z

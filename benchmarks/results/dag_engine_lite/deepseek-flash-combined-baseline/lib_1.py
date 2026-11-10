@@ -599,7 +599,7 @@ class DAGRunner(dag_engine_lite.DAGRunner):
         # Postcondition: execute ready waves sequentially.
         while not scheduler.is_finished():
             wave = scheduler.next_wave()
-            if not wave:  # pragma: no cover (assumption: is_finished false implies a ready wave)
+            if not wave:  # unreachable (assumption: is_finished false implies a ready wave)
                 break
             for node_id in wave:
                 scheduler.mark_running(node_id)

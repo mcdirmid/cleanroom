@@ -574,7 +574,7 @@ class DAG(dag_engine_lite.DAG):
             node_id = ready.pop(0)
             order.append(node_id)
             for dependent in sorted(self._downstream.get(node_id, ())):
-                if dependent not in indegree:  # pragma: no cover (assumption: adjacency_invariants - downstream members are registered nodes)
+                if dependent not in indegree:  # unreachable (assumption: adjacency_invariants - downstream members are registered nodes)
                     continue
                 indegree[dependent] -= 1
                 if indegree[dependent] == 0:
@@ -666,7 +666,7 @@ class DAG(dag_engine_lite.DAG):
             positions[node_id] = len(stack)
             stack.append(node_id)
             for dependent in sorted(self._downstream.get(node_id, ())):
-                if dependent not in self._nodes:  # pragma: no cover (assumption: registered_downstream_members - dependents are registered nodes)
+                if dependent not in self._nodes:  # unreachable (assumption: registered_downstream_members - dependents are registered nodes)
                     continue
                 state = color.get(dependent, 0)
                 if state == 1:
@@ -842,7 +842,7 @@ class WaveScheduler(dag_engine_lite.WaveScheduler):
                     continue
                 seen.add(dependency)
                 state = self._states.get(dependency)
-                if state is None:  # pragma: no cover (assumption: dependencies_validated_before_scheduling - every dependency is a synced node)
+                if state is None:  # unreachable (assumption: dependencies_validated_before_scheduling - every dependency is a synced node)
                     continue
                 if state in _BLOCKING_STATES:
                     return True
@@ -872,7 +872,7 @@ class DAGRunner(dag_engine_lite.DAGRunner):
         while not halted and not self._scheduler.is_finished():
             # POSTCONDITION: execute ready waves sequentially; halt when none remain.
             wave = self._scheduler.next_wave()
-            if not wave:  # pragma: no cover (assumption: validated_graph_no_stalled_waves - validated waves always progress)
+            if not wave:  # unreachable (assumption: validated_graph_no_stalled_waves - validated waves always progress)
                 break
             for node_id in wave:
                 definition = self._dag.get_node(node_id)

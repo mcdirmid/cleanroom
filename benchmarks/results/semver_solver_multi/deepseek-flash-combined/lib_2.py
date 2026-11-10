@@ -782,7 +782,7 @@ def _expand_atom(
             return [[(">=", base), ("<", _caret_upper(bound))]]
         if operator == "~":
             return [[(">=", base), ("<", _tilde_upper(bound))]]
-        return [[]]  # pragma: no cover (assumption: operators are validated against the contracted operator set)
+        return [[]]  # unreachable (assumption: operators are validated against the contracted operator set)
     version = bound.version
     if operator in ("", "=", "=="):
         return [[("==", version)]]
@@ -800,7 +800,7 @@ def _expand_atom(
         return [[(">=", version), ("<", _caret_upper_full(version))]]
     if operator == "~":
         return [[(">=", version), ("<", _tilde_upper_full(version))]]
-    return [[]]  # pragma: no cover (assumption: operators are validated against the contracted operator set)
+    return [[]]  # unreachable (assumption: operators are validated against the contracted operator set)
 
 
 def _compile_clause(
@@ -913,7 +913,7 @@ def _clause_satisfied(
             if comparison < 0:
                 return False
         else:
-            return False  # pragma: no cover (assumption: operators are validated against the contracted operator set)
+            return False  # unreachable (assumption: operators are validated against the contracted operator set)
     return True
 
 

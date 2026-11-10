@@ -228,7 +228,7 @@ class RingBuffer(ring_buffer.RingBuffer):
         # requires(not self.is_empty, BufferEmptyError) is violated; this
         # defensive guard is unreachable for conforming callers.
         if self.is_empty:
-            raise ring_buffer.BufferEmptyError("cannot pop from an empty ring buffer")  # pragma: no cover (assumption: precondition enforced by caller)
+            raise ring_buffer.BufferEmptyError("cannot pop from an empty ring buffer")  # unreachable (assumption: precondition enforced by caller)
 
         # WHEN size is greater than zero, MUST remove the oldest item, decrement
         # size by 1, and return the removed item.
@@ -274,7 +274,7 @@ _initialize_ = __initialize__
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-03T17:28:38Z
 # LAST_CHANGED: 2026-11-03T17:28:10Z
-# CHANGE: Resolve coverage feedback: the empty-buffer pop guard raises BufferEmptyError for the caller precondition requires(not self.is_empty, BufferEmptyError), which conforming tests never violate. Kept the defensive guard for contract conformance and annotated the raise with '# pragma: no cover (assumption: precondition enforced by caller)' so the uncoverable branch no longer blocks 100% coverage; normal pop path remains fully covered.
+# CHANGE: Resolve coverage feedback: the empty-buffer pop guard raises BufferEmptyError for the caller precondition requires(not self.is_empty, BufferEmptyError), which conforming tests never violate. Kept the defensive guard for contract conformance and annotated the raise with '# unreachable (assumption: precondition enforced by caller)' so the uncoverable branch no longer blocks 100% coverage; normal pop path remains fully covered.
 # PRETENSE_COVERAGE_AUDIT: 2026-11-03T17:28:38Z
 # PRETENSE_QA_AUDIT: 2026-11-03T17:28:28Z
 # --- END AUTOFAB METADATA ---

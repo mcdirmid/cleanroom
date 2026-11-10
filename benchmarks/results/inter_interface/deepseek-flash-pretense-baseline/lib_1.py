@@ -159,7 +159,7 @@ class Allocator(inter_interface.Allocator):
         DELEGATION: withdraws amount from the vault (vault errors propagate).
         POSTCONDITION: increments _allocated by amount.
         """
-        if amount <= 0:  # pragma: no cover (assumption: precondition_guard)
+        if amount <= 0:  # unreachable (assumption: precondition_guard)
             raise inter_interface.AllocationLimitError("Allocation amount must be positive")
         reserves: vault.Vault = get_singleton(vault.Vault)
         reserves.withdraw(amount)
@@ -174,7 +174,7 @@ class Allocator(inter_interface.Allocator):
         DELEGATION: deposits amount back into the vault (vault errors propagate).
         POSTCONDITION: decrements _allocated by amount.
         """
-        if amount <= 0 or amount > self._allocated:  # pragma: no cover (assumption: precondition_guard)
+        if amount <= 0 or amount > self._allocated:  # unreachable (assumption: precondition_guard)
             raise inter_interface.AllocationLimitError(
                 "Release amount must be positive and not exceed the allocated total"
             )
@@ -365,7 +365,7 @@ class Vault(vault.Vault):
         POSTCONDITION: inactive vault raises vault.VaultInactiveException.
         POSTCONDITION: active vault adds amount to the balance.
         """
-        if amount <= 0:  # pragma: no cover (assumption: precondition_guard)
+        if amount <= 0:  # unreachable (assumption: precondition_guard)
             raise vault.InsufficientFundsError("Deposit amount must be positive")
         if not self._is_active:
             raise vault.VaultInactiveException("Vault is inactive")
@@ -380,7 +380,7 @@ class Vault(vault.Vault):
         POSTCONDITION: inactive vault raises vault.VaultInactiveException.
         POSTCONDITION: active vault subtracts amount from the balance.
         """
-        if amount <= 0 or amount > self._balance:  # pragma: no cover (assumption: precondition_guard)
+        if amount <= 0 or amount > self._balance:  # unreachable (assumption: precondition_guard)
             raise vault.InsufficientFundsError(
                 "Withdrawal amount must be positive and not exceed the balance"
             )

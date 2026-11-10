@@ -1614,6 +1614,26 @@ def check_type_ignore(file_path: str) -> list[str]:
     return errors
 
 
+def check_no_pragma_no_cover(file_path: str) -> list[str]:
+    """Check that modules do not use '# pragma: no cover' or '# no cover' comments.
+    Coverage exclusions must use 'with unreachable:' or 'unreachable()' only when instructed by coverage."""
+    errors: list[str] = []
+    if not os.path.exists(file_path):
+        return errors
+    try:
+        with open(file_path, "rb") as f:
+            for tok in tokenize.tokenize(f.readline):
+                if tok.type == tokenize.COMMENT:
+                    if re.search(r"#\s*(?:pragma:\s*no\s*cover|no\s*cover)\b", tok.string):
+                        errors.append(
+                            f"{file_path}:{tok.start[0]}: error: '# pragma: no cover' is prohibited; "
+                            f"use 'with unreachable:' or 'unreachable()' instead (only when instructed by coverage)"
+                        )
+    except (tokenize.TokenError, OSError, SyntaxError):
+        pass
+    return errors
+
+
 def check_test_impl_imports(lib_pkg: str, file_path: str) -> list[str]:
     """Check that a test module (<target>_test.py) only imports from its target module (<target>)
     and does not import any other implementation module (*_impl.py) or foreign Impl class."""

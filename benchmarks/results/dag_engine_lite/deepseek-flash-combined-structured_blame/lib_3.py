@@ -527,7 +527,7 @@ class DAG(dag_engine_lite.DAG):
         # topological_sort guarantees a complete acyclic order, so every upstream is processed first.
         order = self.topological_sort()
         # Empty graph is a caller precondition; guard retained solely to keep max() total.
-        if not order:  # pragma: no cover (assumption: caller executes a graph containing nodes)
+        if not order:  # unreachable (assumption: caller executes a graph containing nodes)
             return ([], 0.0)
         durations: Mapping[str, float] = estimated_durations if estimated_durations is not None else {}
         # Dynamic programming sweep computes the earliest completion time of every node.
@@ -845,7 +845,7 @@ _initialize_ = __initialize__
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-09T22:57:19Z
 # LAST_CHANGED: 2026-11-09T22:40:25Z
-# CHANGE: Annotate the empty-graph critical path short-circuit as an uncontracted caller-precondition assumption with '# pragma: no cover (assumption: caller executes a graph containing nodes)', retaining it only to keep the max() reduction total for empty input.
+# CHANGE: Annotate the empty-graph critical path short-circuit as an uncontracted caller-precondition assumption with '# unreachable (assumption: caller executes a graph containing nodes)', retaining it only to keep the max() reduction total for empty input.
 # COVERAGE_AUDIT: 2026-11-09T22:41:09Z
 # PRETENSE_COVERAGE_AUDIT: 2026-11-09T22:57:19Z
 # PRETENSE_QA_AUDIT: 2026-11-09T22:56:56Z

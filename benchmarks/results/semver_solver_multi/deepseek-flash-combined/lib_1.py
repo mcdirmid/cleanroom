@@ -885,7 +885,7 @@ def _expand_comparator(prefix: str, target: _Target) -> _Alternatives:
         return [[(semver_core.ComparatorOp.LT, lower)]]
 
     # Unreachable: the clause tokenizer only yields the operators handled above.
-    return _impossible_alternatives()  # pragma: no cover (assumption: tokenizer-restricted operator set)
+    return _impossible_alternatives()  # unreachable (assumption: tokenizer-restricted operator set)
 
 
 def _hyphen_alternatives(
@@ -924,7 +924,7 @@ def _compile_clause(
         token = _CLAUSE_TOKEN_PATTERN.match(clause, position)
         # Unreachable: a stripped clause always yields a leading token because the
         # token pattern consumes the optional prefix and any non-space remainder.
-        if token is None:  # pragma: no cover (assumption: stripped clauses always yield a leading token)
+        if token is None:  # unreachable (assumption: stripped clauses always yield a leading token)
             raise _invalid(source, f"malformed clause {clause!r}")
         prefix = token.group(1) or "="
         target_text = token.group(2)

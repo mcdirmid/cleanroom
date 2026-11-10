@@ -119,7 +119,7 @@ class Allocator(inter_interface.Allocator):
     @override
     def allocate(self, amount: int) -> None:
         # PRECONDITION: amount must be positive.
-        if amount <= 0:  # pragma: no cover (assumption: precondition_guard)
+        if amount <= 0:  # unreachable (assumption: precondition_guard)
             raise inter_interface.AllocationLimitError()
         # POSTCONDITION: reserve funds from the collaborator vault.
         get_singleton(vault.Vault).withdraw(amount)
@@ -130,7 +130,7 @@ class Allocator(inter_interface.Allocator):
     @override
     def release(self, amount: int) -> None:
         # PRECONDITION: amount must be positive and within allocated funds.
-        if amount <= 0 or amount > self._allocated:  # pragma: no cover (assumption: precondition_guard)
+        if amount <= 0 or amount > self._allocated:  # unreachable (assumption: precondition_guard)
             raise inter_interface.AllocationLimitError()
         # POSTCONDITION: return funds to the collaborator vault.
         get_singleton(vault.Vault).deposit(amount)
@@ -269,7 +269,7 @@ class Vault(vault.Vault):
     @override
     def deposit(self, amount: int) -> None:
         # PRECONDITION: amount must be positive.
-        if amount <= 0:  # pragma: no cover (assumption: precondition_guard)
+        if amount <= 0:  # unreachable (assumption: precondition_guard)
             raise vault.InsufficientFundsError()
         # POSTCONDITION: inactive vault refuses deposits.
         if not self._is_active:
@@ -281,7 +281,7 @@ class Vault(vault.Vault):
     @override
     def withdraw(self, amount: int) -> None:
         # PRECONDITION: amount must be positive and within balance.
-        if amount <= 0 or amount > self._balance:  # pragma: no cover (assumption: precondition_guard)
+        if amount <= 0 or amount > self._balance:  # unreachable (assumption: precondition_guard)
             raise vault.InsufficientFundsError()
         # POSTCONDITION: inactive vault refuses withdrawals.
         if not self._is_active:

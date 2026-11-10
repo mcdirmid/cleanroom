@@ -96,6 +96,8 @@ reportUnknownArgumentType = false
 
 [tool.coverage.report]
 exclude_also = [
+    'with unreachable:',
+    'with unreachable\(',
     'def unreachable\(',
     'unreachable\(',
     'assert_never\(',

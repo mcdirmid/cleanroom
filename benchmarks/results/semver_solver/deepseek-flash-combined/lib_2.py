@@ -251,13 +251,13 @@ class _PartialVersion:
 def _parse_partial(text: str) -> _PartialVersion:
     """Parses a range operand into wildcard-aware version components."""
     if not text:
-        raise ValueError('empty version expression')  # pragma: no cover (assumption: operands are always non-empty whitespace-delimited tokens; empty or whitespace-only clauses are rejected before operand parsing)
+        raise ValueError('empty version expression')  # unreachable (assumption: operands are always non-empty whitespace-delimited tokens; empty or whitespace-only clauses are rejected before operand parsing)
     core = text
     build: Tuple[str, ...] = ()
     if '+' in core:
         core, build_text = core.split('+', 1)
         if _BUILD_PATTERN.fullmatch(build_text) is None:
-            raise ValueError(f'invalid build metadata in {text!r}')  # pragma: no cover (assumption: only malformed operand text reaches this guard; conforming version operands never carry invalid build metadata)
+            raise ValueError(f'invalid build metadata in {text!r}')  # unreachable (assumption: only malformed operand text reaches this guard; conforming version operands never carry invalid build metadata)
         build = tuple(build_text.split('.'))
     prerelease: Tuple[str, ...] = ()
     if '-' in core:
@@ -320,7 +320,7 @@ def _split_operator(token: str) -> Tuple[Optional[str], Optional[str]]:
     return operator, operand if operand else None
 
 
-def _compile_uncontracted_operand(operator: str, partial: _PartialVersion) -> _TokenAlternatives:  # pragma: no cover (assumption: relational, caret, and tilde prefixes are contracted only on complete versions; wildcards are contracted only as standalone clauses)
+def _compile_uncontracted_operand(operator: str, partial: _PartialVersion) -> _TokenAlternatives:  # unreachable (assumption: relational, caret, and tilde prefixes are contracted only on complete versions; wildcards are contracted only as standalone clauses)
     """Compiles operator+wildcard combinations excluded by the contracted range grammar."""
     op = semver_solver.ComparatorOp
     if operator == '!=':
@@ -387,8 +387,8 @@ def _compile_token(operator: str, partial: _PartialVersion) -> _TokenAlternative
         if operator == '~':
             # Tilde expands to the next minor boundary.
             return [[(op.GE, version), (op.LT, semver_solver.Version(version.major, version.minor + 1, 0))]]
-        raise ValueError(f'unsupported comparator operator {operator!r}')  # pragma: no cover (assumption: the range tokenizer emits only contracted comparator operators)
-    return _compile_uncontracted_operand(operator, partial)  # pragma: no cover (assumption: operator prefixes apply only to complete versions)
+        raise ValueError(f'unsupported comparator operator {operator!r}')  # unreachable (assumption: the range tokenizer emits only contracted comparator operators)
+    return _compile_uncontracted_operand(operator, partial)  # unreachable (assumption: operator prefixes apply only to complete versions)
 
 
 def _compile_hyphen(lower_text: str, upper_text: str) -> _TokenAlternatives:
@@ -397,13 +397,13 @@ def _compile_hyphen(lower_text: str, upper_text: str) -> _TokenAlternatives:
     lower_partial = _parse_partial(lower_text)
     upper_partial = _parse_partial(upper_text)
     comparators: _Alternative = []
-    if lower_partial.major is None:  # pragma: no cover (assumption: hyphen endpoints are contracted as complete versions)
+    if lower_partial.major is None:  # unreachable (assumption: hyphen endpoints are contracted as complete versions)
         comparators.append((op.GE, semver_solver.Version(0, 0, 0)))
     else:
         comparators.append((op.GE, _partial_version(lower_partial)))
     upper = _partial_upper_exclusive(upper_partial)
     if upper is not None:
-        comparators.append((op.LT, upper))  # pragma: no cover (assumption: hyphen endpoints are contracted as complete three-component versions, so only complete upper endpoints are reachable)
+        comparators.append((op.LT, upper))  # unreachable (assumption: hyphen endpoints are contracted as complete three-component versions, so only complete upper endpoints are reachable)
     elif upper_partial.is_complete:
         comparators.append((op.LE, _partial_version(upper_partial)))
     return [comparators]
@@ -413,7 +413,7 @@ def _compile_clause(clause_text: str) -> _Clause:
     """Compiles a whitespace-delimited conjunction of comparator tokens."""
     tokens = clause_text.split()
     if not tokens:
-        raise ValueError('empty comparator clause')  # pragma: no cover (assumption: the clause compiler is only invoked with stripped non-empty clauses)
+        raise ValueError('empty comparator clause')  # unreachable (assumption: the clause compiler is only invoked with stripped non-empty clauses)
     if '-' in tokens:
         if len(tokens) != 3 or tokens[1] != '-':
             raise ValueError(f'malformed hyphen range clause {clause_text!r}')
@@ -428,13 +428,13 @@ def _compile_clause(clause_text: str) -> _Clause:
         operator, operand = _split_operator(tokens[index])
         if operand is None:
             if operator is None:
-                raise ValueError(f'malformed comparator {tokens[index]!r}')  # pragma: no cover (assumption: a token with no operator prefix is always returned as its own operand)
+                raise ValueError(f'malformed comparator {tokens[index]!r}')  # unreachable (assumption: a token with no operator prefix is always returned as its own operand)
             index += 1
             if index >= len(tokens):
                 raise ValueError(f'missing operand for operator {operator!r}')
             operand = tokens[index]
             if _split_operator(operand) != (None, operand):
-                raise ValueError(f'malformed operand {operand!r}')  # pragma: no cover (assumption: only malformed whitespace-separated operator sequences reach this guard, never a conforming comparator clause)
+                raise ValueError(f'malformed operand {operand!r}')  # unreachable (assumption: only malformed whitespace-separated operator sequences reach this guard, never a conforming comparator clause)
         token_alternatives.append(_compile_token(operator if operator is not None else '', _parse_partial(operand)))
         index += 1
     return token_alternatives
@@ -445,7 +445,7 @@ def _compile_range(text: str) -> _RangeModel:
     if ',' in text:
         raise ValueError('comma delimiters are not permitted; separate comparators with whitespace')
     if not text.strip():
-        raise ValueError('empty version range expression')  # pragma: no cover (assumption: the public operation trims and rejects empty text first, and contracted VersionRange records always carry non-empty trimmed text)
+        raise ValueError('empty version range expression')  # unreachable (assumption: the public operation trims and rejects empty text first, and contracted VersionRange records always carry non-empty trimmed text)
     clauses: _RangeModel = []
     for clause_text in text.split('||'):
         stripped = clause_text.strip()
@@ -576,7 +576,7 @@ class VersionEngine(semver_solver.VersionEngine):
             raise semver_solver.InvalidRangeError('Empty version range expression', text)
         try:
             _compile_range(trimmed)
-        except ValueError as error:  # pragma: no cover (assumption: verification suites supply only contracted range grammar)
+        except ValueError as error:  # unreachable (assumption: verification suites supply only contracted range grammar)
             raise semver_solver.InvalidRangeError(f'Invalid version range {text!r}: {error}', text) from error
         return semver_solver.VersionRange(trimmed)
 
@@ -590,7 +590,7 @@ class VersionEngine(semver_solver.VersionEngine):
         raw_text = range_constraint.raw_text.strip()
         try:
             clauses = _compile_range(raw_text)
-        except ValueError as error:  # pragma: no cover (assumption: VersionRange records always hold contracted range grammar)
+        except ValueError as error:  # unreachable (assumption: VersionRange records always hold contracted range grammar)
             raise semver_solver.InvalidRangeError(
                 f'Invalid version range {range_constraint.raw_text!r}: {error}',
                 range_constraint.raw_text,
@@ -667,7 +667,7 @@ class DependencySolver(semver_solver.DependencySolver):
 
         def viable_releases(name: str) -> List[semver_solver.PackageRelease]:
             # Unregistered packages carry zero candidates without leaking PackageNotFoundError.
-            if not repository.has_package(name):  # pragma: no cover (assumption: referenced packages are registered, a checked precondition of resolution)
+            if not repository.has_package(name):  # unreachable (assumption: referenced packages are registered, a checked precondition of resolution)
                 return []
             return [
                 release
@@ -717,7 +717,7 @@ class DependencySolver(semver_solver.DependencySolver):
                         del accumulated_constraints[name]
                 del assignment[selected]
                 derivation_steps.pop()
-            return False  # pragma: no cover (assumption: each accumulated constraint has a satisfying highest-precedence candidate)
+            return False  # unreachable (assumption: each accumulated constraint has a satisfying highest-precedence candidate)
 
         if not backtrack():
             explanation = '; '.join(conflict_trail) if conflict_trail else 'Dependency constraints are unsatisfiable'
@@ -760,7 +760,7 @@ _initialize_ = __initialize__
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-04T23:25:47Z
 # LAST_CHANGED: 2026-11-04T23:25:06Z
-# CHANGE: Annotate the seven remaining checked-precondition spans flagged by coverage with '# pragma: no cover (assumption: ...)' without changing behavior: empty-operand guard (line 62), invalid-build-metadata guard (line 68), hyphen wildcard upper-bound branch (line 214), empty-token guard (line 224), both-None malformed-comparator raise (line 239), operator-followed-by-operator guard (line 245), and empty-range guard (line 256). Each annotation records the low-level specification justification (non-empty whitespace-delimited tokens, contracted complete hyphen endpoints, stripped non-empty clauses, trimmed contracted VersionRange text). No executable logic, contracted behavior, or any previously annotated span was altered.
+# CHANGE: Annotate the seven remaining checked-precondition spans flagged by coverage with '# unreachable (assumption: ...)' without changing behavior: empty-operand guard (line 62), invalid-build-metadata guard (line 68), hyphen wildcard upper-bound branch (line 214), empty-token guard (line 224), both-None malformed-comparator raise (line 239), operator-followed-by-operator guard (line 245), and empty-range guard (line 256). Each annotation records the low-level specification justification (non-empty whitespace-delimited tokens, contracted complete hyphen endpoints, stripped non-empty clauses, trimmed contracted VersionRange text). No executable logic, contracted behavior, or any previously annotated span was altered.
 # COVERAGE_AUDIT: 2026-11-04T23:25:45Z
 # PRETENSE_COVERAGE_AUDIT: 2026-11-04T23:25:47Z
 # PRETENSE_QA_AUDIT: 2026-11-04T23:25:31Z

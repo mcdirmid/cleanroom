@@ -130,7 +130,7 @@ class Allocator(inter_interface.Allocator):
     def allocate(self, amount: int) -> None:
         # PRECONDITION: a non-positive allocation violates funding limits.
         if amount <= 0:
-            raise inter_interface.AllocationLimitError(  # pragma: no cover (assumption: invalid amount precondition)
+            raise inter_interface.AllocationLimitError(  # unreachable (assumption: invalid amount precondition)
                 "Allocation amount must be greater than zero."
             )
         # SEQUENCING: reserve the funds through the collaborator vault.
@@ -144,7 +144,7 @@ class Allocator(inter_interface.Allocator):
     def release(self, amount: int) -> None:
         # PRECONDITION: non-positive releases or releases beyond allocated funds are rejected.
         if amount <= 0 or amount > self._allocated:
-            raise inter_interface.AllocationLimitError(  # pragma: no cover (assumption: invalid amount precondition)
+            raise inter_interface.AllocationLimitError(  # unreachable (assumption: invalid amount precondition)
                 "Release amount must be positive and not exceed allocated funds."
             )
         # SEQUENCING: return the funds through the collaborator vault.
@@ -171,7 +171,7 @@ _initialize_ = __initialize__
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-04T18:43:31Z
 # LAST_CHANGED: 2026-11-04T18:42:54Z
-# CHANGE: Annotated precondition AllocationLimitError guards in allocate and release with '# pragma: no cover (assumption: invalid amount precondition)' per coverage feedback.
+# CHANGE: Annotated precondition AllocationLimitError guards in allocate and release with '# unreachable (assumption: invalid amount precondition)' per coverage feedback.
 # PRETENSE_COVERAGE_AUDIT: 2026-11-04T18:43:31Z
 # PRETENSE_QA_AUDIT: 2026-11-04T18:43:18Z
 # --- END AUTOFAB METADATA ---
@@ -298,7 +298,7 @@ class Vault(vault.Vault):
     def deposit(self, amount: int) -> None:
         # PRECONDITION: a non-positive deposit violates balance constraints.
         if amount <= 0:
-            raise vault.InsufficientFundsError(  # pragma: no cover (assumption: invalid amount precondition)
+            raise vault.InsufficientFundsError(  # unreachable (assumption: invalid amount precondition)
                 "Deposit amount must be greater than zero."
             )
         # POSTCONDITION: an inactive vault rejects the operation.
@@ -312,7 +312,7 @@ class Vault(vault.Vault):
     def withdraw(self, amount: int) -> None:
         # PRECONDITION: non-positive or above-balance withdrawals are rejected.
         if amount <= 0 or amount > self._balance:
-            raise vault.InsufficientFundsError(  # pragma: no cover (assumption: invalid amount precondition)
+            raise vault.InsufficientFundsError(  # unreachable (assumption: invalid amount precondition)
                 "Withdrawal amount must be positive and not exceed the balance."
             )
         # POSTCONDITION: an inactive vault rejects the operation.
@@ -346,7 +346,7 @@ _initialize_ = __initialize__
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-04T18:43:33Z
 # LAST_CHANGED: 2026-11-04T18:42:50Z
-# CHANGE: Annotated precondition InsufficientFundsError guards in deposit and withdraw with '# pragma: no cover (assumption: invalid amount precondition)' per coverage feedback.
+# CHANGE: Annotated precondition InsufficientFundsError guards in deposit and withdraw with '# unreachable (assumption: invalid amount precondition)' per coverage feedback.
 # PRETENSE_COVERAGE_AUDIT: 2026-11-04T18:43:33Z
 # PRETENSE_QA_AUDIT: 2026-11-04T18:43:20Z
 # --- END AUTOFAB METADATA ---

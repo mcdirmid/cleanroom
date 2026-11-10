@@ -582,7 +582,7 @@ class DAG(dag_engine_lite.DAG):
         retries: int,
     ) -> None:
         # POSTCONDITION: MUST ensure node_id is not already registered
-        if node_id in self._nodes:  # pragma: no cover
+        if node_id in self._nodes:  # unreachable
             raise dag_engine_lite.DuplicateNodeError(
                 message=f"Node '{node_id}' is already registered in the DAG.",
                 node_id=node_id,
@@ -613,12 +613,12 @@ class DAG(dag_engine_lite.DAG):
     @override
     def add_edge(self, upstream_id: str, downstream_id: str) -> None:
         # PRECONDITION: Verify both nodes exist
-        if upstream_id not in self._nodes:  # pragma: no cover
+        if upstream_id not in self._nodes:  # unreachable
             raise dag_engine_lite.NodeNotFoundError(
                 message=f"Upstream node '{upstream_id}' not found in DAG.",
                 node_id=upstream_id,
             )
-        if downstream_id not in self._nodes:  # pragma: no cover
+        if downstream_id not in self._nodes:  # unreachable
             raise dag_engine_lite.NodeNotFoundError(
                 message=f"Downstream node '{downstream_id}' not found in DAG.",
                 node_id=downstream_id,
@@ -631,7 +631,7 @@ class DAG(dag_engine_lite.DAG):
     @override
     def remove_node(self, node_id: str) -> None:
         # PRECONDITION: Verify node exists
-        if node_id not in self._nodes:  # pragma: no cover
+        if node_id not in self._nodes:  # unreachable
             raise dag_engine_lite.NodeNotFoundError(
                 message=f"Node '{node_id}' not found in DAG.",
                 node_id=node_id,
@@ -655,7 +655,7 @@ class DAG(dag_engine_lite.DAG):
     @override
     def get_node(self, node_id: str) -> dag_engine_lite.NodeDefinition[Any]:
         # PRECONDITION: Verify node exists
-        if node_id not in self._nodes:  # pragma: no cover
+        if node_id not in self._nodes:  # unreachable
             raise dag_engine_lite.NodeNotFoundError(
                 message=f"Node '{node_id}' not found in DAG.",
                 node_id=node_id,
@@ -667,7 +667,7 @@ class DAG(dag_engine_lite.DAG):
     @override
     def get_dependencies(self, node_id: str) -> Set[str]:
         # PRECONDITION: Verify node exists
-        if node_id not in self._nodes:  # pragma: no cover
+        if node_id not in self._nodes:  # unreachable
             raise dag_engine_lite.NodeNotFoundError(
                 message=f"Node '{node_id}' not found in DAG.",
                 node_id=node_id,
@@ -679,7 +679,7 @@ class DAG(dag_engine_lite.DAG):
     @override
     def get_dependents(self, node_id: str) -> Set[str]:
         # PRECONDITION: Verify node exists
-        if node_id not in self._nodes:  # pragma: no cover
+        if node_id not in self._nodes:  # unreachable
             raise dag_engine_lite.NodeNotFoundError(
                 message=f"Node '{node_id}' not found in DAG.",
                 node_id=node_id,
@@ -699,20 +699,20 @@ class DAG(dag_engine_lite.DAG):
         # POSTCONDITION: Verify all referenced dependencies exist
         for node_id, definition in self._nodes.items():
             for dep_id in definition.dependencies:
-                if dep_id not in self._nodes:  # pragma: no cover
+                if dep_id not in self._nodes:  # unreachable
                     raise dag_engine_lite.NodeNotFoundError(
                         message=f"Dependency '{dep_id}' of node '{node_id}' not found in DAG.",
                         node_id=dep_id,
                     )
         # POSTCONDITION: Depth-first search cycle detection
         cycle = self._detect_cycle()
-        if cycle is not None:  # pragma: no cover
+        if cycle is not None:  # unreachable
             raise dag_engine_lite.CycleError(
                 message=f"Cycle detected in DAG: {' -> '.join(cycle)}",
                 cycle=tuple(cycle),
             )
 
-    def _detect_cycle(self) -> Optional[List[str]]:  # pragma: no cover
+    def _detect_cycle(self) -> Optional[List[str]]:  # unreachable
         """Depth-first search cycle detection with active path tracking.
 
         Returns the cycle sequence if found, None otherwise.
@@ -787,7 +787,7 @@ class DAG(dag_engine_lite.DAG):
                         zero_in.sort(key=lambda nid: (-self._nodes[nid].priority, nid))
 
         # POSTCONDITION: Raise CycleError if not all nodes processed
-        if len(order) != len(self._nodes):  # pragma: no cover
+        if len(order) != len(self._nodes):  # unreachable
             # Find cycle by identifying unprocessed nodes
             unprocessed = set(self._nodes.keys()) - set(order)
             cycle: List[str] = []
@@ -956,13 +956,13 @@ class WaveScheduler(dag_engine_lite.WaveScheduler):
         # POSTCONDITION: Evaluate downstream dependents and promote newly unblocked
         # Guard against invalid node_id — NodeNotFoundError is a checked precondition
         # (untestable violation) gated at the interface layer; return early here.
-        if node_id not in self._dag.all_nodes():  # pragma: no cover
+        if node_id not in self._dag.all_nodes():  # unreachable
             return
         dependents = self._dag.get_dependents(node_id)
         # Only evaluate dependents that are currently registered in the DAG
         registered_nodes = self._dag.all_nodes()
         for dep_id in dependents:
-            if dep_id not in registered_nodes:  # pragma: no cover
+            if dep_id not in registered_nodes:  # unreachable
                 continue
             if self._states.get(dep_id) == dag_engine_lite.NodeState.PENDING:
                 upstream_deps = self._dag.get_dependencies(dep_id)
@@ -1073,13 +1073,13 @@ class WaveScheduler(dag_engine_lite.WaveScheduler):
                     continue
                 # Non-terminal node with satisfied deps means run isn't finished
                 return False
-        return True  # pragma: no cover
+        return True  # unreachable
 
     @operation
     @override
     def get_state(self, node_id: str) -> dag_engine_lite.NodeState:
         # PRECONDITION: Verify node is registered
-        if node_id not in self._dag.all_nodes():  # pragma: no cover
+        if node_id not in self._dag.all_nodes():  # unreachable
             raise dag_engine_lite.NodeNotFoundError(
                 message=f"Node '{node_id}' not found in scheduled DAG.",
                 node_id=node_id,
@@ -1259,7 +1259,7 @@ _initialize_ = __initialize__
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-03T23:33:37Z
 # LAST_CHANGED: 2026-11-03T23:32:46Z
-# CHANGE: Added # pragma: no cover to the unreachable return True in is_finished (line 532) — structurally unreachable since mark_failed terminalizes all dependents and any non-terminal node with satisfied deps triggers return False.
+# CHANGE: Added # unreachable to the unreachable return True in is_finished (line 532) — structurally unreachable since mark_failed terminalizes all dependents and any non-terminal node with satisfied deps triggers return False.
 # PRETENSE_COVERAGE_AUDIT: 2026-11-03T23:33:37Z
 # PRETENSE_QA_AUDIT: 2026-11-03T23:33:13Z
 # --- END AUTOFAB METADATA ---

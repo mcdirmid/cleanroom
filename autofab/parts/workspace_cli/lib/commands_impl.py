@@ -624,7 +624,7 @@ class WorkspaceCommandHandler(commands.WorkspaceCommandHandler):
                     print(
                         "Error: misattribution: no test-owned spans in this deficit. "
                         "All uncovered spans are [LIB-PRAGMA-REQUIRED] (raises *Error or precondition guard). "
-                        "Blame the library module to add '# pragma: no cover (assumption: precondition enforced by caller)' or restructure.",
+                        "Blame the library module to wrap in 'with unreachable:' or use 'unreachable()' or restructure.",
                         file=sys.stderr,
                     )
                     return 1

@@ -21,6 +21,7 @@ from autofab_py.support.lib.build_lint_common import (
     check_syntax,
     check_tautological_assertions,
     check_type_ignore,
+    check_no_pragma_no_cover,
     format_syntax_error,
 )
 
@@ -538,6 +539,38 @@ class CheckTypeIgnoreTest(unittest.TestCase):
 
     def test_regular_comments_pass(self) -> None:
         source = "# This is a normal comment\nx = 1  # type of variable is int\n# ignore this warning in prose\n"
+        errors = self._check(source)
+        self.assertEqual(errors, [])
+
+
+class CheckNoPragmaNoCoverTest(unittest.TestCase):
+    def _check(self, source: str) -> list[str]:
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=".py", delete=False, encoding="utf-8"
+        ) as f:
+            f.write(source)
+            f.flush()
+            temp_path = f.name
+        try:
+            return check_no_pragma_no_cover(temp_path)
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+
+    def test_pragma_no_cover_rejected(self) -> None:
+        source = "if condition:  # pragma: no cover\n    pass\n"
+        errors = self._check(source)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("'# pragma: no cover' is prohibited", errors[0])
+
+    def test_no_cover_shorthand_rejected(self) -> None:
+        source = "if condition:  # no cover\n    pass\n"
+        errors = self._check(source)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("'# pragma: no cover' is prohibited", errors[0])
+
+    def test_with_unreachable_passes(self) -> None:
+        source = "with unreachable:\n    pass\n"
         errors = self._check(source)
         self.assertEqual(errors, [])
 

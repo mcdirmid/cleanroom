@@ -1405,7 +1405,7 @@ def run_pretense_cli(argv: Optional[List[str]] = None) -> int:
                 "• DO NOT expose details (line numbers, code snippets, or internal symbols) of other files.\n"
                 "• Translate uncovered statements and branches into missing specification requirements or scenario cases.\n"
                 "• If an uncovered branch is an unreachable defensive check or caller assumption guaranteed by the specification, instruct the implementation author to prune it or mark it as unreachable according to the methodology.\n"
-                "• If an uncovered line persists after tests were updated or across multiple rounds, examine the library implementation closely: trace control flow and invariants to verify whether the line is structurally unreachable or defensive dead code; if unreachable, blame the library (prune, unreachable(), or # pragma: no cover).\n"
+                "• If an uncovered line persists after tests were updated or across multiple rounds, examine the library implementation closely: trace control flow and invariants to verify whether the line is structurally unreachable or defensive dead code; if unreachable, blame the library (prune, with unreachable:, or unreachable()).\n"
                 + "="
                 * 80
             )

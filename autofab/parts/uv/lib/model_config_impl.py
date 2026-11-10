@@ -20,6 +20,7 @@ except Exception:
     pass
 
 from support.lib import app_info
+from support.lib.framework import unreachable
 from support.lib.lifecycle import (
     LifecycleRegistry,
     Singleton,
@@ -90,8 +91,9 @@ def _find_toml_config_file() -> Optional[str]:
     curr = ws_root
     for _ in range(5):
         parent = os.path.dirname(curr)
-        if parent == curr:  # pragma: no cover (assumption: filesystem root)
-            break  # pragma: no cover (assumption: filesystem root)
+        if parent == curr:
+            with unreachable:
+                break
         for cand in repo_candidates:
             p = os.path.join(parent, cand)
             if _is_valid_model_config_file(p):
@@ -102,7 +104,8 @@ def _find_toml_config_file() -> Optional[str]:
         if os.path.isfile(cand):
             return cand
 
-    return None  # pragma: no cover (assumption: fallback when no config found)
+    with unreachable:
+        return None
 
 
 def _load_toml_data(config_file: str) -> Mapping[str, Any]:
@@ -113,8 +116,9 @@ def _load_toml_data(config_file: str) -> Mapping[str, Any]:
     except (
         OSError,
         tomllib.TOMLDecodeError,
-    ):  # pragma: no cover (assumption: invalid toml file)
-        return {}
+    ):
+        with unreachable:
+            return {}
 
 
 class _ConfigData:
@@ -145,13 +149,15 @@ class _ConfigData:
         if "max_iterations" in data:
             try:
                 self.conversation_limit = int(data["max_iterations"])
-            except (ValueError, TypeError):  # pragma: no cover (assumption: valid int)
-                self.conversation_limit = 20
+            except (ValueError, TypeError):
+                with unreachable:
+                    self.conversation_limit = 20
         elif "conversation_limit" in data:
             try:
                 self.conversation_limit = int(data["conversation_limit"])
-            except (ValueError, TypeError):  # pragma: no cover (assumption: valid int)
-                self.conversation_limit = 20
+            except (ValueError, TypeError):
+                with unreachable:
+                    self.conversation_limit = 20
         else:
             self.conversation_limit = 20
 
@@ -159,8 +165,9 @@ class _ConfigData:
         if "node_visit_limit" in data:
             try:
                 self.node_visit_limit = int(data["node_visit_limit"])
-            except (ValueError, TypeError):  # pragma: no cover (assumption: valid int)
-                self.node_visit_limit = 100
+            except (ValueError, TypeError):
+                with unreachable:
+                    self.node_visit_limit = 100
         else:
             self.node_visit_limit = 100
 
@@ -168,8 +175,9 @@ class _ConfigData:
         if "batch_size" in data:
             try:
                 self.batch_size = int(data["batch_size"])
-            except (ValueError, TypeError):  # pragma: no cover (assumption: valid int)
-                self.batch_size = 1
+            except (ValueError, TypeError):
+                with unreachable:
+                    self.batch_size = 1
         else:
             self.batch_size = 1
 

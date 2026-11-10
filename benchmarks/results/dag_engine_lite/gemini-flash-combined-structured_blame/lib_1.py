@@ -785,7 +785,7 @@ class DAG(dag_engine_lite.DAG):
         if len(order) != len(self._nodes):
             self.validate()
             # If validate didn't catch (should be unreachable), raise fallback CycleError
-            raise dag_engine_lite.CycleError(  # pragma: no cover (assumption: self.validate raises CycleError on cyclic graph)
+            raise dag_engine_lite.CycleError(  # unreachable (assumption: self.validate raises CycleError on cyclic graph)
                 message="Cycle detected in DAG",
                 cycle=(),
             )
@@ -1117,7 +1117,7 @@ class DAGRunner(dag_engine_lite.DAGRunner):
 
         while not scheduler.is_finished():
             wave = scheduler.next_wave()
-            if not wave:  # pragma: no cover (assumption: empty wave loop stall breaker per grounding)
+            if not wave:  # unreachable (assumption: empty wave loop stall breaker per grounding)
                 break
             stop_execution = False
             for node_id in wave:

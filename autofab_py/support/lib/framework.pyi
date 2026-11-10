@@ -26,6 +26,7 @@ __all__ = [
     "variant",
     "operation",
     "override",
+    "unreachable",
 ]
 
 T = TypeVar("T")
@@ -135,6 +136,15 @@ def override(func: F) -> F:
     of a supertype method, typically in subclass hierarchies.
     """
     ...
+
+
+class _Unreachable:
+    def __call__(self, reason: str = ...) -> Any: ...
+    def __enter__(self) -> None: ...
+    def __exit__(self, *args: Any) -> None: ...
+
+
+unreachable: _Unreachable
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-07T05:04:27Z

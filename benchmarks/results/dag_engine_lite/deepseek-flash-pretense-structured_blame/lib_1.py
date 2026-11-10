@@ -677,7 +677,7 @@ class DAG(dag_engine_lite.DAG):
                     ready.sort(key=lambda candidate: (-self._nodes[candidate].priority, candidate))
         if len(order) != len(self._nodes):
             cycle = self._detect_cycle()
-            if cycle is None:  # pragma: no cover (assumption: nodes left by in-degree drainage always lie on a directed cycle)
+            if cycle is None:  # unreachable (assumption: nodes left by in-degree drainage always lie on a directed cycle)
                 cycle = tuple(sorted(node_id for node_id in self._nodes if node_id not in set(order)))
             raise dag_engine_lite.CycleError(f"Dependency cycle detected: {' -> '.join(cycle)}", cycle)
         return order
@@ -992,7 +992,7 @@ _initialize_ = __initialize__
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-08T06:43:37Z
 # LAST_CHANGED: 2026-11-08T06:28:42Z
-# CHANGE: Resolved coverage feedback in DAG.topological_sort: pruned the unexercisable defensive guard for unregistered downstream dependents (downstream adjacency only ever holds registered node identifiers, so the in-degree decrement applies directly), and annotated the cycle-sequence fallback branch with '# pragma: no cover (assumption: nodes left by in-degree drainage always lie on a directed cycle)' since a leftover node implies the depth-first cycle detection always returns a sequence.
+# CHANGE: Resolved coverage feedback in DAG.topological_sort: pruned the unexercisable defensive guard for unregistered downstream dependents (downstream adjacency only ever holds registered node identifiers, so the in-degree decrement applies directly), and annotated the cycle-sequence fallback branch with '# unreachable (assumption: nodes left by in-degree drainage always lie on a directed cycle)' since a leftover node implies the depth-first cycle detection always returns a sequence.
 # PRETENSE_COVERAGE_AUDIT: 2026-11-08T06:43:37Z
 # PRETENSE_QA_AUDIT: 2026-11-08T06:43:15Z
 # --- END AUTOFAB METADATA ---

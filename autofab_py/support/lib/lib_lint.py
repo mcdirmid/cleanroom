@@ -52,6 +52,7 @@ from build_lint_common import (
     check_syntax,
     extract_asm_constituents,
     check_type_ignore,
+    check_no_pragma_no_cover,
     check_undeclared_imports,
     ensure_load,
     ensure_pip_load,
@@ -949,6 +950,7 @@ def main() -> int:
         frozen_exception_errors = check_no_frozen_exceptions(args.module_path)
         stub_errors = check_no_stubs(args.module_path)
         type_ignore_errors = check_type_ignore(args.module_path)
+        pragma_errors = check_no_pragma_no_cover(args.module_path)
         type_errors = check_public_types(
             args.module_path,
             pyi_path=spec_file,
@@ -987,6 +989,7 @@ def main() -> int:
             + frozen_exception_errors
             + stub_errors
             + type_ignore_errors
+            + pragma_errors
             + type_errors
             + func_errors
             + sig_errors
@@ -1261,6 +1264,7 @@ def main() -> int:
     frozen_exception_errors = check_no_frozen_exceptions(args.module_path)
     stub_errors = check_no_stubs(args.module_path)
     type_ignore_errors = check_type_ignore(args.module_path)
+    pragma_errors = check_no_pragma_no_cover(args.module_path)
     type_errors = check_public_types(
         args.module_path,
         pyi_path=args.pyi or None,
@@ -1298,6 +1302,7 @@ def main() -> int:
         + frozen_exception_errors
         + stub_errors
         + type_ignore_errors
+        + pragma_errors
         + type_errors
         + func_errors
         + sig_errors

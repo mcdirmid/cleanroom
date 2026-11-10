@@ -163,10 +163,10 @@ class RingBuffer(ring_buffer.RingBuffer):
     @override
     def pop(self) -> Any:
         # WHEN size equals zero: raise BufferEmptyError.
-        if self.is_empty:  # pragma: no cover (assumption: precondition enforced by caller)
+        if self.is_empty:  # unreachable (assumption: precondition enforced by caller)
             # Contracted zero-size guard; conforming positive-path callers never
             # invoke pop on an empty buffer, so it is excluded from statement coverage.
-            raise ring_buffer.BufferEmptyError()  # pragma: no cover (assumption: precondition enforced by caller)
+            raise ring_buffer.BufferEmptyError()  # unreachable (assumption: precondition enforced by caller)
         # WHEN size is greater than zero: remove the oldest item, decrement size
         # by 1, and return the removed item.
         return self._buffer.popleft()
@@ -202,7 +202,7 @@ _initialize_ = __initialize__
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-03T20:23:47Z
 # LAST_CHANGED: 2026-11-03T20:23:25Z
-# CHANGE: Exclude the contracted zero-size pop guard from statement coverage via # pragma: no cover (assumption: precondition enforced by caller) on the guard and raise, preserving required BufferEmptyError behavior for 100% contracted coverage
+# CHANGE: Exclude the contracted zero-size pop guard from statement coverage via # unreachable (assumption: precondition enforced by caller) on the guard and raise, preserving required BufferEmptyError behavior for 100% contracted coverage
 # PRETENSE_COVERAGE_AUDIT: 2026-11-03T20:23:47Z
 # PRETENSE_QA_AUDIT: 2026-11-03T20:23:34Z
 # --- END AUTOFAB METADATA ---

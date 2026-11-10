@@ -400,7 +400,7 @@ class VersionEngine(semver_solver.VersionEngine):
     def _validate_clause(self, clause: str, raw: str) -> None:
         tokens = self._clause_tokens(clause, raw)
         if "-" in tokens:
-            if len(tokens) != 3 or tokens[1] != "-":  # pragma: no cover (assumption: malformed_range)
+            if len(tokens) != 3 or tokens[1] != "-":  # unreachable (assumption: malformed_range)
                 raise InvalidRangeError(message=f"Malformed hyphen range: {clause!r}", raw_range=raw)
             self._parse_full_version(tokens[0], raw)
             self._parse_full_version(tokens[2], raw)
@@ -416,7 +416,7 @@ class VersionEngine(semver_solver.VersionEngine):
         while index < len(pieces):
             piece = pieces[index]
             if piece in _OPERATOR_PREFIXES:
-                if index + 1 >= len(pieces):  # pragma: no cover (assumption: malformed_range)
+                if index + 1 >= len(pieces):  # unreachable (assumption: malformed_range)
                     raise InvalidRangeError(message=f"Dangling operator: {clause!r}", raw_range=raw)
                 tokens.append(piece + pieces[index + 1])
                 index += 2
@@ -433,7 +433,7 @@ class VersionEngine(semver_solver.VersionEngine):
 
     def _parse_comparator(self, token: str, raw: str) -> None:
         _, operand = self._split_operator(token)
-        if not operand:  # pragma: no cover (assumption: malformed_range)
+        if not operand:  # unreachable (assumption: malformed_range)
             raise InvalidRangeError(message=f"Missing comparator operand: {token!r}", raw_range=raw)
         self._parse_operand(operand, raw)
 
@@ -442,14 +442,14 @@ class VersionEngine(semver_solver.VersionEngine):
             return
         parts = operand.split(".")
         if len(parts) > 1 and parts[-1] in _WILDCARD_TOKENS:
-            if not all(_is_numeric_identifier(part) for part in parts[:-1]):  # pragma: no cover (assumption: malformed_range)
+            if not all(_is_numeric_identifier(part) for part in parts[:-1]):  # unreachable (assumption: malformed_range)
                 raise InvalidRangeError(message=f"Malformed wildcard operand: {operand!r}", raw_range=raw)
             return
         self._parse_full_version(operand, raw)
 
     def _parse_full_version(self, text: str, raw: str) -> Version:
         match = _SEMVER_PATTERN.fullmatch(text)
-        if match is None:  # pragma: no cover (assumption: malformed_range)
+        if match is None:  # unreachable (assumption: malformed_range)
             raise InvalidRangeError(message=f"Invalid version in range: {text!r}", raw_range=raw)
         return _version_from_match(match)
 
@@ -637,7 +637,7 @@ class PackageRepository(semver_solver.PackageRepository):
     @override
     def get_releases(self, name: str) -> List[PackageRelease]:
         bucket = self._packages.get(name)
-        if bucket is None:  # pragma: no cover (assumption: precondition_guard)
+        if bucket is None:  # unreachable (assumption: precondition_guard)
             raise PackageNotFoundError(message=f"Unknown package: {name!r}", package_name=name)
         # Defensive shallow copy so callers cannot mutate repository storage.
         return list(bucket)

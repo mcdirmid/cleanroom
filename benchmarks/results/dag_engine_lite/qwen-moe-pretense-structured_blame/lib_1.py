@@ -603,7 +603,7 @@ class DAG(dag_engine_lite.DAG):
     ) -> None:
         
         if node_id in self._nodes:
-            raise dag_engine_lite.DuplicateNodeError(  # pragma: no cover (assumption: DuplicateNodeError is untestable checked precondition)
+            raise dag_engine_lite.DuplicateNodeError(  # unreachable (assumption: DuplicateNodeError is untestable checked precondition)
                 message=f"Node '{node_id}' is already registered in the DAG",
                 node_id=node_id,
             )
@@ -632,12 +632,12 @@ class DAG(dag_engine_lite.DAG):
     @override
     def add_edge(self, upstream_id: str, downstream_id: str) -> None:
         if upstream_id not in self._nodes:
-            raise dag_engine_lite.NodeNotFoundError(  # pragma: no cover (assumption: NodeNotFoundError is untestable checked precondition)
+            raise dag_engine_lite.NodeNotFoundError(  # unreachable (assumption: NodeNotFoundError is untestable checked precondition)
                 message=f"Upstream node '{upstream_id}' does not exist in the DAG",
                 node_id=upstream_id,
             )
         if downstream_id not in self._nodes:
-            raise dag_engine_lite.NodeNotFoundError(  # pragma: no cover (assumption: NodeNotFoundError is untestable checked precondition)
+            raise dag_engine_lite.NodeNotFoundError(  # unreachable (assumption: NodeNotFoundError is untestable checked precondition)
                 message=f"Downstream node '{downstream_id}' does not exist in the DAG",
                 node_id=downstream_id,
             )
@@ -657,7 +657,7 @@ class DAG(dag_engine_lite.DAG):
     @override
     def remove_node(self, node_id: str) -> None:
         if node_id not in self._nodes:
-            raise dag_engine_lite.NodeNotFoundError(  # pragma: no cover (assumption: NodeNotFoundError is untestable checked precondition)
+            raise dag_engine_lite.NodeNotFoundError(  # unreachable (assumption: NodeNotFoundError is untestable checked precondition)
                 message=f"Node '{node_id}' does not exist in the DAG",
                 node_id=node_id,
             )
@@ -676,7 +676,7 @@ class DAG(dag_engine_lite.DAG):
     @override
     def get_node(self, node_id: str) -> dag_engine_lite.NodeDefinition[Any]:
         if node_id not in self._nodes:
-            raise dag_engine_lite.NodeNotFoundError(  # pragma: no cover (assumption: NodeNotFoundError is untestable checked precondition)
+            raise dag_engine_lite.NodeNotFoundError(  # unreachable (assumption: NodeNotFoundError is untestable checked precondition)
                 message=f"Node '{node_id}' does not exist in the DAG",
                 node_id=node_id,
             )
@@ -687,7 +687,7 @@ class DAG(dag_engine_lite.DAG):
     @override
     def get_dependencies(self, node_id: str) -> Set[str]:
         if node_id not in self._nodes:
-            raise dag_engine_lite.NodeNotFoundError(  # pragma: no cover (assumption: NodeNotFoundError is untestable checked precondition)
+            raise dag_engine_lite.NodeNotFoundError(  # unreachable (assumption: NodeNotFoundError is untestable checked precondition)
                 message=f"Node '{node_id}' does not exist in the DAG",
                 node_id=node_id,
             )
@@ -698,7 +698,7 @@ class DAG(dag_engine_lite.DAG):
     @override
     def get_dependents(self, node_id: str) -> Set[str]:
         if node_id not in self._nodes:
-            raise dag_engine_lite.NodeNotFoundError(  # pragma: no cover (assumption: NodeNotFoundError is untestable checked precondition)
+            raise dag_engine_lite.NodeNotFoundError(  # unreachable (assumption: NodeNotFoundError is untestable checked precondition)
                 message=f"Node '{node_id}' does not exist in the DAG",
                 node_id=node_id,
             )
@@ -718,7 +718,7 @@ class DAG(dag_engine_lite.DAG):
         for node_id, definition in self._nodes.items():
             for dep_id in definition.dependencies:
                 if dep_id not in self._nodes:
-                    raise dag_engine_lite.NodeNotFoundError(  # pragma: no cover (assumption: NodeNotFoundError is untestable checked precondition)
+                    raise dag_engine_lite.NodeNotFoundError(  # unreachable (assumption: NodeNotFoundError is untestable checked precondition)
                         message=f"Dependency '{dep_id}' of node '{node_id}' does not exist in the DAG",
                         node_id=dep_id,
                     )
@@ -734,10 +734,10 @@ class DAG(dag_engine_lite.DAG):
             color[node_id] = GRAY
             path.append(node_id)
             for dep_id in self._upstream.get(node_id, set()):
-                if color[dep_id] == GRAY:  # pragma: no cover (assumption: spec requires DAG input, no cycles possible)
+                if color[dep_id] == GRAY:  # unreachable (assumption: spec requires DAG input, no cycles possible)
                     cycle_start = path.index(dep_id)
                     return path[cycle_start:]
-                if color[dep_id] == WHITE:  # pragma: no cover (assumption: spec requires DAG input, DFS body unreachable)
+                if color[dep_id] == WHITE:  # unreachable (assumption: spec requires DAG input, DFS body unreachable)
                     result = dfs(dep_id, path)
                     if result:
                         return result
@@ -749,7 +749,7 @@ class DAG(dag_engine_lite.DAG):
             if color[node_id] == WHITE:
                 cycle = dfs(node_id, [])
                 if cycle:
-                    raise dag_engine_lite.CycleError(  # pragma: no cover (assumption: CycleError is untestable checked precondition)
+                    raise dag_engine_lite.CycleError(  # unreachable (assumption: CycleError is untestable checked precondition)
                         message=f"Cycle detected in DAG: {' -> '.join(cycle)} -> {cycle[0]}",
                         cycle=tuple(cycle),
                     )
@@ -796,7 +796,7 @@ class DAG(dag_engine_lite.DAG):
                         ready.sort(key=lambda nid: (-self._nodes[nid].priority, nid))
 
         if len(order) != len(self._nodes):
-            raise dag_engine_lite.CycleError(  # pragma: no cover (assumption: CycleError is untestable checked precondition; _check_cycles already validated)
+            raise dag_engine_lite.CycleError(  # unreachable (assumption: CycleError is untestable checked precondition; _check_cycles already validated)
                 message="Cycle detected during topological sort",
                 cycle=tuple(self._nodes.keys()),
             )
@@ -859,7 +859,7 @@ class DAG(dag_engine_lite.DAG):
 
         # Find terminal node with maximum completion time
         if not earliest:
-            return ([], 0.0)  # pragma: no cover (assumption: spec guarantees non-empty graph for critical path)
+            return ([], 0.0)  # unreachable (assumption: spec guarantees non-empty graph for critical path)
 
         terminal = max(earliest, key=lambda nid: earliest[nid])
         total_weight = earliest[terminal]
@@ -1034,7 +1034,7 @@ class WaveScheduler(dag_engine_lite.WaveScheduler):
             )
         )
         if not self._states:
-            return True  # pragma: no cover (assumption: spec guarantees non-empty scheduler)
+            return True  # unreachable (assumption: spec guarantees non-empty scheduler)
         return all(
             state in terminal_states for state in self._states.values()
         )
@@ -1043,7 +1043,7 @@ class WaveScheduler(dag_engine_lite.WaveScheduler):
     @override
     def get_state(self, node_id: str) -> dag_engine_lite.NodeState:
         if node_id not in self._dag.all_nodes():
-            raise dag_engine_lite.NodeNotFoundError(  # pragma: no cover (assumption: NodeNotFoundError is untestable checked precondition)
+            raise dag_engine_lite.NodeNotFoundError(  # unreachable (assumption: NodeNotFoundError is untestable checked precondition)
                 message=f"Node '{node_id}' is not registered in the scheduled DAG",
                 node_id=node_id,
             )
@@ -1097,7 +1097,7 @@ class DAGRunner(dag_engine_lite.DAGRunner):
         while not self._scheduler.is_finished():
             wave = self._scheduler.next_wave()
             if not wave:
-                break  # pragma: no cover (assumption: waves are populated per spec)
+                break  # unreachable (assumption: waves are populated per spec)
 
             for node_id in wave:
                 # Mark as RUNNING
@@ -1221,7 +1221,7 @@ _initialize_ = __initialize__
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-08T20:28:28Z
 # LAST_CHANGED: 2026-11-08T20:27:43Z
-# CHANGE: Pruned unreachable discard cleanup loops in remove_node; annotated DFS cycle-detection branches in _check_cycles with # pragma: no cover; cleared stale FEEDBACK metadata references.
+# CHANGE: Pruned unreachable discard cleanup loops in remove_node; annotated DFS cycle-detection branches in _check_cycles with # unreachable; cleared stale FEEDBACK metadata references.
 # PRETENSE_COVERAGE_AUDIT: 2026-11-08T20:28:28Z
 # PRETENSE_QA_AUDIT: 2026-11-08T20:28:07Z
 # --- END AUTOFAB METADATA ---

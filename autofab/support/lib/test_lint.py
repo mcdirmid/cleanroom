@@ -45,6 +45,7 @@ from build_lint_common import (
     check_banned_skips,
     check_test_structure,
     check_type_ignore,
+    check_no_pragma_no_cover,
     check_undeclared_imports,
     ensure_load,
     ensure_pip_load,
@@ -522,6 +523,7 @@ def main() -> int:
                 + check_test_getattr(args.module_path)
                 + check_banned_skips(args.module_path)
                 + check_type_ignore(args.module_path)
+                + check_no_pragma_no_cover(args.module_path)
                 + check_no_error_testing(args.module_path)
                 + check_no_try_except_in_tests(args.module_path)
                 + undeclared_errors
@@ -739,6 +741,7 @@ def main() -> int:
             + check_no_relative_parent_imports(args.module_path)
             + check_banned_skips(args.module_path)
             + check_type_ignore(args.module_path)
+            + check_no_pragma_no_cover(args.module_path)
             + undeclared_errors
         )
 

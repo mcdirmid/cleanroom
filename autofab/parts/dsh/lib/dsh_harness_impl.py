@@ -148,7 +148,7 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
         sessions_dir: Optional[str] = None,
         simulation_mode: bool = False,
         parser: Optional[dsh_telemetry.DshTelemetryParser] = None,
-        max_rounds_per_worker: int = 4,
+        max_rounds_per_worker: int = 8,
     ) -> None:
         self._model_name = model_name
         self._timeout_seconds = timeout_seconds
@@ -974,6 +974,7 @@ class DshHarnessManager(dsh_harness.DshHarnessManager):
             sessions_dir=sessions_dir,
             simulation_mode=simulation_mode,
             parser=self.get_telemetry_parser(),
+            max_rounds_per_worker=kwargs.get("max_rounds_per_worker", 8),
         )
 
     # Contract: MUST return DeepSeek Harness telemetry parser instance.
@@ -990,8 +991,8 @@ class DshHarnessManager(dsh_harness.DshHarnessManager):
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-18T19:13:51Z
-# LAST_CHANGED: 2026-11-09T19:42:00Z
-# CHANGE: Label old role conversation as dead after replacement is issued
+# LAST_CHANGED: 2026-11-10T20:30:00Z
+# CHANGE: Increase default worker session recycling threshold from 4 rounds to 8 rounds
 # COVERAGE_AUDIT: 2026-10-18T19:13:51Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

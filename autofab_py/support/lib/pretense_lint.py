@@ -35,6 +35,7 @@ try:
         check_test_impl_imports,
         check_test_imports,
         check_type_ignore,
+        check_no_pragma_no_cover,
         find_spec_pyi,
         format_syntax_error,
         module_file,
@@ -61,6 +62,7 @@ except ImportError:
         check_test_impl_imports,
         check_test_imports,
         check_type_ignore,
+        check_no_pragma_no_cover,
         find_spec_pyi,
         format_syntax_error,
         module_file,
@@ -3895,6 +3897,9 @@ def main() -> int:
 
     type_ignore_errs = check_type_ignore(args.module_path)
     all_errors.extend(type_ignore_errs)
+
+    pragma_errs = check_no_pragma_no_cover(args.module_path)
+    all_errors.extend(pragma_errs)
 
     if all_errors:
         for err in all_errors:

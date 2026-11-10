@@ -394,7 +394,7 @@ def _wildcard_upper(bound: _RangeBound) -> Optional[semver_solver.Version]:
 
 def _caret_upper(bound: _RangeBound) -> semver_solver.Version:
     major, minor, patch = bound.components
-    if major is None:  # pragma: no cover (assumption: caret on '*' is handled by the caller)
+    if major is None:  # unreachable (assumption: caret on '*' is handled by the caller)
         raise AssertionError("caret upper bound requires a concrete major component")
     if major > 0:
         return semver_solver.Version(major + 1, 0, 0)
@@ -409,7 +409,7 @@ def _caret_upper(bound: _RangeBound) -> semver_solver.Version:
 
 def _tilde_upper(bound: _RangeBound) -> semver_solver.Version:
     major, minor, _patch = bound.components
-    if major is None:  # pragma: no cover (assumption: tilde on '*' is handled by the caller)
+    if major is None:  # unreachable (assumption: tilde on '*' is handled by the caller)
         raise AssertionError("tilde upper bound requires a concrete major component")
     if minor is None:
         return semver_solver.Version(major + 1, 0, 0)
@@ -446,7 +446,7 @@ def _expand(kind: str, bound: _RangeBound) -> _DNF:
             return _conjunction(_Comparator(op.GE, version), _Comparator(op.LT, _caret_upper(bound)))
         if kind == '~':
             return _conjunction(_Comparator(op.GE, version), _Comparator(op.LT, _tilde_upper(bound)))
-        raise AssertionError(f"Unsupported range operator '{kind}'")  # pragma: no cover (assumption: _split_operator yields only supported operators)
+        raise AssertionError(f"Unsupported range operator '{kind}'")  # unreachable (assumption: _split_operator yields only supported operators)
 
     major, _minor, _patch = bound.components
     lower = _wildcard_lower(bound)
@@ -484,7 +484,7 @@ def _expand(kind: str, bound: _RangeBound) -> _DNF:
         if major is None:
             return [[]]
         return _conjunction(_Comparator(op.GE, lower), _Comparator(op.LT, _tilde_upper(bound)))
-    raise AssertionError(f"Unsupported range operator '{kind}'")  # pragma: no cover (assumption: _split_operator yields only supported operators)
+    raise AssertionError(f"Unsupported range operator '{kind}'")  # unreachable (assumption: _split_operator yields only supported operators)
 
 
 def _hyphen_lower(bound: _RangeBound) -> _DNF:
@@ -629,7 +629,7 @@ def _comparator_satisfied(version: semver_solver.Version, comparator: _Comparato
         return precedence > 0
     if op is semver_solver.ComparatorOp.GE:
         return precedence >= 0
-    return False  # pragma: no cover (assumption: ComparatorOp is exhaustive)
+    return False  # unreachable (assumption: ComparatorOp is exhaustive)
 
 
 def _clause_satisfied(
@@ -906,7 +906,7 @@ _initialize_ = __initialize__
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-09T22:41:22Z
 # LAST_CHANGED: 2026-11-09T22:30:00Z
-# CHANGE: Resolve coverage feedback on unreachable logic in semver_solver_impl.py: prune the duplicate empty-operand guard in _parse_bound (callers always pass non-empty clause/operator tokens, so empty bounds cannot occur) and the duplicate empty-token guard in _compile_clause (clauses are already whitespace-stripped and non-empty before tokenization); malformed empty inputs still raise InvalidRangeError through the malformed-component path in _parse_bound. Annotate the unreachable internal invariant raises in _expand with '# pragma: no cover (assumption: _split_operator yields only supported operators)'.
+# CHANGE: Resolve coverage feedback on unreachable logic in semver_solver_impl.py: prune the duplicate empty-operand guard in _parse_bound (callers always pass non-empty clause/operator tokens, so empty bounds cannot occur) and the duplicate empty-token guard in _compile_clause (clauses are already whitespace-stripped and non-empty before tokenization); malformed empty inputs still raise InvalidRangeError through the malformed-component path in _parse_bound. Annotate the unreachable internal invariant raises in _expand with '# unreachable (assumption: _split_operator yields only supported operators)'.
 # COVERAGE_AUDIT: 2026-11-09T22:35:48Z
 # PRETENSE_COVERAGE_AUDIT: 2026-11-09T22:41:22Z
 # PRETENSE_QA_AUDIT: 2026-11-09T22:40:59Z

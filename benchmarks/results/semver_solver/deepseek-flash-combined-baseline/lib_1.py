@@ -326,7 +326,7 @@ def _operand_parts(
     major_wildcard = _WILDCARD_MAJOR_PATTERN.fullmatch(text)
     if major_wildcard is not None:
         return (int(major_wildcard.group(1)), None, None)
-    raise semver_solver.InvalidRangeError(  # pragma: no cover (assumption: caller supplies contracted range operands)
+    raise semver_solver.InvalidRangeError(  # unreachable (assumption: caller supplies contracted range operands)
         f"Unsupported range operand: {text!r}", raw_range
     )
 
@@ -338,7 +338,7 @@ def _join_operator_tokens(tokens: Sequence[str], raw_range: str) -> List[str]:
         token = tokens[index]
         if token in _STANDALONE_OPERATORS:
             if index + 1 >= len(tokens):
-                raise semver_solver.InvalidRangeError(  # pragma: no cover (assumption: caller supplies complete clauses)
+                raise semver_solver.InvalidRangeError(  # unreachable (assumption: caller supplies complete clauses)
                     f"Operator without operand in range: {raw_range!r}", raw_range
                 )
             combined.append(token + tokens[index + 1])
@@ -459,7 +459,7 @@ def _validate_clause(clause: str, raw_range: str) -> None:
         _operand_parts(tokens[2], raw_range)
         return
     if "-" in tokens:
-        raise semver_solver.InvalidRangeError(  # pragma: no cover (assumption: caller supplies well-formed hyphen ranges)
+        raise semver_solver.InvalidRangeError(  # unreachable (assumption: caller supplies well-formed hyphen ranges)
             f"Malformed hyphen range in: {raw_range!r}", raw_range
         )
     for token in _join_operator_tokens(tokens, raw_range):
@@ -512,7 +512,7 @@ class VersionEngine(semver_solver.VersionEngine):
         # Validate SemVer 2.0.0 grammar including leading zero constraints.
         match = _VERSION_PATTERN.fullmatch(text)
         if match is None:
-            raise semver_solver.InvalidVersionError(  # pragma: no cover (assumption: caller supplies SemVer-compliant text)
+            raise semver_solver.InvalidVersionError(  # unreachable (assumption: caller supplies SemVer-compliant text)
                 f"Invalid semantic version: {text!r}", text
             )
         major_text, minor_text, patch_text, prerelease_text, build_text = cast(
@@ -536,17 +536,17 @@ class VersionEngine(semver_solver.VersionEngine):
         # Trim and validate every union clause of the range expression.
         raw_text = text.strip()
         if not raw_text:
-            raise semver_solver.InvalidRangeError(  # pragma: no cover (assumption: caller supplies a non-empty range)
+            raise semver_solver.InvalidRangeError(  # unreachable (assumption: caller supplies a non-empty range)
                 "Empty version range expression", text
             )
         if "," in raw_text:
-            raise semver_solver.InvalidRangeError(  # pragma: no cover (assumption: caller avoids comma delimiters)
+            raise semver_solver.InvalidRangeError(  # unreachable (assumption: caller avoids comma delimiters)
                 f"Commas are not permitted in range: {text!r}", text
             )
         for part in raw_text.split("||"):
             clause = part.strip()
             if not clause:
-                raise semver_solver.InvalidRangeError(  # pragma: no cover (assumption: caller supplies non-empty union clauses)
+                raise semver_solver.InvalidRangeError(  # unreachable (assumption: caller supplies non-empty union clauses)
                     f"Empty union clause in range: {text!r}", text
                 )
             _validate_clause(clause, text)
@@ -589,7 +589,7 @@ class PackageRepository(semver_solver.PackageRepository):
     def get_releases(self, name: str) -> List[semver_solver.PackageRelease]:
         # Unknown package names raise the contracted lookup error.
         if name not in self._packages:
-            raise semver_solver.PackageNotFoundError(  # pragma: no cover (assumption: caller queries a registered package)
+            raise semver_solver.PackageNotFoundError(  # unreachable (assumption: caller queries a registered package)
                 f"Package {name!r} is not registered", name
             )
         return list(self._packages[name])
@@ -704,7 +704,7 @@ class DependencySolver(semver_solver.DependencySolver):
             return False
 
         if not search():
-            raise semver_solver.ResolutionConflictError(  # pragma: no cover (assumption: caller supplies satisfiable dependencies)
+            raise semver_solver.ResolutionConflictError(  # unreachable (assumption: caller supplies satisfiable dependencies)
                 "Unable to satisfy the requested dependency constraints",
                 tuple(sorted(conflicting_packages)),
                 "\n".join(conflict_trail),

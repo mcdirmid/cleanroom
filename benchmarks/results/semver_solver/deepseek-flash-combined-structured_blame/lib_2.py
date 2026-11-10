@@ -527,7 +527,7 @@ def _expand_version_op(
         return [[(">=", version), ("<", _caret_upper(version))]]
     if op == "~":
         return [[(">=", version), ("<", _tilde_upper(version))]]
-    raise semver_solver.InvalidRangeError(  # pragma: no cover (assumption: operators are validated before expansion)
+    raise semver_solver.InvalidRangeError(  # unreachable (assumption: operators are validated before expansion)
         f"Unsupported operator '{op}' in range '{raw_range}'",
         raw_range,
     )
@@ -575,7 +575,7 @@ def _expand_wildcard_op(
         if tilde_upper is None:
             return [[]]
         return [[(">=", lower), ("<", tilde_upper)]]
-    raise semver_solver.InvalidRangeError(  # pragma: no cover (assumption: operators are validated before expansion)
+    raise semver_solver.InvalidRangeError(  # unreachable (assumption: operators are validated before expansion)
         f"Unsupported operator '{op}' in range '{raw_range}'",
         raw_range,
     )
@@ -710,7 +710,7 @@ def _compare(
         return result > 0
     if op == ">=":
         return result >= 0
-    return False  # pragma: no cover (assumption: comparators are normalized during compilation)
+    return False  # unreachable (assumption: comparators are normalized during compilation)
 
 
 def _targets_prerelease(

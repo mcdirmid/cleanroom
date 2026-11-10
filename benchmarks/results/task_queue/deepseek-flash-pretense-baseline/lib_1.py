@@ -192,7 +192,7 @@ class TaskQueue(task_queue.TaskQueue):
         if not self.is_available:
             raise task_queue.QueueUnavailableException()
         # WHEN the capacity limit is reached, MUST raise QueueFullError (caller precondition).
-        if self.is_full:  # pragma: no cover (assumption: submit requires a non-full queue)
+        if self.is_full:  # unreachable (assumption: submit requires a non-full queue)
             raise QueueFullError()
         # Queue is available: append the task to the tail and grow pending_count by one.
         self._queue.append((task_id, payload))
@@ -204,7 +204,7 @@ class TaskQueue(task_queue.TaskQueue):
         if not self.is_available:
             raise task_queue.QueueUnavailableException()
         # WHEN pending_count equals 0, MUST raise QueueEmptyError (caller precondition).
-        if self.is_empty:  # pragma: no cover (assumption: dispatch requires a non-empty queue)
+        if self.is_empty:  # unreachable (assumption: dispatch requires a non-empty queue)
             raise task_queue.QueueEmptyError()
         # Pop the oldest task, hand it to the worker, and return its identifier.
         task_id, payload = self._queue.popleft()
@@ -412,7 +412,7 @@ class TaskWorker(task_worker.TaskWorker):
         # WHEN the collaborator queue is unavailable, MUST raise WorkerExecutionException.
         try:
             task_id = queue.dispatch()
-        except task_queue.QueueEmptyError:  # pragma: no cover (assumption: queue has a pending task)
+        except task_queue.QueueEmptyError:  # unreachable (assumption: queue has a pending task)
             raise task_worker.WorkerError()
         except task_queue.QueueUnavailableException:
             raise task_worker.WorkerExecutionException()

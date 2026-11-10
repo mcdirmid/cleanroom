@@ -241,7 +241,7 @@ class TaskQueue(task_queue.TaskQueue):
                 "Cannot submit to an unavailable task queue"
             )
         # PRECONDITION: caller respects the configured capacity bound.
-        if self.is_full:  # pragma: no cover (assumption: caller respects capacity bound)
+        if self.is_full:  # unreachable (assumption: caller respects capacity bound)
             raise QueueFullError("Cannot submit to a full task queue")
         # POSTCONDITION: available queue appends the task to the tail.
         self._queue.append((task_id, payload))
@@ -256,7 +256,7 @@ class TaskQueue(task_queue.TaskQueue):
                 "Cannot dispatch from an unavailable task queue"
             )
         # PRECONDITION: caller only dispatches when a pending task exists.
-        if self.is_empty:  # pragma: no cover (assumption: caller checks pending count)
+        if self.is_empty:  # unreachable (assumption: caller checks pending count)
             raise task_queue.QueueEmptyError("Cannot dispatch from an empty task queue")
         # POSTCONDITION: pops the oldest task and hands it to the worker.
         task_id, payload = self._queue.popleft()
@@ -510,7 +510,7 @@ class TaskWorker(task_worker.TaskWorker):
         try:
             # POSTCONDITION: dispatch transfers the oldest task to this worker for execution.
             task_id = queue.dispatch()
-        except task_queue.QueueEmptyError as exc:  # pragma: no cover (assumption: caller checks pending count)
+        except task_queue.QueueEmptyError as exc:  # unreachable (assumption: caller checks pending count)
             # POSTCONDITION: an empty collaborator queue raises WorkerError.
             raise task_worker.WorkerError("Cannot fetch from an empty task queue") from exc
         except task_queue.QueueUnavailableException as exc:

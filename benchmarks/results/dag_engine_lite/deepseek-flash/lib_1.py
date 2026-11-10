@@ -1001,7 +1001,7 @@ class DAGRunner(dag_engine_lite.DAGRunner):
         # MUST execute ready waves sequentially.
         while not halted and not scheduler.is_finished():
             wave = scheduler.next_wave()
-            if not wave:  # pragma: no cover (assumption: is_finished matches next_wave readiness)
+            if not wave:  # unreachable (assumption: is_finished matches next_wave readiness)
                 break
             for node_id in wave:
                 definition = dag.get_node(node_id)
@@ -1094,7 +1094,7 @@ _initialize_ = __initialize__
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-02T23:46:56Z
 # LAST_CHANGED: 2026-11-02T23:44:41Z
-# CHANGE: Resolve unreachable-code feedback: remove the redundant upstream-membership guard in DFS cycle detection (all callers pre-validate referenced dependencies), delete the no-op pending-promotion pass in the CONTINUE_ON_ERROR branch (synchronization already applies the same predicate and the intervening pass only marks SKIPPED), and annotate the defensive empty-wave stall guard with '# pragma: no cover (assumption: ...)'. Runtime re-verified across happy path, cycles, retries, all failure policies, removal purge, and empty DAG.
+# CHANGE: Resolve unreachable-code feedback: remove the redundant upstream-membership guard in DFS cycle detection (all callers pre-validate referenced dependencies), delete the no-op pending-promotion pass in the CONTINUE_ON_ERROR branch (synchronization already applies the same predicate and the intervening pass only marks SKIPPED), and annotate the defensive empty-wave stall guard with '# unreachable (assumption: ...)'. Runtime re-verified across happy path, cycles, retries, all failure policies, removal purge, and empty DAG.
 # COVERAGE_AUDIT: 2026-11-02T23:46:56Z
 # QA_AUDIT: 2026-11-02T23:46:44Z
 # --- END AUTOFAB METADATA ---

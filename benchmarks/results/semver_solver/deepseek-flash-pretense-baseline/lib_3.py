@@ -227,7 +227,7 @@ class _Target:
 
 def _invalid_version(raw_text: str) -> semver_solver.InvalidVersionError:
     """Builds the contracted version grammar violation error."""
-    return semver_solver.InvalidVersionError(  # pragma: no cover (assumption: InvalidVersionError is a contracted precondition violation that verification suites MUST NOT exercise)
+    return semver_solver.InvalidVersionError(  # unreachable (assumption: InvalidVersionError is a contracted precondition violation that verification suites MUST NOT exercise)
         f"Invalid semantic version {raw_text!r}",
         raw_text=raw_text,
     )
@@ -235,7 +235,7 @@ def _invalid_version(raw_text: str) -> semver_solver.InvalidVersionError:
 
 def _invalid_range(raw_text: str, detail: str) -> semver_solver.InvalidRangeError:
     """Builds the contracted range syntax violation error."""
-    return semver_solver.InvalidRangeError(  # pragma: no cover (assumption: InvalidRangeError is a contracted precondition violation that verification suites MUST NOT exercise)
+    return semver_solver.InvalidRangeError(  # unreachable (assumption: InvalidRangeError is a contracted precondition violation that verification suites MUST NOT exercise)
         f"Invalid version range {raw_text!r}: {detail}",
         raw_range=raw_text,
     )
@@ -266,11 +266,11 @@ def _parse_target(spec: str) -> Optional[_Target]:
         return _Target(exact=version, lower=version, upper=version)
     match = _WILDCARD_PATTERN.fullmatch(spec)
     if match is None:
-        return None  # pragma: no cover (assumption: malformed range targets are contracted InvalidRangeError preconditions that MUST NOT be exercised)
+        return None  # unreachable (assumption: malformed range targets are contracted InvalidRangeError preconditions that MUST NOT be exercised)
     components = [group for group in match.groups() if group is not None]
     # Bare partial versions without a wildcard are contracted grammar violations.
     if not any(component in _WILDCARD_CHARS for component in components):
-        return None  # pragma: no cover (assumption: bare partial ranges are contracted InvalidRangeError preconditions that MUST NOT be exercised)
+        return None  # unreachable (assumption: bare partial ranges are contracted InvalidRangeError preconditions that MUST NOT be exercised)
     if components[0] in _WILDCARD_CHARS:
         return _Target(exact=None, lower=None, upper=None)
     major = int(components[0])
@@ -395,7 +395,7 @@ def _parse_clause(clause: str, raw_text: str) -> Optional[List[_Clause]]:
         lower_target = _parse_target(tokens[0])
         upper_target = _parse_target(tokens[2])
         if lower_target is None or upper_target is None:
-            raise _invalid_range(raw_text, f"malformed hyphen range clause {clause!r}")  # pragma: no cover (assumption: malformed hyphen ranges are contracted InvalidRangeError preconditions that MUST NOT be exercised)
+            raise _invalid_range(raw_text, f"malformed hyphen range clause {clause!r}")  # unreachable (assumption: malformed hyphen ranges are contracted InvalidRangeError preconditions that MUST NOT be exercised)
         return _expand_hyphen(lower_target, upper_target)
     items: List[Tuple[str, _Target]] = []
     index = 0
@@ -410,15 +410,15 @@ def _parse_clause(clause: str, raw_text: str) -> Optional[List[_Clause]]:
         if not spec:
             index += 1
             if index >= len(tokens):
-                raise _invalid_range(raw_text, f"comparator without a target in clause {clause!r}")  # pragma: no cover (assumption: operator-only comparators are contracted InvalidRangeError preconditions that MUST NOT be exercised)
+                raise _invalid_range(raw_text, f"comparator without a target in clause {clause!r}")  # unreachable (assumption: operator-only comparators are contracted InvalidRangeError preconditions that MUST NOT be exercised)
             spec = tokens[index]
         index += 1
         target = _parse_target(spec)
         if target is None:
-            raise _invalid_range(raw_text, f"malformed comparator target {spec!r}")  # pragma: no cover (assumption: malformed range targets are contracted InvalidRangeError preconditions that MUST NOT be exercised)
+            raise _invalid_range(raw_text, f"malformed comparator target {spec!r}")  # unreachable (assumption: malformed range targets are contracted InvalidRangeError preconditions that MUST NOT be exercised)
         items.append((operator, target))
     if not items:
-        raise _invalid_range(raw_text, f"empty clause {clause!r}")  # pragma: no cover (assumption: empty clauses are contracted InvalidRangeError preconditions that MUST NOT be exercised)
+        raise _invalid_range(raw_text, f"empty clause {clause!r}")  # unreachable (assumption: empty clauses are contracted InvalidRangeError preconditions that MUST NOT be exercised)
     results: List[_Clause] = [[]]
     for operator, target in items:
         if operator == "^":
@@ -438,15 +438,15 @@ def _parse_range_clauses(raw_text: str) -> Tuple[str, List[_Clause]]:
     """Parses a range expression into a normalized text and its disjunctive comparator clauses."""
     text = raw_text.strip()
     if not text:
-        raise _invalid_range(raw_text, "empty range expression")  # pragma: no cover (assumption: empty ranges are contracted InvalidRangeError preconditions that MUST NOT be exercised)
+        raise _invalid_range(raw_text, "empty range expression")  # unreachable (assumption: empty ranges are contracted InvalidRangeError preconditions that MUST NOT be exercised)
     if "," in text:
-        raise _invalid_range(raw_text, "comma-delimited comparators are not permitted")  # pragma: no cover (assumption: comma-delimited ranges are contracted InvalidRangeError preconditions that MUST NOT be exercised)
+        raise _invalid_range(raw_text, "comma-delimited comparators are not permitted")  # unreachable (assumption: comma-delimited ranges are contracted InvalidRangeError preconditions that MUST NOT be exercised)
     normalized: List[str] = []
     clauses: List[_Clause] = []
     for raw_clause in text.split("||"):
         clause = raw_clause.strip()
         if not clause:
-            raise _invalid_range(raw_text, "empty union clause")  # pragma: no cover (assumption: empty union clauses are contracted InvalidRangeError preconditions that MUST NOT be exercised)
+            raise _invalid_range(raw_text, "empty union clause")  # unreachable (assumption: empty union clauses are contracted InvalidRangeError preconditions that MUST NOT be exercised)
         normalized.append(clause)
         expanded = _parse_clause(clause, raw_text)
         if expanded is not None:
@@ -475,7 +475,7 @@ class VersionEngine(semver_solver.VersionEngine):
         version = _match_full_version(text)
         if version is None:
             # PRECONDITIONS: grammar violations and leading zeroes MUST raise InvalidVersionError.
-            raise _invalid_version(text)  # pragma: no cover (assumption: InvalidVersionError is a contracted precondition violation that verification suites MUST NOT exercise)
+            raise _invalid_version(text)  # unreachable (assumption: InvalidVersionError is a contracted precondition violation that verification suites MUST NOT exercise)
         return version
 
     def compare_precedence(self, v1: semver_solver.Version, v2: semver_solver.Version) -> int:
@@ -574,7 +574,7 @@ class PackageRepository(semver_solver.PackageRepository):
     def get_releases(self, name: str) -> List[semver_solver.PackageRelease]:
         # PRECONDITIONS: an unregistered name MUST raise PackageNotFoundError.
         if name not in self._packages:
-            raise semver_solver.PackageNotFoundError(  # pragma: no cover (assumption: PackageNotFoundError is a contracted precondition violation that verification suites MUST NOT exercise)
+            raise semver_solver.PackageNotFoundError(  # unreachable (assumption: PackageNotFoundError is a contracted precondition violation that verification suites MUST NOT exercise)
                 f"Package {name!r} is not registered",
                 package_name=name,
             )
@@ -613,8 +613,8 @@ class DependencySolver(semver_solver.DependencySolver):
             # POSTCONDITIONS: unregistered packages evaluate to zero candidate releases.
             try:
                 available = repository.get_releases(package)
-            except semver_solver.PackageNotFoundError:  # pragma: no cover (assumption: unregistered root packages are a contracted ResolutionConflictError precondition that MUST NOT be exercised)
-                available = []  # pragma: no cover (assumption: unregistered root packages are a contracted ResolutionConflictError precondition that MUST NOT be exercised)
+            except semver_solver.PackageNotFoundError:  # unreachable (assumption: unregistered root packages are a contracted ResolutionConflictError precondition that MUST NOT be exercised)
+                available = []  # unreachable (assumption: unregistered root packages are a contracted ResolutionConflictError precondition that MUST NOT be exercised)
             return [
                 release
                 for release in available
@@ -669,7 +669,7 @@ class DependencySolver(semver_solver.DependencySolver):
 
         # PRECONDITIONS: unsatisfiable roots MUST raise ResolutionConflictError instead of PackageNotFoundError.
         if not backtrack():
-            raise semver_solver.ResolutionConflictError(  # pragma: no cover (assumption: unsatisfiable roots are a contracted ResolutionConflictError precondition that MUST NOT be exercised)
+            raise semver_solver.ResolutionConflictError(  # unreachable (assumption: unsatisfiable roots are a contracted ResolutionConflictError precondition that MUST NOT be exercised)
                 f"Unable to resolve dependencies involving {sorted(conflicting_packages)}",
                 conflicting_packages=tuple(sorted(conflicting_packages)),
                 explanation="; ".join(conflict_trail),

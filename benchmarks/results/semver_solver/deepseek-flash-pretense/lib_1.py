@@ -264,7 +264,7 @@ def _parse_version_text(text: str) -> semver_solver.Version:
     """Parses a SemVer 2.0.0 string, rejecting leading zeroes and grammar violations."""
     match = _VERSION_PATTERN.match(text)
     if match is None:
-        raise semver_solver.InvalidVersionError(f"Invalid semantic version: {text!r}", text)  # pragma: no cover (assumption: precondition_guard)
+        raise semver_solver.InvalidVersionError(f"Invalid semantic version: {text!r}", text)  # unreachable (assumption: precondition_guard)
     return _version_from_match(match)
 
 
@@ -323,7 +323,7 @@ def _compare_precedence(v1: semver_solver.Version, v2: semver_solver.Version) ->
 
 def _wildcard_interval(major: Optional[int], minor: Optional[int]) -> _Interval:
     """Expands a wildcard operand into a half-open version interval."""
-    if major is None:  # pragma: no cover (assumption: caller guarantees a concrete major)
+    if major is None:  # unreachable (assumption: caller guarantees a concrete major)
         return (None, True, None, True)
     if minor is None:
         return (
@@ -361,7 +361,7 @@ def _parse_range_operand(token: str, raw_text: str) -> _RangeOperand:
         ):
             return ("wildcard", None, int(major_text), int(minor_text))
     # Bare partial versions without wildcard characters are malformed range syntax.
-    raise semver_solver.InvalidRangeError(  # pragma: no cover (assumption: precondition_guard)
+    raise semver_solver.InvalidRangeError(  # unreachable (assumption: precondition_guard)
         f"Invalid version range expression: {raw_text!r}", raw_text
     )
 
@@ -466,7 +466,7 @@ def _comparator_intervals(
             return [(upper, True, None, True)]
         if operator == ">=":
             return [(lower, True, None, True)]
-    raise semver_solver.InvalidRangeError(  # pragma: no cover (assumption: operator validated by tokenizer)
+    raise semver_solver.InvalidRangeError(  # unreachable (assumption: operator validated by tokenizer)
         f"Invalid version range expression: {raw_text!r}", raw_text
     )
 
@@ -543,7 +543,7 @@ def _tokenize_clause(clause: str, raw_text: str) -> List[Tuple[str, str]]:
             index += 1
         operand = clause[start:index]
         if not operand:
-            raise semver_solver.InvalidRangeError(  # pragma: no cover (assumption: precondition_guard)
+            raise semver_solver.InvalidRangeError(  # unreachable (assumption: precondition_guard)
                 f"Invalid version range expression: {raw_text!r}", raw_text
             )
         tokens.append((operator, operand))
@@ -626,7 +626,7 @@ def _compile_range(
 ) -> Tuple[List[List[_Interval]], List[semver_solver.Version]]:
     """Compiles a (possibly unioned) range expression into disjunctive interval sets."""
     if not text.strip() or "," in text:
-        raise semver_solver.InvalidRangeError(  # pragma: no cover (assumption: precondition_guard)
+        raise semver_solver.InvalidRangeError(  # unreachable (assumption: precondition_guard)
             f"Invalid version range expression: {text!r}", text
         )
     clauses: List[List[_Interval]] = []
@@ -634,7 +634,7 @@ def _compile_range(
     for raw_clause in text.split("||"):
         clause = raw_clause.strip()
         if not clause:
-            raise semver_solver.InvalidRangeError(  # pragma: no cover (assumption: precondition_guard)
+            raise semver_solver.InvalidRangeError(  # unreachable (assumption: precondition_guard)
                 f"Invalid version range expression: {text!r}", text
             )
         hyphen = _HYPHEN_RANGE_PATTERN.match(clause)
@@ -698,14 +698,14 @@ def _resolve_version_engine() -> semver_solver.VersionEngine:
     """Resolves the version engine singleton, falling back to a direct instance."""
     try:
         return get_singleton(semver_solver.VersionEngine)
-    except LifecycleError:  # pragma: no cover (assumption: lifecycle registration precedes resolution)
+    except LifecycleError:  # unreachable (assumption: lifecycle registration precedes resolution)
         return VersionEngine()
 
 
 def _resolve_package_repository() -> semver_solver.PackageRepository:
     """Resolves the shared package repository, preferring the live instance."""
     global _latest_repository
-    if _latest_repository is None:  # pragma: no cover (assumption: lifecycle registration precedes resolution)
+    if _latest_repository is None:  # unreachable (assumption: lifecycle registration precedes resolution)
         try:
             _latest_repository = get_singleton(semver_solver.PackageRepository)
         except LifecycleError:
@@ -774,7 +774,7 @@ class PackageRepository(semver_solver.PackageRepository):
     def get_releases(self, name: str) -> List[semver_solver.PackageRelease]:
         # WHEN name is unregistered, MUST raise PackageNotFoundError.
         if name not in self._packages:
-            raise semver_solver.PackageNotFoundError(  # pragma: no cover (assumption: precondition_guard)
+            raise semver_solver.PackageNotFoundError(  # unreachable (assumption: precondition_guard)
                 f"Package {name!r} is not registered in the repository", name
             )
         return list(self._packages[name])
@@ -899,12 +899,12 @@ class DependencySolver(semver_solver.DependencySolver):
             return False
 
         if not backtrack():
-            explanation = (  # pragma: no cover (assumption: precondition_guard)
+            explanation = (  # unreachable (assumption: precondition_guard)
                 " | ".join(conflict_trail)
                 if conflict_trail
                 else "Dependency resolution exhausted all candidate releases"
             )
-            raise semver_solver.ResolutionConflictError(  # pragma: no cover (assumption: precondition_guard)
+            raise semver_solver.ResolutionConflictError(  # unreachable (assumption: precondition_guard)
                 f"Unable to resolve dependencies: {explanation}",
                 tuple(sorted(conflicting_packages)),
                 explanation,

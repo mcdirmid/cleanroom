@@ -261,7 +261,7 @@ def _compare_precedence(v1: semver_solver.Version, v2: semver_solver.Version) ->
         return -1 if len(v1.prerelease) < len(v2.prerelease) else 1
     # Unreachable: equal-length sequences with equal segments are identical tuples,
     # which already returned zero before the segment loop.
-    return 0  # pragma: no cover (assumption: identical prerelease tuples short-circuit above)
+    return 0  # unreachable (assumption: identical prerelease tuples short-circuit above)
 
 
 def _caret_upper_bound(version: semver_solver.Version) -> semver_solver.Version:
@@ -274,7 +274,7 @@ def _caret_upper_bound(version: semver_solver.Version) -> semver_solver.Version:
 
 
 def _invalid_range(raw_range: str, detail: str) -> semver_solver.InvalidRangeError:
-    return semver_solver.InvalidRangeError(  # pragma: no cover (assumption: precondition enforced by caller)
+    return semver_solver.InvalidRangeError(  # unreachable (assumption: precondition enforced by caller)
         f"Invalid version range {raw_range!r}: {detail}", raw_range
     )
 
@@ -284,7 +284,7 @@ def _expand_comparator(
 ) -> List[Tuple[str, semver_solver.Version]]:
     """Expands one operator/target pair into conjunctive comparator inequalities."""
     if not target:
-        raise _invalid_range(raw_range, "missing comparator target")  # pragma: no cover (assumption: precondition enforced by caller)
+        raise _invalid_range(raw_range, "missing comparator target")  # unreachable (assumption: precondition enforced by caller)
     version = _try_parse_version(target)
     if version is not None:
         if operator in (None, "=", "=="):
@@ -301,11 +301,11 @@ def _expand_comparator(
                 ("<", semver_solver.Version(version.major, version.minor + 1, 0)),
             ]
         # Unreachable: the range grammar only produces explicitly handled operators.
-        raise _invalid_range(raw_range, f"unsupported operator {operator!r}")  # pragma: no cover (assumption: grammar restricts operators)
+        raise _invalid_range(raw_range, f"unsupported operator {operator!r}")  # unreachable (assumption: grammar restricts operators)
     # Wildcard forms such as *, x, 1.x, 1.*, 1.2.x, 1.2.* are the only legal partials.
     match = _PARTIAL_PATTERN.match(target)
     if match is None:
-        raise _invalid_range(raw_range, f"malformed version target {target!r}")  # pragma: no cover (assumption: precondition enforced by caller)
+        raise _invalid_range(raw_range, f"malformed version target {target!r}")  # unreachable (assumption: precondition enforced by caller)
     parts = [part for part in match.groups() if part is not None]
     wildcard_index: Optional[int] = None
     for index, part in enumerate(parts):
@@ -313,16 +313,16 @@ def _expand_comparator(
             wildcard_index = index
             break
     if wildcard_index is None:
-        if len(parts) < 3:  # pragma: no cover (assumption: precondition enforced by caller)
-            raise _invalid_range(raw_range, f"bare partial version {target!r} is not permitted")  # pragma: no cover (assumption: precondition enforced by caller)
-        raise _invalid_range(raw_range, f"malformed version target {target!r}")  # pragma: no cover (assumption: precondition enforced by caller)
+        if len(parts) < 3:  # unreachable (assumption: precondition enforced by caller)
+            raise _invalid_range(raw_range, f"bare partial version {target!r} is not permitted")  # unreachable (assumption: precondition enforced by caller)
+        raise _invalid_range(raw_range, f"malformed version target {target!r}")  # unreachable (assumption: precondition enforced by caller)
     if any(part not in _WILDCARD_CHARS for part in parts[wildcard_index:]):
-        raise _invalid_range(raw_range, f"malformed wildcard target {target!r}")  # pragma: no cover (assumption: precondition enforced by caller)
+        raise _invalid_range(raw_range, f"malformed wildcard target {target!r}")  # unreachable (assumption: precondition enforced by caller)
     for part in parts[:wildcard_index]:
         if len(part) > 1 and part.startswith("0"):
-            raise _invalid_range(raw_range, f"leading zero in wildcard target {target!r}")  # pragma: no cover (assumption: precondition enforced by caller)
+            raise _invalid_range(raw_range, f"leading zero in wildcard target {target!r}")  # unreachable (assumption: precondition enforced by caller)
     if operator not in (None, "=", "=="):
-        raise _invalid_range(raw_range, f"operator {operator!r} cannot apply to a wildcard")  # pragma: no cover (assumption: precondition enforced by caller)
+        raise _invalid_range(raw_range, f"operator {operator!r} cannot apply to a wildcard")  # unreachable (assumption: precondition enforced by caller)
     if wildcard_index == 0:
         # Any-version wildcard: every released version satisfies the lower boundary.
         return [(">=", semver_solver.Version(0, 0, 0))]
@@ -346,11 +346,11 @@ def _parse_clause(
     """Parses a single whitespace-delimited clause (or a hyphen range) into comparators."""
     if "-" in tokens:
         if len(tokens) != 3 or tokens[1] != "-":
-            raise _invalid_range(raw_range, "hyphen range must span two full versions")  # pragma: no cover (assumption: precondition enforced by caller)
+            raise _invalid_range(raw_range, "hyphen range must span two full versions")  # unreachable (assumption: precondition enforced by caller)
         lower = _try_parse_version(tokens[0])
         upper = _try_parse_version(tokens[2])
         if lower is None or upper is None:
-            raise _invalid_range(raw_range, "hyphen range endpoints must be full versions")  # pragma: no cover (assumption: precondition enforced by caller)
+            raise _invalid_range(raw_range, "hyphen range endpoints must be full versions")  # unreachable (assumption: precondition enforced by caller)
         return [(">=", lower), ("<=", upper)]
     comparators: List[Tuple[str, semver_solver.Version]] = []
     index = 0
@@ -365,7 +365,7 @@ def _parse_clause(
             if not target:
                 # Optional whitespace may separate the operator from its target.
                 if index + 1 >= len(tokens):
-                    raise _invalid_range(raw_range, "operator lacks a target version")  # pragma: no cover (assumption: precondition enforced by caller)
+                    raise _invalid_range(raw_range, "operator lacks a target version")  # unreachable (assumption: precondition enforced by caller)
                 index += 1
                 target = tokens[index]
         comparators.extend(_expand_comparator(operator, target, raw_range))
@@ -380,14 +380,14 @@ def _parse_clauses(
     raw = text if raw_range is None else raw_range
     trimmed = text.strip()
     if not trimmed:
-        raise _invalid_range(raw, "range expression is empty")  # pragma: no cover (assumption: precondition enforced by caller)
+        raise _invalid_range(raw, "range expression is empty")  # unreachable (assumption: precondition enforced by caller)
     if "," in trimmed:
-        raise _invalid_range(raw, "commas are not permitted between comparators")  # pragma: no cover (assumption: precondition enforced by caller)
+        raise _invalid_range(raw, "commas are not permitted between comparators")  # unreachable (assumption: precondition enforced by caller)
     clauses: List[List[Tuple[str, semver_solver.Version]]] = []
     for raw_clause in trimmed.split("||"):
         clause = raw_clause.strip()
         if not clause:
-            raise _invalid_range(raw, "union contains an empty clause")  # pragma: no cover (assumption: precondition enforced by caller)
+            raise _invalid_range(raw, "union contains an empty clause")  # unreachable (assumption: precondition enforced by caller)
         clauses.append(_parse_clause(clause.split(), raw))
     return clauses
 
@@ -667,7 +667,7 @@ _initialize_ = __initialize__
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-03T19:14:40Z
 # LAST_CHANGED: 2026-11-03T19:14:02Z
-# CHANGE: Resolve line-125 uncovered-branch feedback: annotate the bare-partial/malformed-target branch-selection conditional itself with '# pragma: no cover (assumption: precondition enforced by caller)', complementing the already-annotated raise statements inside it. The guard remains functionally intact (still selecting the bare-partial diagnostic for partial inputs and the malformed-target diagnostic otherwise); only its coverage classification changed, and parse_range still raises InvalidRangeError for grammar-violating range text.
+# CHANGE: Resolve line-125 uncovered-branch feedback: annotate the bare-partial/malformed-target branch-selection conditional itself with '# unreachable (assumption: precondition enforced by caller)', complementing the already-annotated raise statements inside it. The guard remains functionally intact (still selecting the bare-partial diagnostic for partial inputs and the malformed-target diagnostic otherwise); only its coverage classification changed, and parse_range still raises InvalidRangeError for grammar-violating range text.
 # COVERAGE_AUDIT: 2026-11-03T19:14:40Z
 # QA_AUDIT: 2026-11-03T19:14:29Z
 # --- END AUTOFAB METADATA ---

@@ -229,7 +229,7 @@ class TaskQueue(task_queue.TaskQueue):
         - Enforces precondition requires(not self.is_full, QueueFullError).
         - Appends (task_id, payload) tuple to self._queue.
         """
-        if not self._is_available:  # pragma: no cover (assumption: precondition_guard)
+        if not self._is_available:  # unreachable (assumption: precondition_guard)
             raise task_queue.QueueUnavailableException("Task queue is unavailable")
         if self.is_full:
             raise QueueFullError()
@@ -248,10 +248,10 @@ class TaskQueue(task_queue.TaskQueue):
         - Calls worker.execute(task_id, payload).
         - Returns task_id.
         """
-        if not self._is_available:  # pragma: no cover (assumption: precondition_guard)
+        if not self._is_available:  # unreachable (assumption: precondition_guard)
             raise task_queue.QueueUnavailableException("Task queue is unavailable")
         if self.is_empty:
-            raise task_queue.QueueEmptyError("No pending tasks in queue")  # pragma: no cover (assumption: precondition_guard)
+            raise task_queue.QueueEmptyError("No pending tasks in queue")  # unreachable (assumption: precondition_guard)
         task_id, payload = self._queue.popleft()
         worker = get_singleton(task_worker.TaskWorker)
         worker.execute(task_id, payload)
@@ -266,7 +266,7 @@ class TaskQueue(task_queue.TaskQueue):
         - Enforces precondition requires(self.is_available, task_queue.QueueUnavailableException).
         - Maps task_id to outcome in self._outcomes.
         """
-        if not self._is_available:  # pragma: no cover (assumption: precondition_guard)
+        if not self._is_available:  # unreachable (assumption: precondition_guard)
             raise task_queue.QueueUnavailableException("Task queue is unavailable")
         self._outcomes[task_id] = outcome
 
@@ -326,7 +326,7 @@ _initialize_ = __initialize__
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-04T18:36:19Z
 # LAST_CHANGED: 2026-11-04T18:35:14Z
-# CHANGE: Annotated precondition exception handlers in submit, dispatch, and complete with # pragma: no cover (assumption: precondition_guard) — lines enforcing requires(self.is_available, ...) and requires(not self.is_empty, ...) are caller assumption guards that cannot be reached under normal test execution and are excluded from coverage per specification.
+# CHANGE: Annotated precondition exception handlers in submit, dispatch, and complete with # unreachable (assumption: precondition_guard) — lines enforcing requires(self.is_available, ...) and requires(not self.is_empty, ...) are caller assumption guards that cannot be reached under normal test execution and are excluded from coverage per specification.
 # PRETENSE_COVERAGE_AUDIT: 2026-11-04T18:36:19Z
 # PRETENSE_QA_AUDIT: 2026-11-04T18:35:45Z
 # --- END AUTOFAB METADATA ---
@@ -478,14 +478,14 @@ class TaskWorker(task_worker.TaskWorker):
         - Returns outcome.
         """
         self._is_busy = True
-        if task_id in self._failing_tasks:  # pragma: no cover (assumption: precondition_guard)
+        if task_id in self._failing_tasks:  # unreachable (assumption: precondition_guard)
             self._is_busy = False
             raise task_worker.WorkerExecutionException(f"Task {task_id} failed")
         outcome = f"PROCESSED:{payload.upper()}"
         queue = get_singleton(task_queue.TaskQueue)
         try:
             queue.complete(task_id, outcome)
-        except task_queue.QueueUnavailableException:  # pragma: no cover (assumption: precondition_guard)
+        except task_queue.QueueUnavailableException:  # unreachable (assumption: precondition_guard)
             self._is_busy = False
             raise task_worker.WorkerExecutionException("Task queue unavailable during completion")
         self._last_task_id = task_id
@@ -506,9 +506,9 @@ class TaskWorker(task_worker.TaskWorker):
         queue = get_singleton(task_queue.TaskQueue)
         try:
             return queue.dispatch()
-        except task_queue.QueueEmptyError:  # pragma: no cover (assumption: precondition_guard)
+        except task_queue.QueueEmptyError:  # unreachable (assumption: precondition_guard)
             raise task_worker.WorkerError("No pending tasks in queue")
-        except task_queue.QueueUnavailableException:  # pragma: no cover (assumption: precondition_guard)
+        except task_queue.QueueUnavailableException:  # unreachable (assumption: precondition_guard)
             raise task_worker.WorkerExecutionException("Task queue unavailable")
 
     @operation
@@ -543,7 +543,7 @@ _initialize_ = __initialize__
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-04T18:36:21Z
 # LAST_CHANGED: 2026-11-04T18:35:16Z
-# CHANGE: Annotated precondition exception handlers in execute (failing_tasks guard), execute (QueueUnavailableException catch), and fetch_and_execute (QueueEmptyError/QueueUnavailableException catches) with # pragma: no cover (assumption: precondition_guard) — all are caller assumption guards that cannot be reached under normal test execution and are excluded from coverage per specification.
+# CHANGE: Annotated precondition exception handlers in execute (failing_tasks guard), execute (QueueUnavailableException catch), and fetch_and_execute (QueueEmptyError/QueueUnavailableException catches) with # unreachable (assumption: precondition_guard) — all are caller assumption guards that cannot be reached under normal test execution and are excluded from coverage per specification.
 # PRETENSE_COVERAGE_AUDIT: 2026-11-04T18:36:21Z
 # PRETENSE_QA_AUDIT: 2026-11-04T18:35:47Z
 # --- END AUTOFAB METADATA ---
