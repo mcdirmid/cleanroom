@@ -14,7 +14,7 @@ The model_config_ext component provides external serialization and discovery kno
 
 Grounding gaps covered include:
 
-- Model configuration schema extraction: Extracts the model configuration schema from declarative TOML files and serialized JSON dictionaries, covering model identifiers, remote API base url endpoints, designated API key environment variables, request timeout durations, conversation turn limits, sampling temperatures, maximum token limits, capability tiers, tier labels, uncached input rates, cached input rates, output rates, quantization settings, default harnesses, batch sizes, conversation token bounds, test failure limits (max_failures), and unproductive turn limits.
+- Model configuration schema extraction: Extracts the model configuration schema from declarative TOML files and serialized JSON dictionaries, covering model identifiers, remote API base url endpoints, designated API key environment variables, request timeout durations, conversation turn limits, sampling temperatures, maximum token limits, capability tiers, tier labels, uncached input rates, cached input rates, output rates, quantization settings, default harnesses, batch sizes, concurrent subagent limits (concurrent_subagents, allowing only 1 or unset, disallowed for antigravity models), conversation token bounds, test failure limits (max_failures), and unproductive turn limits.
 
 - Configuration file discovery: Locates target configuration TOML and JSON files in repository roots, parent directories, build output trees, or the canonical user configuration directory.
 
@@ -22,6 +22,6 @@ Grounding gaps covered include:
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-19T18:45:00Z
-LAST_CHANGED: 2026-10-19T18:45:00Z
-CHANGE: Enhance model_config_ext with declarative TOML schema, capability tiers, and token rate pricing
+LAST_CHANGED: 2026-11-10T21:20:00Z
+CHANGE: Add concurrent_subagents schema and antigravity validation constraints
 -->

@@ -12,7 +12,7 @@ from autofab.parts.uv.lib.target_impl import (
 )
 from autofab.parts.core.lib.file_paths import PathString
 from autofab.parts.dag.lib.dag_storage import DagNode, RoleAddress, UnitAddress
-from support.lib.lifecycle import LifecycleRegistry, enter_phase
+from support.lib.lifecycle import LifecycleTestCase, enter_phase
 
 
 def _make_dag_node(unit_address: str, role_address: str = "") -> DagNode:
@@ -21,10 +21,7 @@ def _make_dag_node(unit_address: str, role_address: str = "") -> DagNode:
     )
 
 
-class TestUvTargetImpl(unittest.TestCase):
-    def setUp(self) -> None:
-        self.registry = LifecycleRegistry()
-        __initialize__(self.registry)
+class TestUvTargetImpl(LifecycleTestCase):
 
     def test_normalize_target(self) -> None:
         """Verifies normalizing various target label formats into canonical DagNode."""

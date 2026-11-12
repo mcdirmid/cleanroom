@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from typing import Optional
-from support.lib.lifecycle import LifecycleRegistry
+from support.lib.lifecycle import auto_initialize
 from . import (
     subagent_coordinator_impl,
     subagent_harness_impl,
@@ -16,12 +16,7 @@ CONSTITUENTS = (
 
 
 # Contract: initializes subagent assembly component and its constituents (subagent_coordinator_impl, subagent_harness_impl, subagent_tool_impl)
-def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
-    """Initializes the subagent assembly component and its constituents."""
-    for constituent in CONSTITUENTS:
-        constituent.__initialize__(registry)
-
-
+__initialize__ = auto_initialize()
 _initialize_ = __initialize__
 
 # --- CLEANROOM METADATA ---

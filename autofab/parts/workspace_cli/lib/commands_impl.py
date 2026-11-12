@@ -10,13 +10,7 @@ import subprocess
 import sys
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from support.lib.lifecycle import (
-    LifecycleRegistry,
-    LifecycleResolutionError,
-    Singleton,
-    get_default_registry,
-    get_singleton,
-)
+from support.lib.lifecycle import LifecycleResolutionError, auto_initialize, get_default_registry, get_singleton, singleton
 from autofab.parts.agent.lib import node_config, session as agent_session
 from autofab.parts.control.lib import (
     attribution,
@@ -328,10 +322,10 @@ def _ensure_cli_node_config(main_root: Optional[str] = None) -> None:
 
 
 # Contract: Realizes substantive domain operations for Autofab role workspaces in agent_session tier.
+@singleton
 class WorkspaceCommandHandler(commands.WorkspaceCommandHandler):
     """Realizes substantive domain operations for Autofab role workspaces."""
 
-    tier = agent_session.agent_session
 
     def __init__(self) -> None:
         pass
@@ -501,6 +495,11 @@ class WorkspaceCommandHandler(commands.WorkspaceCommandHandler):
             if meta:
                 pending_mgr = get_singleton(pending.WorkspacePendingManager)
                 pending_mgr.remove_pending_target(ws_root, target)
+            try:
+                prov = get_singleton(provision.WorkspaceProvisioner)
+                prov.unlock_workspace_directories(ws_root)
+            except Exception:
+                pass
             print(
                 f"[SUBMIT DELIVERED] Target '{target}' submitted successfully.\n"
                 "Run 'bin/get_work' now to inspect remaining units.\n"
@@ -710,6 +709,11 @@ class WorkspaceCommandHandler(commands.WorkspaceCommandHandler):
                     if cov_status
                     else None,
                 )
+                try:
+                    prov = get_singleton(provision.WorkspaceProvisioner)
+                    prov.unlock_workspace_directories(ws_root)
+                except Exception:
+                    pass
                 return 0
             return 1
 
@@ -883,6 +887,12 @@ class WorkspaceCommandHandler(commands.WorkspaceCommandHandler):
             ):
                 pending_mgr.remove_pending_target(ws_root, pending_targets[0])
 
+        try:
+            prov = get_singleton(provision.WorkspaceProvisioner)
+            prov.unlock_workspace_directories(ws_root)
+        except Exception:
+            pass
+
         print(
             f"[REJECT DELIVERED] Feedback rejected for '{file_path}'.\n"
             f"Reason: {reason.strip()}\n"
@@ -953,6 +963,11 @@ class WorkspaceCommandHandler(commands.WorkspaceCommandHandler):
                     and list(pending_mgr.get_pending_work(ws_root)) == pending_targets
                 ):
                     pending_mgr.remove_pending_target(ws_root, pending_targets[0])
+            try:
+                prov = get_singleton(provision.WorkspaceProvisioner)
+                prov.unlock_workspace_directories(ws_root)
+            except Exception:
+                pass
             print(
                 "[FAIL RECORDED] Target marked failed due to unresolvable impasse.\n"
                 "Your work on this target is 100% COMPLETE. Run 'bin/get_work' to check for other units,\n"
@@ -1134,17 +1149,5 @@ class WorkspaceCommandHandler(commands.WorkspaceCommandHandler):
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
-
-# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
-def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
-    """Registers constituent singletons into the lifecycle registry."""
-    reg = get_default_registry() if registry is None else registry
-    reg.register_singleton(
-        WorkspaceCommandHandler,
-        keys=[commands.WorkspaceCommandHandler, WorkspaceCommandHandler],
-        tier=agent_session.agent_session,
-    )
-
-
+__initialize__ = auto_initialize()
 _initialize_ = __initialize__
-# --- END CLEANROOM AUTO-GENERATED ---

@@ -1141,6 +1141,60 @@ ctx.returns(lambda v, r: v.is_prerelease)
         self.assertTrue(none_dom.validate(None))
         self.assertFalse(none_dom.validate("hello"))
 
+    def test_require_arg_fuzz_domain(self) -> None:
+        """Scenario 4.7: Verify require_arg with fuzz_domain override."""
+        from pretense import Domain, StateMachine, require_arg, transition
+        from support.lib.lifecycle import SystemTier, Singleton
+
+        # 1. Direct validation with fuzz_domain parameter
+        require_arg(
+            100,
+            Domain.integers(min_value=0),
+            fuzz_domain=Domain.integers(min_value=0, max_value=5),
+        )
+        with self.assertRaises(pretense.PretenseSpecificationError):
+            require_arg(
+                -1,
+                Domain.integers(min_value=0),
+                fuzz_domain=Domain.integers(min_value=0, max_value=5),
+            )
+
+        # 2. State machine transition with fuzz_domain override
+        class DummySvc(Singleton[SystemTier]):
+            def run(self, count: int) -> int:
+                return count
+
+        class DummySM(StateMachine):
+            @transition(DummySvc.run)
+            def run(self, count: int) -> None:
+                require_arg(
+                    count,
+                    Domain.integers(min_value=0),
+                    fuzz_domain=Domain.integers(min_value=0, max_value=5),
+                )
+                ret = self.inner_run(count)
+                assert ret == count
+
+            def inner_run(self, count: int) -> int:
+                return count
+
+        sm = DummySM()
+        trans = sm.transitions[0]
+        args_fn = getattr(trans, "args_fn", None)
+        self.assertIsNotNone(args_fn)
+        assert args_fn is not None
+        # Test generation draws strictly within fuzz_domain [0..5]
+        for _ in range(20):
+            drawn = args_fn(sm.state, sm)
+            self.assertIsNotNone(drawn)
+            self.assertTrue(
+                0 <= drawn[0] <= 5, f"Expected 0 <= count <= 5, got {drawn[0]}"
+            )
+        # Test non-generation validates values up to canonical domain (e.g. 50 is valid)
+        self.assertEqual(args_fn(sm.state, sm, 50), (50,))
+        # Negative value fails validation
+        self.assertIsNone(args_fn(sm.state, sm, -5))
+
     def test_collaborator_seeding_in_hypothesis_fuzzing(self) -> None:
         """Verify that collaborator seeding transitions are compiled and executable by Hypothesis."""
         from dataclasses import dataclass, field

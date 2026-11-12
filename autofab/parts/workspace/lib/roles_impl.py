@@ -8,12 +8,7 @@ import os
 import tomllib
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from support.lib.lifecycle import (
-    LifecycleRegistry,
-    Singleton,
-    get_default_registry,
-    get_singleton,
-)
+from support.lib.lifecycle import auto_initialize, get_singleton, singleton
 from autofab.parts.agent.lib import session as agent_session
 
 try:
@@ -726,10 +721,10 @@ def _load_roles_from_methodology(
 
 
 # Contract: Realizes roles.RoleResolver singleton.
+@singleton
 class RoleResolver(roles.RoleResolver):
     """Realizes role configuration resolution and constraint verification."""
 
-    tier = agent_session.agent_session
 
     def _get_roles(
         self, repo_root: Optional[str] = None
@@ -947,17 +942,5 @@ class RoleResolver(roles.RoleResolver):
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
-
-# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
-def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
-    """Registers constituent singletons into the lifecycle registry."""
-    reg = get_default_registry() if registry is None else registry
-    reg.register_singleton(
-        RoleResolver,
-        keys=[roles.RoleResolver, RoleResolver],
-        tier=agent_session.agent_session,
-    )
-
-
+__initialize__ = auto_initialize()
 _initialize_ = __initialize__
-# --- END CLEANROOM AUTO-GENERATED ---

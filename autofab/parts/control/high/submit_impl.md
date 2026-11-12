@@ -39,7 +39,7 @@ When submitting a file target:
 
 - The submission coordinator resolves the target file path and unit name against the local workspace and canonical repository roots.
 
-- The submission coordinator submits an auditor role by rejecting test files, resolving the audited implementation and companion test files, stamping in-band audit tags directly in the canonical repository, constructing an audit outcome message formatted with the audit tag, and synchronizing the updated files back to the role workspace.
+- The submission coordinator submits an auditor role by rejecting test files, resolving the audited implementation and companion test files, stamping in-band audit tags directly in the canonical repository when verification checks pass, constructing an audit outcome message formatted with the audit tag, politely accepting submission without mutating repository files when verification checks fail without uncommitted staged blame, and synchronizing the updated files back to the role workspace.
 
 - The submission coordinator submits a producer role by verifying write permissions and active directory scope patterns, requiring a change summary exactly when code was modified against the ephemeral code hash, stripping the code hash when copying back to the main repository, updating in-band change metadata directly in the canonical repository, constructing an outcome message formatted with a change summary or clean status, and synchronizing the updated files back to the role workspace with refreshed ephemeral code hashes. When a producer role declares multiple source patterns (`src_patterns`), the submission coordinator synchronizes and updates metadata for all matching companion files for that unit to the canonical repository alongside the submitted file.
 

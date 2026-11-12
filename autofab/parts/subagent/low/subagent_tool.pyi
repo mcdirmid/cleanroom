@@ -36,6 +36,9 @@ class SubagentToolRunner(Singleton[AgentSessionTier], Protocol):
         max_unproductive_turns: Optional[int] = None,
         target_node: Optional[str] = None,
         max_unproductive_rounds: Optional[int] = None,
+        pretense: bool = False,
+        experiment: Optional[str] = None,
+        concurrent_subagents: Optional[int] = None,
     ) -> int:
         """Orchestrates multi-agent execution across topological waves until convergence.
 

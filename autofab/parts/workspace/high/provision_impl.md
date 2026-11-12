@@ -21,7 +21,7 @@ The workspace provisioner:
 
 - Validates that the target directory exists and resolves the role definition.
 
-- Creates the role workspace working tree, copying workspace roots, project configurations (.python-version, pyproject.toml, uv.lock, model_configs.toml), and build definitions while configuring type-checking to cover the workspace without directory exclusions, stripping readme declaration attributes from provisioned pyproject.toml, and for authoring roles with writable targets initializing a local git tracking repository (`git init`) configured with local committer identity (`Autofab Worker <worker@autofab.local>`), writing `.gitignore` excluding internal caches, logs, and run artifacts, and recording the initial commit snapshot upon workspace commissioning, while omitting git initialization for auditor roles with zero writable targets.
+- Creates the role workspace working tree, copying workspace roots, project configurations (.python-version, pyproject.toml, uv.lock, model_configs.toml), and build definitions while configuring type-checking to cover the workspace without directory exclusions, configuring test runner pythonpath to include the workspace root and workspace scope parts, stripping readme declaration attributes from provisioned pyproject.toml, projecting the target scope into the workspace under the leaf directory scope name (omitting enclosing container path prefixes from the role workspace working tree), recording main_dir_scope alongside dir_scope in the role descriptor, and for authoring roles with writable targets initializing a local git tracking repository (`git init`) configured with local committer identity (`Autofab Worker <worker@autofab.local>`), writing `.gitignore` excluding internal caches, logs, and run artifacts, and recording the initial commit snapshot upon workspace commissioning, while omitting git initialization for auditor roles with zero writable targets.
 
 - Inspects the declared role patterns to identify writable target files, upstream contract dependencies, and stub role dependencies.
 
@@ -51,11 +51,15 @@ The workspace provisioner:
 
 - Writes instructions for acting on blame and feedback into the guide, warning authoring agents that static checks do not execute tests or verify runtime logic, clarifying that passing `bin/check_files` does not mean feedback is resolved, directing authors to resolve runtime defects against contracts and tests before submitting, and mandating that auditor agents inspect target `# CHANGE:` commit headers before delivering blame to tailor feedback to what remains unaddressed without recycling identical critiques.
 
+- Locks non-writable workspace directories to read-only permissions (`0o555`) while preserving write permissions (`0o755`) on declared writable target directories, runner `bin/`, and workspace roots when a role agent is active in the workspace.
+
+- Unlocks workspace directories with write permissions (`0o755`) upon round completion, system file synchronization, or workspace teardown.
+
 - Registers the new workspace descriptor in the workspace registry.
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-30T05:28:00Z
-LAST_CHANGED: 2026-10-30T08:00:00Z
-CHANGE: Initialize in-workspace git repository and instruct local rollback commands
+LAST_CHANGED: 2026-11-11T14:00:00Z
+CHANGE: Implement dynamic workspace directory locking and unlocking across role rounds
 SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 -->

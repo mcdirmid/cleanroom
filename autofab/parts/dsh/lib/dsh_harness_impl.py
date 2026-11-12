@@ -12,12 +12,7 @@ import sys
 import time
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
-from support.lib.lifecycle import (
-    LifecycleRegistry,
-    Singleton,
-    get_default_registry,
-    get_singleton,
-)
+from support.lib.lifecycle import auto_initialize, get_singleton, singleton
 from autofab.parts.agent.lib import session as agent_session
 from autofab.parts.subagent.lib import subagent_coordinator, subagent_harness
 from autofab.parts.workspace_cli.lib import work
@@ -188,6 +183,17 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
     # Contract: Dispatches work directive to a DeepSeek Harness role workspace.
     def dispatch_role(self, dispatch: subagent_coordinator.RoleDispatch) -> str:
         """Dispatches work directive to a DeepSeek Harness role workspace."""
+        try:
+            from autofab.parts.workspace.lib import provision
+            prov = get_singleton(provision.WorkspaceProvisioner)
+            prov.lock_workspace_directories(
+                dispatch.workspace_dir,
+                role_name=dispatch.role_name,
+                dir_scope=dispatch.dir_scope,
+            )
+        except Exception:
+            pass
+
         task_handle = f"dsh_{dispatch.role_name}_{int(time.time() * 1000)}"
         work_mgr = get_singleton(work.WorkspaceWorkManager)
         disk_pending = tuple(work_mgr.get_pending_work(dispatch.workspace_dir))
@@ -418,6 +424,16 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
         )
         return task_handle
 
+    def _unlock_task_workspace(self, task: Optional[_ActiveDshTask]) -> None:
+        if task is None:
+            return
+        try:
+            from autofab.parts.workspace.lib import provision
+            prov = get_singleton(provision.WorkspaceProvisioner)
+            prov.unlock_workspace_directories(task.dispatch.workspace_dir)
+        except Exception:
+            pass
+
     def _finalize_round(
         self,
         task: _ActiveDshTask,
@@ -439,12 +455,13 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
             if (
                 task.is_rpc
                 and task.rpc_handle
-                and task.rpc_handle.startswith("dsh_rpc::")
+                and task.rpc_handle.startswith(("dsh_rpc::", "dsh_rpc_web::"))
             ):
                 parts = task.rpc_handle.split("::")
                 if len(parts) >= 2 and parts[1]:
                     self._session_baselines.pop(parts[1], None)
             self._worker_round_counts[task.dispatch.workspace_dir] = 0
+            self._unlock_task_workspace(task)
             return subagent_coordinator.RoleRoundResult(
                 role=task.dispatch.role_name,
                 status="failed",
@@ -468,6 +485,7 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
                                     break
                 except Exception:
                     pass
+            self._unlock_task_workspace(task)
             return subagent_coordinator.RoleRoundResult(
                 role=task.dispatch.role_name,
                 status="failed",
@@ -560,7 +578,11 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
             "dsh_session_id.txt",
         )
         session_id: Optional[str] = None
-        if task.is_rpc and task.rpc_handle and task.rpc_handle.startswith("dsh_rpc::"):
+        if (
+            task.is_rpc
+            and task.rpc_handle
+            and task.rpc_handle.startswith(("dsh_rpc::", "dsh_rpc_web::"))
+        ):
             parts = task.rpc_handle.split("::")
             if len(parts) >= 2 and parts[1]:
                 session_id = parts[1]
@@ -687,6 +709,8 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
                     self._session_baselines[session_id] = metrics
                 self._session_baselines[task.dispatch.workspace_dir] = metrics
 
+        self._unlock_task_workspace(task)
+
         return subagent_coordinator.RoleRoundResult(
             role=task.dispatch.role_name,
             status=status,
@@ -710,74 +734,77 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
                 failure_reason=f"Unknown task handle '{task_handle}'",
             )
 
-        if task.is_rpc:
-            while True:
-                rpc_status = self._telemetry_parser.poll_round_rpc(
-                    task.rpc_handle or "", sessions_dir=self._sessions_dir
-                )
-                if rpc_status.is_completed:
-                    return self._finalize_round(task, rpc_status=rpc_status)
-                if self._timeout_seconds is not None and self._timeout_seconds > 0:
-                    elapsed = time.time() - task.start_time
-                    if elapsed >= self._timeout_seconds:
-                        return subagent_coordinator.RoleRoundResult(
-                            role=task.dispatch.role_name,
-                            status="failed",
-                            failure_reason="RPC round execution timed out",
-                            wall_clock_seconds=elapsed,
-                        )
-                time.sleep(0.1)
+        try:
+            if task.is_rpc:
+                while True:
+                    rpc_status = self._telemetry_parser.poll_round_rpc(
+                        task.rpc_handle or "", sessions_dir=self._sessions_dir
+                    )
+                    if rpc_status.is_completed:
+                        return self._finalize_round(task, rpc_status=rpc_status)
+                    if self._timeout_seconds is not None and self._timeout_seconds > 0:
+                        elapsed = time.time() - task.start_time
+                        if elapsed >= self._timeout_seconds:
+                            return subagent_coordinator.RoleRoundResult(
+                                role=task.dispatch.role_name,
+                                status="failed",
+                                failure_reason="RPC round execution timed out",
+                                wall_clock_seconds=elapsed,
+                            )
+                    time.sleep(0.1)
 
-        if task.process is not None:
-            try:
-                if self._timeout_seconds is not None and self._timeout_seconds > 0:
-                    task.process.wait(timeout=self._timeout_seconds)
-                else:
-                    task.process.wait()
-            except subprocess.TimeoutExpired:
-                task.process.kill()
-                task.process.wait()
-                self._session_baselines.pop(task.dispatch.workspace_dir, None)
-                return subagent_coordinator.RoleRoundResult(
-                    role=task.dispatch.role_name,
-                    status="failed",
-                    failure_reason="Process execution timed out",
-                    wall_clock_seconds=time.time() - task.start_time,
-                )
-            if task.process.returncode != 0:
-                self._session_baselines.pop(task.dispatch.workspace_dir, None)
-                return subagent_coordinator.RoleRoundResult(
-                    role=task.dispatch.role_name,
-                    status="failed",
-                    failure_reason=f"Process exited with code {task.process.returncode}",
-                    wall_clock_seconds=time.time() - task.start_time,
-                )
-        elif not self._simulation_mode and not task.is_rpc:
-            failure_reason = "No subprocess or RPC task active"
-            if os.path.isfile(task.log_file):
+            if task.process is not None:
                 try:
-                    with open(task.log_file, "r", encoding="utf-8") as lf:
-                        for line in lf:
-                            if (
-                                '"type":"error"' in line
-                                and "DeepSeek Harness Desktop RPC is unavailable"
-                                in line
-                            ):
-                                data = json.loads(line)
-                                failure_reason = data.get("message", failure_reason)
-                                self._session_baselines.pop(
-                                    task.dispatch.workspace_dir, None
-                                )
-                                return subagent_coordinator.RoleRoundResult(
-                                    role=task.dispatch.role_name,
-                                    status="failed",
-                                    failure_reason=failure_reason,
-                                    wall_clock_seconds=time.time() - task.start_time,
-                                )
-                except Exception:
-                    pass
+                    if self._timeout_seconds is not None and self._timeout_seconds > 0:
+                        task.process.wait(timeout=self._timeout_seconds)
+                    else:
+                        task.process.wait()
+                except subprocess.TimeoutExpired:
+                    task.process.kill()
+                    task.process.wait()
+                    self._session_baselines.pop(task.dispatch.workspace_dir, None)
+                    return subagent_coordinator.RoleRoundResult(
+                        role=task.dispatch.role_name,
+                        status="failed",
+                        failure_reason="Process execution timed out",
+                        wall_clock_seconds=time.time() - task.start_time,
+                    )
+                if task.process.returncode != 0:
+                    self._session_baselines.pop(task.dispatch.workspace_dir, None)
+                    return subagent_coordinator.RoleRoundResult(
+                        role=task.dispatch.role_name,
+                        status="failed",
+                        failure_reason=f"Process exited with code {task.process.returncode}",
+                        wall_clock_seconds=time.time() - task.start_time,
+                    )
+            elif not self._simulation_mode and not task.is_rpc:
+                failure_reason = "No subprocess or RPC task active"
+                if os.path.isfile(task.log_file):
+                    try:
+                        with open(task.log_file, "r", encoding="utf-8") as lf:
+                            for line in lf:
+                                if (
+                                    '"type":"error"' in line
+                                    and "DeepSeek Harness Desktop RPC is unavailable"
+                                    in line
+                                ):
+                                    data = json.loads(line)
+                                    failure_reason = data.get("message", failure_reason)
+                                    self._session_baselines.pop(
+                                        task.dispatch.workspace_dir, None
+                                    )
+                                    return subagent_coordinator.RoleRoundResult(
+                                        role=task.dispatch.role_name,
+                                        status="failed",
+                                        failure_reason=failure_reason,
+                                        wall_clock_seconds=time.time() - task.start_time,
+                                    )
+                    except Exception:
+                        pass
 
-        return self._finalize_round(task, rpc_status=None)
+            return self._finalize_round(task, rpc_status=None)
+        finally:
+            self._unlock_task_workspace(task)
 
     # Contract: MUST return role round result when terminated, or None when still running without blocking.
     def poll_role(
@@ -806,6 +833,7 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
                 if self._timeout_seconds is not None and self._timeout_seconds > 0:
                     elapsed = time.time() - task.start_time
                     if elapsed >= self._timeout_seconds:
+                        self._unlock_task_workspace(task)
                         return subagent_coordinator.RoleRoundResult(
                             role=task.dispatch.role_name,
                             status="failed",
@@ -940,10 +968,10 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
 
 
 # Contract: Realizes management of DeepSeek Harness execution adapters and telemetry parsing in agent_session tier.
+@singleton
 class DshHarnessManager(dsh_harness.DshHarnessManager):
     """Realizes management of DeepSeek Harness execution adapters and telemetry parsing."""
 
-    tier = agent_session.agent_session
 
     # Contract: MUST install DeepSeek Harness adapter factory into subagent harness registry under 'dsh'.
     def initialize(self) -> None:
@@ -991,23 +1019,11 @@ class DshHarnessManager(dsh_harness.DshHarnessManager):
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-18T19:13:51Z
-# LAST_CHANGED: 2026-11-10T20:30:00Z
-# CHANGE: Increase default worker session recycling threshold from 4 rounds to 8 rounds
+# LAST_CHANGED: 2026-11-11T16:30:00Z
+# CHANGE: Support Web RPC task handles (dsh_rpc_web::) for session ID extraction and round continuity
 # COVERAGE_AUDIT: 2026-10-18T19:13:51Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
-
-# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
-def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
-    """Registers constituent singletons into the lifecycle registry."""
-    reg = get_default_registry() if registry is None else registry
-    reg.register_singleton(
-        DshHarnessManager,
-        keys=[dsh_harness.DshHarnessManager, DshHarnessManager],
-        tier=agent_session.agent_session,
-    )
-
-
+__initialize__ = auto_initialize()
 _initialize_ = __initialize__
-# --- END CLEANROOM AUTO-GENERATED ---

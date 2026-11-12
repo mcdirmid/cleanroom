@@ -2,13 +2,7 @@ from __future__ import annotations
 import os
 import tomllib
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
-from support.lib.lifecycle import (
-    LifecycleRegistry,
-    LifecycleResolutionError,
-    Singleton,
-    get_default_registry,
-    get_singleton,
-)
+from support.lib.lifecycle import LifecycleResolutionError, auto_initialize, get_singleton, singleton
 from autofab.parts.agent.lib import agent_config, node_config, agent_session
 from autofab.parts.dag.lib import dag_storage, subgraph
 from . import work_scheduler
@@ -173,10 +167,10 @@ def _is_auditor_node(node: dag_storage.DagNode) -> bool:
     )
 
 
+@singleton
 class WorkScheduler(work_scheduler.WorkScheduler):
     """Discovers ready tasks across subgraph or directory scope using dynamic role precedence."""
 
-    tier = agent_session.agent_session
 
     def __init__(self) -> None:
         pass
@@ -588,17 +582,5 @@ class WorkScheduler(work_scheduler.WorkScheduler):
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
-
-# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
-def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
-    """Registers constituent singletons into the lifecycle registry."""
-    reg = get_default_registry() if registry is None else registry
-    reg.register_singleton(
-        WorkScheduler,
-        keys=[WorkScheduler, work_scheduler.WorkScheduler],
-        tier=WorkScheduler.tier,
-    )
-
-
+__initialize__ = auto_initialize()
 _initialize_ = __initialize__
-# --- END CLEANROOM AUTO-GENERATED ---

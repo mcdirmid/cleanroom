@@ -17,7 +17,7 @@ By standardizing on a dynamic Hypothesis compiler, dual-layer timeouts combining
 - A fake synthesizer extracts argument validation and model state updates from transition methods, removing wrapped target calls and postconditions to construct pure in-memory test doubles.
 - An active step diagnostic formats the active transition, inputs, and state snapshot for shrunken failures or timeout warnings.
 - A unit test synthesizer formats shrunken counterexample sequences into standalone deterministic Python test functions.
-- A watchdog monitor coordinates execution timeout enforcement using Python timers and signal-based faulthandler alarms.
+- A watchdog monitor coordinates execution timeout enforcement using dynamic environment resolution, warning timers with thread interrupts, and signal-based faulthandler alarms.
 - A test runner coordinator discovers test files, orchestrates pytest/pretense execution, verifies coverage thresholds, and aggregates run results.
 
 ### Contracts
@@ -28,7 +28,7 @@ By standardizing on a dynamic Hypothesis compiler, dual-layer timeouts combining
 - The state machine compiler tracks active transition steps and state snapshots during execution. [track_active_steps]
 - The state machine compiler formats active step diagnostics detailing failed transitions, parameter values, and contextual diagnostic reasons when return recognizers reject SUT outcomes. [format_step_diagnostics]
 - The unit test synthesizer compiles minimal counterexample traces into standalone Python test functions. [synthesize_unit_test_code]
-- The watchdog monitor arms a warning timer and a faulthandler timeout interrupt before test execution. [arm_execution_watchdog]
+- The watchdog monitor arms a warning timer and a faulthandler timeout interrupt before test execution, resolving timeout bounds from environment variables or parent verification bounds, and interrupting the main thread upon expiration to capture counterexamples. [arm_execution_watchdog]
 - The watchdog monitor disarms watchdog timers upon test execution completion. [disarm_execution_watchdog]
 - The test runner coordinator discovers pretense test files matching naming patterns across target paths, rejecting loading errors or missing test targets. [discover_pretense_test_files]
 - The test runner coordinator executes discovered test cases using configured fuzzing and coverage parameters, suppressing property fuzzing during coverage evaluation to bound execution to deterministic test suites while reserving fuzzing for QA verification, formatting and reporting failure and error details across executed test methods when test failures occur to prevent defect masking while prioritizing the shortest failure traceback when multiple failures or an exception group occurs to isolate the minimal reproduction, and formatting auditor guidance reminders upon test failures directing the agent to formulate blame feedback strictly in terms of how the blamed file is not compliant with the common source of truth specification, permitting line numbers only within the blamed file while strictly forbidding exposing details of other files. [run_test_cases]

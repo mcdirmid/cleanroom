@@ -35,6 +35,7 @@ from build_lint_common import (
     check_no_error_testing,
     check_no_try_except_in_tests,
     check_no_lifecycle_scope_leaks,
+    check_no_singleton_monkeypatching,
     check_tautological_assertions,
     check_syntax,
     check_test_dry_run,
@@ -198,6 +199,7 @@ def generate_test_skeleton(
     impl_classes: list[str] = []
     impl_functions: list[str] = []
     has_singleton = False
+    singleton_tier = "system"
     is_impl = impl_stem.endswith("_impl")
 
     for node in tree.body:
@@ -205,6 +207,7 @@ def generate_test_skeleton(
             impl_classes.append(node.name)
             for dec in node.decorator_list:
                 dec_name = None
+                tier_val = None
                 if isinstance(dec, ast.Name):
                     dec_name = dec.id
                 elif isinstance(dec, ast.Attribute):
@@ -214,8 +217,16 @@ def generate_test_skeleton(
                         dec_name = dec.func.id
                     elif isinstance(dec.func, ast.Attribute):
                         dec_name = dec.func.attr
+                    if dec.args:
+                        a0 = dec.args[0]
+                        if isinstance(a0, ast.Constant) and isinstance(a0.value, str):
+                            tier_val = a0.value
+                        elif isinstance(a0, ast.Name):
+                            tier_val = a0.id
                 if dec_name == "singleton_type":
                     has_singleton = True
+                    if tier_val:
+                        singleton_tier = tier_val
         elif isinstance(
             node, (ast.FunctionDef, ast.AsyncFunctionDef)
         ) and not node.name.startswith("_"):
@@ -233,7 +244,9 @@ def generate_test_skeleton(
         "import unittest",
     ]
     if is_impl or has_singleton:
-        lines.append("from support.lib.lifecycle import LifecycleRegistry, enter_phase")
+        lines.append("from support.lib.lifecycle import LifecycleTestCase")
+    else:
+        lines.append("import unittest")
 
     pkg_prefix = (
         lib_pkg.replace("/", ".").replace("\\", ".").strip(".") if lib_pkg else "lib"
@@ -244,37 +257,16 @@ def generate_test_skeleton(
         lines.append(f"from {pkg_prefix}.{impl_stem} import (")
         for sym in all_symbols:
             lines.append(f"    {sym},")
-        if is_impl:
-            lines.append("    __initialize__,")
         lines.append(")")
-    elif is_impl:
-        lines.append(f"from {pkg_prefix}.{impl_stem} import __initialize__")
 
     lines.append("")
-    lines.append(f"class {test_cls_name}(unittest.TestCase):")
     if is_impl or has_singleton:
-        lines.append("    def setUp(self) -> None:")
-        lines.append("        self.registry = LifecycleRegistry()")
-        lines.append("        __initialize__(self.registry)")
-        lines.append("")
+        lines.append(f"class {test_cls_name}(LifecycleTestCase):")
         lines.append("    def test_initialization(self) -> None:")
         lines.append('        """CUJ: Verify initial component presence."""')
-        lines.append("        self.assertIsNotNone(self.registry)")
-        if all_symbols:
-            symbols_str = ", ".join(all_symbols)
-            lines.append(f"        for sym in [{symbols_str}]:")
-            lines.append("            self.assertIsNotNone(sym)")
-            if impl_classes:
-                lines.append(
-                    "        # Singletons are resolved within an active phase scope:"
-                )
-                lines.append(
-                    "        # with enter_phase(agent_session, registry=self.registry) as scope:"
-                )
-                lines.append(
-                    f"        #     instance = scope.get_singleton({sorted(impl_classes)[0]})"
-                )
+        lines.append("        self.assertIsNotNone(self.sut)")
     else:
+        lines.append(f"class {test_cls_name}(unittest.TestCase):")
         lines.append("    def test_initialization(self) -> None:")
         lines.append('        """CUJ: Verify initial component presence."""')
         if all_symbols:
@@ -734,6 +726,7 @@ def main() -> int:
             + check_no_error_testing(args.module_path)
             + check_no_try_except_in_tests(args.module_path)
             + check_no_lifecycle_scope_leaks(args.module_path)
+            + check_no_singleton_monkeypatching(args.module_path)
             + check_test_mocks(args.module_path)
             + check_test_structure(args.module_path)
             + check_test_getattr(args.module_path)

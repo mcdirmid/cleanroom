@@ -61,9 +61,21 @@ class WorkspaceProvisioner(Singleton[AgentSessionTier], Protocol):
         repo_root: Optional[str] = None,
     ) -> int: ...
 
+    # Contract: MUST restore write permissions (0o755) on all directories in a role workspace.
+    def unlock_workspace_directories(self, workspace_dir: str) -> None: ...
+
+    # Contract: MUST lock non-writable directories in a role workspace to 0o555 while preserving 0o755 on declared target directories.
+    def lock_workspace_directories(
+        self,
+        workspace_dir: str,
+        role_name: Optional[str] = None,
+        dir_scope: str = "",
+        repo_root: Optional[str] = None,
+    ) -> None: ...
+
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-06T22:55:00Z
-# CHANGE: new file
+# LAST_CHANGED: 2026-11-11T14:00:00Z
+# CHANGE: Add unlock_workspace_directories and lock_workspace_directories contracts
 # --- END CLEANROOM METADATA ---

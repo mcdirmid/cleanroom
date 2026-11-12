@@ -1,12 +1,12 @@
 from __future__ import annotations
 from typing import Any, Callable, Collection, Dict, FrozenSet, List, Mapping, Optional, Sequence, Set, Tuple
-from support.lib.lifecycle import InTier, LifecycleRegistry, Singleton, SystemTier, get_default_registry, get_singleton, system
+from support.lib.lifecycle import auto_initialize, singleton
 from . import dag_engine
 
 # Requirements specified in dag_engine_impl.pyi
 
+@singleton
 class DAG(dag_engine.DAG):
-    tier = system
 
     def __init__(self) -> None:
         # TODO___init___body
@@ -65,8 +65,8 @@ class DAG(dag_engine.DAG):
         raise NotImplementedError
 
 
+@singleton
 class WaveScheduler(dag_engine.WaveScheduler):
-    tier = system
 
     def __init__(self, dag: Optional[dag_engine.DAG] = None) -> None:
         # TODO___init___body
@@ -101,8 +101,8 @@ class WaveScheduler(dag_engine.WaveScheduler):
         raise NotImplementedError
 
 
+@singleton
 class DAGRunner(dag_engine.DAGRunner):
-    tier = system
 
     def __init__(self, dag: Optional[dag_engine.DAG] = None, scheduler: Optional[dag_engine.WaveScheduler] = None) -> None:
         # TODO___init___body
@@ -120,27 +120,5 @@ class DAGRunner(dag_engine.DAGRunner):
         # TODO_is_cancelled_body
         raise NotImplementedError
 
-
-# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
-def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
-    """Registers constituent singletons into the lifecycle registry."""
-    reg = get_default_registry() if registry is None else registry
-    reg.register_singleton(
-        DAG,
-        keys=[DAG, dag_engine.DAG, InTier[SystemTier]],
-        tier=system,
-    )
-    reg.register_singleton(
-        WaveScheduler,
-        keys=[WaveScheduler, dag_engine.WaveScheduler, InTier[SystemTier]],
-        tier=system,
-    )
-    reg.register_singleton(
-        DAGRunner,
-        keys=[DAGRunner, dag_engine.DAGRunner, InTier[SystemTier]],
-        tier=system,
-    )
-
-
+__initialize__ = auto_initialize()
 _initialize_ = __initialize__
-# --- END CLEANROOM AUTO-GENERATED ---

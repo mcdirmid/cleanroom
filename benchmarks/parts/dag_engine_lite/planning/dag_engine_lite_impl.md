@@ -57,16 +57,18 @@ By encapsulating adjacency index management, employing Kahn's algorithm for dete
 ### Inherited Deferred Requirements
 
 - Graph data structures, topological sort algorithms, cycle detection traversal, and sequential wave execution.
-  - Grounded: [concrete_dag_engine_lite_realization]
+  - Grounded: [concrete_dag_engine_lite_realization, kahn_topology_ext: [kahn_topological_sorting_and_critical_path]]
 
 ### Knowledge Requirements
 
 - Directed acyclic graph protocol, wave scheduler, DAG runner, node lifecycle states, failure policy outcomes, and DAG run report metrics.
   - Grounded: [dag_engine_lite: [dag_engine_lite_core_service]]
+- Algorithmic mechanics for Kahn's topological sorting, priority-ordered tie-breaking, cycle path reconstruction, and critical path dynamic programming.
+  - Grounded: [kahn_topology_ext: [kahn_topological_sorting_and_critical_path]]
 
 <!-- AUTOFAB METADATA
-LAST_CLEANED: 2026-11-10T07:51:09Z
+LAST_CLEANED: 2026-11-12T04:48:06Z
 LAST_CHANGED: 2026-11-02T19:35:00Z
 CHANGE: Specify duplicate node error on add_node for already registered node identifiers
-SPEC_QA_AUDIT: 2026-11-10T07:51:09Z
+SPEC_QA_AUDIT: 2026-11-12T04:48:06Z
 -->

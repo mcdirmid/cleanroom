@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import unittest
-from support.lib.lifecycle import LifecycleRegistry, enter_phase
+from support.lib.lifecycle import LifecycleTestCase
 from benchmarks.parts.dag_engine_lite.lib.dag_engine_lite_impl import (
     DAG,
     DAGRunner,
@@ -11,10 +11,7 @@ from benchmarks.parts.dag_engine_lite.lib.dag_engine_lite_impl import (
     __initialize__,
 )
 
-class DagEngineLiteImplTest(unittest.TestCase):
-    def setUp(self) -> None:
-        self.registry = LifecycleRegistry()
-        __initialize__(self.registry)
+class DagEngineLiteImplTest(LifecycleTestCase):
 
     def test_initialization(self) -> None:
         """CUJ: Verify initial component presence."""

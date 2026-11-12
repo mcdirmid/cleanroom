@@ -25,8 +25,8 @@ Given: scope_a has unblocked roles across multiple development stages.
 
 Given: scope_a has unblocked roles and ready work targets.
 
-1. The caller runs the orchestrate command specifying `--batch-size 3`, `--timeout 1200`, `--max-context-tokens 100000`, and `--max-unproductive-rounds 8`.
-   Observed: the coordinator and harness adapter receive the configured batch size, timeout, context compaction, and unproductive round limits.
+1. The caller runs the orchestrate command specifying `--batch-size 3`, `--timeout 1200`, `--max-context-tokens 100000`, `--max-unproductive-rounds 8`, and `--experiment structured_blame`.
+   Observed: the coordinator and harness adapter receive the configured batch size, timeout, context compaction, unproductive round limits, and active experiment identifier.
 
 ## Scenario 5 — Bounding orchestration to a target unit
 

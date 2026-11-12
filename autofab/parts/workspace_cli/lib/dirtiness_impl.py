@@ -8,12 +8,7 @@ import os
 import re
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
-from support.lib.lifecycle import (
-    LifecycleRegistry,
-    LifecycleResolutionError,
-    get_default_registry,
-    get_singleton,
-)
+from support.lib.lifecycle import LifecycleResolutionError, get_singleton, singleton
 from autofab.parts.agent.lib import session as agent_session
 from autofab.parts.metadata.lib import src_metadata
 from autofab.parts.workspace.lib import role_registry
@@ -670,6 +665,7 @@ def _eval_unit_dirty_internal(
 
 
 # Contract: Realizes dirtiness.WorkspaceDirtinessEvaluator in agent_session tier.
+@singleton
 class WorkspaceDirtinessEvaluator(dirtiness.WorkspaceDirtinessEvaluator):
     """Evaluates unit dirtiness, resolves companion contracts, and extracts cross-unit dependencies."""
 
@@ -712,23 +708,8 @@ class WorkspaceDirtinessEvaluator(dirtiness.WorkspaceDirtinessEvaluator):
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z
-# LAST_CHANGED: 2026-10-31T20:50:00Z
-# CHANGE: Support evaluating dirtiness across multi-pattern src_patterns
+# LAST_CHANGED: 2026-11-11T23:00:00Z
+# CHANGE: Decorate WorkspaceDirtinessEvaluator with @singleton
 # COVERAGE_AUDIT: 2026-10-15T17:42:47Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
-
-
-# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
-def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
-    """Registers constituent singletons into the lifecycle registry."""
-    reg = get_default_registry() if registry is None else registry
-    reg.register_singleton(
-        WorkspaceDirtinessEvaluator,
-        keys=[dirtiness.WorkspaceDirtinessEvaluator, WorkspaceDirtinessEvaluator],
-        tier=agent_session.agent_session,
-    )
-
-
-_initialize_ = __initialize__
-# --- END CLEANROOM AUTO-GENERATED ---

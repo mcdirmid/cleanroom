@@ -10,7 +10,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from typing import Dict, List, Optional
-from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_default_registry
+from support.lib.lifecycle import LifecycleTestCase, enter_phase
 from autofab.parts.agent.lib import session as agent_session
 from autofab.parts.metadata.lib import src_metadata
 from autofab.parts.workspace.lib import (
@@ -588,6 +588,18 @@ class FakeWorkspaceProvisioner:
     ) -> role_registry.WorkspaceDescriptor:
         raise NotImplementedError()
 
+    def unlock_workspace_directories(self, workspace_dir: str) -> None:
+        pass
+
+    def lock_workspace_directories(
+        self,
+        workspace_dir: str,
+        role_name: Optional[str] = None,
+        dir_scope: str = "",
+        repo_root: Optional[str] = None,
+    ) -> None:
+        pass
+
 
 def _make_roles():
     low_role = role_registry.RoleDefinition(
@@ -629,9 +641,9 @@ def _make_roles():
     return [low_role, lib_role, test_role, qa_role]
 
 
-class WorkspaceSyncImplTest(unittest.TestCase):
+class WorkspaceSyncImplTest(LifecycleTestCase):
     def setUp(self) -> None:
-        self.registry = LifecycleRegistry()
+        super().setUp()
         self.ws_registry = FakeWorkspaceRegistry(_make_roles())
         self.registry.register_instance(
             self.ws_registry,

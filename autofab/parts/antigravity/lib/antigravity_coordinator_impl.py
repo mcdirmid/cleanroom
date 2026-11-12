@@ -7,12 +7,7 @@ import os
 import re
 from typing import Any, Dict, List, Optional, Sequence
 
-from support.lib.lifecycle import (
-    LifecycleRegistry,
-    Singleton,
-    get_default_registry,
-    get_singleton,
-)
+from support.lib.lifecycle import auto_initialize, get_singleton, singleton
 from autofab.parts.agent.lib import session as agent_session
 from support.lib import app_info
 from autofab.parts.subagent.lib import subagent_coordinator
@@ -60,12 +55,12 @@ Your sole responsibility is coordinating multi-agent DAG convergence across comm
 
 
 # Contract: AntigravityCoordinatorGenerator realizes skill artifact generation, tool parameter formatting, and wake notification parsing in the agent session tier.
+@singleton
 class AntigravityCoordinatorGenerator(
     antigravity_coordinator.AntigravityCoordinatorGenerator
 ):
     """Realizes skill artifact generation, tool parameter formatting, and wake notification parsing."""
 
-    tier = agent_session.agent_session
 
     def __init__(self) -> None:
         pass
@@ -268,12 +263,12 @@ def _render_isolation_rule_content(
 
 
 # Contract: AntigravityWorkspaceConfigurer realizes Antigravity-specific isolation rules and workspace confinement in the agent session tier.
+@singleton
 class AntigravityWorkspaceConfigurer(
     antigravity_workspace.AntigravityWorkspaceConfigurer
 ):
     """Realizes Antigravity-specific isolation rules and workspace confinement."""
 
-    tier = agent_session.agent_session
 
     def __init__(self) -> None:
         pass
@@ -383,28 +378,5 @@ class AntigravityWorkspaceConfigurer(
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
-
-# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
-def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
-    """Registers constituent singletons into the lifecycle registry."""
-    reg = get_default_registry() if registry is None else registry
-    reg.register_singleton(
-        AntigravityCoordinatorGenerator,
-        keys=[
-            antigravity_coordinator.AntigravityCoordinatorGenerator,
-            AntigravityCoordinatorGenerator,
-        ],
-        tier=agent_session.agent_session,
-    )
-    reg.register_singleton(
-        AntigravityWorkspaceConfigurer,
-        keys=[
-            antigravity_workspace.AntigravityWorkspaceConfigurer,
-            AntigravityWorkspaceConfigurer,
-        ],
-        tier=agent_session.agent_session,
-    )
-
-
+__initialize__ = auto_initialize()
 _initialize_ = __initialize__
-# --- END CLEANROOM AUTO-GENERATED ---

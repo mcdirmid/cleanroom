@@ -1,8 +1,10 @@
 """Unit tests for submit_impl."""
 
+import os
+import tempfile
 import unittest
 from typing import Optional
-from support.lib.lifecycle import LifecycleRegistry, enter_phase, system
+from support.lib.lifecycle import LifecycleTestCase, enter_phase, system
 from autofab.parts.agent.lib import node_config, agent_session
 from autofab.parts.dag.lib import dag_storage
 from autofab.parts.control.lib import submit, verification
@@ -74,9 +76,9 @@ class MockNodeConfig:
         self.feedback: Optional[list[str]] = None
 
 
-class ControlSubmitImplTest(unittest.TestCase):
+class ControlSubmitImplTest(LifecycleTestCase):
     def setUp(self) -> None:
-        self.registry = LifecycleRegistry()
+        super().setUp()
         self.coordinator = SubmissionCoordinator()
         self.registry.register_instance(
             self.coordinator,
@@ -368,6 +370,29 @@ class ControlSubmitImplTest(unittest.TestCase):
                 )
                 self.assertFalse(outcome.accepted)
                 self.assertIn("Workspace integrity check failed", outcome.message)
+
+    def test_resolve_submit_target_with_dir_scope(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            repo_root = td
+            scope = "my_benchmark_flight"
+            target_file = os.path.join(
+                repo_root, scope, "parts", "my_part", "lib", "my_part_impl.py"
+            )
+            os.makedirs(os.path.dirname(target_file), exist_ok=True)
+            with open(target_file, "w", encoding="utf-8") as f:
+                f.write("class MyPart: pass\n")
+
+            # Resolving relative to scope without scope prefix in target
+            rel_target = "parts/my_part/lib/my_part_impl.py"
+            resolved_path, unit = self.coordinator.resolve_submit_target(
+                target=rel_target,
+                repo_root=repo_root,
+                role_name="lib",
+                dir_scope=scope,
+            )
+            self.assertEqual(resolved_path, os.path.realpath(target_file))
+            self.assertEqual(unit, "my_part_impl")
+
 
 
 if __name__ == "__main__":

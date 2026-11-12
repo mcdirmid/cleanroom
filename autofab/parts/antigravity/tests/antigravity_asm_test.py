@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from support.lib.lifecycle import LifecycleRegistry, enter_phase
+from support.lib.lifecycle import LifecycleRegistry, LifecycleTestCase, enter_phase
 from autofab.parts.agent.lib import session as agent_session
 from autofab.parts.antigravity.lib import (
     antigravity_asm,
@@ -14,7 +14,7 @@ from autofab.parts.antigravity.lib import (
 )
 
 
-class AntigravityAsmTest(unittest.TestCase):
+class AntigravityAsmTest(LifecycleTestCase):
     """Test cases for antigravity_asm assembly."""
 
     def test_assembly_initialization(self) -> None:

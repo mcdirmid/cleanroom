@@ -349,6 +349,43 @@ def copy_file_with_perms(
     )
 
 
+def unlock_workspace_directories(workspace_dir: str) -> None:
+    """Restores write permissions (0o755) on all directories within a workspace."""
+    if not os.path.isdir(workspace_dir):
+        return
+    try:
+        os.chmod(workspace_dir, 0o755)
+    except OSError:
+        pass
+    for dirpath, dirs, _ in os.walk(workspace_dir, followlinks=False):
+        for d in dirs:
+            dp = os.path.join(dirpath, d)
+            if not os.path.islink(dp):
+                try:
+                    os.chmod(dp, 0o755)
+                except OSError:
+                    pass
+
+
+def lock_workspace_directories(
+    workspace_dir: str,
+    role_name: str | None = None,
+    dir_scope: str = "",
+    repo_root: str | None = None,
+) -> None:
+    """Locks non-writable directories in a workspace to 0o555 while preserving 0o755 on target directories."""
+    try:
+        from support.lib.lifecycle import get_singleton
+        from autofab.parts.workspace.lib import provision
+
+        prov = get_singleton(provision.WorkspaceProvisioner)
+        prov.lock_workspace_directories(
+            workspace_dir, role_name=role_name, dir_scope=dir_scope, repo_root=repo_root
+        )
+    except Exception:
+        pass
+
+
 def compute_role_work_queue(
     role_name: str, dir_scope: str, repo_root: str | None = None
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -502,14 +539,20 @@ Your sole, monomaniacal mission is coordinating multi-agent DAG convergence acro
    For each role with ready nodes in the queue:
    - Check active subagents using `manage_subagents` with action `list`.
    - Obtain the workspace directory for the role from `workspace_dirs[<role>]`.
-   - If the role is a fused role (e.g. `baseline` or `pretense_baseline`), instruct the worker to run `bin/get_work` once at start, consult its workspace `AGENTS.md` and `guides/`, verify via its provisioned `bin/verify_*` micro-binaries, and report `COMPLETED` via `send_message` when done (without calling `bin/submit` or `bin/check_files`).
    - If an active worker for that role already exists, wake it using `send_message`:
-     "Ready nodes detected in global DAG. Your assigned role workspace directory is '<workspace_dir>'. Because working directories do not persist across tool calls, prefix all shell commands with 'cd <workspace_dir> && ' (e.g. 'cd <workspace_dir> && bin/get_work') and use absolute paths under '<workspace_dir>' for file tools. Immediately run 'cd <workspace_dir> && bin/get_work' to acquire pending ready nodes. Consult your workspace AGENTS.md and role guide, perform role verification (via bin/check_files for standard roles, or bin/verify_* micro-binaries for fused roles), resolve nodes (via bin/submit, bin/blame, or bin/fail for standard roles, or report COMPLETED for fused roles), and drain all ready nodes before completing. If success is impossible, run 'cd <workspace_dir> && bin/fail <target> \"<reason>\"' and report FAILED: <target> - <reason>."
+     - For standard roles:
+       "Ready nodes detected in scope '<scope>'. Assigned workspace: '<workspace_dir>'. Run 'bin/get_work' to pull ready targets, author changes in place, verify with 'bin/check_files <target>', submit via 'bin/submit <target> \"<summary>\"' (or bin/blame/fail), and drain all ready nodes before completing."
+     - For fused roles:
+       "Ready nodes detected in scope '<scope>'. Assigned workspace: '<workspace_dir>'. Run 'bin/get_work' once at session start, verify with 'bin/verify_*' micro-binaries until all pass, and send 'COMPLETED' via send_message when done."
    - If no active worker for that role exists, spawn it via `invoke_subagent`:
      - TypeName: "autofab_worker" (or "autofab_baseline_worker" if role is a fused role like baseline or pretense_baseline)
      - Role: "Autofab <Role> Worker"
      - Model: "<antigravity_models[<role>]>" (MUST use `antigravity_models[<role>]` from `work-queue --json`: e.g. `"flash"` when `gemini-flash` is specified, `"flash_lite"` when `flash-lite` is specified, `"pro"` when `pro` is specified, and `"inherit"` when `gemini-argon` is specified since Antigravity does not expose Argon directly for subagents)
-     - Prompt: "You are an autonomous Autofab '<role>' worker for scope '<scope>'. Your assigned role workspace directory is '<workspace_dir>'. You must operate strictly inside your assigned role workspace directory. Because shell working directory does not persist across tool calls, prefix all shell commands with 'cd <workspace_dir> && ' (e.g., 'cd <workspace_dir> && bin/get_work') and use absolute paths under '<workspace_dir>' for file operations. All target verification and round resolution must proceed through the prescribed bin/ executables in your workspace (consult AGENTS.md). Immediately run 'cd <workspace_dir> && bin/get_work' to acquire pending ready nodes. Consult your workspace AGENTS.md and companion guides in guides/, perform role verification (bin/check_files for standard roles; bin/verify_* micro-binaries for fused roles), resolve nodes (bin/submit, bin/blame, or bin/fail for standard roles; or report COMPLETED via send_message for fused roles without calling bin/submit), and drain all ready nodes before completing. If success is impossible or an unresolvable impasse occurs, execute 'cd <workspace_dir> && bin/fail <target> \"<reason>\"' and report FAILED: <target> - <reason>."
+     - Prompt:
+       - For standard roles:
+         "You are an autonomous Autofab '<role>' worker for scope '<scope>'. Your assigned role workspace directory is '<workspace_dir>'. Operate strictly inside your assigned workspace directory. Because shell working directory does not persist across tool calls, prefix all shell commands with 'cd <workspace_dir> && ' (e.g. 'cd <workspace_dir> && bin/get_work') and use absolute paths under '<workspace_dir>' for file tools. All target verification and round resolution must proceed through the prescribed bin/ executables in your workspace (consult AGENTS.md). 1. Immediately run 'cd <workspace_dir> && bin/get_work' to acquire pending ready nodes. 2. Consult your workspace AGENTS.md and companion guides in guides/ (e.g. 'guides/<guide_name>.md' located directly under your workspace root; do not prefix with scope), author target files directly in place (authoring in scratch/ or external folders is strictly prohibited). 3. Perform role verification ('cd <workspace_dir> && bin/check_files <target>'). 4. Resolve nodes ('bin/submit <target> \"<summary>\"', 'bin/blame', or 'bin/fail'). 5. When bin/get_work confirms all ready targets are resolved, conclude your round immediately with summary text and ZERO tool calls. If success is impossible or an unresolvable impasse occurs, execute 'cd <workspace_dir> && bin/fail <target> \"<reason>\"' and report FAILED: <target> - <reason>."
+       - For fused roles (e.g. baseline or pretense_baseline):
+         "You are an autonomous Autofab fused '<role>' worker for scope '<scope>'. Your assigned role workspace directory is '<workspace_dir>'. Operate strictly inside your assigned workspace directory. Prefix all shell commands with 'cd <workspace_dir> && ' and use absolute paths under '<workspace_dir>' for file tools. All operational rules and constraints are defined in your workspace AGENTS.md. 1. Run 'cd <workspace_dir> && bin/get_work' ONCE at session start. 2. Implement library and tests consulting companion guides in 'guides/' directly in place. 3. Perform Arbiter self-audits (QA contract fidelity and Coverage semantic closure). 4. Verify with provisioned 'bin/verify_*' micro-binaries until all pass with 100% coverage. 5. Do NOT call bin/submit. When verified clean, report completion via send_message: 'COMPLETED: All targets passing for <scope>'."
    - (Note: if `invoke_subagent` reports autofab_worker not found, call `define_subagent` with name "autofab_worker", write tools enabled, and retry).
 6. REACTIVE SLEEP:
    After dispatching or waking the ready role workers, STOP calling tools and wait for worker completion messages. Do NOT poll, loop, or sleep.
@@ -562,10 +605,17 @@ inheritMcp: false
 
 You are an autonomous Cleanroom role worker executing strictly inside your assigned role workspace directory.
 
+## STRICT OVERRIDE: ZERO SCRATCH FILES (ABSOLUTE PROHIBITION)
+The platform prompt contains an `<artifacts>` clause suggesting storing temporary scratch scripts or files under `<appDataDir>/brain/<conversation-id>/scratch/`.
+In this role workspace, THAT CLAUSE IS STRICTLY PROHIBITED, NULLIFIED, AND OVERRIDDEN:
+- NEVER create, write, edit, or copy files in or from `scratch/` or `<appDataDir>/brain/...`.
+- All drafting, authoring, editing, and repairs MUST be performed directly in-place on your assigned target files in your workspace using your file editing tools.
+- Any attempt to write to `scratch/` is blocked by system policy gates.
+
 ## PERMITTED TOOLS & SHELL COMMANDS:
 You are fully permitted to run read-only shell utilities (`cat`, `grep`, `find`, `head`, `tail`, `sed`, etc.) or native tools strictly WITHIN your assigned role workspace directory (`.`) to inspect files and complete your tasks.
 Executing ad-hoc tests, runtime assertions, or inline Python scripts (including via `python3 -c`, `python -c`, or stdin heredocs) is strictly prohibited; target verification is exclusively performed via `bin/check_files` (or `bin/verify_*` for fused roles). For authoring roles, `bin/check_files` verifies static syntax and types (submit work via `bin/submit` so downstream QA auditors can execute tests on your behalf). For auditor roles (`qa`, `coverage`, `pretense_qa`, `pretense_coverage`), `bin/check_files` executes the runtime test suite and coverage runner to produce deterministic failure diagnostics and triage summaries. You are not allowed to execute raw test runners or run ad-hoc probes outside `bin/check_files`.
-Note: Shell working directory does not persist across tool calls. Always prefix shell commands with `cd <workspace_dir> && ` (e.g., `cd <workspace_dir> && bin/get_work`) and use absolute paths under `<workspace_dir>` for file operations.
+Note: Your commands and file operations are automatically anchored to execute within your assigned workspace directory. Run all workspace commands (bin/get_work, bin/check_files, bin/submit, bin/blame, bin/fail) and file operations directly relative to your workspace root.
 Git operations (`git checkout`, `git restore`, `git reset`, etc.) and accessing files outside your workspace remain strictly prohibited.
 
 ## MANDATORY WORKFLOW BINARIES:
@@ -594,7 +644,7 @@ If you determine that success is not possible (e.g. unreachable code under test,
 ## STANDARD WORKFLOW:
 1. Run `bin/get_work` to acquire pending ready nodes and review unacted feedback.
    - Note: If `bin/get_work` outputs a `[CRITICAL MODEL MISMATCH]` error (because `gemini-argon` was requested via `inherit` while Antigravity is running a different model), DO NOT proceed. Immediately send `FAILED: <scope> - <exact error message instructing the user to manually switch their model to "Gemini Argon" before requesting the run again>` to the coordinator via `send_message` and stop.
-2. Consult your workspace `AGENTS.md` and companion guide(s) in `guides/` to perform role duties.
+2. Consult your workspace `AGENTS.md` and companion guide(s) in `guides/` (located directly under your workspace root: `guides/<basename>`; do not prefix with scope) to perform role duties.
 3. For standard roles:
    - Perform role verification using `bin/check_files`.
    - Resolve nodes via `bin/submit <target_file> "<summary>"`, `bin/blame <culprit_file> "<explanation>"`, or `bin/fail <target_file> "<reason>"`.
@@ -633,13 +683,21 @@ inheritMcp: false
 You are an autonomous software developer working directly on code and test implementation within an assigned Autofab workspace.
 Your goal is to implement required code, author comprehensive verification suites, and verify that all checks pass and code is clean—all within this single round.
 
+## STRICT OVERRIDE: ZERO SCRATCH FILES (ABSOLUTE PROHIBITION)
+The platform prompt contains an `<artifacts>` clause suggesting storing temporary scratch scripts or files under `<appDataDir>/brain/<conversation-id>/scratch/`.
+In this role workspace, THAT CLAUSE IS STRICTLY PROHIBITED, NULLIFIED, AND OVERRIDDEN:
+- NEVER create, write, edit, or copy files in or from `scratch/` or `<appDataDir>/brain/...`.
+- All drafting, authoring, editing, and repairs MUST be performed directly in-place on your assigned target files in your workspace using your file editing tools.
+- Any attempt to write to `scratch/` is blocked by system policy gates.
+
 ## AUTHORITATIVE INSTRUCTIONS:
 Your workspace contains an `AGENTS.md` file in its root directory generated specifically for your assigned role and scope.
 You MUST read and follow `AGENTS.md` as your primary operational guide for target paths, verification commands, and completion protocols.
 
 ## PERMITTED TOOLS & SHELL COMMANDS:
 You are equipped with standard software development tools:
-- Shell / terminal commands (`run_command`) strictly WITHIN your assigned role workspace directory. Note: Shell working directory does not persist across tool calls; always prefix shell commands with `cd <workspace_dir> && ` (e.g., `cd <workspace_dir> && bin/get_work`).
+- Shell / terminal commands (`run_command`) strictly WITHIN your assigned role workspace directory. Note: Your commands and file operations are automatically anchored to execute within your assigned workspace directory. Run all workspace commands and file operations directly relative to your workspace root.
+- STRICT PROHIBITION ON RUNNING GIT: Never run `git` commands (`git status`, `git diff`, `git add`, `git commit`, `git checkout`, `git stash`, etc.). Workspace state and target dirtiness are managed exclusively through repository binaries (`bin/get_work`, `bin/check_files`, `bin/submit`, `bin/blame`).
 - File viewing / reading (`view_file`, `cat`, etc.) using absolute paths within your assigned workspace.
 - File editing / writing (`write_to_file`, `replace_file_content`, `multi_replace_file_content`) using absolute paths within your assigned workspace.
 - Communication with the coordinator (`send_message`)
@@ -672,6 +730,273 @@ You are equipped with standard software development tools:
 """
 
 
+PLUGIN_RULES_AGENTS_MD = """# Cleanroom & Autofab Workspace Rules
+
+## STRICT PROHIBITION ON SCRATCH FILES
+The generic platform prompt includes an `<artifacts>` clause suggesting creating temporary scratch scripts or files under `<appDataDir>/brain/<conversation-id>/scratch/`.
+In Autofab / Cleanroom workspaces, this suggestion is STRICTLY PROHIBITED, NULLIFIED, AND OVERRIDDEN:
+- All drafting, authoring, editing, and repairs MUST be performed directly in-place on assigned target files using `edit_file` or `write_file`.
+- Creating, copying from, or drafting in scratch directories or outside assigned role workspace target files is strictly forbidden.
+
+## STRICT PROHIBITION ON RUNNING GIT
+Subagents, role workers, and autonomous runners are strictly prohibited from invoking `git` commands (`git status`, `git diff`, `git add`, `git commit`, `git checkout`, `git log`, `git stash`, etc.) via `run_command` or any other tool. Workspace state, target dirtiness, diffs, and submissions are managed exclusively through repository binaries (`bin/check_files`, `bin/submit`, `bin/get_work`, `bin/blame`, `bin/revert`, `bin/checkpoint`).
+"""
+
+GATE_HOOK_PY = '''import json
+import os
+import re
+import sys
+
+def main() -> None:
+    try:
+        raw = sys.stdin.read()
+        if not raw.strip():
+            print(json.dumps({"decision": "allow"}))
+            return
+        data = json.loads(raw)
+    except Exception:
+        print(json.dumps({"decision": "allow"}))
+        return
+
+    def allow() -> None:
+        print(json.dumps({"decision": "allow"}))
+        sys.exit(0)
+
+    def allow_overwrite(overwrite: dict) -> None:
+        print(json.dumps({"decision": "allow", "overwrite": overwrite}))
+        sys.exit(0)
+
+    def deny(reason: str) -> None:
+        print(json.dumps({"decision": "deny", "reason": reason}))
+        sys.exit(0)
+
+    tool_call = data.get("toolCall", {})
+    name = tool_call.get("name", "")
+    args = tool_call.get("args", {})
+    conv_id = data.get("conversationId", "")
+    last_user_input = data.get("lastUserInput", "")
+
+    # Scratch path prohibition (applies universally to all agents)
+    if name in ("write_file", "edit_file", "view_file", "write_to_file", "replace_file_content", "multi_replace_file_content"):
+        path = (args.get("Path") or args.get("path") or "").strip("'\\\"").strip()
+        if "/scratch/" in path or path.endswith("/scratch"):
+            deny(
+                "STRICT POLICY VIOLATION: Authoring files in scratch/ directories is strictly prohibited. "
+                "Author and edit assigned target files directly in place within your workspace."
+            )
+
+    # Git and Unzip commands prohibition (applies universally to all agents)
+    if name == "run_command":
+        cmd = (args.get("CommandLine") or "").strip("'\\\"").strip()
+        if re.search(r"(?:^|[\\s;&|`$()])git(?:\\.exe)?(?:\\s|$)", cmd) or re.search(
+            r"(?:^|[\\s;&|`$()])(?:\\.git/|cat\\s+.*\\.git|tail\\s+.*\\.git|head\\s+.*\\.git|ls\\s+.*\\.git)",
+            cmd,
+        ):
+            deny(
+                "STRICT POLICY VIOLATION: Direct git commands and inspecting .git/ directories are strictly prohibited in Autofab workspaces. "
+                "Workspace state and submissions are managed exclusively through repository binaries "
+                "(bin/check_files, bin/submit, bin/blame). To revert broken edits, use bin/revert."
+            )
+
+        if re.search(r"(?:^|[\\s;&|`$()])unzip(?:\\s|$)", cmd):
+            deny(
+                "STRICT POLICY VIOLATION: Unzipping runner binaries or inspecting internal tool archives is strictly prohibited. "
+                "Consult your companion guide in guides/ for all required structures and conventions."
+            )
+
+    # Registry management for worker subagent hermetic rooting
+    plugin_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    registry_path = os.path.join(plugin_dir, "active_workers.json")
+
+    registry = {}
+    if os.path.isfile(registry_path):
+        try:
+            with open(registry_path, "r", encoding="utf-8") as f:
+                content_reg = json.load(f)
+                if isinstance(content_reg, dict):
+                    registry = content_reg
+        except Exception:
+            registry = {}
+
+    # Stale pruning
+    pruned = False
+    for cid in list(registry.keys()):
+        entry = registry[cid]
+        if not isinstance(entry, dict) or not os.path.isdir(entry.get("workspace_dir", "")):
+            del registry[cid]
+            pruned = True
+
+    ws_pattern = re.compile(
+        r"(?:assigned\\s+(?:role\\s+)?workspace(?:\\s+directory)?\\s+(?:is\\s*[:=]?\\s*|:\\s*)|workspace:\\s*)['\\\"](?P<ws>[^'\\\"]+)['\\\"]",
+        re.IGNORECASE,
+    )
+    role_pattern = re.compile(
+        r"autonomous\\s+Autofab\\s+(?:fused\\s+)?'?(?P<role>[a-zA-Z0-9_-]+)'?\\s+worker",
+        re.IGNORECASE,
+    )
+
+    ws_dir = None
+    if conv_id and conv_id in registry:
+        ws_dir = registry[conv_id].get("workspace_dir")
+
+    if not ws_dir and conv_id:
+        candidates = []
+        tpath = data.get("transcriptPath")
+        if tpath and os.path.isfile(tpath):
+            candidates.append(tpath)
+        brain_tpath = os.path.expanduser(f"~/.gemini/antigravity/brain/{conv_id}/.system_generated/logs/transcript.jsonl")
+        if brain_tpath not in candidates and os.path.isfile(brain_tpath):
+            candidates.append(brain_tpath)
+
+        for c_file in candidates:
+            try:
+                with open(c_file, "r", encoding="utf-8") as fp:
+                    for _ in range(5):
+                        line_str = fp.readline()
+                        if not line_str:
+                            break
+                        rec = json.loads(line_str)
+                        text = rec.get("content", "")
+                        m = ws_pattern.search(text)
+                        if m:
+                            cand = m.group("ws").strip()
+                            if os.path.isdir(cand):
+                                ws_dir = cand
+                                rm = role_pattern.search(text)
+                                role = rm.group("role") if rm else "worker"
+                                registry[conv_id] = {
+                                    "role": role,
+                                    "workspace_dir": ws_dir,
+                                }
+                                pruned = True
+                                break
+                    if ws_dir:
+                        break
+            except Exception:
+                pass
+
+    if not ws_dir and last_user_input:
+        m = ws_pattern.search(last_user_input)
+        if m:
+            cand = m.group("ws").strip()
+            if os.path.isdir(cand):
+                ws_dir = cand
+                if conv_id:
+                    rm = role_pattern.search(last_user_input)
+                    role = rm.group("role") if rm else "worker"
+                    registry[conv_id] = {
+                        "role": role,
+                        "workspace_dir": ws_dir,
+                    }
+                    pruned = True
+
+    if pruned:
+        try:
+            tmp_path = f"{registry_path}.tmp.{os.getpid()}"
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(registry, f, indent=2)
+                f.write("\\n")
+            os.replace(tmp_path, registry_path)
+        except Exception:
+            pass
+
+    # If not a registered worker subagent (e.g. coordinator or parent session), allow execution
+    if not ws_dir:
+        allow()
+
+    canonical_ws = os.path.realpath(os.path.abspath(ws_dir))
+
+    # Hermetic Root Invariant enforcement for worker subagents
+    if name == "run_command":
+        cmd = (args.get("CommandLine") or "").strip("'\\\"").strip()
+
+        # Block referencing canonical host repository outside workspace
+        if "/projects/cleanroom" in cmd or "/cleanroom/" in cmd:
+            deny(
+                f"STRICT BOUNDARY VIOLATION: Referencing host repository paths outside your role workspace is strictly prohibited. "
+                f"You are confined exclusively to your assigned role workspace: '{ws_dir}'."
+            )
+
+        # Prohibit internal cd navigation
+        cd_re = re.compile(r"(?:^|[;&|`()]\\s*|\\$\\(\\s*)\\s*cd(?:\\s+([^;&|`$()]+|\\\"[^\\\"]+\\\"|'[^']+'))?")
+        for m in cd_re.finditer(cmd):
+            target = m.group(1)
+            if not target:
+                deny(
+                    f"STRICT BOUNDARY VIOLATION: Subagents are permanently rooted in their workspace directory ('{ws_dir}'). "
+                    f"Changing directories (cd) into subdirectories (e.g. guides/) or external paths is strictly prohibited. "
+                    f"Run all tools (bin/get_work, bin/check_files, bin/submit) directly from the workspace root."
+                )
+            clean_target = target.strip("'\\\"").strip()
+            if clean_target in (".", "./"):
+                continue
+            try:
+                target_canonical = os.path.realpath(os.path.abspath(clean_target))
+            except Exception:
+                target_canonical = ""
+            if target_canonical == canonical_ws or clean_target == ws_dir:
+                continue
+            deny(
+                f"STRICT BOUNDARY VIOLATION: Subagents are permanently rooted in their workspace directory ('{ws_dir}'). "
+                f"Changing directories (cd) into subdirectories (e.g. guides/) or external paths is strictly prohibited. "
+                f"Run all tools (bin/get_work, bin/check_files, bin/submit) directly from the workspace root."
+            )
+
+        # Transparent command auto-rooting via overwrite
+        pattern_escaped = re.escape(ws_dir)
+        canonical_escaped = re.escape(canonical_ws)
+        prefix_re = re.compile(
+            rf"^\\s*cd\\s+['\\\"]?(?:{pattern_escaped}|{canonical_escaped})['\\\"]?\\s*&&\\s*",
+            re.IGNORECASE,
+        )
+        if not prefix_re.search(cmd):
+            new_cmd = f"cd {ws_dir} && ({cmd})"
+            allow_overwrite({"CommandLine": new_cmd})
+        elif (args.get("CommandLine") or "") != cmd:
+            allow_overwrite({"CommandLine": cmd})
+        else:
+            allow()
+
+    elif name in ("read_file", "write_file", "edit_file", "view_file", "write_to_file", "replace_file_content", "multi_replace_file_content"):
+        raw_path = args.get("Path") or args.get("path") or ""
+        path = raw_path.strip("'\\\"").strip()
+        path_key = "Path" if "Path" in args else "path"
+
+        # Also normalize Overwrite boolean if passed as a string
+        overwrite_patch = {}
+        for ok in ("Overwrite", "overwrite"):
+            if ok in args and isinstance(args[ok], str):
+                overwrite_patch[ok] = args[ok].lower() == "true"
+
+        if not os.path.isabs(path):
+            resolved = os.path.normpath(os.path.join(ws_dir, path))
+            canonical_resolved = os.path.realpath(resolved)
+            if canonical_resolved == canonical_ws or canonical_resolved.startswith(canonical_ws + os.sep):
+                patch = {path_key: resolved, **overwrite_patch}
+                allow_overwrite(patch)
+            else:
+                deny(f"STRICT BOUNDARY VIOLATION: Path traversal '{path}' escapes assigned workspace.")
+        else:
+            canonical_path = os.path.realpath(os.path.normpath(path))
+            if canonical_path == canonical_ws or canonical_path.startswith(canonical_ws + os.sep):
+                if raw_path != path or overwrite_patch:
+                    patch = {path_key: path, **overwrite_patch}
+                    allow_overwrite(patch)
+                else:
+                    allow()
+            else:
+                deny(
+                    f"STRICT BOUNDARY VIOLATION: Access to path '{path}' is strictly prohibited. "
+                    f"You are confined exclusively to your assigned role workspace: '{ws_dir}'."
+                )
+
+    allow()
+
+if __name__ == "__main__":
+    main()
+'''
+
+
 def ensure_antigravity_plugin_installed() -> str:
     """Installs or refreshes Cleanroom agents in global Antigravity plugin directory."""
     app_info = _get_app_info()
@@ -684,6 +1009,8 @@ def ensure_antigravity_plugin_installed() -> str:
     coord_dir = os.path.join(agents_dir, f"{app_name}_coordinator")
     worker_dir = os.path.join(agents_dir, f"{app_name}_worker")
     baseline_worker_dir = os.path.join(agents_dir, f"{app_name}_baseline_worker")
+    rules_dir = os.path.join(plugin_dir, "rules")
+    hooks_dir = os.path.join(plugin_dir, "hooks")
 
     # If legacy skills directory exists, remove it
     legacy_skills_dir = os.path.join(plugin_dir, "skills")
@@ -693,6 +1020,8 @@ def ensure_antigravity_plugin_installed() -> str:
     os.makedirs(coord_dir, exist_ok=True)
     os.makedirs(worker_dir, exist_ok=True)
     os.makedirs(baseline_worker_dir, exist_ok=True)
+    os.makedirs(rules_dir, exist_ok=True)
+    os.makedirs(hooks_dir, exist_ok=True)
 
     plugin_json = {
         "name": app_name,
@@ -712,6 +1041,32 @@ def ensure_antigravity_plugin_installed() -> str:
         os.path.join(baseline_worker_dir, "agent.md"), "w", encoding="utf-8"
     ) as f:
         f.write(BASELINE_WORKER_AGENT_MD.strip() + "\n")
+
+    with open(os.path.join(rules_dir, "AGENTS.md"), "w", encoding="utf-8") as f:
+        f.write(PLUGIN_RULES_AGENTS_MD.strip() + "\n")
+
+    hooks_json = {
+        f"{app_name}-safety-gate": {
+            "PreToolUse": [
+                {
+                    "matcher": "run_command|read_file|write_file|edit_file|view_file|write_to_file|replace_file_content|multi_replace_file_content",
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": "python3 hooks/gate.py",
+                            "timeout": 10,
+                        }
+                    ],
+                }
+            ]
+        }
+    }
+    with open(os.path.join(plugin_dir, "hooks.json"), "w", encoding="utf-8") as f:
+        json.dump(hooks_json, f, indent=2)
+        f.write("\n")
+
+    with open(os.path.join(hooks_dir, "gate.py"), "w", encoding="utf-8") as f:
+        f.write(GATE_HOOK_PY.strip() + "\n")
 
     return plugin_dir
 
@@ -1533,16 +1888,17 @@ def run_work_queue(argv: list[str]) -> int:
             ws_dir = reg.compute_workspace_dir(
                 r.role_name, dir_scope=scope, repo_root=root
             )
-            if not os.path.isdir(ws_dir) or not os.path.isdir(
-                os.path.join(ws_dir, "bin")
-            ):
-                prov.commission(
-                    role_name=r.role_name,
-                    dir_scope=scope,
-                    repo_root=root,
-                    model=default_model,
-                )
             workspace_dirs[r.role_name] = ws_dir
+            if not os.path.isdir(ws_dir):
+                try:
+                    prov.commission(
+                        r.role_name,
+                        dir_scope=scope,
+                        repo_root=root,
+                        model=default_model,
+                    )
+                except Exception:
+                    pass
             ws_model = default_model or ""
             for desc_name in app_inf.get_role_descriptors():
                 rcfg = os.path.join(ws_dir, desc_name)
@@ -2408,9 +2764,17 @@ def run_blame_cli(argv: list[str], prog: str = "autofab blame") -> int:
     )
     parser.add_argument(
         "--facet",
+        "--facets",
         dest="facet",
         default=None,
         help="Constrained noun phrase facet (max 8 words, max 60 chars)",
+    )
+    parser.add_argument(
+        "--lines",
+        "--line",
+        dest="lines",
+        default=None,
+        help="Line number or line range within culprit file",
     )
     parser.add_argument(
         "--witness",
@@ -2447,7 +2811,9 @@ def run_blame_cli(argv: list[str], prog: str = "autofab blame") -> int:
         if viol_val and not viol_val.startswith("[viol:"):
             viol_val = f"[viol:{viol_val.strip('[]')}]"
         facet_val = parsed.facet or ""
-        critique = f"{slug_val} {viol_val} Facet: {facet_val}"
+        critique = f"{slug_val} {viol_val} Facet: {facet_val}".strip()
+        if getattr(parsed, "lines", None):
+            critique += f" Lines: {parsed.lines}"
         if parsed.witness:
             critique += f" Witness: {parsed.witness}"
     if not critique:
@@ -2596,6 +2962,12 @@ def run_clean(
         help="Maximum targets dispatched per role round.",
     )
     parser.add_argument(
+        "--concurrent-subagents",
+        type=int,
+        default=None,
+        help="Maximum concurrent subagents running at a time (allowed value: 1).",
+    )
+    parser.add_argument(
         "--timeout",
         type=float,
         default=None,
@@ -2692,7 +3064,12 @@ def run_clean(
 
             experiments.set_active_experiments(parsed.experiment)
         except Exception:
-            pass
+            try:
+                from autofab.support.lib import experiments
+
+                experiments.set_active_experiments(parsed.experiment)
+            except Exception:
+                pass
 
     target_input = parsed.scope_opt or parsed.dir_scope or _get_dir_scope()
     if not target_input:
@@ -2771,6 +3148,10 @@ def run_clean(
                 forward_args.extend(["--max-waves", str(parsed.max_waves)])
             if parsed.batch_size is not None:
                 forward_args.extend(["--batch-size", str(parsed.batch_size)])
+            if getattr(parsed, "concurrent_subagents", None) is not None:
+                forward_args.extend(
+                    ["--concurrent-subagents", str(parsed.concurrent_subagents)]
+                )
             if parsed.timeout is not None:
                 forward_args.extend(["--timeout", str(parsed.timeout)])
             if parsed.max_context_tokens is not None:
@@ -2783,6 +3164,8 @@ def run_clean(
                 forward_args.append("--pretense")
             if parsed.simulation:
                 forward_args.append("--simulation")
+            if parsed.experiment:
+                forward_args.extend(["--experiment", parsed.experiment])
             if getattr(parsed, "dsh_web", False):
                 os.environ["AUTOFAB_DSH_WEB"] = "1"
                 forward_args.append("--dsh-web")
@@ -2910,6 +3293,18 @@ def run_clean(
             )
             return 0
 
+        # Auto-provision role workspaces on demand for ready roles
+        if ready_nodes:
+            prov = get_singleton(provision.WorkspaceProvisioner)
+            ready_role_names = {r_name for r_name, _, _ in ready_nodes}
+            for r_name in ready_role_names:
+                prov.commission(
+                    r_name,
+                    dir_scope=scope,
+                    repo_root=root,
+                    model=bound_model,
+                )
+
         in_antigravity = bool(os.environ.get("ANTIGRAVITY_AGENT")) or bool(
             os.environ.get("ANTIGRAVITY_CONVERSATION_ID")
         )
@@ -2918,25 +3313,7 @@ def run_clean(
         model_to_bind = bound_model
         model_hint = f" (model: {model_to_bind})" if model_to_bind else ""
         print(f"=== Autofab Clean Pre-flight [Scope: {scope}{role_suffix}] ===")
-        print(
-            f"Commissioning/verifying {len(declared_roles)} role workspaces{model_hint}..."
-        )
-        commissioned_dirs = []
-        for r in declared_roles:
-            ws_info = prov.commission(
-                role_name=r.role_name,
-                dir_scope=scope,
-                repo_root=root,
-                model=model_to_bind,
-                reset=True,
-            )
-            commissioned_dirs.append((r.role_name, ws_info.workspace_dir))
-        parent_ws_dir = (
-            os.path.dirname(commissioned_dirs[0][1]) if commissioned_dirs else ""
-        )
-        print(
-            f"[OK] All {len(commissioned_dirs)} role workspaces ready in {parent_ws_dir}."
-        )
+        print(f"Verified {len(declared_roles)} declared roles{model_hint}.")
 
         print(f"\nDirty Nodes Detected in Scope '{scope}'{role_suffix}:")
         print(f"  • {len(ready_nodes)} node(s) READY for dispatch:")
@@ -3069,6 +3446,56 @@ def main_orchestrate(argv: list[str] | None = None) -> int:
 
 
 def run_benchmark_cli(argv: list[str]) -> int:
+    model_flags: list[str] = []
+    suite_flags: list[str] = []
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
+        if arg.startswith(("--model=", "--models=")):
+            model_flags.append(arg.split("=", 1)[1])
+        elif arg in ("--model", "--models") and i + 1 < len(argv):
+            model_flags.append(argv[i + 1])
+            i += 1
+        elif arg.startswith(("--suite=", "--suites=")):
+            suite_flags.append(arg.split("=", 1)[1])
+        elif arg in ("--suite", "--suites") and i + 1 < len(argv):
+            suite_flags.append(argv[i + 1])
+            i += 1
+        i += 1
+
+    if len(model_flags) > 1:
+        print(
+            f"Error: Multiple --model flags specified ({model_flags}). A benchmark flight accepts exactly one model.",
+            file=sys.stderr,
+        )
+        return 1
+
+    if len(suite_flags) > 1:
+        print(
+            f"Error: Multiple --suite flags specified ({suite_flags}). A benchmark flight accepts exactly one suite.",
+            file=sys.stderr,
+        )
+        return 1
+
+    known_suites = {
+        "dag_engine",
+        "dag_engine_lite",
+        "ring_buffer",
+        "semver_solver",
+        "task_queue",
+        "lru_cache",
+        "heapq",
+        "graphlib",
+    }
+    if model_flags:
+        m_val = model_flags[0].strip().lower()
+        if m_val in known_suites:
+            print(
+                f"Error: '{m_val}' is a benchmark suite name, not a model profile. Did you mean --suite {m_val}?",
+                file=sys.stderr,
+            )
+            return 1
+
     for idx, arg in enumerate(argv):
         if arg.startswith("--experiment="):
             os.environ["AUTOFAB_EXPERIMENT"] = arg.split("=", 1)[1]
@@ -3385,24 +3812,39 @@ def decommission_workspaces(
         deleted_paths: set[str] = set()
 
         def _delete_dir(path: str) -> None:
-            if not os.path.isdir(path):
+            if not os.path.exists(path):
                 return
+            try:
+                os.chmod(path, 0o777)
+            except OSError:
+                pass
             for dirpath, dirs, files in os.walk(path, followlinks=False):
                 for d in dirs:
                     dp = os.path.join(dirpath, d)
                     if not os.path.islink(dp):
                         try:
-                            os.chmod(dp, 0o755)
+                            os.chmod(dp, 0o777)
                         except OSError:
                             pass
                 for f in files:
                     fp = os.path.join(dirpath, f)
                     if not os.path.islink(fp):
                         try:
-                            os.chmod(fp, 0o644)
+                            os.chmod(fp, 0o666)
                         except OSError:
                             pass
-            shutil.rmtree(path, ignore_errors=True)
+
+            def _onexc(func: Any, p: str, exc_info: Any) -> None:
+                try:
+                    os.chmod(p, 0o777)
+                    func(p)
+                except OSError:
+                    pass
+
+            try:
+                shutil.rmtree(path, onexc=_onexc)
+            except TypeError:
+                shutil.rmtree(path, ignore_errors=True)
 
         for r in declared_roles:
             ws_dir = reg.compute_workspace_dir(
@@ -3420,7 +3862,8 @@ def decommission_workspaces(
         for ws_container in app_inf.get_role_workspaces_containers():
             rw_dir = os.path.join(parent_dir, ws_container)
             if os.path.isdir(rw_dir):
-                clean_scope = dir_scope.strip("/").split("/")[0]
+                clean_scope = dir_scope.strip("/").lstrip("/")
+                sanitized_scope = clean_scope.replace("/", "_").replace(".", "_")
                 for item in os.listdir(rw_dir):
                     item_path = os.path.join(rw_dir, item)
                     if (
@@ -3439,11 +3882,12 @@ def decommission_workspaces(
                                     cdata.get("dir_scope")
                                     or cdata.get("parts_dir")
                                     or ""
-                                )
+                                ).strip("/").lstrip("/")
                                 if (
-                                    clean_scope in cfg_scope.split("/")
-                                    or cfg_scope.startswith(clean_scope)
-                                    or cfg_scope.startswith(f"//{clean_scope}")
+                                    cfg_scope == clean_scope
+                                    or cfg_scope == f"//{clean_scope}"
+                                    or cfg_scope.startswith(f"{clean_scope}/")
+                                    or cfg_scope.startswith(f"//{clean_scope}/")
                                 ):
                                     r_role = str(
                                         cdata.get("role_name")
@@ -3458,9 +3902,8 @@ def decommission_workspaces(
                                 pass
                             break
                     if not should_delete and (
-                        f"_{clean_scope}_" in item
-                        or item.endswith(f"_{clean_scope}")
-                        or item.startswith(f"{clean_scope}_")
+                        item == sanitized_scope
+                        or item.endswith(f"_{sanitized_scope}")
                     ):
                         should_delete = True
 
@@ -4110,7 +4553,17 @@ def run_harvest_fused_cli(argv: list[str]) -> int:
 
                     if is_constituent:
                         src_f = os.path.join(ws_dir, rel)
-                        dst_f = os.path.join(main_root, rel)
+                        main_scope = str(meta.get("main_dir_scope") or "").strip("/")
+                        ws_scope = str(meta.get("dir_scope") or "").strip("/")
+                        main_rel = rel
+                        if (
+                            main_scope
+                            and ws_scope
+                            and main_scope != ws_scope
+                            and rel.startswith(ws_scope + "/")
+                        ):
+                            main_rel = main_scope + "/" + rel[len(ws_scope) + 1 :]
+                        dst_f = os.path.join(main_root, main_rel)
                         os.makedirs(os.path.dirname(dst_f), exist_ok=True)
                         shutil.copy2(src_f, dst_f)
                         os.chmod(dst_f, 0o644)

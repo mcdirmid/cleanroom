@@ -8,7 +8,7 @@ import tempfile
 from typing import Optional
 import unittest
 
-from support.lib.lifecycle import LifecycleRegistry, enter_phase
+from support.lib.lifecycle import LifecycleTestCase, enter_phase
 from support.lib import app_info
 from autofab.parts.agent.lib import session as agent_session
 from autofab.parts.dsh.lib import dsh_workspace
@@ -47,13 +47,12 @@ class FakeWorkspaceRegistry:
         )
 
 
-class DshWorkspaceImplTest(unittest.TestCase):
+class DshWorkspaceImplTest(LifecycleTestCase):
     """Test cases for DshWorkspaceConfigurer."""
 
     def setUp(self) -> None:
+        super().setUp()
         self.test_dir = tempfile.mkdtemp()
-        self.registry = LifecycleRegistry()
-        __initialize__(self.registry)
         self.registry.register_instance(
             FakeWorkspaceRegistry(),
             keys=[role_registry.WorkspaceRegistry],

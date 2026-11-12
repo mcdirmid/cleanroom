@@ -14,11 +14,7 @@ from typing import Any, Dict, Optional, Set
 import urllib.request
 import uuid
 
-from support.lib.lifecycle import (
-    LifecycleRegistry,
-    Singleton,
-    get_default_registry,
-)
+from support.lib.lifecycle import auto_initialize, singleton
 
 try:
     from support.lib import app_info
@@ -235,10 +231,10 @@ def _resolve_dsh_model_selection(
 
 
 # Contract: Realizes event stream and session storage archive parsing for DeepSeek Harness in agent_session tier.
+@singleton
 class DshTelemetryParser(dsh_telemetry.DshTelemetryParser):
     """Realizes event stream and session storage archive parsing for DeepSeek Harness."""
 
-    tier = agent_session.agent_session
 
     def __init__(self) -> None:
         self._active_rpc_turns: Dict[str, Dict[str, Any]] = {}
@@ -793,17 +789,5 @@ class DshTelemetryParser(dsh_telemetry.DshTelemetryParser):
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
-
-# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
-def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
-    """Registers constituent singletons into the lifecycle registry."""
-    reg = get_default_registry() if registry is None else registry
-    reg.register_singleton(
-        DshTelemetryParser,
-        keys=[DshTelemetryParser, dsh_telemetry.DshTelemetryParser],
-        tier=DshTelemetryParser.tier,
-    )
-
-
+__initialize__ = auto_initialize()
 _initialize_ = __initialize__
-# --- END CLEANROOM AUTO-GENERATED ---

@@ -105,7 +105,7 @@ def is_uninitialized_pretense_module(content: str) -> bool:
                             base_id = base.value.id
                         elif isinstance(base.value, ast.Attribute):
                             base_id = base.value.attr
-                    if base_id in ("TestCase", "unittest.TestCase"):
+                    if base_id in ("TestCase", "unittest.TestCase", "LifecycleTestCase"):
                         has_test = True
                     elif base_id in ("StateMachine", "StateMachineProto"):
                         has_sm = True
@@ -180,7 +180,7 @@ def check_pretense_structure(
                     base_id = base.value.id
                 elif isinstance(base.value, ast.Attribute):
                     base_id = base.value.attr
-            if base_id in ("TestCase", "unittest.TestCase"):
+            if base_id in ("TestCase", "unittest.TestCase", "LifecycleTestCase"):
                 test_classes.append(c)
             elif base_id in ("StateMachine", "StateMachineProto") or base_id.endswith(
                 "StateMachine"
@@ -1570,8 +1570,8 @@ def check_no_pre_seeding(tree: ast.AST, file_path: str = "") -> list[str]:
             if "StateMachine" in node.name or node.name.endswith("State"):
                 continue
             is_test_case = any(
-                (isinstance(b, ast.Name) and b.id in ("TestCase", "unittest.TestCase"))
-                or (isinstance(b, ast.Attribute) and b.attr == "TestCase")
+                (isinstance(b, ast.Name) and b.id in ("TestCase", "unittest.TestCase", "LifecycleTestCase"))
+                or (isinstance(b, ast.Attribute) and b.attr in ("TestCase", "LifecycleTestCase"))
                 for b in node.bases
             ) or (
                 (
@@ -1645,8 +1645,8 @@ def check_no_raises_in_test_cases(tree: ast.AST, file_path: str = "") -> list[st
         if "StateMachine" in node.name or node.name.endswith("State"):
             continue
         is_test_case = any(
-            (isinstance(b, ast.Name) and b.id in ("TestCase", "unittest.TestCase"))
-            or (isinstance(b, ast.Attribute) and b.attr == "TestCase")
+            (isinstance(b, ast.Name) and b.id in ("TestCase", "unittest.TestCase", "LifecycleTestCase"))
+            or (isinstance(b, ast.Attribute) and b.attr in ("TestCase", "LifecycleTestCase"))
             for b in node.bases
         ) or (
             (
@@ -1684,8 +1684,8 @@ def check_no_raises_in_test_cases(tree: ast.AST, file_path: str = "") -> list[st
                             errors.append(
                                 f"{file_path}:{child.lineno}: error: [PRE_LINT_NO_RAISES_IN_TEST_CASE] "
                                 f"'with raises(...)' is Pretense transition DSL for AST pivots. "
-                                "Inside test methods, verify contract violations (*Error) via 'self.checked.violating(ExpectedError).method(...)' "
-                                "or 'with self.checked.violating(ExpectedError):'. Calling 'self.assertRaises(...)' is strictly prohibited (PN_NO_ASSERT_RAISES)."
+                                "Inside test methods, verify contract violations (*Error) directly via 'self.checked.violating(ExpectedError).<method>(...)'. "
+                                "Calling 'self.assertRaises(...)' or using 'with ...violating(...):' is strictly prohibited (PN_NO_ASSERT_RAISES, PN_NO_WITH_VIOLATING)."
                             )
                 elif isinstance(child, ast.Expr) and isinstance(child.value, ast.Call):
                     call = child.value
@@ -1698,8 +1698,8 @@ def check_no_raises_in_test_cases(tree: ast.AST, file_path: str = "") -> list[st
                         errors.append(
                             f"{file_path}:{child.lineno}: error: [PRE_LINT_NO_RAISES_IN_TEST_CASE] "
                             f"'raises(...)' is Pretense transition DSL for AST pivots. "
-                            "Inside test methods, verify contract violations (*Error) via 'self.checked.violating(ExpectedError).method(...)' "
-                            "or 'with self.checked.violating(ExpectedError):'. Calling 'self.assertRaises(...)' is strictly prohibited (PN_NO_ASSERT_RAISES)."
+                            "Inside test methods, verify contract violations (*Error) directly via 'self.checked.violating(ExpectedError).<method>(...)'. "
+                            "Calling 'self.assertRaises(...)' or using 'with ...violating(...):' is strictly prohibited (PN_NO_ASSERT_RAISES, PN_NO_WITH_VIOLATING)."
                         )
     return errors
 
@@ -1707,8 +1707,8 @@ def check_no_raises_in_test_cases(tree: ast.AST, file_path: str = "") -> list[st
 def check_no_assert_raises(tree: ast.AST, file_path: str = "") -> list[str]:
     """Ensures test methods in Pretense modules do not use 'assertRaises' or 'assertRaisesRegex' (PN_NO_ASSERT_RAISES).
 
-    Contract violations (*Error) must be verified on the SUT via 'self.checked.violating(ExpectedError).method(...)'
-    or 'with self.checked.violating(ExpectedError):' (which self-asserts the exception and marks the adapter terminal).
+    Contract violations (*Error) must be verified on the SUT via 'self.checked.violating(ExpectedError).<method>(...)'
+    (which self-asserts the exception and marks the adapter terminal).
     Operational postcondition exceptions (*Exception) are handled via transition pivots with 'with raises(ExpectedException):'.
     Using 'self.assertRaises(...)', 'self.assertRaisesRegex(...)', or wrapping violating() in assertRaises is strictly prohibited.
     """
@@ -1724,8 +1724,7 @@ def check_no_assert_raises(tree: ast.AST, file_path: str = "") -> list[str]:
                 errors.append(
                     f"{file_path}:{node.lineno}: error [PN_NO_ASSERT_RAISES]: "
                     f"Calling '{func_name}' is strictly prohibited in Pretense test modules. "
-                    "Contract violations (*Error) must be verified via 'self.checked.violating(ExpectedError).<method>(...)' "
-                    "or 'with self.checked.violating(ExpectedError):' (which self-asserts the exception and marks the adapter terminal). "
+                    "Contract violations (*Error) must be verified via 'self.checked.violating(ExpectedError).<method>(...)'. "
                     "Do NOT wrap 'violating(...)' inside 'assertRaises(...)'."
                 )
     return errors
@@ -1809,8 +1808,8 @@ def check_no_direct_real_access(tree: ast.AST, file_path: str = "") -> list[str]
         if "StateMachine" in node.name or node.name.endswith("State"):
             continue
         is_test_case = any(
-            (isinstance(b, ast.Name) and b.id in ("TestCase", "unittest.TestCase"))
-            or (isinstance(b, ast.Attribute) and b.attr == "TestCase")
+            (isinstance(b, ast.Name) and b.id in ("TestCase", "unittest.TestCase", "LifecycleTestCase"))
+            or (isinstance(b, ast.Attribute) and b.attr in ("TestCase", "LifecycleTestCase"))
             for b in node.bases
         ) or (
             (
@@ -1841,6 +1840,206 @@ def check_no_direct_real_access(tree: ast.AST, file_path: str = "") -> list[str]
                             f"Direct access to 'self.real' in test method '{item.name}' is strictly prohibited. "
                             "Tests must drive and verify the component exclusively through 'self.checked' "
                             "(or 'self.checked.violating(...)')."
+                        )
+    return errors
+
+
+def check_no_direct_sm_access_in_real_tests(tree: ast.AST, file_path: str = "") -> list[str]:
+    """Ensures test methods in Test*Real classes do not access 'self.sm' directly (PN_NO_DIRECT_SM_ACCESS_IN_REAL_TEST).
+
+    'self.sm' is only permitted during test fixture setup in setUp()/tearDown() to wire
+    'self.checked = self.sm.as_checked(TargetClass, self.real)'.
+    All real implementation test methods (def test_*) must interact with the SUT exclusively
+    through 'self.checked' or 'self.checked.violating(...)'. Direct access to 'self.sm' in
+    Test*Real test methods is strictly prohibited.
+    """
+    errors: list[str] = []
+    tree_body: list[ast.stmt] = getattr(tree, "body", [])
+    for node in tree_body:
+        if not isinstance(node, ast.ClassDef):
+            continue
+        if "StateMachine" in node.name or node.name.endswith("State"):
+            continue
+        is_real_test_case = (
+            (
+                node.name.startswith("Test")
+                or any(
+                    (isinstance(b, ast.Name) and b.id in ("TestCase", "unittest.TestCase", "LifecycleTestCase"))
+                    or (isinstance(b, ast.Attribute) and b.attr in ("TestCase", "LifecycleTestCase"))
+                    for b in node.bases
+                )
+            )
+            and "Real" in node.name
+        )
+        if not is_real_test_case:
+            continue
+
+        for item in node.body:
+            if not isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            if not item.name.startswith("test"):
+                continue
+
+            for child in ast.walk(item):
+                if isinstance(child, ast.Attribute) and child.attr == "sm":
+                    if isinstance(child.value, ast.Name) and child.value.id == "self":
+                        errors.append(
+                            f"{file_path}:{child.lineno}: error [PN_NO_DIRECT_SM_ACCESS_IN_REAL_TEST]: "
+                            f"Direct access to 'self.sm' in test method '{item.name}' of '{node.name}' is strictly prohibited. "
+                            "Real implementation tests must drive operations and assertions exclusively through 'self.checked' "
+                            "(or 'self.checked.violating(...)')."
+                        )
+    return errors
+
+
+def check_impl_allowed_classes_only(
+    tree: ast.AST, file_path: str = "", is_impl: bool = False
+) -> list[str]:
+    """Ensures implementation pretense modules only define implementation pseudo-state machines and TestCase classes (PN_IMPL_ALLOWED_CLASSES_ONLY).
+
+    Defining auxiliary helper classes, custom protocols, mock wrappers, adapter proxies,
+    or custom context managers (such as '_CheckedTarget', '_CheckedContext', '_CheckedAdapter')
+    is strictly prohibited.
+    """
+    errors: list[str] = []
+    if not is_impl:
+        return errors
+
+    def _get_base_name(base: ast.AST) -> str:
+        if isinstance(base, ast.Name):
+            return base.id
+        elif isinstance(base, ast.Attribute):
+            return base.attr
+        elif isinstance(base, ast.Subscript):
+            return _get_base_name(base.value)
+        return ""
+
+    body = getattr(tree, "body", [])
+    for node in body:
+        if not isinstance(node, ast.ClassDef):
+            continue
+
+        base_names = [_get_base_name(b) for b in node.bases]
+        is_test_case = any(
+            b in ("TestCase", "unittest.TestCase") or b.endswith("TestCase")
+            for b in base_names
+        ) or node.name.startswith("Test")
+
+        is_sm = any(
+            b in ("StateMachine", "StateMachineProto") or b.endswith("StateMachine")
+            for b in base_names
+        ) or node.name.endswith("StateMachine") or node.name.endswith("ImplPseudoStateMachine")
+
+        if not (is_test_case or is_sm):
+            errors.append(
+                f"{file_path}:{node.lineno}: error [PN_IMPL_ALLOWED_CLASSES_ONLY]: "
+                f"Class '{node.name}' is strictly prohibited in implementation pretense modules. "
+                "Implementation pretense modules must only define the implementation pseudo-state machine "
+                "and TestCase classes."
+            )
+    return errors
+
+
+def check_terminal_violating(tree: ast.AST, file_path: str = "") -> list[str]:
+    """Ensures 'violating(...)' is strictly the final statement of a test method (PN_TERMINAL_VIOLATING).
+
+    In Pretense, invoking 'violating(...)' on a CheckedAdapter marks the adapter terminal upon
+    asserting the expected contract violation. Any subsequent operation or violation call on that
+    adapter instance raises PretenseSpecificationError. Therefore, each contract violation scenario
+    must be isolated in its own dedicated test method where 'violating(...)' is the terminal statement.
+    """
+    errors: list[str] = []
+    tree_body: list[ast.stmt] = getattr(tree, "body", [])
+
+    def _has_violating(node: ast.AST) -> bool:
+        for child in ast.walk(node):
+            if isinstance(child, ast.Call):
+                if (isinstance(child.func, ast.Attribute) and child.func.attr == "violating") or (
+                    isinstance(child.func, ast.Name) and child.func.id == "violating"
+                ):
+                    return True
+        return False
+
+    for node in tree_body:
+        if not isinstance(node, ast.ClassDef):
+            continue
+        if "StateMachine" in node.name or node.name.endswith("State"):
+            continue
+        is_test_case = any(
+            (isinstance(b, ast.Name) and b.id in ("TestCase", "unittest.TestCase", "LifecycleTestCase"))
+            or (isinstance(b, ast.Attribute) and b.attr in ("TestCase", "LifecycleTestCase"))
+            for b in node.bases
+        ) or (
+            (
+                node.name.startswith("Test")
+                or node.name.endswith("Real")
+                or node.name.endswith("Fake")
+            )
+            and any(
+                isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and m.name.startswith("test")
+                for m in node.body
+            )
+        )
+        if not is_test_case:
+            continue
+
+        for item in node.body:
+            if not isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            if not item.name.startswith("test"):
+                continue
+
+            stmts = item.body
+            if not stmts:
+                continue
+
+            violating_indices = [
+                idx for idx, stmt in enumerate(stmts) if _has_violating(stmt)
+            ]
+            if not violating_indices:
+                continue
+
+            last_idx = len(stmts) - 1
+
+            # Check if violating appears before the last statement:
+            for idx in violating_indices:
+                if idx != last_idx:
+                    stmt = stmts[idx]
+                    errors.append(
+                        f"{file_path}:{stmt.lineno}: error [PN_TERMINAL_VIOLATING]: "
+                        f"'violating(...)' must be the final statement of test method '{item.name}'. "
+                        "Calling 'violating(...)' marks the checked adapter terminal; any subsequent statement in this method is prohibited. "
+                        "Move subsequent operations to a separate test method."
+                    )
+
+            # Check for multiple violating calls across the method:
+            violating_call_count = sum(
+                1
+                for stmt in stmts
+                for child in ast.walk(stmt)
+                if isinstance(child, ast.Call)
+                and (
+                    (isinstance(child.func, ast.Attribute) and child.func.attr == "violating")
+                    or (isinstance(child.func, ast.Name) and child.func.id == "violating")
+                )
+            )
+            if violating_call_count > 1:
+                errors.append(
+                    f"{file_path}:{item.lineno}: error [PN_TERMINAL_VIOLATING]: "
+                    f"Test method '{item.name}' invokes 'violating(...)' multiple times ({violating_call_count} calls). "
+                    "In Pretense, 'violating(...)' marks the checked adapter terminal; each contract violation scenario must be tested in its own dedicated test method."
+                )
+
+            # Prohibit using violating(...) as a context manager (PN_NO_WITH_VIOLATING):
+            for stmt in stmts:
+                if isinstance(stmt, (ast.With, ast.AsyncWith)):
+                    if any(_has_violating(with_item) for with_item in stmt.items):
+                        errors.append(
+                            f"{file_path}:{stmt.lineno}: error [PN_NO_WITH_VIOLATING]: "
+                            f"Using 'with ...violating(...):' as a context manager in '{item.name}' is strictly prohibited. "
+                            "Contract violations must be invoked directly as a terminal call on the adapter: "
+                            "'self.checked.violating(ExpectedError).<method>(*args)'."
                         )
     return errors
 
@@ -2017,8 +2216,8 @@ def check_interface_transition_coverage(
     for node in tree_body:
         if isinstance(node, ast.ClassDef):
             is_test_case_subclass = any(
-                (isinstance(b, ast.Name) and b.id in ("TestCase", "unittest.TestCase"))
-                or (isinstance(b, ast.Attribute) and b.attr == "TestCase")
+                (isinstance(b, ast.Name) and b.id in ("TestCase", "unittest.TestCase", "LifecycleTestCase"))
+                or (isinstance(b, ast.Attribute) and b.attr in ("TestCase", "LifecycleTestCase"))
                 for b in node.bases
             )
             has_test_methods = any(
@@ -2283,6 +2482,7 @@ def _discover_package_initializers(
                         if (
                             "def __initialize__" in content
                             or "singleton_type" in content
+                            or "singleton" in content
                         ):
                             tree = ast.parse(content, filename=file_full)
                             for node in tree.body:
@@ -2301,7 +2501,7 @@ def _discover_package_initializers(
                                             dec.func, ast.Name
                                         ):
                                             dec_name = dec.func.id
-                                        if dec_name == "singleton_type":
+                                        if dec_name in ("singleton", "singleton_type"):
                                             has_init = True
                                             break
                                     if has_init:
@@ -2677,6 +2877,9 @@ def generate_pretense_scaffold(
                 "",
             ]
         )
+        single_cls = (
+            service_classes[0]["name"] if service_classes else target_cls_name
+        )
         if len(service_classes) > 1:
             fake_ret_type = f"Tuple[{', '.join(c['name'] for c in service_classes)}]"
             lines.extend(
@@ -2694,9 +2897,6 @@ def generate_pretense_scaffold(
                 ]
             )
         else:
-            single_cls = (
-                service_classes[0]["name"] if service_classes else target_cls_name
-            )
             lines.extend(
                 [
                     f"def make_{clean_stem}_fake(",
@@ -2727,7 +2927,7 @@ def generate_pretense_scaffold(
             lines.append(f"        self.sm = {iface_sm_cls_name}()")
         else:
             lines.append(f"        self.fake = make_{clean_stem}_fake()")
-            lines.append(f"        self.sm = {iface_sm_cls_name}(sut=self.fake)")
+            lines.append(f"        self.sm = {iface_sm_cls_name}(singletons={{{single_cls}: self.fake}})")
         lines.extend(
             [
                 "",
@@ -3619,6 +3819,7 @@ def _resolve_lib_dir_and_pkg(
     while curr and curr != os.path.dirname(curr):
         if any(os.path.isfile(os.path.join(curr, marker)) for marker in markers):
             repo_root = curr
+            break
         curr = os.path.dirname(curr)
 
     default_lib_dir = os.path.join(part_dir, "lib")
@@ -3868,6 +4069,17 @@ def main() -> int:
 
     direct_real_errs = check_no_direct_real_access(tree, args.module_path)
     all_errors.extend(direct_real_errs)
+
+    direct_sm_errs = check_no_direct_sm_access_in_real_tests(tree, args.module_path)
+    all_errors.extend(direct_sm_errs)
+
+    allowed_classes_errs = check_impl_allowed_classes_only(
+        tree, args.module_path, is_impl=not is_interface
+    )
+    all_errors.extend(allowed_classes_errs)
+
+    terminal_violating_errs = check_terminal_violating(tree, args.module_path)
+    all_errors.extend(terminal_violating_errs)
 
     multi_iface_errs = check_multi_interface_inheritance(tree, args.module_path)
     all_errors.extend(multi_iface_errs)

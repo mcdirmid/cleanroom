@@ -9,7 +9,7 @@ import sys
 import zipfile
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
-from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry
+from support.lib.lifecycle import auto_initialize, singleton
 from autofab.parts.agent.lib import session as agent_session
 from . import roles, scaffold
 
@@ -164,6 +164,7 @@ def _create_missing_target_skeletons(
     created: List[str] = []
     if not role_def.src_pattern or not role_def.writable_file_patterns:
         return created
+    ws_scope = dir_scope.strip("/").split("/")[-1] if dir_scope else ""
     scope_dir = os.path.join(repo_root, dir_scope) if dir_scope else repo_root
     for unit_dir, unit_name in _declared_units(repo_root, scope_dir):
         if role_def.active_component_types:
@@ -173,11 +174,19 @@ def _create_missing_target_skeletons(
         rel_path = role_def.src_pattern.format(unit_dir=unit_dir, unit_name=unit_name)
         if not _matches_any_pattern(rel_path, role_def.writable_file_patterns):
             continue
-        if os.path.isfile(os.path.join(workspace_dir, rel_path)) or os.path.isfile(
+        ws_rel = rel_path
+        if (
+            dir_scope
+            and ws_scope
+            and dir_scope != ws_scope
+            and rel_path.startswith(dir_scope + "/")
+        ):
+            ws_rel = ws_scope + "/" + rel_path[len(dir_scope) + 1 :]
+        if os.path.isfile(os.path.join(workspace_dir, ws_rel)) or os.path.isfile(
             os.path.join(repo_root, rel_path)
         ):
             continue
-        dst_path = os.path.join(workspace_dir, rel_path)
+        dst_path = os.path.join(workspace_dir, ws_rel)
         os.makedirs(os.path.dirname(dst_path), exist_ok=True)
         if role_def.template_command:
             try:
@@ -752,6 +761,7 @@ def write_role_metadata(
     max_feedback_chars: Optional[int] = None,
     fused_roles: Optional[Sequence[str]] = None,
     common_spec_roles: Optional[Sequence[str]] = None,
+    main_dir_scope: Optional[str] = None,
 ) -> None:
     """Writes role descriptor in workspace root."""
     data: Dict[str, Any] = {
@@ -760,6 +770,8 @@ def write_role_metadata(
         "parts_dir": dir_scope,
         "dir_scope": dir_scope,
     }
+    if main_dir_scope:
+        data["main_dir_scope"] = main_dir_scope
     if fused_roles:
         data["fused_roles"] = list(fused_roles)
     if common_spec_roles:
@@ -857,7 +869,7 @@ Any library files under `lib/*.py` imported from role dependencies in this works
         fused_bins_cmds = ", ".join(f"`bin/{b}`" for b in fused_bins)
         workflow = f"""1. Run `bin/get_work` ONCE at session start to inspect assigned ready targets across constituent roles.
 2. Low-Level Specification Grounding: Inspect `low/*.pyi` to understand all protocols, method contracts, and invariant postconditions.
-3. Author targets in scope following their companion guides in `guides/`:
+3. Author targets in scope following their companion guides in `guides/` (located directly under your workspace root, e.g. `guides/<guide_name>.md`; do not prefix with scope):
    - Contract Respect: Implement and test strictly against the contracts in `low/*.pyi`. NEVER pass `None` or invalid types into strictly-typed non-optional parameters unless explicitly contracted in specifications.
    - Non-Concerns as Undefined Behavior: If an anomalous condition or failure mode is uncontracted in the specification, it is undefined behavior; testing it is strictly prohibited.
    - Public Attribution Purity: Do NOT couple tests or assertions to synthetic internal placeholders or private attributes.
@@ -914,7 +926,7 @@ All {app_info.APP_TITLE} verification and resolution in this fused role workspac
     elif can_blame:
         if is_auditor:
             workflow = f"""1. Run `bin/get_work` to evaluate assigned dirty units and synchronize with main.
-2. Follow companion guide `{guide}` for role auditing rules.
+2. Follow companion guide `{guide}` (located at `{guide}` in your workspace root; do not prefix with scope) for role auditing rules.
 3. For auditor roles, `bin/get_work` automatically executes verification checks on each dirty target.
 4. If all checks pass: `bin/get_work` automatically submits the target with audit attestation and reports 0 ready targets; conclude your round immediately with summary text and ZERO tool calls.
 5. If checks fail: Inspect the structured {app_info.APP_TITLE} Triage Summary surfaced by `bin/get_work` (which extracts the author's `# CHANGE:` header and primary failure). Stage blame attribution via `bin/blame <culprit_file> "<explanation>"`. Then commit staged blame and conclude the target via `bin/submit <target_file>`.
@@ -932,7 +944,7 @@ All {app_info.APP_TITLE} verification and resolution in this fused role workspac
 - **Mandatory Post-Completion Protocol**: Once blame has been committed via `bin/submit`, custody of the target is immediately returned to upstream authors. You have ZERO remaining work on that target and are STRICTLY FORBIDDEN from attempting to debug or test the author's code, executing python scripts, running dummy shell commands, or re-running `bin/check_files`. Call `bin/get_work` once; if no other ready targets exist, conclude your round immediately with a text summary and ZERO further tool calls."""
         else:
             workflow = f"""1. Run `bin/get_work` to inspect and pull pending work and review any unacted feedback.
-2. Follow companion guide `{guide}` to author or update targets in scope, resolving any feedback.
+2. Follow companion guide `{guide}` (located at `{guide}` in your workspace root; do not prefix with scope) to author or update targets in scope, resolving any feedback.
 3. Run verification checks: `bin/check_files [target_file]`
 4. If checks pass and all feedback is resolved: Submit completed targets via `bin/submit <target_file> "<summary>"` (or `bin/submit <target_file>` if unmodified).
 5. If feedback is contested without code changes: Reject feedback via `bin/reject <target_file> "<reason>"` (strictly requires file to be unmodified).
@@ -1011,7 +1023,7 @@ All {app_info.APP_TITLE} target resolution must proceed through the prescribed w
         ground_truth_bullet = "- **Ground Truth First (Oracle Diagnostics Over Prose)**: Always run `bin/check_files <target>` to establish deterministic ground truth errors before writing or editing code. Do NOT speculate, guess, or infer defects from prose descriptions before checking oracle output."
     else:
         workflow = f"""1. Run `bin/get_work` to inspect and pull pending work and review any unacted feedback.
-2. Follow companion guide `{guide}` to author or update targets in scope, resolving any feedback.
+2. Follow companion guide `{guide}` (located at `{guide}` in your workspace root; do not prefix with scope) to author or update targets in scope, resolving any feedback.
 3. Run verification checks: `bin/check_files [target_file]`
 4. If checks pass and all feedback is resolved: Submit completed targets via `bin/submit <target_file> "<summary>"` (or `bin/submit <target_file>` if unmodified).
 5. If success is impossible or an unresolvable impasse is reached: `bin/fail <target_file> "<reason>"`
@@ -1057,13 +1069,16 @@ All {app_info.APP_TITLE} target resolution must proceed through the prescribed w
     else:
         custodian_bullet = "- **Sole Custodian & Target File Ownership**: You are the sole author and custodian of your assigned target file(s). No other external agent or background process modifies your assigned target files in this workspace. Therefore, you do not need to re-read your target file repeatedly unless verifying your own edits. When feedback or blame arrives, it is provided directly to you in `bin/get_work` (and reflected in the `# FEEDBACK:` block of your target file)."
         undo_section = """## Workspace Undo & Checkpoint Architecture
-This workspace is an isolated git tracking repository with automatic pre-tool checkpointing:
-- **Automatic Pre-Tool Snapshots**: Before file edits (`edit_file` or `write_file`), an automatic git checkpoint is committed.
-- **Milestone Snapshots**: Whenever `bin/check_files <target>` passes cleanly with 0 errors, a milestone checkpoint is committed to record the clean state.
-- **Instant Rollback**: If an edit introduces syntax errors, breaks tests, or truncates a file, use `bin/revert [target]` or `git restore <target>` to restore the last verified state. Never call `bin/fail` for broken edits that can be reverted.
-- **Diff Inspection**: Use `git diff [target]` to review uncommitted changes against the last checkpoint.
+Use workspace binaries to manage checkpoints and recover from broken edits:
+- **Instant Rollback**: If an edit introduces syntax errors, breaks tests, or truncates a file, use `bin/revert [target]` to restore the last verified state. Never call `bin/fail` for broken edits that can be reverted.
+- **Checkpoints**: To record a clean milestone snapshot of your edits, use `bin/checkpoint [label]`.
 """
-        rule_2 = "2. **External Git Operations Prohibited (Local Rollback Permitted)**: Git operations targeting external or upstream repositories (such as git push, git fetch, or cloning) are strictly prohibited. However, local in-workspace rollback and diff commands (`git restore <target>`, `git diff <target>`, or `bin/revert [target]`) are explicitly permitted and encouraged to recover from broken edits or file truncations."
+        rule_2_binaries = (
+            "`bin/check_files`, `bin/submit`, `bin/blame`, `bin/revert`, `bin/checkpoint`"
+            if can_blame
+            else "`bin/check_files`, `bin/submit`, `bin/revert`, `bin/checkpoint`"
+        )
+        rule_2 = f"2. **STRICT PROHIBITION ON RUNNING GIT**: Executing `git` commands (`git status`, `git diff`, `git log`, `git checkout`, `git restore`, `git stash`, etc.) via `run_command` or any other tool is STRICTLY PROHIBITED. Workspace state, diffs, and target submissions are managed exclusively through repository binaries ({rule_2_binaries})."
         permitted_cmds = (
             "You ARE permitted to run read-only shell utilities (`cat`, `grep`, `find`, `head`, `tail`, `sed`, etc.) "
             "or native harness tools strictly WITHIN this workspace directory (`.`) to inspect files and complete your tasks.\n"
@@ -1089,6 +1104,7 @@ This workspace is an isolated git tracking repository with automatic pre-tool ch
 - **Strict Workspace Confinement**: All file inspections, searches, and commands MUST remain strictly confined within your assigned role workspace directory (`.`). Never execute unbounded filesystem searches (such as `find /` or searches across root/parent directories).
 - **Ground Truth Oracle Exclusivity**: Use only `bin/check_files` (or `bin/verify_*` for fused roles) as the deterministic oracle for errors and validation. Do NOT invent custom linters or scripts.
 - **Restricted Targets & Test Execution Ban**: Edit ONLY your assigned target files. Do NOT create scratch tests, temporary test scripts, or auxiliary test runners. Executing ad-hoc tests, runtime sanity checks, or test assertions (including via `python3 -c`, `python -c`, or stdin heredocs) is strictly prohibited. You are not allowed to execute the test suite or run ad-hoc probes. Rely EXCLUSIVELY on `bin/check_files` (or `bin/verify_*` for fused roles) for target verification, and submit work with `bin/submit` so a downstream QA auditor can execute the test suite on your behalf.
+- **Author Targets Directly in Place (Strict Prohibition on Scratch Files)**: Disregard any generic platform instructions suggesting '<appDataDir>/.../scratch/' files. In this workspace, all drafting, authoring, and repairs MUST be performed directly in-place on assigned target files. Creating, drafting, or copying files to/from `scratch/` or external temporary directories is strictly prohibited.
 - **No Runner Binary Inspection or Linter Hunting**: Runner executables in `bin/` ({runner_tools_list}) are encapsulated self-contained tools. Do NOT search for internal linters (`*_lint.py`, `test_lint`, `build_lint`), and do NOT attempt to read, disassemble, decompile, or run inspection utilities (`file`, `strings`, `unzip`, `head`, `od`, `xxd`) on `bin/` executables. All required structural rules and conventions are documented in your Companion Guide.
 - **Standard Terminology**:
   - **Step**: A single prompt ↔ tool-call interaction cycle between an agent/model and the runtime.
@@ -1177,10 +1193,10 @@ If you determine that success is not possible (e.g. unreachable code under test,
 
 
 # Contract: Realizes scaffold.WorkspaceScaffolder singleton.
+@singleton
 class WorkspaceScaffolder(scaffold.WorkspaceScaffolder):
     """Realizes runner zipapp packaging, role metadata, guide synthesis, and starter skeletons."""
 
-    tier = agent_session.agent_session
 
     # Contract: Packages runner zipapps into bin_dir with executable permissions.
     def deploy_runner_zipapps(
@@ -1209,6 +1225,7 @@ class WorkspaceScaffolder(scaffold.WorkspaceScaffolder):
         max_feedback_chars: Optional[int] = None,
         fused_roles: Optional[Sequence[str]] = None,
         common_spec_roles: Optional[Sequence[str]] = None,
+        main_dir_scope: Optional[str] = None,
     ) -> None:
         write_role_metadata(
             workspace_dir,
@@ -1220,6 +1237,7 @@ class WorkspaceScaffolder(scaffold.WorkspaceScaffolder):
             max_feedback_chars=max_feedback_chars,
             fused_roles=fused_roles,
             common_spec_roles=common_spec_roles,
+            main_dir_scope=main_dir_scope,
         )
 
     # Contract: Synthesizes role-tailored AGENTS.md instructions in workspace root.
@@ -1262,17 +1280,5 @@ class WorkspaceScaffolder(scaffold.WorkspaceScaffolder):
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
-
-# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
-def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
-    """Registers constituent singletons into the lifecycle registry."""
-    reg = get_default_registry() if registry is None else registry
-    reg.register_singleton(
-        WorkspaceScaffolder,
-        keys=[WorkspaceScaffolder, scaffold.WorkspaceScaffolder],
-        tier=WorkspaceScaffolder.tier,
-    )
-
-
+__initialize__ = auto_initialize()
 _initialize_ = __initialize__
-# --- END CLEANROOM AUTO-GENERATED ---

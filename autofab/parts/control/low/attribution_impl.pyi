@@ -125,12 +125,14 @@ class AttributionCoordinator(attribution.AttributionCoordinator):
         GROUNDING:
         - Resolves the target file and rejects the recording when the target file cannot be
           resolved.
-        - Appends the failure diagnostic through
-          src_metadata.SourceMetadataCoordinator.append_feedback and marks the target dirty through
-          src_metadata.SourceMetadataCoordinator.mark_dirty.
-        - Synchronizes the mutated in-band metadata header to disk through
-          src_metadata.SourceMetadataCoordinator.update_metadata and constructs the formatted
-          failure message carried by the attribution outcome.
+        - Discovers role context from workspace metadata or execution environment.
+        - For authoring roles, appends the failure diagnostic through
+          src_metadata.SourceMetadataCoordinator.append_feedback, marks the target dirty through
+          src_metadata.SourceMetadataCoordinator.mark_dirty, and synchronizes the mutated in-band
+          metadata header to disk through src_metadata.SourceMetadataCoordinator.update_metadata.
+        - For auditor roles, bypasses canonical file metadata mutation and records task failure
+          strictly in local workspace state.
+        - Constructs the formatted failure message carried by the attribution outcome.
         """
         ...
 

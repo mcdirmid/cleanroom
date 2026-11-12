@@ -22,7 +22,7 @@ Allowing untested code to enter the repository creates regressions. The submissi
 - A submission coordinator forbids a change summary when resolving an auditor role. [forbid_summary_for_auditors]
 - A submission coordinator rejects submission when session feedback is present and workspace files were not modified. [reject_unmodified_when_feedback_present]
 - A submission coordinator marks the target node status as clean in graph storage with the change summary upon acceptance. [mark_node_clean]
-- A submission coordinator rejects submission of test files in auditor roles. [reject_test_submission_for_auditors]
+- A submission coordinator rejects submission of test files in auditor roles, stamps in-band audit tags in the canonical repository when verification checks pass, and politely accepts submission without mutating the canonical repository when verification checks fail without uncommitted staged blame. [reject_test_submission_for_auditors]
 - A submission coordinator rejects submission of read-only targets or targets outside directory scope. [reject_invalid_producer_file_submission]
 - A submission coordinator discovers role context and directory scope from workspace manifest metadata designated by autofab_files_ext when executed within an isolated role workspace. [discover_workspace_context]
 - A submission coordinator validates file modification hash against change summary presence. [validate_file_change_summary]

@@ -103,8 +103,8 @@ class AttributionCoordinator(Singleton[AgentSessionTier], Protocol):
 
         POSTCONDITIONS:
         - WHEN the target file cannot be resolved, MUST reject failure recording.
-        - WHEN failure recording is accepted, MUST append the failure diagnostic and mark dirty status on the target file.
-        - WHEN failure recording is accepted, MUST synchronize the affected files.
+        - WHEN failure recording is accepted in an authoring role, MUST append the failure diagnostic and mark dirty status on the target file in the canonical repository, and MUST synchronize the affected files.
+        - WHEN failure recording is accepted in an auditor role, MUST record failure strictly within the auditor workspace without mutating or appending feedback to the audited canonical file.
         """
         ...
 

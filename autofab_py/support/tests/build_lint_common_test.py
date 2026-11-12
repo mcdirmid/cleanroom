@@ -13,6 +13,7 @@ from autofab_py.support.lib.build_lint_common import (
     check_no_error_testing,
     check_no_try_except_in_tests,
     check_no_lifecycle_scope_leaks,
+    check_no_singleton_monkeypatching,
     check_no_frozen_exceptions,
     check_no_private_imports,
     check_no_sys_modules_tampering,
@@ -20,6 +21,7 @@ from autofab_py.support.lib.build_lint_common import (
     check_singleton_registration,
     check_syntax,
     check_tautological_assertions,
+    check_test_imports,
     check_type_ignore,
     check_no_pragma_no_cover,
     format_syntax_error,
@@ -200,6 +202,21 @@ try:
 except Exception as exc:
     error_msg = f"Task failed with error: {exc}"
     self.record_error(error_msg)
+"""
+        self.assertEqual(self._check(source), [])
+
+    def test_reified_enclosing_function_return_passes(self) -> None:
+        source = """
+def execute_node(definition):
+    error = None
+    while True:
+        try:
+            val = definition.action()
+            break
+        except Exception as caught:
+            error = caught
+            break
+    return NodeResult(value=val, error=error)
 """
         self.assertEqual(self._check(source), [])
 
@@ -1049,6 +1066,26 @@ class BuildLintCommonImplImportsAndSingletonTest(unittest.TestCase):
         finally:
             os.remove(path)
 
+    def test_check_singleton_registration_rejects_top_level_initialize_call(self) -> None:
+        source = (
+            "class LocalService:\n"
+            "    pass\n\n"
+            "def __initialize__(registry=None):\n"
+            "    reg.register_singleton(LocalService, keys=[LocalService])\n\n"
+            "__initialize__()\n"
+        )
+        path = self._write_temp(source)
+        try:
+            errors = check_singleton_registration(path)
+            self.assertTrue(
+                any(
+                    "top-level invocation of '__initialize__()' is prohibited" in e
+                    for e in errors
+                )
+            )
+        finally:
+            os.remove(path)
+
 
 class BuildLintCommonLifecycleScopeLeakTest(unittest.TestCase):
     def _write_temp(self, content: str) -> str:
@@ -1173,6 +1210,136 @@ class BuildLintCommonLifecycleScopeLeakTest(unittest.TestCase):
         try:
             errors = check_no_lifecycle_scope_leaks(path)
             self.assertEqual(errors, [])
+        finally:
+            os.remove(path)
+
+
+class BuildLintCommonCheckTestImportsTest(unittest.TestCase):
+    def test_check_test_imports_allows_both_scoped_and_short_forms(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            part_dir = os.path.join(td, "my_part")
+            lib_dir = os.path.join(part_dir, "lib")
+            tests_dir = os.path.join(part_dir, "tests")
+            os.makedirs(lib_dir, exist_ok=True)
+            os.makedirs(tests_dir, exist_ok=True)
+            with open(os.path.join(lib_dir, "engine_impl.py"), "w") as f:
+                f.write("class Engine: pass\n")
+
+            test_file = os.path.join(tests_dir, "engine_impl_test.py")
+            # Test short form: from my_part.lib.engine_impl import Engine
+            with open(test_file, "w") as f:
+                f.write("from my_part.lib.engine_impl import Engine\n")
+
+            scoped_pkg = "my_scope.parts.my_part.lib"
+            errs = check_test_imports(scoped_pkg, test_file)
+            self.assertEqual(errs, [], f"Short form should be allowed under scoped pkg, got {errs}")
+
+            # Test scoped form: from my_scope.parts.my_part.lib.engine_impl import Engine
+            with open(test_file, "w") as f:
+                f.write("from my_scope.parts.my_part.lib.engine_impl import Engine\n")
+
+            errs = check_test_imports(scoped_pkg, test_file)
+            self.assertEqual(errs, [], f"Scoped form should be allowed under scoped pkg, got {errs}")
+
+
+class BuildLintCommonCheckNoSingletonMonkeypatchingTest(unittest.TestCase):
+    def _write_temp(self, content: str) -> str:
+        with tempfile.NamedTemporaryFile(
+            "w", suffix="_test.py", delete=False, encoding="utf-8"
+        ) as f:
+            f.write(content)
+            return f.name
+
+    def test_monkeypatching_singleton_fails(self) -> None:
+        source = (
+            "import unittest\n"
+            "class MyTest(unittest.TestCase):\n"
+            "    def test_foo(self):\n"
+            "        sched = self.get_singleton(WaveScheduler)\n"
+            "        sched.next_wave = lambda: []\n"
+        )
+        path = self._write_temp(source)
+        try:
+            errs = check_no_singleton_monkeypatching(path)
+            self.assertTrue(any("monkeypatching method or attribute 'next_wave'" in e for e in errs), errs)
+        finally:
+            os.remove(path)
+
+    def test_monkeypatching_sut_fails(self) -> None:
+        source = (
+            "import unittest\n"
+            "class MyTest(unittest.TestCase):\n"
+            "    def test_foo(self):\n"
+            "        self.sut.field = 123\n"
+        )
+        path = self._write_temp(source)
+        try:
+            errs = check_no_singleton_monkeypatching(path)
+            self.assertTrue(any("monkeypatching method or attribute 'field'" in e for e in errs), errs)
+        finally:
+            os.remove(path)
+
+    def test_setattr_on_singleton_fails(self) -> None:
+        source = (
+            "import unittest\n"
+            "class MyTest(unittest.TestCase):\n"
+            "    def test_foo(self):\n"
+            "        sched = self.get_singleton(WaveScheduler)\n"
+            "        setattr(sched, 'next_wave', lambda: [])\n"
+        )
+        path = self._write_temp(source)
+        try:
+            errs = check_no_singleton_monkeypatching(path)
+            self.assertTrue(any("monkeypatching method or attribute 'next_wave'" in e for e in errs), errs)
+        finally:
+            os.remove(path)
+
+    def test_fake_class_internal_assignment_allowed(self) -> None:
+        source = (
+            "import unittest\n"
+            "from support.lib.lifecycle import fake\n"
+            "class MyTest(unittest.TestCase):\n"
+            "    @fake(Storage)\n"
+            "    class FakeStorage:\n"
+            "        def __init__(self):\n"
+            "            self.saved = []\n"
+            "    def test_foo(self):\n"
+            "        pass\n"
+        )
+        path = self._write_temp(source)
+        try:
+            errs = check_no_singleton_monkeypatching(path)
+            self.assertEqual(errs, [])
+        finally:
+            os.remove(path)
+
+    def test_normal_method_calls_and_test_case_fields_allowed(self) -> None:
+        source = (
+            "import unittest\n"
+            "class MyTest(unittest.TestCase):\n"
+            "    def test_foo(self):\n"
+            "        self.my_local_state = 123\n"
+            "        self.sut.run()\n"
+        )
+        path = self._write_temp(source)
+        try:
+            errs = check_no_singleton_monkeypatching(path)
+            self.assertEqual(errs, [])
+        finally:
+            os.remove(path)
+
+    def test_allow_pragma_suppresses(self) -> None:
+        source = (
+            "import unittest\n"
+            "class MyTest(unittest.TestCase):\n"
+            "    def test_foo(self):\n"
+            "        sched = self.get_singleton(WaveScheduler)\n"
+            "        sched.next_wave = lambda: []  # cleanroom: allow-singleton-monkeypatch\n"
+        )
+        path = self._write_temp(source)
+        try:
+            errs = check_no_singleton_monkeypatching(path)
+            self.assertEqual(errs, [])
         finally:
             os.remove(path)
 

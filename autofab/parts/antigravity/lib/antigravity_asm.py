@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from typing import Optional
-from support.lib.lifecycle import LifecycleRegistry
+from support.lib.lifecycle import auto_initialize
 from . import (
     antigravity_coordinator_impl,
     antigravity_harness_impl,
@@ -14,12 +14,7 @@ CONSTITUENTS = (
 
 
 # Contract: Initializes the antigravity assembly component and its constituents (antigravity_coordinator_impl, antigravity_harness_impl).
-def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
-    """Initializes the antigravity assembly component and its constituents."""
-    for constituent in CONSTITUENTS:
-        constituent.__initialize__(registry)
-
-
+__initialize__ = auto_initialize()
 _initialize_ = __initialize__
 
 # --- CLEANROOM METADATA ---

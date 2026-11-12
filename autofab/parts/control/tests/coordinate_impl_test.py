@@ -2,7 +2,7 @@
 
 import unittest
 from typing import Any, List, Optional, Sequence
-from support.lib.lifecycle import LifecycleRegistry, enter_phase, system
+from support.lib.lifecycle import LifecycleTestCase, enter_phase, system
 from autofab.parts.core.lib import file_paths
 from autofab.parts.agent.lib import (
     file_alias,
@@ -128,9 +128,9 @@ class MockNodeConfig:
     read_write_files = []
 
 
-class ControlCoordinateImplTest(unittest.TestCase):
+class ControlCoordinateImplTest(LifecycleTestCase):
     def setUp(self) -> None:
-        self.registry = LifecycleRegistry()
+        super().setUp()
         self.coordinator = SessionCoordinator()
         self.mock_storage = MockDagStorage()
         self.registry.register_instance(
@@ -327,8 +327,8 @@ class ControlCoordinateImplTest(unittest.TestCase):
             unit_address=dag_storage.UnitAddress("parts/foo:bar"),
             role_address=dag_storage.RoleAddress("qa"),
         )
-        self.coordinator.reset_nodes([source_node])
         with enter_phase(agent_session.agent_session, registry=self.registry):
+            self.coordinator.reset_nodes([source_node])
             # Attempting to blame the QA node itself or unresolvable target
             outcome = self.coordinator.dispatch_blame(
                 source_alias="parts/foo:bar",

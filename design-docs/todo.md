@@ -572,6 +572,15 @@ In Google Antigravity environments:
   - Updated `workspace_cli` (`coverage_impl.py` and `commands_impl.py`) to classify contracted error spans as `TEST-COVERAGE-DEFICIT` and uncontracted caller precondition guards as `LIB-PRAGMA-REQUIRED`, lifting the mechanical prohibition on test-directed blame for contracted error postconditions.
   - Extended Pretense framework (`pretense/`): added optional `error` parameter to `pretense.require` and `pretense.require_arg`, raising `PretenseSpecificationError` (or the contracted error) upon requirement failures.
   - Verified benchmark parity across `semver_solver` and `semver_solver_multi` across baseline, pretense, and combined methodologies, eliminating wildcard operator defects and lifting differential cross-test soundness to 97.5%–100%.
+- [ ] **Phase 16: Local Single-GPU Contention Control & Subagent Concurrency Bounding (`concurrent_subagents`)**
+  - Add `concurrent_subagents` configuration parameter to model profiles and credentials.
+  - Enforce validation: allowed values are `None` (unlimited concurrency) and `1` (single subagent running at a time). Any other value raises a validation error.
+  - Disallow `concurrent_subagents` for models bound to the `antigravity` harness.
+  - Configure `concurrent_subagents = 1` for Tier 1 local offline models (`qwen-moe`, `tiel-coder-qwen-moe`, `qwen-next-flash`, `qwen-dense`, `gemma-moe`, `gemma-dense`).
+  - Implement sequential dispatch in `SubagentCoordinator.orchestrate` when `concurrent_subagents = 1`:
+    - Block new dispatches while `len(active_workers) >= 1`.
+    - When unblocked (`len(active_workers) == 0`) and multiple candidate roles are unblocked in `ready_roles_map`, prioritize the most recently run role (MRU) based on previous dispatch timestamp, falling back to topological order for roles that haven't run.
+  - Cascade specification alignment across `high/`, `planning/`, `scenarios/`, `low/`, `lib/`, and `tests/` in `autofab/parts/subagent/` and `autofab/parts/uv/`.
 
 ### Current Verification Health
 

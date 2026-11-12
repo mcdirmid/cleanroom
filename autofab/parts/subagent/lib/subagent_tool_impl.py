@@ -7,24 +7,17 @@ import os
 import sys
 from typing import Optional, Sequence
 
-from support.lib.lifecycle import (
-    LifecycleRegistry,
-    LifecycleResolutionError,
-    Singleton,
-    enter_phase,
-    get_default_registry,
-    get_singleton,
-)
+from support.lib.lifecycle import LifecycleResolutionError, auto_initialize, enter_phase, get_singleton, singleton
 from support.lib import app_info
 from autofab.parts.agent.lib import session as agent_session
 from . import subagent_coordinator, subagent_harness, subagent_tool
 
 
 # Contract: SubagentToolRunner realizes command dispatch and execution runner for subagent orchestration in the agent session tier.
+@singleton
 class SubagentToolRunner(subagent_tool.SubagentToolRunner):
     """Realizes command dispatch and execution runner for subagent orchestration."""
 
-    tier = agent_session.agent_session
 
     # Contract: SubagentToolRunner.execute_command - parses CLI argument sequence and executes selected action.
     def execute_command(self, argv: Sequence[str]) -> int:
@@ -86,6 +79,12 @@ class SubagentToolRunner(subagent_tool.SubagentToolRunner):
             help="Maximum targets dispatched per role turn.",
         )
         orch_parser.add_argument(
+            "--concurrent-subagents",
+            type=int,
+            default=None,
+            help="Maximum concurrent running subagents (allowed value: 1).",
+        )
+        orch_parser.add_argument(
             "--timeout",
             type=float,
             default=None,
@@ -133,6 +132,12 @@ class SubagentToolRunner(subagent_tool.SubagentToolRunner):
             action="store_true",
             help="Use DeepSeek Harness Web loopback bridge.",
         )
+        orch_parser.add_argument(
+            "--experiment",
+            dest="experiment",
+            default=None,
+            help="Active experiment identifier.",
+        )
 
         args_list = list(argv)
         if not args_list or args_list[0] != "orchestrate":
@@ -159,6 +164,8 @@ class SubagentToolRunner(subagent_tool.SubagentToolRunner):
                 max_unproductive_rounds=parsed.max_unproductive_rounds,
                 target_node=parsed.target_node,
                 pretense=parsed.pretense,
+                experiment=getattr(parsed, "experiment", None),
+                concurrent_subagents=getattr(parsed, "concurrent_subagents", None),
             )
 
         parser.print_help()
@@ -180,8 +187,23 @@ class SubagentToolRunner(subagent_tool.SubagentToolRunner):
         target_node: Optional[str] = None,
         max_unproductive_rounds: Optional[int] = None,
         pretense: bool = False,
+        experiment: Optional[str] = None,
+        concurrent_subagents: Optional[int] = None,
     ) -> int:
         """Orchestrates multi-agent execution across topological waves until convergence."""
+        if experiment:
+            os.environ["AUTOFAB_EXPERIMENT"] = experiment
+            try:
+                from support.lib import experiments
+
+                experiments.set_active_experiments(experiment)
+            except Exception:
+                try:
+                    from autofab.support.lib import experiments
+
+                    experiments.set_active_experiments(experiment)
+                except Exception:
+                    pass
         effective_unproductive = (
             max_unproductive_rounds
             if max_unproductive_rounds is not None
@@ -209,6 +231,7 @@ class SubagentToolRunner(subagent_tool.SubagentToolRunner):
             model_name=model,
             max_unproductive_rounds=effective_unproductive,
             target_node=target_node,
+            concurrent_subagents=concurrent_subagents,
         )
 
         print(f"\n=== {app_info.APP_TITLE} Orchestration Summary ===")
@@ -249,17 +272,5 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
-
-# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
-def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
-    """Registers constituent singletons into the lifecycle registry."""
-    reg = get_default_registry() if registry is None else registry
-    reg.register_singleton(
-        SubagentToolRunner,
-        keys=[subagent_tool.SubagentToolRunner, SubagentToolRunner],
-        tier=agent_session.agent_session,
-    )
-
-
+__initialize__ = auto_initialize()
 _initialize_ = __initialize__
-# --- END CLEANROOM AUTO-GENERATED ---

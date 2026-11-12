@@ -4,12 +4,7 @@ import os
 import re
 import subprocess
 from typing import Any, Dict, List, Optional, Sequence, Tuple
-from support.lib.lifecycle import (
-    LifecycleRegistry,
-    Singleton,
-    get_default_registry,
-    get_singleton,
-)
+from support.lib.lifecycle import auto_initialize, get_singleton, singleton
 from autofab.parts.agent.lib import file_alias, node_config, agent_session
 from autofab.parts.dag.lib import dag_storage
 from . import verification
@@ -52,10 +47,10 @@ def _compute_path_hash(path: str) -> str:
         return ""
 
 
+@singleton
 class VerificationEvaluator(verification.VerificationEvaluator):
     """Evaluates verification checks and manages diagnostic noise and hash caching."""
 
-    tier = agent_session.agent_session
 
     def __init__(self) -> None:
         self._cached_node_hash: Dict[dag_storage.DagNode, str] = {}
@@ -204,17 +199,5 @@ class VerificationEvaluator(verification.VerificationEvaluator):
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
-
-# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
-def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
-    """Registers constituent singletons into the lifecycle registry."""
-    reg = get_default_registry() if registry is None else registry
-    reg.register_singleton(
-        VerificationEvaluator,
-        keys=[VerificationEvaluator, verification.VerificationEvaluator],
-        tier=VerificationEvaluator.tier,
-    )
-
-
+__initialize__ = auto_initialize()
 _initialize_ = __initialize__
-# --- END CLEANROOM AUTO-GENERATED ---

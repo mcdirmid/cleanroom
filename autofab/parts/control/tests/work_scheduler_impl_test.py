@@ -1,7 +1,7 @@
 """Unit tests for work_scheduler_impl."""
 
 import unittest
-from support.lib.lifecycle import LifecycleRegistry, enter_phase, system
+from support.lib.lifecycle import LifecycleTestCase, enter_phase, system
 from autofab.parts.agent.lib import (
     file_alias,
     node_config,
@@ -71,9 +71,9 @@ class MockNodeConfig:
         self.guide = None
 
 
-class ControlWorkSchedulerImplTest(unittest.TestCase):
+class ControlWorkSchedulerImplTest(LifecycleTestCase):
     def setUp(self) -> None:
-        self.registry = LifecycleRegistry()
+        super().setUp()
         self.scheduler = WorkScheduler()
         self.registry.register_instance(
             self.scheduler,

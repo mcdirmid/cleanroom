@@ -113,6 +113,28 @@ class WatchdogMonitor:
     """Coordinates execution watchdogs using software timers and faulthandler alarms."""
 
     @staticmethod
+    def resolve_timeout(default: float = 45.0) -> float:
+        """Resolves watchdog execution timeout dynamically from environment variables."""
+        if "PRETENSE_TIMEOUT" in os.environ:
+            try:
+                return float(os.environ["PRETENSE_TIMEOUT"].strip())
+            except ValueError:
+                pass
+        if "AUTOFAB_WATCHDOG_TIMEOUT" in os.environ:
+            try:
+                return float(os.environ["AUTOFAB_WATCHDOG_TIMEOUT"].strip())
+            except ValueError:
+                pass
+        for env_key in ("AUTOFAB_VERIFY_TIMEOUT", "CLEANROOM_VERIFY_TIMEOUT"):
+            if env_key in os.environ:
+                try:
+                    outer = float(os.environ[env_key].strip())
+                    return max(5.0, outer - 10.0)
+                except ValueError:
+                    pass
+        return default
+
+    @staticmethod
     def arm(timeout_seconds: float, target_name: Optional[str] = None) -> Any:
         if timeout_seconds <= 0:
             return None
@@ -150,6 +172,11 @@ class WatchdogMonitor:
             sys.stderr.flush()
             killer = threading.Thread(target=_hard_kill, daemon=True)
             killer.start()
+            try:
+                import _thread
+                _thread.interrupt_main()
+            except Exception:
+                pass
 
         timer = threading.Timer(warning_delay, _timeout_warning)
         timer.daemon = True
@@ -1143,20 +1170,14 @@ def run_pretense_cli(argv: Optional[List[str]] = None) -> int:
         "--timeout",
         type=float,
         default=None,
-        help="Timeout in seconds per target (default: 90.0, or $PRETENSE_TIMEOUT). Set to 0 to disable.",
+        help="Timeout in seconds per target (default: 45.0, or $PRETENSE_TIMEOUT). Set to 0 to disable.",
     )
 
     args = parser.parse_args(argv)
 
     raw_timeout = args.timeout
     if raw_timeout is None:
-        env_val = os.environ.get(
-            "PRETENSE_TIMEOUT", os.environ.get("CLEANROOM_VERIFY_TIMEOUT", "90.0")
-        )
-        try:
-            raw_timeout = float(env_val)
-        except ValueError:
-            raw_timeout = 45.0
+        raw_timeout = WatchdogMonitor.resolve_timeout(default=45.0)
     timeout_seconds = max(0.0, raw_timeout)
 
     def _collect_lib_impls_from_dir(lib_dir: Path) -> Set[str]:

@@ -190,6 +190,8 @@ class require_arg(Generic[T]):
         domain: Union[Domain[Sequence[E]], Domain[List[E]], Domain[Tuple[E, ...]]],
         preferred: Optional[Sequence[Sequence[E]]] = None,
         error: Optional[Union[Type[BaseException], BaseException]] = None,
+        *,
+        fuzz_domain: Optional[Domain[Any]] = None,
     ) -> None: ...
     @overload
     def __init__(
@@ -198,6 +200,8 @@ class require_arg(Generic[T]):
         domain: Union[Domain[Optional[Sequence[E]]], Domain[Optional[List[E]]], Domain[Optional[Tuple[E, ...]]]],
         preferred: Optional[Sequence[Optional[Sequence[E]]]] = None,
         error: Optional[Union[Type[BaseException], BaseException]] = None,
+        *,
+        fuzz_domain: Optional[Domain[Any]] = None,
     ) -> None: ...
     @overload
     def __init__(
@@ -206,6 +210,8 @@ class require_arg(Generic[T]):
         domain: Domain[T],
         preferred: Optional[Sequence[T]] = None,
         error: Optional[Union[Type[BaseException], BaseException]] = None,
+        *,
+        fuzz_domain: Optional[Domain[Any]] = None,
     ) -> None: ...
     @overload
     def __init__(
@@ -213,6 +219,8 @@ class require_arg(Generic[T]):
         val: T,
         domain: Domain[T],
         preferred: Union[Type[BaseException], BaseException],
+        *,
+        fuzz_domain: Optional[Domain[Any]] = None,
     ) -> None: ...
     @overload
     def __call__(
@@ -221,6 +229,8 @@ class require_arg(Generic[T]):
         domain: Union[Domain[Sequence[E]], Domain[List[E]], Domain[Tuple[E, ...]]],
         preferred: Optional[Sequence[Sequence[E]]] = None,
         error: Optional[Union[Type[BaseException], BaseException]] = None,
+        *,
+        fuzz_domain: Optional[Domain[Any]] = None,
     ) -> None: ...
     @overload
     def __call__(
@@ -229,6 +239,8 @@ class require_arg(Generic[T]):
         domain: Union[Domain[Optional[Sequence[E]]], Domain[Optional[List[E]]], Domain[Optional[Tuple[E, ...]]]],
         preferred: Optional[Sequence[Optional[Sequence[E]]]] = None,
         error: Optional[Union[Type[BaseException], BaseException]] = None,
+        *,
+        fuzz_domain: Optional[Domain[Any]] = None,
     ) -> None: ...
     @overload
     def __call__(
@@ -237,6 +249,8 @@ class require_arg(Generic[T]):
         domain: Domain[T],
         preferred: Optional[Sequence[T]] = None,
         error: Optional[Union[Type[BaseException], BaseException]] = None,
+        *,
+        fuzz_domain: Optional[Domain[Any]] = None,
     ) -> None: ...
     @overload
     def __call__(
@@ -244,6 +258,8 @@ class require_arg(Generic[T]):
         val: T,
         domain: Domain[T],
         preferred: Union[Type[BaseException], BaseException],
+        *,
+        fuzz_domain: Optional[Domain[Any]] = None,
     ) -> None: ...
 
 
@@ -628,7 +644,7 @@ class StateMachine(Generic[StateT]):
     def get_singleton(self, target_type: Type[T]) -> T: ...
     def sut(self, target_type: Type[T]) -> T: ...
     def as_fake(self, protocol_type: Optional[Type[T]] = None) -> T: ...
-    def as_checked(self, protocol_type: Type[T], real_instance: Optional[T] = None) -> T: ...
+    def as_checked(self, protocol_type: Type[T], real_instance: Optional[T] = None) -> CheckedAdapter[T]: ...
     def bind(self, target: Any) -> Any: ...
     def make_state_machine(self, initial_state: Any) -> StateMachine: ...
     def check_invariants(self) -> None: ...
@@ -637,7 +653,7 @@ class StateMachine(Generic[StateT]):
 
 
 @data_type
-class CheckedAdapter:
+class CheckedAdapter(Generic[T]):
     """Verification proxy conforming to an interface protocol that dispatches through a state machine and real singleton."""
 
     def __init__(
@@ -647,7 +663,7 @@ class CheckedAdapter:
         real_instance: Optional[Any] = None,
     ) -> None: ...
 
-    def violating(self, exc_type: Optional[Type[BaseException]] = None, match: str = "") -> Any: ...
+    def violating(self, exc_type: Optional[Type[BaseException]] = None, match: str = "") -> T: ...
 
     def __getattr__(self, name: str) -> Any: ...
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import unittest
-from support.lib.lifecycle import LifecycleRegistry, enter_phase
+from support.lib.lifecycle import LifecycleRegistry, LifecycleTestCase, enter_phase
 from autofab.parts.agent.lib import session as agent_session
 from autofab.parts.dsh.lib import (
     dsh_asm,
@@ -12,7 +12,7 @@ from autofab.parts.dsh.lib import (
 )
 
 
-class DshAsmTest(unittest.TestCase):
+class DshAsmTest(LifecycleTestCase):
     """Test cases for dsh_asm assembly."""
 
     def test_assembly_initialization(self) -> None:

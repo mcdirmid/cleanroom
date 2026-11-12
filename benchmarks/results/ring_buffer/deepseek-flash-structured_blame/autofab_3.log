@@ -1,0 +1,5 @@
+[CHANGE] ring_buffer_deepseek_flash_1/parts/ring_buffer/tests/ring_buffer_impl_test.py: Initial unittest suite for RingBuffer singleton: lifecycle-scoped instantiation, capacity/size/empty/full invariants, push with available capacity (returns None), push overwrite eviction returning oldest item, pop empty raising BufferEmptyError, FIFO pop ordering, clear reset, and snapshot_items FIFO order plus non-mutating copy semantics.
+[CHANGE] ring_buffer_deepseek_flash_1/parts/ring_buffer/lib/ring_buffer.py: Define interface module: BufferError/BufferEmptyError data types and RingBuffer protocol with push/pop/clear/snapshot_items stubs and test_only marker.
+[CHANGE] ring_buffer_deepseek_flash_1/parts/ring_buffer/lib/ring_buffer_impl.py: Implement RingBuffer singleton: deque-backed storage capacity 10, push with overwrite eviction, pop raising BufferEmptyError, clear, and FIFO snapshot_items.
+[AUDIT] ring_buffer_deepseek_flash_1/parts/ring_buffer/lib/ring_buffer_impl.py: QA_AUDIT
+[AUDIT] ring_buffer_deepseek_flash_1/parts/ring_buffer/lib/ring_buffer_impl.py: COVERAGE_AUDIT

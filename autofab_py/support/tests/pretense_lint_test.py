@@ -40,6 +40,9 @@ from autofab_py.support.lib.pretense_lint import (
     check_no_assert_raises,
     check_no_call_target_in_interface,
     check_no_direct_real_access,
+    check_no_direct_sm_access_in_real_tests,
+    check_impl_allowed_classes_only,
+    check_terminal_violating,
     check_no_pre_seeding,
     check_no_raises_for_errors,
     check_no_raises_in_test_cases,
@@ -1385,9 +1388,6 @@ class PretenseLintTest(unittest.TestCase):
             "class TestTargetImplReal(unittest.TestCase):\n"
             "    def test_precondition_violating(self) -> None:\n"
             "        self.checked.violating(ValueError).do_work()\n"
-            "    def test_precondition_with_violating(self) -> None:\n"
-            "        with self.checked.violating(ValueError):\n"
-            "            self.checked.do_work()\n"
         )
         good_tree = ast.parse(good_code)
         good_errs = check_no_raises_in_test_cases(good_tree, "good_file.py")
@@ -1463,9 +1463,6 @@ class PretenseLintTest(unittest.TestCase):
             "class TestTargetImplReal(unittest.TestCase):\n"
             "    def test_precondition_violating(self) -> None:\n"
             "        self.checked.violating(ValueError).do_work()\n"
-            "    def test_precondition_with_violating(self) -> None:\n"
-            "        with self.checked.violating(ValueError):\n"
-            "            self.checked.do_work()\n"
         )
         good_tree = ast.parse(good_code)
         good_errs = check_no_assert_raises(good_tree, "good_file.py")
@@ -1503,6 +1500,175 @@ class PretenseLintTest(unittest.TestCase):
         good_tree = ast.parse(good_code)
         good_errs = check_no_direct_real_access(good_tree, "good_file.py")
         self.assertEqual(len(good_errs), 0)
+
+    def test_terminal_violating(self) -> None:
+        """Verifies check_terminal_violating enforces violating(...) as strictly terminal (PN_TERMINAL_VIOLATING)."""
+        # Bad: violating is followed by another statement
+        bad_not_last = (
+            "import unittest\n\n"
+            "class TestTargetImplReal(unittest.TestCase):\n"
+            "    def test_violating_not_last(self) -> None:\n"
+            "        self.checked.violating(ValueError).configure(0)\n"
+            "        self.checked.validate()\n"
+        )
+        tree = ast.parse(bad_not_last)
+        errs = check_terminal_violating(tree, "test_file.py")
+        self.assertEqual(len(errs), 1)
+        self.assertIn("PN_TERMINAL_VIOLATING", errs[0])
+        self.assertIn("must be the final statement", errs[0])
+
+        # Bad: multiple violating statements in the same test method
+        bad_multiple = (
+            "import unittest\n\n"
+            "class TestTargetImplReal(unittest.TestCase):\n"
+            "    def test_multiple_violations(self) -> None:\n"
+            "        self.checked.violating(ValueError).configure(0)\n"
+            "        self.checked.violating(TypeError).configure('bad')\n"
+        )
+        tree = ast.parse(bad_multiple)
+        errs = check_terminal_violating(tree, "test_file.py")
+        self.assertEqual(len(errs), 2)
+        self.assertTrue(all("PN_TERMINAL_VIOLATING" in e for e in errs))
+
+        # Bad: with violating as context manager is strictly prohibited (PN_NO_WITH_VIOLATING)
+        bad_with = (
+            "import unittest\n\n"
+            "class TestTargetImplReal(unittest.TestCase):\n"
+            "    def test_with_violating(self) -> None:\n"
+            "        with self.checked.violating(ValueError):\n"
+            "            self.checked.configure(0)\n"
+        )
+        tree = ast.parse(bad_with)
+        errs = check_terminal_violating(tree, "test_file.py")
+        self.assertEqual(len(errs), 1)
+        self.assertIn("PN_NO_WITH_VIOLATING", errs[0])
+
+        # Good: violating as single terminal direct call
+        good_call = (
+            "import unittest\n\n"
+            "class TestTargetImplReal(unittest.TestCase):\n"
+            "    def test_valid_violating(self) -> None:\n"
+            "        self.checked.configure(10)\n"
+            "        self.checked.violating(ValueError).configure(0)\n"
+        )
+        tree = ast.parse(good_call)
+        errs = check_terminal_violating(tree, "test_file.py")
+        self.assertEqual(len(errs), 0)
+
+        # Good: normal test without violating
+        good_normal = (
+            "import unittest\n\n"
+            "class TestTargetImplReal(unittest.TestCase):\n"
+            "    def test_normal(self) -> None:\n"
+            "        self.checked.configure(10)\n"
+            "        assert self.checked.capacity == 10\n"
+        )
+        tree = ast.parse(good_normal)
+        errs = check_terminal_violating(tree, "test_file.py")
+        self.assertEqual(len(errs), 0)
+
+    def test_no_direct_sm_access_in_real_tests(self) -> None:
+        """Verifies check_no_direct_sm_access_in_real_tests rejects self.sm in Test*Real methods (PN_NO_DIRECT_SM_ACCESS_IN_REAL_TEST)."""
+        bad_code = (
+            "import unittest\n\n"
+            "class TestTargetImplReal(unittest.TestCase):\n"
+            "    def setUp(self) -> None:\n"
+            "        self.sm = TargetStateMachine()\n"
+            "        self.checked = self.sm.as_checked(Target, self.real)\n"
+            "    def test_bad_push(self) -> None:\n"
+            "        self.sm.push(1)\n"
+            "    def test_bad_size(self) -> None:\n"
+            "        sz = self.sm.prop_size()\n"
+        )
+        tree = ast.parse(bad_code)
+        errs = check_no_direct_sm_access_in_real_tests(tree, "test_impl_pretense.py")
+        self.assertEqual(len(errs), 2)
+        self.assertTrue(all("PN_NO_DIRECT_SM_ACCESS_IN_REAL_TEST" in e for e in errs))
+
+        good_code = (
+            "import unittest\n\n"
+            "class TestTargetImplReal(unittest.TestCase):\n"
+            "    def setUp(self) -> None:\n"
+            "        self.sm = TargetStateMachine()\n"
+            "        self.checked = self.sm.as_checked(Target, self.real)\n"
+            "    def test_good_push(self) -> None:\n"
+            "        self.checked.push(1)\n"
+            "        assert self.checked.size == 1\n"
+        )
+        good_tree = ast.parse(good_code)
+        good_errs = check_no_direct_sm_access_in_real_tests(good_tree, "test_impl_pretense.py")
+        self.assertEqual(len(good_errs), 0)
+
+        # In Test*Fake, self.sm is allowed for seeding
+        fake_code = (
+            "import unittest\n\n"
+            "class TestTargetFake(unittest.TestCase):\n"
+            "    def setUp(self) -> None:\n"
+            "        self.sm = TargetStateMachine()\n"
+            "    def test_fake_seeding(self) -> None:\n"
+            "        self.sm.seed_initial()\n"
+        )
+        fake_tree = ast.parse(fake_code)
+        fake_errs = check_no_direct_sm_access_in_real_tests(fake_tree, "test_pretense.py")
+        self.assertEqual(len(fake_errs), 0)
+
+    def test_impl_allowed_classes_only(self) -> None:
+        """Verifies check_impl_allowed_classes_only rejects unauthorized auxiliary classes in impl modules (PN_IMPL_ALLOWED_CLASSES_ONLY)."""
+        bad_code = (
+            "import unittest\n"
+            "from typing import Protocol\n"
+            "class _CheckedAdapter(Protocol):\n"
+            "    pass\n"
+            "class _CheckedTarget:\n"
+            "    pass\n"
+            "class TargetImplPseudoStateMachine(TargetStateMachine):\n"
+            "    pass\n"
+            "class TestTargetImplReal(unittest.TestCase):\n"
+            "    pass\n"
+        )
+        tree = ast.parse(bad_code)
+        errs = check_impl_allowed_classes_only(tree, "target_impl_pretense.py", is_impl=True)
+        self.assertEqual(len(errs), 2)
+        self.assertTrue(all("PN_IMPL_ALLOWED_CLASSES_ONLY" in e for e in errs))
+        self.assertIn("_CheckedAdapter", errs[0])
+        self.assertIn("_CheckedTarget", errs[1])
+
+        # Ignored when is_impl is False
+        iface_errs = check_impl_allowed_classes_only(tree, "target_pretense.py", is_impl=False)
+        self.assertEqual(len(iface_errs), 0)
+
+        good_code = (
+            "import unittest\n"
+            "class TargetImplPseudoStateMachine(TargetStateMachine):\n"
+            "    pass\n"
+            "class TestTargetImplReal(unittest.TestCase):\n"
+            "    pass\n"
+        )
+        good_tree = ast.parse(good_code)
+        good_errs = check_impl_allowed_classes_only(good_tree, "target_impl_pretense.py", is_impl=True)
+        self.assertEqual(len(good_errs), 0)
+
+    def test_lifecycle_test_case_recognized_in_impl_pretense(self) -> None:
+        """Verifies check_pretense_structure recognizes LifecycleTestCase as a valid test case base."""
+        code = (
+            "from support.lib.lifecycle import LifecycleTestCase\n"
+            "class TargetImplPseudoStateMachine(TargetStateMachine):\n"
+            "    pass\n"
+            "class TestTargetImplReal(LifecycleTestCase):\n"
+            "    def test_scenario(self) -> None:\n"
+            "        pass\n"
+        )
+        tree = ast.parse(code)
+        errs = check_pretense_structure(tree, "target_impl_pretense.py", is_interface=False)
+        self.assertFalse(
+            any("PRE_LINT_MISSING_TEST_CASES" in e for e in errs),
+            f"LifecycleTestCase should satisfy test case requirement, got: {errs}",
+        )
+        self.assertFalse(
+            any("PRE_LINT_MISSING_STATE_OR_SM" in e for e in errs),
+            f"Module should be recognized as initialized, got: {errs}",
+        )
+
 
 
 if __name__ == "__main__":

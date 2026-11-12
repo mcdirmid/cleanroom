@@ -18,12 +18,7 @@ except ImportError:
     except ImportError:
         tomllib = None  # type: ignore
 
-from support.lib.lifecycle import (
-    LifecycleRegistry,
-    Singleton,
-    get_default_registry,
-    get_singleton,
-)
+from support.lib.lifecycle import auto_initialize, get_singleton, singleton
 from support.lib import app_info
 from autofab.parts.agent.lib import session as agent_session
 from autofab.parts.workspace_cli.lib import pending, work
@@ -39,10 +34,10 @@ from . import subagent_coordinator
 def resolve_model_parameters(
     repo_root: str,
     model_name: Optional[str] = None,
-) -> Tuple[Optional[int], Optional[int], Optional[int]]:
-    """Resolves (subagent_batch_size, conversation_max_tokens, max_unproductive_rounds) from model_configs.toml."""
+) -> Tuple[Optional[int], Optional[int], Optional[int], Optional[int]]:
+    """Resolves (subagent_batch_size, conversation_max_tokens, max_unproductive_rounds, concurrent_subagents) from model_configs.toml."""
     if tomllib is None:
-        return None, None, None
+        return None, None, None, None
     cfg_path = os.path.join(repo_root, "model_configs.toml")
     if not os.path.isfile(cfg_path):
         env_cfg = app_info.get_model_config_file()
@@ -59,15 +54,15 @@ def resolve_model_parameters(
                     cfg_path = cand
                     break
         else:
-            return None, None, None
+            return None, None, None, None
 
     if not cfg_path or not os.path.isfile(cfg_path):
-        return None, None, None
+        return None, None, None, None
     try:
         with open(cfg_path, "rb") as f:
             cfg = tomllib.load(f)
     except Exception:
-        return None, None, None
+        return None, None, None, None
 
     global_unproductive: Optional[int] = None
     u_top = cfg.get("max_unproductive_rounds")
@@ -79,11 +74,11 @@ def resolve_model_parameters(
 
     models_dict = cfg.get("models", {})
     if not isinstance(models_dict, dict):
-        return None, None, global_unproductive
+        return None, None, global_unproductive, None
 
     target = model_name or cfg.get("default")
     if not target or not isinstance(target, str):
-        return None, None, global_unproductive
+        return None, None, global_unproductive, None
 
     target_clean = target.strip().lower()
     matched_data = None
@@ -110,7 +105,7 @@ def resolve_model_parameters(
                 break
 
     if matched_data is None:
-        return None, None, global_unproductive
+        return None, None, global_unproductive, None
 
     resolved_batch: Optional[int] = None
     b_val = matched_data.get("subagent_batch_size") or matched_data.get("batch_size")
@@ -136,7 +131,47 @@ def resolve_model_parameters(
         except (ValueError, TypeError):
             pass
 
-    return resolved_batch, resolved_tokens, resolved_unproductive
+    resolved_concurrent: Optional[int] = None
+    c_val = matched_data.get("concurrent_subagents")
+    if c_val is None:
+        creds_file = app_info.get_user_credentials_file()
+        if os.path.isfile(creds_file):
+            try:
+                with open(creds_file, "rb") as cf:
+                    c_data = tomllib.load(cf)
+                if isinstance(c_data, dict):
+                    c_val = c_data.get("concurrent_subagents")
+                    if (
+                        c_val is None
+                        and "models" in c_data
+                        and isinstance(c_data["models"], dict)
+                    ):
+                        m_c = c_data["models"].get(target) or c_data["models"].get(
+                            target_clean
+                        )
+                        if isinstance(m_c, dict):
+                            c_val = m_c.get("concurrent_subagents")
+            except Exception:
+                pass
+
+    if c_val is not None:
+        try:
+            resolved_concurrent = int(c_val)
+        except (ValueError, TypeError):
+            raise ValueError(
+                f"Invalid concurrent_subagents={c_val}; only 1 is supported."
+            )
+        if resolved_concurrent != 1:
+            raise ValueError(
+                f"Invalid concurrent_subagents={resolved_concurrent}; only 1 is supported."
+            )
+        harness_val = str(matched_data.get("harness", "")).lower().strip()
+        if harness_val == "antigravity":
+            raise ValueError(
+                f"Model '{target}' uses antigravity harness; concurrent_subagents cannot be set for antigravity models."
+            )
+
+    return resolved_batch, resolved_tokens, resolved_unproductive, resolved_concurrent
 
 
 _resolve_model_parameters = resolve_model_parameters
@@ -245,10 +280,47 @@ def _collect_units_for_paths(paths: Sequence[str]) -> Set[Tuple[str, str]]:
     return units
 
 
+def _delete_dir_robust(path: str) -> None:
+    """Robustly deletes a directory tree, making all files and directories writable first."""
+    if not os.path.exists(path):
+        return
+    try:
+        os.chmod(path, 0o777)
+    except OSError:
+        pass
+    for dirpath, dirs, files in os.walk(path, followlinks=False):
+        for d in dirs:
+            dp = os.path.join(dirpath, d)
+            if not os.path.islink(dp):
+                try:
+                    os.chmod(dp, 0o777)
+                except OSError:
+                    pass
+        for f in files:
+            fp = os.path.join(dirpath, f)
+            if not os.path.islink(fp):
+                try:
+                    os.chmod(fp, 0o666)
+                except OSError:
+                    pass
+
+    def _onexc(func: Any, p: str, exc_info: Any) -> None:
+        try:
+            os.chmod(p, 0o777)
+            func(p)
+        except OSError:
+            pass
+
+    try:
+        shutil.rmtree(path, onexc=_onexc)
+    except TypeError:
+        shutil.rmtree(path, ignore_errors=True)
+
+
+@singleton
 class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
     """Realizes zero-execution multi-agent workspace coordination across execution waves."""
 
-    tier = agent_session.agent_session
 
     # Contract: discover ready dirty roles unblocked by upstream prerequisites across directory scope
     # Contract: commission absent workspace directory via WorkspaceProvisioner
@@ -309,11 +381,27 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
                     prov = get_singleton(provision.WorkspaceProvisioner)
                     prov.commission(role, dir_scope=dir_scope, repo_root=root)
 
+                ws_scope = dir_scope.strip("/").split("/")[-1] if dir_scope else ""
+                ws_target_paths = target_paths
+                if dir_scope and ws_scope and dir_scope != ws_scope:
+                    ws_target_paths = []
+                    for tp in target_paths:
+                        if tp.startswith(dir_scope + "/"):
+                            ws_target_paths.append(
+                                ws_scope + "/" + tp[len(dir_scope) + 1 :]
+                            )
+                        elif tp.startswith("//" + dir_scope + "/"):
+                            ws_target_paths.append(
+                                "//" + ws_scope + "/" + tp[len("//" + dir_scope) + 1 :]
+                            )
+                        else:
+                            ws_target_paths.append(tp)
+
                 dispatch = subagent_coordinator.RoleDispatch(
                     role_name=role,
                     workspace_dir=ws_dir,
-                    dir_scope=dir_scope,
-                    ready_targets=tuple(target_paths),
+                    dir_scope=ws_scope,
+                    ready_targets=tuple(ws_target_paths),
                     batch_size=batch_size,
                     task_prompt="",
                 )
@@ -380,8 +468,17 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
         harness: subagent_coordinator.HarnessAdapter,
     ) -> Sequence[subagent_coordinator.RoleRoundResult]:
         """Dispatches all roles in an execution wave through the harness and awaits results."""
+        prov = get_singleton(provision.WorkspaceProvisioner)
         handles: List[str] = []
         for dispatch in wave:
+            try:
+                prov.lock_workspace_directories(
+                    dispatch.workspace_dir,
+                    role_name=dispatch.role_name,
+                    dir_scope=dispatch.dir_scope,
+                )
+            except Exception:
+                pass
             handle = harness.dispatch_role(dispatch)
             handles.append(handle)
 
@@ -389,6 +486,12 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
         for handle in handles:
             res = harness.await_role(handle)
             results.append(res)
+
+        for dispatch in wave:
+            try:
+                prov.unlock_workspace_directories(dispatch.workspace_dir)
+            except Exception:
+                pass
 
         return tuple(results)
 
@@ -413,6 +516,7 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
         max_unproductive_turns: Optional[int] = None,
         target_node: Optional[str] = None,
         max_unproductive_rounds: Optional[int] = None,
+        concurrent_subagents: Optional[int] = None,
     ) -> subagent_coordinator.OrchestrationSummary:
         """Orchestrates iterative multi-agent execution until DAG convergence or failure."""
         reg = get_singleton(role_registry.WorkspaceRegistry)
@@ -420,10 +524,30 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
         root = repo_root or reg.discover_repository_root()
 
         # Resolve model parameters from model_configs.toml
-        resolved_batch, _, resolved_unproductive = _resolve_model_parameters(
-            root, model_name=model_name
+        resolved_batch, _, resolved_unproductive, resolved_concurrent = (
+            _resolve_model_parameters(root, model_name=model_name)
         )
         effective_batch_size = batch_size if batch_size is not None else resolved_batch
+        effective_concurrent = (
+            concurrent_subagents
+            if concurrent_subagents is not None
+            else resolved_concurrent
+        )
+        if effective_concurrent is not None:
+            if effective_concurrent != 1:
+                raise ValueError(
+                    f"Invalid concurrent_subagents={effective_concurrent}; only 1 is supported."
+                )
+            harness_platform = getattr(harness, "platform_name", "") or getattr(
+                harness, "name", ""
+            )
+            if not harness_platform and hasattr(harness, "__class__"):
+                harness_platform = harness.__class__.__name__.lower()
+            if "antigravity" in str(harness_platform).lower():
+                raise ValueError(
+                    "concurrent_subagents cannot be set for antigravity models."
+                )
+
         user_unproductive = (
             max_unproductive_rounds
             if max_unproductive_rounds is not None
@@ -439,6 +563,8 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
         consecutive_identical_blames: Dict[str, int] = {}
         last_blame_fingerprints: Dict[str, Tuple[Tuple[str, ...], str]] = {}
         subagent_restarts: Dict[str, int] = {}
+        consecutive_rejections: Dict[Tuple[str, str, str], int] = {}
+        last_dispatched_time: Dict[str, float] = {}
 
         print(
             f"[ORCHESTRATE] Starting orchestration: scope='{dir_scope}', max_waves={max_waves}",
@@ -477,18 +603,7 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
                 r_name, dir_scope=dir_scope, repo_root=root
             )
             if os.path.isdir(ws_dir):
-                shutil.rmtree(ws_dir, ignore_errors=True)
-            try:
-                prov = get_singleton(provision.WorkspaceProvisioner)
-                prov.commission(
-                    role_name=r_name,
-                    dir_scope=dir_scope,
-                    repo_root=root,
-                    reset=True,
-                    model=model_name,
-                )
-            except Exception:
-                pass
+                _delete_dir_robust(ws_dir)
 
         # Filter roles up to target_role if specified
         roles_to_evaluate = all_scope_roles
@@ -568,6 +683,14 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
                             f"elapsed={res.wall_clock_seconds:.1f}s",
                             flush=True,
                         )
+                        try:
+                            ws_finish = reg.compute_workspace_dir(
+                                role_name, dir_scope=dir_scope, repo_root=root
+                            )
+                            prov_finish = get_singleton(provision.WorkspaceProvisioner)
+                            prov_finish.unlock_workspace_directories(ws_finish)
+                        except Exception:
+                            pass
                         if res.status == "failed":
                             failure_msg = (
                                 res.failure_reason
@@ -709,6 +832,120 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
                                         consecutive_identical_blames[other_role] = 0
                                         last_blame_fingerprints.pop(other_role, None)
 
+                            for (w_r, a_r, t_r) in list(consecutive_rejections.keys()):
+                                if (w_r == role_name or a_r == role_name) and (
+                                    t_r in sub_set
+                                    or any(
+                                        t_r.endswith(st) or st.endswith(t_r)
+                                        for st in sub_set
+                                    )
+                                ):
+                                    consecutive_rejections.pop((w_r, a_r, t_r), None)
+
+                        # Harvest and evaluate any rejections delivered by this worker
+                        rejections: List[Dict[str, Any]] = []
+                        ws_dir_rej = reg.compute_workspace_dir(
+                            role_name, dir_scope=dir_scope, repo_root=root
+                        )
+                        for r_buf_dir in (ws_dir_rej, root):
+                            r_buf_p = os.path.join(
+                                r_buf_dir, ".autofab_reject_buffer.json"
+                            )
+                            if os.path.isfile(r_buf_p):
+                                try:
+                                    with open(r_buf_p, "r", encoding="utf-8") as f:
+                                        r_data = json.load(f)
+                                        if isinstance(r_data, list):
+                                            rejections.extend(r_data)
+                                    os.remove(r_buf_p)
+                                except Exception:
+                                    pass
+
+                        for rej in rejections:
+                            rej_worker = (
+                                rej.get("worker") or role_name
+                            ).split(":")[-1].strip().lower()
+                            rej_auditor = (
+                                rej.get("auditor") or ""
+                            ).split(":")[-1].strip().lower()
+                            rej_target = os.path.normpath(
+                                rej.get("target") or rej.get("file_path") or ""
+                            ).replace("\\", "/")
+                            if not rej_auditor:
+                                try:
+                                    for r_cand in all_scope_roles:
+                                        r_cand_name = (
+                                            r_cand.role_name
+                                            if hasattr(r_cand, "role_name")
+                                            else str(r_cand)
+                                        ).split(":")[-1].strip().lower()
+                                        r_cand_def = reg.resolve_role_definition(
+                                            r_cand_name, repo_root=root
+                                        )
+                                        if r_cand_def and (
+                                            r_cand_def.audit_tag
+                                            or not r_cand_def.src_pattern
+                                            or not r_cand_def.writable_file_patterns
+                                        ):
+                                            if rej_worker in (
+                                                r_cand_def.role_deps or ()
+                                            ) or rej_worker in (
+                                                r_cand_def.feedback_role_deps or ()
+                                            ):
+                                                rej_auditor = r_cand_name
+                                                break
+                                except Exception:
+                                    pass
+                            if rej_worker and rej_auditor and rej_target:
+                                rej_key = (rej_worker, rej_auditor, rej_target)
+                                consecutive_rejections[rej_key] = (
+                                    consecutive_rejections.get(rej_key, 0) + 1
+                                )
+                                if consecutive_rejections[rej_key] >= 2:
+                                    print(
+                                        f"[ORCHESTRATE] Circuit breaker: 2 consecutive rejections between auditor '{rej_auditor}' and worker '{rej_worker}' on '{rej_target}'. "
+                                        f"Restarting both roles with clean workspaces and sessions...",
+                                        flush=True,
+                                    )
+                                    for reset_role in (rej_worker, rej_auditor):
+                                        h_act = active_workers.pop(reset_role, None)
+                                        if h_act:
+                                            try:
+                                                harness.interrupt_role(h_act)
+                                            except Exception:
+                                                pass
+                                        target_ws = reg.compute_workspace_dir(
+                                            reset_role,
+                                            dir_scope=dir_scope,
+                                            repo_root=root,
+                                        )
+                                        if os.path.isdir(target_ws):
+                                            _delete_dir_robust(target_ws)
+                                        try:
+                                            prov = get_singleton(
+                                                provision.WorkspaceProvisioner
+                                            )
+                                            prov.commission(
+                                                reset_role,
+                                                dir_scope=dir_scope,
+                                                repo_root=root,
+                                                model=model_name,
+                                            )
+                                            if effective_batch_size is not None:
+                                                _persist_batch_size(
+                                                    target_ws, effective_batch_size
+                                                )
+                                        except Exception:
+                                            pass
+                                        advisory = (
+                                            f"[CIRCUIT BREAKER ADVISORY] Your workspace and conversation session were restarted "
+                                            f"with a clean slate because 2 consecutive rejections occurred between auditor '{rej_auditor}' "
+                                            f"and worker '{rej_worker}' on '{rej_target}'. Please re-evaluate the specification "
+                                            f"and contracts from first principles to resolve the impasse."
+                                        )
+                                        unresolved_reminders[reset_role] = advisory
+                                    consecutive_rejections[rej_key] = 0
+
                         if len(res.blamed_targets) > 0:
                             ws_dir = reg.compute_workspace_dir(
                                 role_name, dir_scope=dir_scope, repo_root=root
@@ -770,7 +1007,7 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
                                     except Exception:
                                         pass
                                     if os.path.isdir(ws_dir):
-                                        shutil.rmtree(ws_dir, ignore_errors=True)
+                                        _delete_dir_robust(ws_dir)
                                     prov = get_singleton(provision.WorkspaceProvisioner)
                                     prov.commission(
                                         role_name,
@@ -945,7 +1182,7 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
                                 except Exception:
                                     pass
                             else:
-                                shutil.rmtree(ws_dir, ignore_errors=True)
+                                _delete_dir_robust(ws_dir)
 
                     total_tokens = (
                         cumulative_input + cumulative_cached + cumulative_output
@@ -997,11 +1234,25 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
                         status_message=f"Orchestration deadlocked: {blocked_count} units blocked on unresolved prerequisites.",
                     )
 
-                # 5. Dispatch unblocked ready roles concurrently
+                # 5. Dispatch unblocked ready roles concurrently or sequentially
                 dispatched_any = False
                 if wave_count < max_waves:
-                    for r_name, target_paths in ready_roles_map.items():
-                        if r_name not in active_workers:
+                    if effective_concurrent == 1 and active_workers:
+                        # With concurrent_subagents = 1, do not dispatch when a worker is already running
+                        pass
+                    else:
+                        candidate_roles = [
+                            r for r in ready_roles_map if r not in active_workers
+                        ]
+                        if effective_concurrent == 1 and candidate_roles:
+                            candidate_roles.sort(
+                                key=lambda r: last_dispatched_time.get(r, 0.0),
+                                reverse=True,
+                            )
+                            candidate_roles = candidate_roles[:1]
+
+                        for r_name in candidate_roles:
+                            target_paths = ready_roles_map[r_name]
                             if (
                                 effective_batch_size is not None
                                 and effective_batch_size > 0
@@ -1021,29 +1272,51 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
                                     repo_root=root,
                                     model=model_name,
                                 )
-                            else:
-                                try:
-                                    sync_svc = get_singleton(sync.WorkspaceSynchronizer)
-                                    sync_svc.pull(
-                                        ws_dir,
-                                        root,
-                                        r_name,
-                                        dir_scope=dir_scope,
-                                        silent=True,
-                                    )
-                                    sync_svc.refresh_system_files(
-                                        ws_dir,
-                                        root,
-                                        r_name,
-                                        dir_scope=dir_scope,
-                                        silent=True,
-                                    )
-                                except Exception:
-                                    pass
+                            try:
+                                sync_svc = get_singleton(sync.WorkspaceSynchronizer)
+                                sync_svc.pull(
+                                    ws_dir,
+                                    root,
+                                    r_name,
+                                    dir_scope=dir_scope,
+                                    silent=True,
+                                )
+                                sync_svc.refresh_system_files(
+                                    ws_dir,
+                                    root,
+                                    r_name,
+                                    dir_scope=dir_scope,
+                                    silent=True,
+                                )
+                            except Exception:
+                                pass
+
+                            ws_scope = (
+                                dir_scope.strip("/").split("/")[-1]
+                                if dir_scope
+                                else ""
+                            )
+                            ws_target_paths = target_paths
+                            if dir_scope and ws_scope and dir_scope != ws_scope:
+                                ws_target_paths = []
+                                for tp in target_paths:
+                                    if tp.startswith(dir_scope + "/"):
+                                        ws_target_paths.append(
+                                            ws_scope + "/" + tp[len(dir_scope) + 1 :]
+                                        )
+                                    elif tp.startswith("//" + dir_scope + "/"):
+                                        ws_target_paths.append(
+                                            "//"
+                                            + ws_scope
+                                            + "/"
+                                            + tp[len("//" + dir_scope) + 1 :]
+                                        )
+                                    else:
+                                        ws_target_paths.append(tp)
 
                             try:
                                 work_mgr = get_singleton(work.WorkspaceWorkManager)
-                                work_mgr.set_pending_work(ws_dir, target_paths)
+                                work_mgr.set_pending_work(ws_dir, ws_target_paths)
                             except Exception:
                                 pass
 
@@ -1054,16 +1327,29 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
                             dispatch = subagent_coordinator.RoleDispatch(
                                 role_name=r_name,
                                 workspace_dir=ws_dir,
-                                dir_scope=dir_scope,
-                                ready_targets=tuple(target_paths),
+                                dir_scope=ws_scope,
+                                ready_targets=tuple(ws_target_paths),
                                 batch_size=effective_batch_size,
                                 task_prompt=reminder,
                             )
+                            try:
+                                prov = get_singleton(provision.WorkspaceProvisioner)
+                                prov.lock_workspace_directories(
+                                    ws_dir,
+                                    role_name=r_name,
+                                    dir_scope=dir_scope,
+                                    repo_root=root,
+                                )
+                            except Exception:
+                                pass
+
                             handle = harness.dispatch_role(dispatch)
                             active_workers[r_name] = handle
                             assigned_targets_map[r_name] = tuple(target_paths)
                             worker_idle_cycles[r_name] = 0
-                            worker_start_times[r_name] = time.time()
+                            now_t = time.time()
+                            worker_start_times[r_name] = now_t
+                            last_dispatched_time[r_name] = now_t
                             dispatched_any = True
                             print(
                                 f"[ORCHESTRATE] Dispatched role '{r_name}' on {len(target_paths)} target(s): {', '.join(target_paths)}",
@@ -1099,13 +1385,28 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
                     r_name, dir_scope=dir_scope, repo_root=root
                 )
                 if os.path.isdir(ws_dir):
-                    shutil.rmtree(ws_dir, ignore_errors=True)
+                    _delete_dir_robust(ws_dir)
             raise
 
         if active_workers:
             for h in active_workers.values():
                 try:
                     harness.interrupt_role(h)
+                except Exception:
+                    pass
+
+        # Guarantee all role workspaces in scope are unlocked upon orchestrator exit
+        for r_entry in all_scope_roles:
+            r_name = (
+                r_entry.role_name if hasattr(r_entry, "role_name") else str(r_entry)
+            )
+            ws_dir = reg.compute_workspace_dir(
+                r_name, dir_scope=dir_scope, repo_root=root
+            )
+            if os.path.isdir(ws_dir):
+                try:
+                    prov = get_singleton(provision.WorkspaceProvisioner)
+                    prov.unlock_workspace_directories(ws_dir)
                 except Exception:
                     pass
 
@@ -1151,30 +1452,18 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
         self,
         repo_root: str,
         model_name: Optional[str] = None,
-    ) -> Tuple[Optional[int], Optional[int], Optional[int]]:
+    ) -> Tuple[Optional[int], Optional[int], Optional[int], Optional[int]]:
         """Dynamically resolves subagent batch sizes, token limits, and unproductive round thresholds."""
         return _resolve_model_parameters(repo_root, model_name=model_name)
 
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-30T19:55:00Z
-# LAST_CHANGED: 2026-10-30T19:55:00Z
-# CHANGE: Enforce initialization grace period before evaluating idle worker reaping
+# LAST_CHANGED: 2026-11-10T21:20:00Z
+# CHANGE: Add concurrent_subagents resolution, validation, and MRU sequential dispatch
 # COVERAGE_AUDIT: 2026-10-18T19:13:51Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
-
-# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
-def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
-    """Registers constituent singletons into the lifecycle registry."""
-    reg = get_default_registry() if registry is None else registry
-    reg.register_singleton(
-        SubagentCoordinator,
-        keys=[subagent_coordinator.SubagentCoordinator, SubagentCoordinator],
-        tier=agent_session.agent_session,
-    )
-
-
+__initialize__ = auto_initialize()
 _initialize_ = __initialize__
-# --- END CLEANROOM AUTO-GENERATED ---

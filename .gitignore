@@ -26,6 +26,8 @@ __pycache__/
 *.cleanroom.log*
 *.autofab.log*
 /benchmark_*
+/*_*_[0-9]*
+/*_*_[0-9]*.failed
 /benchmarks/runs/
 benchmarks/runs/
 scratch/

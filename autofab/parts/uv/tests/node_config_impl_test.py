@@ -52,7 +52,7 @@ from autofab.parts.dag.lib.dag_storage import (
     RoleAddress,
     UnitAddress,
 )
-from support.lib.lifecycle import LifecycleRegistry, enter_phase
+from support.lib.lifecycle import LifecycleTestCase, enter_phase
 
 
 def _make_dag_node(unit_address: str, role_address: str = "") -> DagNode:
@@ -147,9 +147,9 @@ class FakeManifestLoader:
         return self.manifests.get(node.unit_address)
 
 
-class TestUvNodeConfigImpl(unittest.TestCase):
+class TestUvNodeConfigImpl(LifecycleTestCase):
     def setUp(self) -> None:
-        self.registry = LifecycleRegistry()
+        super().setUp()
         self.file_paths = FakeFilePaths("/workspace")
         self.role_config = FakeRoleConfig()
         self.agent_config = FakeAgentConfig(is_step_mode=True)
@@ -169,7 +169,6 @@ class TestUvNodeConfigImpl(unittest.TestCase):
         self.registry.register_instance(
             self.role_config, keys=[RoleConfig], tier="agent_session"
         )
-        __initialize__(self.registry)
 
     def test_alias_manager_sanitize_text(self) -> None:
         """CUJ: Sanitizing text by masking workspace paths and stripping execution roots."""

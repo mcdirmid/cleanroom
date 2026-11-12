@@ -24,7 +24,7 @@ The attribution coordinator attributes blame by recording a feedback message on 
 
 The attribution coordinator attributes defect blame to a culprit file in a repository workspace by sanitizing the critique explanation to collapse multi-line breaks into a single continuous paragraph without exceeding configured maximum feedback character limits (defaulting to 2000 characters when unconfigured), resolving the culprit file via alias resolution, exact path matching, or normalized relative path suffix matching against registered blame targets, discovering role context from workspace metadata or execution environment, then invoking a build blame target or appending in-band feedback and dirty markers directly to the culprit file in the canonical repository and synchronizing the updated file back to the local role workspace.
 
-The attribution coordinator records task failure for a file target by appending failure diagnostics and marking dirty status in the canonical repository, discovering role context from workspace metadata or execution environment, then synchronizing the updated file back to the local role workspace.
+The attribution coordinator records task failure for a file target by discovering role context from workspace metadata or execution environment: for authoring roles, appending failure diagnostics and marking dirty status in the canonical repository and synchronizing the updated file back to the local role workspace; for auditor roles, recording task failure strictly within the auditor workspace without mutating or appending feedback to the audited file in the canonical repository.
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-30T11:00:00Z

@@ -4,12 +4,7 @@ from __future__ import annotations
 
 import os
 from typing import Optional
-from support.lib.lifecycle import (
-    LifecycleRegistry,
-    Singleton,
-    get_default_registry,
-    get_singleton,
-)
+from support.lib.lifecycle import auto_initialize, get_singleton, singleton
 
 try:
     from support.lib import app_info
@@ -371,10 +366,10 @@ def _format_dsh_patch_yml(
 
 
 # Contract: Realizes workspace instruction customization and role confinement for DeepSeek Harness in agent_session tier.
+@singleton
 class DshWorkspaceConfigurer(dsh_workspace.DshWorkspaceConfigurer):
     """Realizes workspace instruction customization and role confinement for DeepSeek Harness."""
 
-    tier = agent_session.agent_session
 
     # Contract: Configures AGENTS.md and Cordis patch in workspace_dir, returning DshWorkspaceConfinementReport.
     def configure_role_workspace(
@@ -449,17 +444,5 @@ class DshWorkspaceConfigurer(dsh_workspace.DshWorkspaceConfigurer):
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
-
-# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
-def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
-    """Registers constituent singletons into the lifecycle registry."""
-    reg = get_default_registry() if registry is None else registry
-    reg.register_singleton(
-        DshWorkspaceConfigurer,
-        keys=[dsh_workspace.DshWorkspaceConfigurer, DshWorkspaceConfigurer],
-        tier=agent_session.agent_session,
-    )
-
-
+__initialize__ = auto_initialize()
 _initialize_ = __initialize__
-# --- END CLEANROOM AUTO-GENERATED ---

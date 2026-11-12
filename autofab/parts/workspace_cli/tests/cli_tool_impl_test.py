@@ -5,7 +5,7 @@ import unittest
 from contextlib import redirect_stdout
 from typing import Any, List, Optional, Tuple
 
-from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_default_registry
+from support.lib.lifecycle import LifecycleTestCase, enter_phase
 from support.lib import app_info
 from autofab.parts.agent.lib import session as agent_session
 from autofab.parts.workspace_cli.lib import (
@@ -136,9 +136,9 @@ class FakeWorkspaceCommandHandler:
         return 0
 
 
-class WorkspaceToolImplTest(unittest.TestCase):
+class WorkspaceToolImplTest(LifecycleTestCase):
     def setUp(self) -> None:
-        self.registry = LifecycleRegistry()
+        super().setUp()
         self.fake_cmds = FakeWorkspaceCommandHandler()
         self.registry.register_instance(
             self.fake_cmds,

@@ -41,7 +41,7 @@ class WorkspaceChecker(check.WorkspaceChecker):
         """Evaluates dirty work in local workspace and prints ready tasks.
 
         GROUNDING:
-        - Evaluates dirty work using work.WorkspaceWorkManager.compute_role_work_queue,
+        - Evaluates dirty work using work.WorkspaceWorkManager.compute_role_work_queue against the canonical main workspace using canonical main_dir_scope (projecting discovered target paths to the role workspace leaf directory scope) when running in an isolated role workspace,
           relisting assigned pending targets when prior dirty work is already set,
           verifies when gemini-argon is configured on the antigravity harness that the active subagent conversation is executing on gemini-argon,
           for auditor roles aggressively executes verification checks on each discovered ready dirty target,
@@ -105,7 +105,7 @@ class WorkspaceChecker(check.WorkspaceChecker):
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-30T11:00:00Z
-# LAST_CHANGED: 2026-11-09T20:05:00Z
-# CHANGE: Format non-auditor check_files success with feedback/changes resolution notice
+# LAST_CHANGED: 2026-11-11T23:00:00Z
+# CHANGE: Evaluate canonical main_dir_scope when discovering work from main in isolated workspaces
 # SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---

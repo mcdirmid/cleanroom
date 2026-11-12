@@ -107,6 +107,9 @@ is `/repo/parts/widget/widget_spec.md`, and its companion test file is
    `/repo/parts/widget/widget_spec.md` records the epsilon audit tag; and the local role workspace
    file `/ws/epsilon_scope_a/parts/widget/widget_spec.md` carries the same updated content.
 
+3. The agent submits `/ws/epsilon_scope_a/parts/widget/widget_spec.md` when verification checks fail and no uncommitted staged blame exists in the workspace.
+   Observed: an accepted submission outcome; the canonical repository file `/repo/parts/widget/widget_spec.md` is left unmutated without audit tags or dirty markings; and no error is raised.
+
 ## Scenario 7 — Submitting a producer file target
 
 Given: role alpha is not an auditor role; `/ws/alpha_scope_a/parts/widget/widget_spec.md` is a

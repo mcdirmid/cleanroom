@@ -125,9 +125,35 @@ class WorkspaceProvisioner(Singleton[AgentSessionTier], Protocol):
         """
         ...
 
+    @operation
+    def unlock_workspace_directories(self, workspace_dir: str) -> None:
+        """Restores write permissions (0o755) on all directories within a workspace.
+
+        POSTCONDITIONS:
+        - WHEN workspace_dir is a valid directory, MUST traverse all directory entries and set directory permissions to 0o755.
+        """
+        ...
+
+    @operation
+    def lock_workspace_directories(
+        self,
+        workspace_dir: str,
+        role_name: Optional[str] = None,
+        dir_scope: str = "",
+        repo_root: Optional[str] = None,
+    ) -> None:
+        """Locks non-writable directories in a workspace to 0o555 while preserving 0o755 on declared target directories.
+
+        POSTCONDITIONS:
+        - MUST resolve declared writable file patterns for role_name and dir_scope.
+        - MUST retain 0o755 permissions on workspace_dir root, bin directory, and directories containing or leading to writable targets.
+        - MUST set permissions to 0o555 on all other directories containing only read-only contracts or guides.
+        """
+        ...
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-22T13:50:00Z
-# LAST_CHANGED: 2026-10-22T13:50:00Z
-# CHANGE: Restrict workspace provisioning exclusively to target scope and bound methodology package assets
+# LAST_CHANGED: 2026-11-11T14:00:00Z
+# CHANGE: Add dynamic workspace directory locking and unlocking operations
 # SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

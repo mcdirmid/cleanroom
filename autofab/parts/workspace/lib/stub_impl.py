@@ -9,12 +9,7 @@ import re
 import shutil
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
-from support.lib.lifecycle import (
-    LifecycleRegistry,
-    Singleton,
-    get_default_registry,
-    get_singleton,
-)
+from support.lib.lifecycle import auto_initialize, get_singleton, singleton
 from support.lib import app_info
 from autofab.parts.agent.lib import session as agent_session
 from . import role_registry, stub
@@ -564,10 +559,10 @@ def _sync_all_stub_deps(
 
 
 # Contract: Realizes stub.WorkspaceStubSynthesizer singleton.
+@singleton
 class WorkspaceStubSynthesizer(stub.WorkspaceStubSynthesizer):
     """Realizes AST-based test stub synthesis and dependency synchronization."""
 
-    tier = agent_session.agent_session
 
     def __init__(self) -> None:
         pass
@@ -595,8 +590,9 @@ class WorkspaceStubSynthesizer(stub.WorkspaceStubSynthesizer):
         dir_scope: str = "",
     ) -> int:
         """Synchronizes read-only test stubs for all stub_role_deps of a role."""
+        ws_scope = dir_scope.strip("/").split("/")[-1] if dir_scope else ""
         ws_scope_dir = (
-            os.path.join(workspace_dir, dir_scope) if dir_scope else workspace_dir
+            os.path.join(workspace_dir, ws_scope) if ws_scope else workspace_dir
         )
         main_scope_dir = os.path.join(main_root, dir_scope) if dir_scope else main_root
         return _sync_all_stub_deps(
@@ -632,17 +628,5 @@ class WorkspaceStubSynthesizer(stub.WorkspaceStubSynthesizer):
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
-
-# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
-def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
-    """Registers constituent singletons into the lifecycle registry."""
-    reg = get_default_registry() if registry is None else registry
-    reg.register_singleton(
-        WorkspaceStubSynthesizer,
-        keys=[stub.WorkspaceStubSynthesizer, WorkspaceStubSynthesizer],
-        tier=agent_session.agent_session,
-    )
-
-
+__initialize__ = auto_initialize()
 _initialize_ = __initialize__
-# --- END CLEANROOM AUTO-GENERATED ---

@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Optional
-from support.lib.lifecycle import LifecycleRegistry, get_default_registry
+from support.lib.lifecycle import auto_initialize
 from . import (
     attribution_impl,
     coordinate_impl,
@@ -19,13 +19,7 @@ CONSTITUENTS = (
 
 
 # Contract: Initializes the control assembly component by delegating to its constituents.
-def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
-    """Initializes the control assembly component by delegating to its constituents."""
-    reg = get_default_registry() if registry is None else registry
-    for constituent in CONSTITUENTS:
-        constituent.__initialize__(reg)
-
-
+__initialize__ = auto_initialize()
 _initialize_ = __initialize__
 
 # --- CLEANROOM METADATA ---

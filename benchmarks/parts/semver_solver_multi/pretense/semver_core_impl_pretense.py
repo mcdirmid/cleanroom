@@ -183,8 +183,7 @@ class TestTargetImplReal(unittest.TestCase):
         # fixed scenario tests should contain no redundant manual assertions (self.assertEqual, self.assertTrue).
         #
         # Contract violation testing (covering contracted *Error branches in lib):
-        # with self.checked.violating(ExpectedError):
-        #     self.checked.method_that_violates(...)
+        # self.checked.violating(ExpectedError).method_that_violates(...)
         #
         # Collaborator isolation: if earlier calls exhaust a collaborator (e.g. advance a scheduler to finished),
         # subsequent loops on that instance (e.g. runner.run()) exit immediately. Use separate test methods

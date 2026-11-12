@@ -10,12 +10,7 @@ import re
 import stat
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
-from support.lib.lifecycle import (
-    LifecycleRegistry,
-    Singleton,
-    get_default_registry,
-    get_singleton,
-)
+from support.lib.lifecycle import auto_initialize, get_singleton, singleton
 
 try:
     from support.lib import app_info
@@ -228,6 +223,24 @@ def _project_for_role_workspace(content: str, filename: str, is_writable: bool) 
     )
 
 
+def _resolve_main_scope_dir(workspace_dir: str, main_root: str, dir_scope: str) -> str:
+    """Resolves the canonical main scope directory, falling back to main_dir_scope from role metadata."""
+    main_scope_dir = os.path.join(main_root, dir_scope)
+    if not os.path.isdir(main_scope_dir):
+        role_meta_file = os.path.join(workspace_dir, ".autofab_role.json")
+        if os.path.isfile(role_meta_file):
+            try:
+                with open(role_meta_file, "r", encoding="utf-8") as f:
+                    m_data = json.load(f)
+                if m_data.get("main_dir_scope"):
+                    cand = os.path.join(main_root, str(m_data["main_dir_scope"]))
+                    if os.path.isdir(cand):
+                        return cand
+            except Exception:
+                pass
+    return main_scope_dir
+
+
 def _is_runtime_support_library(fname: str) -> bool:
     """Returns True if file is a user-facing runtime API or type stub, excluding internal oracles."""
     base = fname.lower()
@@ -334,10 +347,10 @@ def _find_matching_files(root_dir: str, patterns: Sequence[str]) -> List[str]:
 
 
 # Contract: Realizes sync.WorkspaceSynchronizer singleton.
+@singleton
 class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
     """Realizes two-phase harvesting, inbound pulling, and blame flushing."""
 
-    tier = agent_session.agent_session
 
     def __init__(self) -> None:
         pass
@@ -353,10 +366,16 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
         delete_missing: bool = True,
     ) -> int:
         registry = get_singleton(role_registry.WorkspaceRegistry)
+        try:
+            prov = get_singleton(provision.WorkspaceProvisioner)
+            prov.unlock_workspace_directories(workspace_dir)
+        except Exception:
+            pass
         role_def = registry.resolve_role_definition(role_name, main_root)
 
-        main_scope_dir = os.path.join(main_root, dir_scope)
-        ws_scope_dir = os.path.join(workspace_dir, dir_scope)
+        ws_scope = dir_scope.strip("/").split("/")[-1] if dir_scope else ""
+        main_scope_dir = _resolve_main_scope_dir(workspace_dir, main_root, dir_scope)
+        ws_scope_dir = os.path.join(workspace_dir, ws_scope)
         if not os.path.isdir(main_scope_dir):
             return 0
 
@@ -589,6 +608,11 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
         silent: bool = False,
     ) -> int:
         registry = get_singleton(role_registry.WorkspaceRegistry)
+        try:
+            prov = get_singleton(provision.WorkspaceProvisioner)
+            prov.unlock_workspace_directories(workspace_dir)
+        except Exception:
+            pass
         # Resolve the canonical repository root and the role context of the
         # synchronized workspace before recopying system files from that root.
         canonical_root = registry.discover_repository_root(main_root)
@@ -675,9 +699,9 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
                 )
                 pypaths_cfg = ['"."']
                 if dir_scope:
-                    clean_scope = dir_scope.strip("/").split("/")[0]
-                    pypaths_cfg.append(f'"{clean_scope}"')
-                    pypaths_cfg.append(f'"{clean_scope}/parts"')
+                    ws_scope = dir_scope.strip("/").split("/")[-1]
+                    pypaths_cfg.append(f'"{ws_scope}"')
+                    pypaths_cfg.append(f'"{ws_scope}/parts"')
                 pypaths_str = f"pythonpath = [{', '.join(pypaths_cfg)}]"
                 if "pythonpath" in ptext:
                     ptext = re.sub(
@@ -792,6 +816,20 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
         if not isinstance(entries, list) or not entries:
             return ()
 
+        meta_main_scope = ""
+        meta_ws_scope = ""
+        for desc_name in app_info.get_role_descriptors():
+            m_p = os.path.join(workspace_dir, desc_name)
+            if os.path.isfile(m_p):
+                try:
+                    with open(m_p, "r", encoding="utf-8") as f:
+                        m_data = json.load(f)
+                    meta_main_scope = str(m_data.get("main_dir_scope") or "").strip("/")
+                    meta_ws_scope = str(m_data.get("dir_scope") or "").strip("/")
+                except Exception:
+                    pass
+                break
+
         flushed: List[str] = []
         for entry in entries:
             if not isinstance(entry, dict):
@@ -800,6 +838,16 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
             explanation = entry.get("explanation", "")
             blamed_by = entry.get("blamed_by", "role workspace")
             dirty_reason = entry.get("dirty_reason")
+
+            if (
+                meta_main_scope
+                and meta_ws_scope
+                and meta_main_scope != meta_ws_scope
+                and target.startswith(meta_ws_scope + "/")
+            ):
+                mapped_target = meta_main_scope + "/" + target[len(meta_ws_scope) + 1 :]
+                if os.path.isfile(os.path.join(main_root, mapped_target)):
+                    target = mapped_target
 
             target_path = os.path.join(main_root, target)
 
@@ -825,6 +873,11 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
         dir_scope: str,
     ) -> sync.SyncResult:
         registry = get_singleton(role_registry.WorkspaceRegistry)
+        try:
+            prov = get_singleton(provision.WorkspaceProvisioner)
+            prov.unlock_workspace_directories(workspace_dir)
+        except Exception:
+            pass
         role_def = registry.resolve_role_definition(role_name, main_root)
 
         flushed_blames = list(self.flush_blame_buffer(workspace_dir, main_root))
@@ -846,6 +899,17 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
                     for entry in entries:
                         if isinstance(entry, dict):
                             t = entry.get("target", "").lstrip("/")
+                            ws_scope = (
+                                dir_scope.strip("/").split("/")[-1]
+                                if dir_scope
+                                else ""
+                            )
+                            if (
+                                ws_scope
+                                and dir_scope != ws_scope
+                                and t.startswith(ws_scope + "/")
+                            ):
+                                t = dir_scope + "/" + t[len(ws_scope) + 1 :]
                             t_path = os.path.join(main_root, t)
                             if os.path.isfile(t_path):
                                 tag = (
@@ -861,8 +925,9 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
             except (OSError, json.JSONDecodeError):
                 pass
 
-        ws_scope_dir = os.path.join(workspace_dir, dir_scope)
-        main_scope_dir = os.path.join(main_root, dir_scope)
+        ws_scope = dir_scope.strip("/").split("/")[-1] if dir_scope else ""
+        ws_scope_dir = os.path.join(workspace_dir, ws_scope)
+        main_scope_dir = _resolve_main_scope_dir(workspace_dir, main_root, dir_scope)
 
         if os.path.isdir(ws_scope_dir):
             writable_files = _find_matching_files(
@@ -931,17 +996,5 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
 # QA_AUDIT: 2026-11-06T20:48:05Z
 # --- END CLEANROOM METADATA ---
 
-
-# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
-def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
-    """Registers constituent singletons into the lifecycle registry."""
-    reg = get_default_registry() if registry is None else registry
-    reg.register_singleton(
-        WorkspaceSynchronizer,
-        keys=[sync.WorkspaceSynchronizer, WorkspaceSynchronizer],
-        tier=agent_session.agent_session,
-    )
-
-
+__initialize__ = auto_initialize()
 _initialize_ = __initialize__
-# --- END CLEANROOM AUTO-GENERATED ---

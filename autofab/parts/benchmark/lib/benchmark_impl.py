@@ -11,20 +11,14 @@ import shutil
 import stat
 import subprocess
 import sys
+import tempfile
 import time
 import tomllib
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
 from support.lib import app_info, experiments
-from support.lib.lifecycle import (
-    LifecycleRegistry,
-    Singleton,
-    enter_phase,
-    get_default_registry,
-    get_singleton,
-    system,
-)
+from support.lib.lifecycle import auto_initialize, enter_phase, get_singleton, singleton, system
 from . import benchmark
 
 
@@ -883,6 +877,8 @@ class _VerificationGate:
                 extra_paths.append(unit_full_path.parent)
             if unit_full_path.parent.parent.is_dir():
                 extra_paths.append(unit_full_path.parent.parent)
+            if unit_full_path.parent.parent.parent.is_dir():
+                extra_paths.append(unit_full_path.parent.parent.parent)
         else:
             if unit_full_path.is_dir():
                 extra_paths.append(unit_full_path)
@@ -890,6 +886,8 @@ class _VerificationGate:
                 extra_paths.append(unit_full_path.parent)
             if unit_full_path.parent.parent.is_dir():
                 extra_paths.append(unit_full_path.parent.parent)
+            if unit_full_path.parent.parent.parent.is_dir():
+                extra_paths.append(unit_full_path.parent.parent.parent)
 
         env = dict(os.environ)
         env["PYTHONPATH"] = app_info.assemble_pythonpath_str(
@@ -927,13 +925,50 @@ class _VerificationGate:
             if test_path.is_dir():
                 paths_to_typecheck.append(str(test_path))
         if paths_to_typecheck:
-            proc = subprocess.run(
-                ["uv", "run", "pyright"] + paths_to_typecheck,
-                cwd=repo_root,
-                env=env,
-                capture_output=True,
-                text=True,
-            )
+            pyright_extra = [
+                ".",
+                "autofab",
+                "autofab/support/lib",
+                "autofab_py",
+                "autofab_py/support/lib",
+                "pretense",
+            ]
+            for ep in extra_paths:
+                ep_rel = (
+                    os.path.relpath(ep, repo_root).replace("\\", "/")
+                    if ep.is_relative_to(repo_root)
+                    else str(ep)
+                )
+                if ep_rel not in pyright_extra:
+                    pyright_extra.append(ep_rel)
+            pyright_cfg_data = {
+                "include": [
+                    os.path.relpath(p, repo_root).replace("\\", "/")
+                    if Path(p).is_relative_to(repo_root)
+                    else str(p)
+                    for p in paths_to_typecheck
+                ],
+                "extraPaths": pyright_extra,
+                "reportMissingImports": "error",
+            }
+            with tempfile.NamedTemporaryFile(
+                "w", suffix="_pyright.json", delete=False
+            ) as f_cfg:
+                json.dump(pyright_cfg_data, f_cfg)
+                tmp_cfg_path = f_cfg.name
+            try:
+                proc = subprocess.run(
+                    ["uv", "run", "pyright", "--project", tmp_cfg_path],
+                    cwd=repo_root,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                )
+            finally:
+                try:
+                    os.remove(tmp_cfg_path)
+                except OSError:
+                    pass
             err_match = re.search(r"(\d+)\s+errors?", proc.stdout)
             outcomes.pyright_errors = (
                 int(err_match.group(1))
@@ -1139,22 +1174,40 @@ def _delete_directory_safely(path: Path) -> None:
         except OSError:
             pass
         return
-    for dirpath, dirs, files in os.walk(str(path), followlinks=False):
+    path_str = str(path)
+    if not os.path.exists(path_str):
+        return
+    try:
+        os.chmod(path_str, 0o777)
+    except OSError:
+        pass
+    for dirpath, dirs, files in os.walk(path_str, followlinks=False):
         for d in dirs:
             dp = os.path.join(dirpath, d)
             if not os.path.islink(dp):
                 try:
-                    os.chmod(dp, 0o755)
+                    os.chmod(dp, 0o777)
                 except OSError:
                     pass
         for f in files:
             fp = os.path.join(dirpath, f)
             if not os.path.islink(fp):
                 try:
-                    os.chmod(fp, 0o644)
+                    os.chmod(fp, 0o666)
                 except OSError:
                     pass
-    shutil.rmtree(str(path), ignore_errors=True)
+
+    def _onexc(func: Any, p: str, exc_info: Any) -> None:
+        try:
+            os.chmod(p, 0o777)
+            func(p)
+        except OSError:
+            pass
+
+    try:
+        shutil.rmtree(path_str, onexc=_onexc)
+    except TypeError:
+        shutil.rmtree(path_str, ignore_errors=True)
 
 
 def _has_materialized_artifacts(
@@ -1360,6 +1413,7 @@ def _provision_flight_scope(
     pretense: bool = False,
     method: Optional[str] = None,
     model_identifier: Optional[str] = None,
+    experiment: Optional[str] = None,
 ) -> Tuple[str, Path]:
     """Provisions a descriptive sequential flight scope directory under benchmarks/runs/
     (e.g. benchmarks/runs/ring_buffer_qwen_moe_1) preserving the package structure of
@@ -1500,16 +1554,20 @@ def _provision_flight_scope(
         dirs_to_update.append(flight_parts_dir)
     for toml_dir in dirs_to_update:
         pipe_name = effective_method
+        exp_list = [e.strip() for e in experiment.split(",") if e.strip()] if experiment else []
+        exp_line = f"\nexperiments = {json.dumps(exp_list)}\n" if exp_list else "\n"
         for fname in app_info.get_config_filenames():
             c_toml = toml_dir / fname
             if c_toml.is_file():
                 try:
                     content = c_toml.read_text(encoding="utf-8")
+                    updated = content
                     if "pipeline =" not in content:
-                        c_toml.write_text(
-                            content.strip() + f'\npipeline = "{pipe_name}"\n',
-                            encoding="utf-8",
-                        )
+                        updated = updated.strip() + f'\npipeline = "{pipe_name}"\n'
+                    if exp_list and "experiments =" not in updated:
+                        updated = updated.strip() + exp_line
+                    if updated != content:
+                        c_toml.write_text(updated, encoding="utf-8")
                 except OSError:
                     pass
         if not any(
@@ -1517,7 +1575,7 @@ def _provision_flight_scope(
         ):
             try:
                 (toml_dir / app_info.DEFAULT_CONFIG_FILE).write_text(
-                    f'methodology = "//autofab_py"\npipeline = "{pipe_name}"\n',
+                    f'methodology = "//autofab_py"\npipeline = "{pipe_name}"{exp_line}',
                     encoding="utf-8",
                 )
             except OSError:
@@ -1526,14 +1584,18 @@ def _provision_flight_scope(
     env_file = flight_scope_dir / ".env"
     if not env_file.exists():
         try:
-            env_file.write_text(
+            env_content = (
                 "PYTHONFAULTHANDLER=1\n"
                 "PRETENSE_TIMEOUT=90.0\n"
                 f"{app_info.ENV_PREFIX}_VERIFY_TIMEOUT=90.0\n"
-                f"{app_info.ENV_PREFIX}_RETAIN_WORKSPACES=1\n"
-                "AUTOFAB_RETAIN_WORKSPACES=1\n",
-                encoding="utf-8",
             )
+            if os.environ.get(f"{app_info.ENV_PREFIX}_RETAIN_WORKSPACES") == "1":
+                env_content += f"{app_info.ENV_PREFIX}_RETAIN_WORKSPACES=1\n"
+            if os.environ.get("AUTOFAB_RETAIN_WORKSPACES") == "1":
+                env_content += "AUTOFAB_RETAIN_WORKSPACES=1\n"
+            if experiment:
+                env_content += f"AUTOFAB_EXPERIMENT={experiment}\n"
+            env_file.write_text(env_content, encoding="utf-8")
         except OSError:
             pass
 
@@ -2255,6 +2317,7 @@ def _execute_flight(
             pretense=is_pretense,
             method=effective_method,
             model_identifier=model_name,
+            experiment=experiment,
         )
         flight_scope_dir = repo_root / flight_scope
         flight_unit_rel = str(flight_unit_dir.relative_to(repo_root)).replace("\\", "/")
@@ -2366,11 +2429,7 @@ def _execute_flight(
                 sys.stdout.write("=" * 72 + "\n\n")
                 sys.stdout.flush()
 
-                clean_env = {
-                    **os.environ,
-                    "AUTOFAB_RETAIN_WORKSPACES": "1",
-                    f"{app_info.ENV_PREFIX}_RETAIN_WORKSPACES": "1",
-                }
+                clean_env = dict(os.environ)
                 proc = subprocess.Popen(
                     cmd,
                     cwd=repo_root,
@@ -2405,11 +2464,7 @@ def _execute_flight(
                     output_lines.append(timeout_msg)
                 output_text = "".join(output_lines)
             else:
-                clean_env = {
-                    **os.environ,
-                    "AUTOFAB_RETAIN_WORKSPACES": "1",
-                    f"{app_info.ENV_PREFIX}_RETAIN_WORKSPACES": "1",
-                }
+                clean_env = dict(os.environ)
                 proc = subprocess.run(
                     cmd,
                     cwd=repo_root,
@@ -2779,10 +2834,10 @@ def _save_flight_json(record: benchmark.FlightRecord, logs_dir: Path) -> Path:
 # ==============================================================================
 
 
+@singleton
 class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
     """System service realizing empirical model evaluation and telemetry reporting."""
 
-    tier = system
 
     def __init__(self) -> None:
         bwd = os.environ.get("BUILD_WORKSPACE_DIRECTORY", "")
@@ -3424,22 +3479,10 @@ if __name__ == "__main__":
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-19T18:45:00Z
-# LAST_CHANGED: 2026-11-10T08:43:00Z
-# CHANGE: Retain failed benchmark workspaces in-place with failed status without .failed renaming, recycling only finished runs
+# LAST_CHANGED: 2026-11-11T23:15:00Z
+# CHANGE: Resolve flight scope container in verification gate pythonpath and type-checking paths
 # SPEC_QA_AUDIT: 2026-10-19T19:35:00Z
 # --- END CLEANROOM METADATA ---
 
-
-# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
-def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
-    """Registers constituent singletons into the lifecycle registry."""
-    reg = get_default_registry() if registry is None else registry
-    reg.register_singleton(
-        BenchmarkEvaluator,
-        keys=[BenchmarkEvaluator, benchmark.BenchmarkEvaluator],
-        tier=system,
-    )
-
-
+__initialize__ = auto_initialize()
 _initialize_ = __initialize__
-# --- END CLEANROOM AUTO-GENERATED ---

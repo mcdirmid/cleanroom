@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from support.lib.lifecycle import LifecycleRegistry, enter_phase
+from support.lib.lifecycle import LifecycleRegistry, LifecycleTestCase, enter_phase
 from autofab.parts.agent.lib import session as agent_session
 from autofab.parts.subagent.lib import (
     subagent_asm,
@@ -14,7 +14,7 @@ from autofab.parts.subagent.lib import (
 )
 
 
-class SubagentAsmTest(unittest.TestCase):
+class SubagentAsmTest(LifecycleTestCase):
     """Test cases for subagent_asm assembly."""
 
     def test_assembly_initialization(self) -> None:

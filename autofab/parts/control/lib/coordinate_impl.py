@@ -1,13 +1,7 @@
 from __future__ import annotations
 import os
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
-from support.lib.lifecycle import (
-    LifecycleRegistry,
-    LifecycleResolutionError,
-    Singleton,
-    get_default_registry,
-    get_singleton,
-)
+from support.lib.lifecycle import LifecycleResolutionError, auto_initialize, get_singleton, singleton
 
 try:
     from support.lib import app_info
@@ -230,10 +224,10 @@ def _node_display_alias(node: dag_storage.DagNode) -> str:
     return f"{pkg}/{unit_name}" if pkg else unit_name
 
 
+@singleton
 class SessionCoordinator(coordinate.SessionCoordinator):
     """Central session control coordinator facade."""
 
-    tier = agent_session.agent_session
 
     def __init__(self) -> None:
         self._nodes: List[dag_storage.DagNode] = []
@@ -767,17 +761,5 @@ class SessionCoordinator(coordinate.SessionCoordinator):
 # COVERAGE_AUDIT: 2026-10-15T19:49:56Z
 # --- END CLEANROOM METADATA ---
 
-
-# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
-def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
-    """Registers constituent singletons into the lifecycle registry."""
-    reg = get_default_registry() if registry is None else registry
-    reg.register_singleton(
-        SessionCoordinator,
-        keys=[SessionCoordinator, coordinate.SessionCoordinator],
-        tier=SessionCoordinator.tier,
-    )
-
-
+__initialize__ = auto_initialize()
 _initialize_ = __initialize__
-# --- END CLEANROOM AUTO-GENERATED ---

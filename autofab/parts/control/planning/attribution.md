@@ -26,14 +26,14 @@ Defect attribution allows agents encountering irrecoverable upstream flaws to se
 - An attribution coordinator records a failure diagnostic on the target node in graph storage. [record_failure_diagnostic]
 - An attribution coordinator preserves dirty status on a failed target node in graph storage. [preserve_target_dirty]
 - An attribution coordinator resolves culprit files via alias resolution, exact path match, or normalized relative path suffix matching, validates critique formatting and character limits, and executes blame mutations on disk. [execute_file_blame_mutation]
-- An attribution coordinator resolves target files, appends failure feedback, and marks dirty status on disk. [execute_file_failure_mutation]
+- An attribution coordinator resolves target files and executes task failure according to role context, appending failure diagnostics and marking dirty status in the canonical repository for authoring roles, or recording task failure strictly within the auditor workspace without mutating or appending feedback to the audited file in the canonical repository for auditor roles. [execute_file_failure_mutation]
 
 ### Woven Contracts
 
 - When blaming a valid upstream dependency with a single-paragraph critique, the coordinator records feedback, marks the culprit dirty, attributes the source, and fails in-batch dependents. [assert_blame_target_is_upstream, assert_blame_target_receives_feedback, assert_single_paragraph_critique, assert_source_dependencies_clean, record_blame_feedback, mark_culprit_dirty, mark_source_attributed, propagate_in_batch_failure]
 - When recording a task failure, the coordinator logs the failure diagnostic, preserves the target's dirty state, and fails dependent in-batch nodes. [record_failure_diagnostic, preserve_target_dirty, propagate_in_batch_failure]
 - When blaming a culprit file, the coordinator validates critique formatting, executes build blame targets or mutates in-band metadata, and synchronizes files. [assert_single_paragraph_critique, execute_file_blame_mutation, src_metadata: [append_feedback_entry, update_metadata_disk]]
-- When failing a file target, the coordinator appends failure diagnostics, marks dirty status, and synchronizes files. [execute_file_failure_mutation, src_metadata: [append_feedback_entry, mark_dirty_status, update_metadata_disk]]
+- When failing a file target, the coordinator appends failure diagnostics and marks dirty status in canonical metadata for authoring roles, while isolating task failure to the local workspace for auditor roles. [execute_file_failure_mutation, src_metadata: [append_feedback_entry, mark_dirty_status, update_metadata_disk]]
 
 ## Grounding
 

@@ -524,9 +524,7 @@ else
 fi
 check "c20 target class import" "$tmp/c20/tests/worker_impl_test.py" 'from lib\.worker_impl import'
 check "c20 worker imported" "$tmp/c20/tests/worker_impl_test.py" 'Worker,'
-check "c20 initialize imported" "$tmp/c20/tests/worker_impl_test.py" '__initialize__,'
-check "c20 test class" "$tmp/c20/tests/worker_impl_test.py" 'class WorkerImplTest(unittest\.TestCase):'
-check "c20 setup method" "$tmp/c20/tests/worker_impl_test.py" 'def setUp(self) -> None:'
+check "c20 test class" "$tmp/c20/tests/worker_impl_test.py" 'class WorkerImplTest(LifecycleTestCase):'
 check "c20 cuj method" "$tmp/c20/tests/worker_impl_test.py" 'def test_initialization(self) -> None:'
 check "c20 unittest main" "$tmp/c20/tests/worker_impl_test.py" 'if __name__ == "__main__":'
 check "c20 untested req header" "$tmp/c20/tests/worker_impl_test.py" '# Untested requirements:'
@@ -585,7 +583,7 @@ else
 fi
 check "c21 service class import" "$tmp/c21/tests/service_impl_test.py" 'from lib\.service_impl import'
 check "c21 service imported" "$tmp/c21/tests/service_impl_test.py" 'Service,'
-check "c21 service test class" "$tmp/c21/tests/service_impl_test.py" 'class ServiceImplTest(unittest\.TestCase):'
+check "c21 service test class" "$tmp/c21/tests/service_impl_test.py" 'class ServiceImplTest(LifecycleTestCase):'
 check "c21 untested requirement" "$tmp/c21/tests/service_impl_test.py" '# - \[Service\] The service initializes system state\.'
 
 # Case 22: parent package BUILD.bazel contains _ext dependency -> excluded from tests/BUILD.bazel

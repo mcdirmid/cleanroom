@@ -90,8 +90,18 @@ Given: role alpha is commissioned for scope_a at `/ws/alpha_scope_a`.
 1. The provisioner commissions the alpha workspace.
    Observed: test runner configuration in the workspace root restricts test discovery paths strictly to the local workspace `tests/` directory.
 
+## Scenario 9 — Dynamic directory locking and unlocking across agent rounds
+
+Given: role alpha is commissioned for scope_a at `/ws/alpha_scope_a` with writable targets under `alpha/lib` and read-only dependencies under `beta/high` and `guides`.
+
+1. The provisioner locks workspace directories for role alpha.
+   Observed: read-only directories `beta/high` and `guides` have permissions set to 0o555, while workspace root `/ws/alpha_scope_a`, `bin/`, and `alpha/lib` retain 0o755 permissions.
+
+2. The provisioner unlocks workspace directories for role alpha.
+   Observed: all directories across the workspace tree are restored to 0o755 permissions.
+
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-10-11T03:14:20Z
-CHANGE: Author workspace provision concrete scenarios
+LAST_CHANGED: 2026-11-11T14:00:00Z
+CHANGE: Add dynamic workspace directory locking and unlocking scenario
 -->

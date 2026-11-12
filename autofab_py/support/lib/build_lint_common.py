@@ -991,6 +991,19 @@ def check_singleton_registration(file_path: str) -> list[str]:
         and node.name == "__initialize__"
     }
 
+    # Top-level invocation of __initialize__ or _initialize_ is prohibited
+    for node in tree.body:
+        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
+            call_id = ""
+            if isinstance(node.value.func, ast.Name):
+                call_id = node.value.func.id
+            elif isinstance(node.value.func, ast.Attribute):
+                call_id = node.value.func.attr
+            if call_id in ("__initialize__", "_initialize_"):
+                errors.append(
+                    f"{file_path}:{node.lineno}: error: top-level invocation of '{call_id}()' is prohibited; lifecycle registration is invoked by test harnesses or runtime entry points, never at module import time"
+                )
+
     for node in ast.walk(tree):
         if isinstance(node, ast.Call):
             func = node.func
@@ -1035,6 +1048,22 @@ def check_lib_structure(file_path: str) -> list[str]:
         base_name = os.path.basename(file_path)
         is_impl = base_name.endswith("_impl.py") or base_name.endswith("_asm.py")
         if base_name.endswith("_impl.py"):
+            has_singleton_dec = any(
+                isinstance(node, ast.ClassDef)
+                and any(
+                    (isinstance(d, ast.Name) and d.id in ("singleton", "singleton_type"))
+                    or (isinstance(d, ast.Attribute) and d.attr in ("singleton", "singleton_type"))
+                    or (
+                        isinstance(d, ast.Call)
+                        and (
+                            (isinstance(d.func, ast.Name) and d.func.id in ("singleton", "singleton_type"))
+                            or (isinstance(d.func, ast.Attribute) and d.func.attr in ("singleton", "singleton_type"))
+                        )
+                    )
+                    for d in node.decorator_list
+                )
+                for node in tree.body
+            )
             has_singleton = any(
                 isinstance(node, ast.ClassDef)
                 and (
@@ -1059,13 +1088,19 @@ def check_lib_structure(file_path: str) -> list[str]:
                 for node in tree.body
             )
             has_init = any(
-                isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-                and node.name == "__initialize__"
+                (
+                    isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                    and node.name in ("__initialize__", "_initialize_")
+                )
+                or (
+                    isinstance(node, ast.Assign)
+                    and any(getattr(t, "id", "") in ("__initialize__", "_initialize_") for t in node.targets)
+                )
                 for node in tree.body
             )
-            if has_singleton and not has_init:
+            if has_singleton and not has_singleton_dec and not has_init:
                 errors.append(
-                    f"{file_path}: error: implementation module defines Singleton class but is missing '__initialize__'"
+                    f"{file_path}: error: implementation class implements a singleton protocol or declares 'tier' but is missing '@singleton' decorator"
                 )
     except Exception:
         pass
@@ -1128,11 +1163,17 @@ def check_asm_structure(module_path: str, spec_file: Optional[str] = None) -> li
                             for elt in node.value.elts
                             if isinstance(elt, ast.Name)
                         ]
+                elif isinstance(t, ast.Name) and t.id in ("__initialize__", "_initialize_"):
+                    has_initialize = True
         elif (
             isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-            and node.name == "__initialize__"
+            and node.name in ("__initialize__", "_initialize_")
         ):
             has_initialize = True
+
+    # If assembly defines CONSTITUENTS, automatic reflection handles initialization
+    if actual_constituents is not None:
+        has_initialize = True
 
     if actual_constituents is None:
         errors.append(
@@ -1462,7 +1503,9 @@ def _get_broad_exception_pragma_lines(source: str) -> set[int]:
     return lines
 
 
-def _is_handler_reified(h: ast.ExceptHandler) -> bool:
+def _is_handler_reified(
+    h: ast.ExceptHandler, enclosing_scope: Optional[ast.AST] = None
+) -> bool:
     """Determine whether the caught exception variable is legitimately reified,
     stored into a result structure/attribute, passed to a failure handler,
     or returned/yielded, rather than silently suppressed."""
@@ -1532,6 +1575,25 @@ def _is_handler_reified(h: ast.ExceptHandler) -> bool:
             if stmt.value and _references_tracked(stmt.value):
                 return True
 
+    # If the handler assigned the caught exception to a local variable (tracked_names),
+    # verify if the enclosing function or loop scope reifies that variable into a call, return, or attribute.
+    if enclosing_scope is not None and len(tracked_names) > 1:
+        for stmt in ast.walk(enclosing_scope):
+            if stmt is h:
+                continue
+            if isinstance(stmt, (ast.Return, ast.Yield, ast.YieldFrom)):
+                if stmt.value and _references_tracked(stmt.value):
+                    return True
+            elif isinstance(stmt, ast.Call):
+                if _is_call_reification(stmt):
+                    return True
+            elif isinstance(stmt, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+                targets = stmt.targets if isinstance(stmt, ast.Assign) else [stmt.target]
+                for t in targets:
+                    if isinstance(t, (ast.Attribute, ast.Subscript)):
+                        if stmt.value and _references_tracked(stmt.value):
+                            return True
+
     return False
 
 
@@ -1552,8 +1614,21 @@ def check_exception_eating(file_path: str) -> list[str]:
 
     pragma_lines = _get_broad_exception_pragma_lines(source)
 
+    parent_map: dict[ast.AST, ast.AST] = {}
+    for parent in ast.walk(tree):
+        for child in ast.iter_child_nodes(parent):
+            parent_map[child] = parent
+
     for node in ast.walk(tree):
         if isinstance(node, (ast.Try, ast.TryStar)):
+            enclosing_scope: Optional[ast.AST] = None
+            curr = parent_map.get(node)
+            while curr is not None:
+                if isinstance(curr, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Module)):
+                    enclosing_scope = curr
+                    break
+                curr = parent_map.get(curr)
+
             for h in node.handlers:
                 is_broad = False
                 if h.type is None:
@@ -1583,7 +1658,7 @@ def check_exception_eating(file_path: str) -> list[str]:
                     if bool(check_lines & pragma_lines):
                         continue
 
-                    if _is_handler_reified(h):
+                    if _is_handler_reified(h, enclosing_scope):
                         continue
 
                     type_str = ast.unparse(h.type) if h.type else "bare except"
@@ -2486,6 +2561,176 @@ def check_no_lifecycle_scope_leaks(
     return errors
 
 
+ALLOW_SINGLETON_MONKEYPATCH_RE = re.compile(
+    r"#\s*(?:cleanroom:\s*allow-singleton-monkeypatch|pragma:\s*allow-singleton-monkeypatch)\b"
+)
+
+
+def check_no_singleton_monkeypatching(
+    file_path: str, tree: Optional[ast.AST] = None
+) -> list[str]:
+    """Check that test modules do not mutate or monkeypatch methods/attributes on live singleton instances."""
+    errors: list[str] = []
+    if not os.path.exists(file_path) and tree is None:
+        return errors
+
+    lines: list[str] = []
+    if os.path.exists(file_path):
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                lines = f.read().splitlines()
+        except OSError:
+            pass
+
+    if tree is None:
+        try:
+            content = "\n".join(lines)
+            tree = ast.parse(content, filename=file_path)
+        except (SyntaxError, OSError):
+            return errors
+
+    tree_body = tree.body if isinstance(tree, ast.Module) else []
+    for cls_node in [n for n in tree_body if isinstance(n, ast.ClassDef)]:
+        # Skip @fake collaborator classes
+        is_fake_cls = False
+        for dec in cls_node.decorator_list:
+            if (
+                isinstance(dec, ast.Call)
+                and isinstance(dec.func, ast.Name)
+                and dec.func.id == "fake"
+            ):
+                is_fake_cls = True
+        if is_fake_cls:
+            continue
+
+        for method in [
+            n
+            for n in cls_node.body
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+        ]:
+            singleton_vars: set[str] = set()
+            for stmt in ast.walk(method):
+                if isinstance(stmt, (ast.Assign, ast.AnnAssign)):
+                    val = stmt.value
+                    if isinstance(val, ast.Call):
+                        is_get_singleton = False
+                        if (
+                            isinstance(val.func, ast.Name)
+                            and val.func.id == "get_singleton"
+                        ):
+                            is_get_singleton = True
+                        elif (
+                            isinstance(val.func, ast.Attribute)
+                            and val.func.attr == "get_singleton"
+                        ):
+                            is_get_singleton = True
+                        if is_get_singleton:
+                            stmt_targets: Sequence[ast.AST] = (
+                                stmt.targets
+                                if isinstance(stmt, ast.Assign)
+                                else [stmt.target]
+                            )
+                            for tgt in stmt_targets:
+                                if isinstance(tgt, ast.Name):
+                                    singleton_vars.add(tgt.id)
+
+            for node in ast.walk(method):
+                node_targets: Sequence[ast.AST] = []
+                if isinstance(node, ast.Assign):
+                    node_targets = node.targets
+                elif isinstance(node, ast.AnnAssign):
+                    node_targets = [node.target]
+
+                for tgt in node_targets:
+                    if isinstance(tgt, ast.Attribute):
+                        matched = False
+                        var_name = ""
+                        # Case 1: self.sut.<attr> or cls.sut.<attr>
+                        if (
+                            isinstance(tgt.value, ast.Attribute)
+                            and isinstance(tgt.value.value, ast.Name)
+                            and tgt.value.value.id in ("self", "cls")
+                            and tgt.value.attr == "sut"
+                        ):
+                            matched = True
+                            var_name = f"{tgt.value.value.id}.sut"
+                        # Case 2: singleton_var.<attr>
+                        elif (
+                            isinstance(tgt.value, ast.Name)
+                            and tgt.value.id in singleton_vars
+                        ):
+                            matched = True
+                            var_name = tgt.value.id
+
+                        if matched:
+                            lineno = getattr(
+                                tgt, "lineno", getattr(node, "lineno", 1)
+                            )
+                            line_txt = (
+                                lines[lineno - 1]
+                                if 0 <= lineno - 1 < len(lines)
+                                else ""
+                            )
+                            if not ALLOW_SINGLETON_MONKEYPATCH_RE.search(
+                                line_txt
+                            ):
+                                errors.append(
+                                    f"{file_path}:{lineno}: error: monkeypatching method or attribute "
+                                    f"'{tgt.attr}' on live singleton instance '{var_name}' is prohibited; "
+                                    f"configure test scenarios via domain inputs or declare a '@fake(Protocol)' class"
+                                )
+
+                # setattr call
+                if (
+                    isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Name)
+                    and node.func.id == "setattr"
+                ):
+                    if len(node.args) >= 2:
+                        first_arg = node.args[0]
+                        attr_arg = node.args[1]
+                        attr_name = (
+                            attr_arg.value
+                            if isinstance(attr_arg, ast.Constant)
+                            and isinstance(attr_arg.value, str)
+                            else "attr"
+                        )
+                        matched = False
+                        var_name = ""
+                        if (
+                            isinstance(first_arg, ast.Attribute)
+                            and isinstance(first_arg.value, ast.Name)
+                            and first_arg.value.id in ("self", "cls")
+                            and first_arg.attr == "sut"
+                        ):
+                            matched = True
+                            var_name = f"{first_arg.value.id}.sut"
+                        elif (
+                            isinstance(first_arg, ast.Name)
+                            and first_arg.id in singleton_vars
+                        ):
+                            matched = True
+                            var_name = first_arg.id
+
+                        if matched:
+                            lineno = getattr(node, "lineno", 1)
+                            line_txt = (
+                                lines[lineno - 1]
+                                if 0 <= lineno - 1 < len(lines)
+                                else ""
+                            )
+                            if not ALLOW_SINGLETON_MONKEYPATCH_RE.search(
+                                line_txt
+                            ):
+                                errors.append(
+                                    f"{file_path}:{lineno}: error: monkeypatching method or attribute "
+                                    f"'{attr_name}' on live singleton instance '{var_name}' is prohibited; "
+                                    f"configure test scenarios via domain inputs or declare a '@fake(Protocol)' class"
+                                )
+
+    return errors
+
+
 def check_no_top_level_probes(
     file_path: str,
     tree: Optional[ast.AST] = None,
@@ -2701,7 +2946,12 @@ def check_test_imports(lib_pkg: str, file_path: str) -> list[str]:
                     name = alias.name.split(".")[-1]
                     if name and os.path.isfile(os.path.join(lib_dir, name + ".py")):
                         expected_import = f"{expected_prefix}.{name}"
-                        if alias.name != expected_import:
+                        unit_name = os.path.basename(os.path.dirname(lib_dir))
+                        allowed_imports = {
+                            expected_import,
+                            f"{unit_name}.lib.{name}",
+                        }
+                        if alias.name not in allowed_imports:
                             errors.append(
                                 f"{file_path}:{node.lineno}: error: import of lib module '{alias.name}' must be 'import {expected_import}'"
                             )
@@ -2724,7 +2974,14 @@ def check_test_imports(lib_pkg: str, file_path: str) -> list[str]:
                     )
                 elif os.path.isfile(os.path.join(lib_dir, name + ".py")):
                     expected_mod = f"{expected_prefix}.{name}"
-                    if node.module != expected_mod and node.module != expected_prefix:
+                    unit_name = os.path.basename(os.path.dirname(lib_dir))
+                    allowed_mods = {
+                        expected_mod,
+                        expected_prefix,
+                        f"{unit_name}.lib.{name}",
+                        f"{unit_name}.lib",
+                    }
+                    if node.module not in allowed_mods:
                         errors.append(
                             f"{file_path}:{node.lineno}: error: import of lib module '{node.module}' must be 'from {expected_mod} import ...'"
                         )
@@ -5138,6 +5395,14 @@ def maintain_impl_lifecycle(module_path: str, spec_file: Optional[str] = None) -
             isinstance(n, ast.Assign)
             and any(getattr(t, "id", "") == "_initialize_" for t in n.targets)
         )
+        or (
+            isinstance(n, ast.Expr)
+            and isinstance(n.value, ast.Call)
+            and (
+                (isinstance(n.value.func, ast.Name) and n.value.func.id in ("__initialize__", "_initialize_"))
+                or (isinstance(n.value.func, ast.Attribute) and n.value.func.attr in ("__initialize__", "_initialize_"))
+            )
+        )
     ]
     if init_nodes:
         lines = new_content.splitlines(keepends=True)
@@ -5150,7 +5415,24 @@ def maintain_impl_lifecycle(module_path: str, spec_file: Optional[str] = None) -
         if any(l.strip() for l in after_lines):
             new_content += "".join(after_lines).rstrip() + "\n"
 
-    if not singleton_nodes:
+    has_singleton_dec = any(
+        isinstance(node, ast.ClassDef)
+        and any(
+            (isinstance(d, ast.Name) and d.id in ("singleton", "singleton_type"))
+            or (isinstance(d, ast.Attribute) and d.attr in ("singleton", "singleton_type"))
+            or (
+                isinstance(d, ast.Call)
+                and (
+                    (isinstance(d.func, ast.Name) and d.func.id in ("singleton", "singleton_type"))
+                    or (isinstance(d.func, ast.Attribute) and d.func.attr in ("singleton", "singleton_type"))
+                )
+            )
+            for d in node.decorator_list
+        )
+        for node in singleton_nodes
+    )
+
+    if not singleton_nodes or has_singleton_dec:
         new_content = new_content.rstrip() + "\n"
         if new_content != content:
             write_text(module_path, new_content)

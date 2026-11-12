@@ -4,7 +4,7 @@ import json
 import os
 import tempfile
 import unittest
-from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_default_registry
+from support.lib.lifecycle import LifecycleTestCase, enter_phase
 from autofab.parts.agent.lib import session as agent_session
 from autofab.parts.metadata.lib import src_metadata
 from support.lib import app_info
@@ -14,9 +14,9 @@ from autofab.parts.workspace_cli.lib import (
 )
 
 
-class WorkspacePendingImplTest(unittest.TestCase):
+class WorkspacePendingImplTest(LifecycleTestCase):
     def setUp(self) -> None:
-        self.registry = LifecycleRegistry()
+        super().setUp()
         self.pending_mgr = pending_impl.WorkspacePendingManager()
         self.registry.register_instance(
             self.pending_mgr,

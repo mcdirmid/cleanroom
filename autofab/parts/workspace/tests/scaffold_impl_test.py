@@ -8,7 +8,7 @@ import sys
 import tempfile
 import unittest
 import zipfile
-from support.lib.lifecycle import LifecycleRegistry, enter_phase
+from support.lib.lifecycle import LifecycleTestCase, enter_phase
 from autofab.parts.agent.lib import session as agent_session
 from autofab.parts.workspace.lib import (
     roles,
@@ -18,9 +18,9 @@ from autofab.parts.workspace.lib import (
 from support.lib import app_info
 
 
-class WorkspaceScaffoldImplTest(unittest.TestCase):
+class WorkspaceScaffoldImplTest(LifecycleTestCase):
     def setUp(self) -> None:
-        self.registry = LifecycleRegistry()
+        super().setUp()
         self.scaffolder = scaffold_impl.WorkspaceScaffolder()
         self.registry.register_instance(
             self.scaffolder,

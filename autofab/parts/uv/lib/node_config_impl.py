@@ -18,13 +18,7 @@ except ImportError:
         import app_info  # type: ignore
     except ImportError:
         app_info = None  # type: ignore
-from support.lib.lifecycle import (
-    LifecycleRegistry,
-    LifecycleResolutionError,
-    Singleton,
-    get_default_registry,
-    get_singleton,
-)
+from support.lib.lifecycle import LifecycleResolutionError, auto_initialize, get_singleton, singleton
 
 
 # Contract: CommandVerificationCheck - Realizes verification checking by executing a configured command in a subprocess.
@@ -415,8 +409,8 @@ def _load_per_node_info(n: dag_storage.DagNode) -> node_config.PerNodeInfo:
     )
 
 
+@singleton
 class NodeConfig(node_config.NodeConfig):
-    tier = agent_session
 
     def __init__(self) -> None:
         self._per_node_cache: Dict[dag_storage.DagNode, node_config.PerNodeInfo] = {}
@@ -599,8 +593,8 @@ _WORKSPACE_PATTERN: re.Pattern[str] = re.compile(
 )
 
 
+@singleton
 class AliasManager(file_alias.AliasManager):
-    tier = agent_session
 
     def __init__(self) -> None:
         self._aliases: Dict[str, file_alias.FileAlias] = {}
@@ -703,22 +697,5 @@ class AliasManager(file_alias.AliasManager):
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
-
-# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
-def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
-    """Registers constituent singletons into the lifecycle registry."""
-    reg = get_default_registry() if registry is None else registry
-    reg.register_singleton(
-        NodeConfig,
-        keys=[NodeConfig, node_config.NodeConfig],
-        tier=agent_session,
-    )
-    reg.register_singleton(
-        AliasManager,
-        keys=[AliasManager, file_alias.AliasManager],
-        tier=agent_session,
-    )
-
-
+__initialize__ = auto_initialize()
 _initialize_ = __initialize__
-# --- END CLEANROOM AUTO-GENERATED ---

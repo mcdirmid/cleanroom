@@ -93,6 +93,9 @@ class WatchdogMonitor:
     """Coordinates execution watchdogs using software timers and faulthandler alarms."""
 
     @staticmethod
+    def resolve_timeout(default: float = 45.0) -> float: ...
+
+    @staticmethod
     def arm(timeout_seconds: float, target_name: Optional[str] = None) -> Any: ...
 
     @staticmethod

@@ -2,14 +2,7 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional, Sequence, Set
 
-from support.lib.lifecycle import (
-    LifecycleRegistry,
-    Singleton,
-    SystemTier,
-    get_default_registry,
-    get_singleton,
-    system,
-)
+from support.lib.lifecycle import auto_initialize, get_singleton, singleton
 
 from . import dag_config
 from . import subgraph
@@ -18,10 +11,10 @@ from .dag_storage import DagNode, DagStorage
 # Requirements specified in subgraph_impl.pyi
 
 
+@singleton
 class DagSubgraph(subgraph.DagSubgraph):
     """Coordinates topological subgraph queries and visit bounds across graph storage."""
 
-    tier = system
 
     def __init__(self) -> None:
         self._topological_order: List[DagNode] = []
@@ -210,17 +203,7 @@ class DagSubgraph(subgraph.DagSubgraph):
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
-
-# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
-def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
-    """Registers constituent singletons into the lifecycle registry."""
-    reg = get_default_registry() if registry is None else registry
-    reg.register_singleton(
-        DagSubgraph,
-        keys=[DagSubgraph, subgraph.DagSubgraph],
-        tier=system,
-    )
-
-
+__initialize__ = auto_initialize()
 _initialize_ = __initialize__
-# --- END CLEANROOM AUTO-GENERATED ---
+
+

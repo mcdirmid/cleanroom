@@ -4,7 +4,7 @@ import os
 import stat
 import tempfile
 import unittest
-from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_default_registry
+from support.lib.lifecycle import LifecycleTestCase, enter_phase
 from autofab.parts.agent.lib import session as agent_session
 from autofab.parts.workspace.lib import (
     role_registry,
@@ -71,9 +71,9 @@ def _make_roles():
     return [low_role, lib_role, test_role]
 
 
-class WorkspaceStubImplTest(unittest.TestCase):
+class WorkspaceStubImplTest(LifecycleTestCase):
     def setUp(self) -> None:
-        self.registry = LifecycleRegistry()
+        super().setUp()
         self.ws_registry = FakeWorkspaceRegistry(_make_roles())
         self.registry.register_instance(
             self.ws_registry,

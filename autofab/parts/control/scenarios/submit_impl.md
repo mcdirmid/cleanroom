@@ -147,6 +147,10 @@ is `/repo/parts/widget/widget_spec.md`, and its companion test file is
    in the canonical file; and the component's own synchronization of the updated canonical file
    back to the role workspace.
 
+3. The agent submits `/ws/epsilon_scope_a/parts/widget/widget_spec.md` when verification checks fail and no uncommitted staged blame exists in the workspace.
+   Observed: an accepted submission outcome; the canonical repository file `/repo/parts/widget/widget_spec.md` is left unmutated without audit tags or dirty markings; and no error is raised.
+   Realized by: the component's verification evaluation recognizing an auditor submission without staged blame, politely returning an accepted outcome without mutating canonical repository metadata.
+
 ### Scenario 7 — Submitting a producer file target
 
 Given: role alpha is not an auditor role; `/ws/alpha_scope_a/parts/widget/widget_spec.md` is a

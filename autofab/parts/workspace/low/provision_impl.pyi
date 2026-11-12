@@ -44,6 +44,9 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
 
         POSTCONDITIONS:
         - MUST create the role workspace working tree by copying workspace roots, project configurations, and build definitions, resolving the target scope's bound methodology package from autofab_files_ext.AUTOFAB_CONFIG_FILE, evaluating conditional markdown directives against active experiments when copying markdown files, and projecting active methodology runtime support libraries directly to ./support/lib and the role's assigned companion guide to ./guides, while strictly avoiding copying templates, unneeded configuration files, or unbound repository root directories.
+        - MUST project the target scope into the workspace under the leaf directory scope name, omitting enclosing container path prefixes from the role workspace working tree.
+        - MUST record main_dir_scope alongside dir_scope in the role descriptor.
+        - MUST configure test runner pythonpath to include the workspace root, leaf scope root, and leaf scope parts.
         - MUST configure type-checking to cover the workspace without directory exclusions.
         - MUST strip readme declaration attributes from provisioned pyproject.toml to prevent build backend failures.
         - WHEN the role declares writable target patterns, MUST initialize a local git tracking repository (git init) configured with local committer identity (Autofab Worker <worker@autofab.local>), writing .gitignore and recording an initial commit snapshot (omitting git repository initialization for auditor roles with zero writable targets).
@@ -170,6 +173,32 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
         GROUNDING:
         - Resolves role definition and delegates test stub synchronization to
           stub.WorkspaceStubSynthesizer.sync_all_stub_deps.
+        """
+        ...
+
+    @operation
+    @override
+    def unlock_workspace_directories(self, workspace_dir: str) -> None:
+        """Restores write permissions (0o755) on all directories within a workspace.
+
+        GROUNDING:
+        - Traverses workspace_dir and restores directory permissions to 0o755 (workspace_filesystem_mechanics).
+        """
+        ...
+
+    @operation
+    @override
+    def lock_workspace_directories(
+        self,
+        workspace_dir: str,
+        role_name: Optional[str] = None,
+        dir_scope: str = "",
+        repo_root: Optional[str] = None,
+    ) -> None:
+        """Locks non-writable directories in a workspace to 0o555 while preserving 0o755 on declared target directories.
+
+        GROUNDING:
+        - Resolves declared writable patterns and restricts non-writable directories to 0o555 (workspace_filesystem_mechanics).
         """
         ...
 

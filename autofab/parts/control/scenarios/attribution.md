@@ -116,6 +116,12 @@ role alpha, whose verification failed with the diagnostics
    local role workspace file `/ws/alpha_scope_a/parts/widget/widget_spec.md` carries the same
    updated content.
 
+2. The agent is auditing `/ws/epsilon_scope_a/parts/widget/widget_spec.md` as auditor role epsilon,
+   and records the failure for that file target with diagnostics `audit check failed`.
+   Observed: an accepted attribution outcome; task failure is recorded locally in the workspace;
+   and the canonical repository file `/repo/parts/widget/widget_spec.md` is left unchanged and
+   unmutated without feedback or dirty status.
+
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-30T11:00:00Z
 LAST_CHANGED: 2026-10-30T11:00:00Z

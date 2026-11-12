@@ -18,14 +18,15 @@ Complex software development methodologies partition work into specialized roles
 ### Contracts
 
 - A subagent coordinator resets preexisting role workspaces upon initiating orchestration to ensure clean initial state. [reset_preexisting_role_workspaces]
-- A subagent coordinator dynamically resolves subagent batch sizes, conversation token limits, and maximum unproductive rounds thresholds from declarative model configurations matching designated model names or identifiers. [resolve_model_execution_parameters]
+- A subagent coordinator dynamically resolves subagent batch sizes, conversation token limits, maximum unproductive rounds thresholds, and concurrent subagents bounds from declarative model configurations, validating that concurrent subagents must be 1 if set and rejecting antigravity models if concurrent subagents is set. [resolve_model_execution_parameters]
 - A subagent coordinator evaluates DAG work queues across declared roles, dynamically identifying roles with ready work up to an optional target role boundary without static role hardcoding. [evaluate_ready_work_queues]
 - A subagent coordinator restricts work queue evaluation to a designated target unit and its transitive upstream dependencies when a target unit is specified. [bound_evaluation_to_target_unit]
 - A subagent coordinator ensures absent role workspaces are commissioned via workspace provisioning on demand before dispatching directives, persisting effective batch size bounds into workspace configurations. [commission_absent_workspaces]
-- A subagent coordinator dispatches role directives to unblocked ready roles concurrently, purging preexisting blame buffers and tracking active worker handles without static wave partitioning. [dispatch_concurrent_role_workers]
+- A subagent coordinator dispatches role directives to unblocked ready roles concurrently when concurrent subagents is unset, or strictly limits concurrency to 1 worker prioritizing the most recently run role when concurrent subagents is 1, purging preexisting blame buffers and tracking active worker handles without static wave partitioning. [dispatch_concurrent_role_workers]
 - A subagent coordinator periodically polls active workers through the harness adapter at a configurable polling interval (defaulting to 10 seconds), reaping completed rounds, consuming workspace blame buffers, and propagating blame defects into the build graph. [poll_active_role_workers]
 - A subagent coordinator tracks consecutive unproductive rounds yielding zero submitted and zero blamed targets, halting orchestration when unproductive rounds on unresolved targets exceed a threshold (defaulting to 5). [detect_unproductive_turn_impasse]
 - A subagent coordinator detects repeated identical blame delivery on unchanged targets, terminating and recommissioning worker workspaces on two consecutive identical blames and injecting a restart advisory into subsequent task prompts, halting orchestration upon exceeding 10 restarts, while clearing consecutive blame tracking when an author role submits modifications to a previously blamed target, and preventing concurrent dispatch of downstream roles while upstream dependency workers are actively executing or scheduled for concurrent dispatch. [detect_repeated_blame_circuit_breaker]
+- A subagent coordinator detects consecutive rejections between worker roles and upstream auditor roles, terminating active rounds and recommissioning both workspaces with clean baselines upon two consecutive rejections on a target without intervening author code modifications, clearing session state and consecutive rejection tracking for that target, and injecting clean-slate advisories into subsequent task prompts. [detect_consecutive_rejection_impasse]
 - A subagent coordinator injects an actionable reminder directive into subsequent role dispatch directives when an active worker completes a round without submitting, blaming, or failing assigned targets, reminding the worker that conversational commentary without tools is prohibited and requiring verification and resolution via submit, blame, or fail. [remind_worker_on_unresolved_round]
 - A subagent coordinator emits real-time progress notifications detailing role dispatch, round outcomes, token consumption, and work queue state, and publishes authoritative orchestration state snapshots detailing active scopes, execution wave iterations, active running workers, idle completed workers, assigned targets, and convergence outcomes to external coordination storage across role dispatch, round completion, and DAG convergence events. [emit_realtime_orchestration_telemetry]
 - A subagent coordinator drives the supervision loop until all units in scope evaluate clean, a role reports failure, or maximum wave limits are reached. [orchestrate_pipeline_convergence]
@@ -38,7 +39,7 @@ Complex software development methodologies partition work into specialized roles
 
 - When initiating orchestration, the coordinator resets preexisting role workspaces, resolves model execution parameters, drives pipeline convergence until clean convergence or failure, and cleans up upon cancellation. [reset_preexisting_role_workspaces, resolve_model_execution_parameters, orchestrate_pipeline_convergence, delete_role_workspaces_on_convergence, interrupt_active_workers_on_cancellation, decommission_workspaces_on_cancellation]
 - When evaluating work queues, the coordinator commissions absent workspaces with batch size bounds, restricts evaluation to target units when specified, and dispatches concurrent role workers without static wave partitioning. [evaluate_ready_work_queues, bound_evaluation_to_target_unit, commission_absent_workspaces, dispatch_concurrent_role_workers]
-- When supervising active workers, the coordinator periodically polls active workers through the harness adapter, detects unproductive turn impasses, detects repeated blame circuit breakers, reminds workers on unresolved rounds, emits real-time telemetry, and aggregates cumulative telemetry. [poll_active_role_workers, detect_unproductive_turn_impasse, detect_repeated_blame_circuit_breaker, remind_worker_on_unresolved_round, emit_realtime_orchestration_telemetry, aggregate_cumulative_telemetry]
+- When supervising active workers, the coordinator periodically polls active workers through the harness adapter, detects unproductive turn impasses, detects repeated blame circuit breakers, detects consecutive rejection impasses, reminds workers on unresolved rounds, emits real-time telemetry, and aggregates cumulative telemetry. [poll_active_role_workers, detect_unproductive_turn_impasse, detect_repeated_blame_circuit_breaker, detect_consecutive_rejection_impasse, remind_worker_on_unresolved_round, emit_realtime_orchestration_telemetry, aggregate_cumulative_telemetry]
 
 ## Grounding
 
@@ -56,7 +57,7 @@ Complex software development methodologies partition work into specialized roles
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-11-09T22:10:00Z
-CHANGE: Authoritative orchestration state snapshot publishing across dispatch, harvest, and convergence events
+LAST_CHANGED: 2026-11-10T21:20:00Z
+CHANGE: Add concurrent_subagents resolution, validation, and MRU sequential dispatch contracts
 SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->

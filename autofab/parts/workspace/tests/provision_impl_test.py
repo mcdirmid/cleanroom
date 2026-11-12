@@ -8,7 +8,7 @@ import tempfile
 from typing import Any, Optional, Sequence
 import unittest
 import zipfile
-from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_default_registry
+from support.lib.lifecycle import LifecycleTestCase, enter_phase
 from autofab.parts.agent.lib import session as agent_session
 from autofab.parts.workspace.lib import (
     provision,
@@ -210,6 +210,7 @@ class FakeWorkspaceScaffolder:
         max_feedback_chars: Optional[int] = None,
         fused_roles: Optional[Sequence[str]] = None,
         common_spec_roles: Optional[Sequence[str]] = None,
+        main_dir_scope: Optional[str] = None,
     ) -> None:
         role_cfg = os.path.join(workspace_dir, app_info.DEFAULT_ROLE_DESCRIPTOR)
         data: dict[str, Any] = {
@@ -218,6 +219,8 @@ class FakeWorkspaceScaffolder:
             "parts_dir": dir_scope,
             "dir_scope": dir_scope,
         }
+        if main_dir_scope:
+            data["main_dir_scope"] = main_dir_scope
         if model:
             data["model"] = model
         if batch_size is not None:
@@ -292,9 +295,9 @@ class FakeWorkspaceScaffolder:
             pass
 
 
-class WorkspaceProvisionImplTest(unittest.TestCase):
+class WorkspaceProvisionImplTest(LifecycleTestCase):
     def setUp(self) -> None:
-        self.registry = LifecycleRegistry()
+        super().setUp()
         self.ws_registry = FakeWorkspaceRegistry(_make_roles())
         self.registry.register_instance(
             self.ws_registry,
@@ -910,14 +913,110 @@ class WorkspaceProvisionImplTest(unittest.TestCase):
                 os.path.isfile(os.path.join(ws_author, "bin", "checkpoint"))
             )
 
+    def test_commission_multi_segment_dir_scope_ancestor_inits_and_pythonpath(
+        self,
+    ) -> None:
+        """Requirement: Multi-segment dir_scope projects leaf scope into workspace and configures pythonpath."""
+        with tempfile.TemporaryDirectory() as td:
+            repo_root = os.path.join(td, "repo")
+            scope_dir = os.path.join(repo_root, "benchmarks", "runs", "flight_1")
+            os.makedirs(scope_dir, exist_ok=True)
+            with open(
+                os.path.join(repo_root, "benchmarks", "__init__.py"),
+                "w",
+                encoding="utf-8",
+            ) as f:
+                f.write('"""Benchmarks container."""\n')
+            with open(
+                os.path.join(repo_root, "pyproject.toml"), "w", encoding="utf-8"
+            ) as f:
+                f.write(
+                    "[project]\nname = 'test'\n[tool.pytest.ini_options]\npythonpath = ['.']\n"
+                )
+
+            desc = self.provisioner.commission(
+                role_name="lib",
+                dir_scope="benchmarks/runs/flight_1",
+                repo_root=repo_root,
+            )
+            ws_dir = desc.workspace_dir
+            # Verify leaf scope is projected and ancestor container dirs are NOT created
+            self.assertFalse(
+                os.path.exists(os.path.join(ws_dir, "benchmarks"))
+            )
+            self.assertTrue(
+                os.path.isdir(os.path.join(ws_dir, "flight_1"))
+            )
+
+            # Verify pyproject.toml pythonpath contains flight_1 and flight_1/parts
+            ws_pyproj = os.path.join(ws_dir, "pyproject.toml")
+            self.assertTrue(os.path.isfile(ws_pyproj))
+            with open(ws_pyproj, "r", encoding="utf-8") as f:
+                pyproj_content = f.read()
+            self.assertIn('"flight_1"', pyproj_content)
+            self.assertIn('"flight_1/parts"', pyproj_content)
+            self.assertNotIn('"benchmarks"', pyproj_content)
+
+    def test_lock_and_unlock_workspace_directories(self) -> None:
+        """Tests that lock_workspace_directories locks read-only directories to 0o555 and unlock restores to 0o755."""
+        with tempfile.TemporaryDirectory() as td:
+            repo_root = os.path.join(td, "repo")
+            os.makedirs(repo_root, exist_ok=True)
+            with open(
+                os.path.join(repo_root, "pyproject.toml"), "w", encoding="utf-8"
+            ) as f:
+                f.write("[project]\nname = 'test'\n")
+            desc = self.provisioner.commission(
+                role_name="lib",
+                dir_scope="test_scope",
+                repo_root=repo_root,
+            )
+            ws_dir = desc.workspace_dir
+            guides_dir = os.path.join(ws_dir, "guides")
+            os.makedirs(guides_dir, exist_ok=True)
+            support_dir = os.path.join(ws_dir, "support", "lib")
+            os.makedirs(support_dir, exist_ok=True)
+            lib_dir = os.path.join(ws_dir, "test_scope", "parts", "part_a", "lib")
+            os.makedirs(lib_dir, exist_ok=True)
+            with open(os.path.join(lib_dir, "part_a_impl.py"), "w") as f:
+                f.write("# lib target\n")
+            low_dir = os.path.join(ws_dir, "test_scope", "parts", "part_a", "low")
+            os.makedirs(low_dir, exist_ok=True)
+            with open(os.path.join(low_dir, "part_a.pyi"), "w") as f:
+                f.write("# contract\n")
+
+            # Lock workspace
+            self.provisioner.lock_workspace_directories(
+                ws_dir, role_name="lib", dir_scope="test_scope", repo_root=repo_root
+            )
+
+            # lib_dir and bin and root must be 0o755
+            self.assertEqual(os.stat(ws_dir).st_mode & 0o777, 0o755)
+            self.assertEqual(os.stat(os.path.join(ws_dir, "bin")).st_mode & 0o777, 0o755)
+            self.assertEqual(os.stat(lib_dir).st_mode & 0o777, 0o755)
+
+            # guides, support, and low must be 0o555
+            self.assertEqual(os.stat(guides_dir).st_mode & 0o777, 0o555)
+            self.assertEqual(os.stat(support_dir).st_mode & 0o777, 0o555)
+            self.assertEqual(os.stat(low_dir).st_mode & 0o777, 0o555)
+
+            # Unlock workspace
+            self.provisioner.unlock_workspace_directories(ws_dir)
+
+            # All directories must now be 0o755
+            self.assertEqual(os.stat(guides_dir).st_mode & 0o777, 0o755)
+            self.assertEqual(os.stat(support_dir).st_mode & 0o777, 0o755)
+            self.assertEqual(os.stat(low_dir).st_mode & 0o777, 0o755)
+            self.assertEqual(os.stat(lib_dir).st_mode & 0o777, 0o755)
+
 
 if __name__ == "__main__":
     unittest.main()
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-20T23:45:00Z
-# LAST_CHANGED: 2026-10-29T00:48:00Z
-# CHANGE: Propagate common_spec_roles in FakeWorkspaceScaffolder.write_role_metadata
+# LAST_CHANGED: 2026-11-11T14:00:00Z
+# CHANGE: Add test_lock_and_unlock_workspace_directories
 # COVERAGE_AUDIT: 2026-10-15T17:42:47Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

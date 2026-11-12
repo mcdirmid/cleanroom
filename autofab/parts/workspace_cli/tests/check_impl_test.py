@@ -10,7 +10,7 @@ import tempfile
 import unittest
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_default_registry
+from support.lib.lifecycle import LifecycleTestCase, enter_phase
 from autofab.parts.agent.lib import session as agent_session
 from autofab.parts.control.lib import submit
 from support.lib import app_info
@@ -218,10 +218,22 @@ class FakeWorkspaceProvisioner:
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         shutil.copy2(src, dst)
 
+    def unlock_workspace_directories(self, workspace_dir: str) -> None:
+        pass
 
-class WorkspaceCheckImplTest(unittest.TestCase):
+    def lock_workspace_directories(
+        self,
+        workspace_dir: str,
+        role_name: Optional[str] = None,
+        dir_scope: str = "",
+        repo_root: Optional[str] = None,
+    ) -> None:
+        pass
+
+
+class WorkspaceCheckImplTest(LifecycleTestCase):
     def setUp(self) -> None:
-        self.registry = LifecycleRegistry()
+        super().setUp()
         self.phase_cm = enter_phase(agent_session.agent_session, registry=self.registry)
         self.phase_cm.__enter__()
 

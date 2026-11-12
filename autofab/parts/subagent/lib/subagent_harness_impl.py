@@ -10,12 +10,7 @@ import subprocess
 import time
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
-from support.lib.lifecycle import (
-    LifecycleRegistry,
-    Singleton,
-    get_default_registry,
-    get_singleton,
-)
+from support.lib.lifecycle import auto_initialize, get_singleton, singleton
 from autofab.parts.agent.lib import session as agent_session
 from autofab.parts.workspace.lib import role_registry
 from autofab.parts.workspace_cli.lib import work
@@ -142,12 +137,12 @@ def _is_auditor_role(role_name: str) -> bool:
         return False
 
 
+@singleton
 class CommandHarnessAdapter(
     subagent_harness.CommandHarnessAdapter,
 ):
     """Realizes subagent turn execution through process command templates."""
 
-    tier = agent_session.agent_session
 
     def __init__(
         self,
@@ -229,6 +224,17 @@ class CommandHarnessAdapter(
     # Contract: return unique task handle tracking the running turn
     def dispatch_role(self, dispatch: subagent_coordinator.RoleDispatch) -> str:
         """Dispatches work directive to a subagent bound to the role workspace."""
+        try:
+            from autofab.parts.workspace.lib import provision
+            prov = get_singleton(provision.WorkspaceProvisioner)
+            prov.lock_workspace_directories(
+                dispatch.workspace_dir,
+                role_name=dispatch.role_name,
+                dir_scope=dispatch.dir_scope,
+            )
+        except Exception:
+            pass
+
         self._task_counter += 1
         handle = f"task_{dispatch.role_name}_{self._task_counter}_{int(time.time())}"
 
@@ -303,68 +309,76 @@ class CommandHarnessAdapter(
                 failure_reason=f"Task handle '{task_handle}' not found.",
             )
 
-        elapsed = time.time() - task.start_time
-        failure_reason: Optional[str] = None
-        status = "clean"
+        try:
+            elapsed = time.time() - task.start_time
+            failure_reason: Optional[str] = None
+            status = "clean"
 
-        if not self.simulation_mode and task.proc is not None:
-            try:
-                if self.timeout_seconds is not None and self.timeout_seconds > 0:
-                    task.proc.wait(timeout=self.timeout_seconds)
-                else:
+            if not self.simulation_mode and task.proc is not None:
+                try:
+                    if self.timeout_seconds is not None and self.timeout_seconds > 0:
+                        task.proc.wait(timeout=self.timeout_seconds)
+                    else:
+                        task.proc.wait()
+                except subprocess.TimeoutExpired:
+                    task.proc.kill()
                     task.proc.wait()
-            except subprocess.TimeoutExpired:
-                task.proc.kill()
-                task.proc.wait()
-                return subagent_coordinator.RoleRoundResult(
-                    role=task.dispatch.role_name,
-                    status="failed",
-                    failure_reason=f"Subagent process timed out after {self.timeout_seconds} seconds.",
-                    wall_clock_seconds=elapsed,
-                )
+                    return subagent_coordinator.RoleRoundResult(
+                        role=task.dispatch.role_name,
+                        status="failed",
+                        failure_reason=f"Subagent process timed out after {self.timeout_seconds} seconds.",
+                        wall_clock_seconds=elapsed,
+                    )
 
-            if task.proc.returncode != 0:
-                tail_msg = ""
-                if os.path.isfile(task.log_file):
+                if task.proc.returncode != 0:
+                    tail_msg = ""
+                    if os.path.isfile(task.log_file):
+                        try:
+                            with open(
+                                task.log_file, "r", encoding="utf-8", errors="replace"
+                            ) as lf:
+                                lines = lf.readlines()
+                                tail_msg = "".join(lines[-10:])
+                        except OSError:
+                            pass
+                    status = "failed"
+                    failure_reason = f"Process exited with non-zero status {task.proc.returncode}.\n{tail_msg}".strip()
+
+                # Note: await_role primarily relies on blame buffer and pending work difference per contract.
+
+            blamed = _read_blame_buffer(task.dispatch.workspace_dir)
+            for cand in (app_info.DEFAULT_BLAME_BUFFER_FILE,):
+                p = os.path.join(task.dispatch.workspace_dir, cand)
+                if os.path.isfile(p):
                     try:
-                        with open(
-                            task.log_file, "r", encoding="utf-8", errors="replace"
-                        ) as lf:
-                            lines = lf.readlines()
-                            tail_msg = "".join(lines[-10:])
+                        os.remove(p)
                     except OSError:
                         pass
-                status = "failed"
-                failure_reason = f"Process exited with non-zero status {task.proc.returncode}.\n{tail_msg}".strip()
+            if blamed and status != "failed":
+                status = "blamed"
 
-            # Note: await_role primarily relies on blame buffer and pending work difference per contract.
+            work_mgr = get_singleton(work.WorkspaceWorkManager)
+            post_pending = set(work_mgr.get_pending_work(task.dispatch.workspace_dir))
+            submitted = [t for t in task.pre_pending if t not in post_pending]
 
-        blamed = _read_blame_buffer(task.dispatch.workspace_dir)
-        for cand in (app_info.DEFAULT_BLAME_BUFFER_FILE,):
-            p = os.path.join(task.dispatch.workspace_dir, cand)
-            if os.path.isfile(p):
-                try:
-                    os.remove(p)
-                except OSError:
-                    pass
-        if blamed and status != "failed":
-            status = "blamed"
+            telemetry = _parse_token_usage_from_log(task.log_file)
 
-        work_mgr = get_singleton(work.WorkspaceWorkManager)
-        post_pending = set(work_mgr.get_pending_work(task.dispatch.workspace_dir))
-        submitted = [t for t in task.pre_pending if t not in post_pending]
-
-        telemetry = _parse_token_usage_from_log(task.log_file)
-
-        return subagent_coordinator.RoleRoundResult(
-            role=task.dispatch.role_name,
-            status=status,
-            submitted_targets=tuple(submitted),
-            blamed_targets=tuple(blamed),
-            failure_reason=failure_reason,
-            telemetry=telemetry,
-            wall_clock_seconds=elapsed,
-        )
+            return subagent_coordinator.RoleRoundResult(
+                role=task.dispatch.role_name,
+                status=status,
+                submitted_targets=tuple(submitted),
+                blamed_targets=tuple(blamed),
+                failure_reason=failure_reason,
+                telemetry=telemetry,
+                wall_clock_seconds=elapsed,
+            )
+        finally:
+            try:
+                from autofab.parts.workspace.lib import provision
+                prov = get_singleton(provision.WorkspaceProvisioner)
+                prov.unlock_workspace_directories(task.dispatch.workspace_dir)
+            except Exception:
+                pass
 
     # Contract: when subagent process has terminated, return role round result
     # Contract: when subagent process is still running, return None without blocking or termination
@@ -418,10 +432,10 @@ class CommandHarnessAdapter(
         pass
 
 
+@singleton
 class HarnessRegistry(subagent_harness.HarnessRegistry):
     """Realizes harness registry and resolution for external agent platforms."""
 
-    tier = agent_session.agent_session
 
     def __init__(self) -> None:
         self._installed_harnesses: Dict[
@@ -501,26 +515,5 @@ HarnessResolver = HarnessRegistry
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
-
-# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
-def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
-    """Registers constituent singletons into the lifecycle registry."""
-    reg = get_default_registry() if registry is None else registry
-    reg.register_singleton(
-        CommandHarnessAdapter,
-        keys=[CommandHarnessAdapter, subagent_harness.CommandHarnessAdapter],
-        tier=CommandHarnessAdapter.tier,
-    )
-    reg.register_singleton(
-        HarnessRegistry,
-        keys=[
-            subagent_harness.HarnessRegistry,
-            subagent_harness.HarnessResolver,
-            HarnessRegistry,
-        ],
-        tier=agent_session.agent_session,
-    )
-
-
+__initialize__ = auto_initialize()
 _initialize_ = __initialize__
-# --- END CLEANROOM AUTO-GENERATED ---

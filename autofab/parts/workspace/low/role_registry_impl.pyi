@@ -101,7 +101,7 @@ class WorkspaceRegistry(role_registry.WorkspaceRegistry):
 
         GROUNDING:
         - Returns the supplied custom_dest unchanged when provided.
-        - Otherwise sanitizes the role name and dir_scope through
+        - Otherwise sanitizes the role name and leaf directory scope name through
           sanitize_directory_folder_name, replacing directory separator characters with
           underscores to compose a single workspace folder name, builds that folder name
           as a file_paths.WorkspacePath through

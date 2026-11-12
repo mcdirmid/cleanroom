@@ -6,7 +6,7 @@ import os
 import tempfile
 import unittest
 from typing import Dict, List, Optional, Sequence
-from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_default_registry
+from support.lib.lifecycle import LifecycleTestCase, enter_phase
 from autofab.parts.agent.lib import session as agent_session
 from autofab.parts.control.lib import work_scheduler
 from autofab.parts.metadata.lib import src_metadata
@@ -289,9 +289,9 @@ class MockDagStorage:
         self.materialized.append(node)
 
 
-class WorkspaceWorkImplTest(unittest.TestCase):
+class WorkspaceWorkImplTest(LifecycleTestCase):
     def setUp(self) -> None:
-        self.registry = LifecycleRegistry()
+        super().setUp()
         from autofab.parts.workspace_cli.lib import workspace_cli_asm
 
         workspace_cli_asm.__initialize__(self.registry)

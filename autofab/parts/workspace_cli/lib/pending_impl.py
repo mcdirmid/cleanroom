@@ -3,13 +3,7 @@ import json
 import os
 import re
 from typing import List, Optional, Sequence
-from support.lib.lifecycle import (
-    LifecycleRegistry,
-    LifecycleResolutionError,
-    Singleton,
-    get_default_registry,
-    get_singleton,
-)
+from support.lib.lifecycle import LifecycleResolutionError, auto_initialize, get_singleton, singleton
 from autofab.parts.agent.lib import session as agent_session
 from autofab.parts.dag.lib import dag_storage
 from autofab.parts.metadata.lib import src_metadata
@@ -165,10 +159,10 @@ def _normalize_unit_stem(name: str) -> str:
 
 
 # Contract: Realizes pending buffer tracking, target removal, and dirty checks in agent_session tier.
+@singleton
 class WorkspacePendingManager(pending.WorkspacePendingManager):
     """Realizes pending buffer tracking, target removal, and dirty checks."""
 
-    tier = agent_session.agent_session
 
     def __init__(self) -> None:
         pass
@@ -505,17 +499,5 @@ class WorkspacePendingManager(pending.WorkspacePendingManager):
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
-
-# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
-def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
-    """Registers constituent singletons into the lifecycle registry."""
-    reg = get_default_registry() if registry is None else registry
-    reg.register_singleton(
-        WorkspacePendingManager,
-        keys=[WorkspacePendingManager, pending.WorkspacePendingManager],
-        tier=WorkspacePendingManager.tier,
-    )
-
-
+__initialize__ = auto_initialize()
 _initialize_ = __initialize__
-# --- END CLEANROOM AUTO-GENERATED ---

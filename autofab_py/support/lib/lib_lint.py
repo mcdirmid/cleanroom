@@ -456,6 +456,9 @@ def generate_lib_skeleton(
                 )
                 dep_imports.append(f"from {mod} import {names_str}")
 
+    if is_impl:
+        dep_imports.append("from support.lib.lifecycle import get_singleton, singleton")
+
     for imp in sorted(set(dep_imports)):
         lines.append(imp)
 
@@ -688,6 +691,8 @@ def generate_lib_skeleton(
                         lines.append("")
                 lines.append("")
             elif is_impl:
+                if is_cls_singleton:
+                    lines.append("@singleton")
                 lines.append(
                     f"class {cls_name}{type_params_formatted}{bases_formatted}:"
                 )
@@ -767,30 +772,7 @@ def generate_lib_skeleton(
                 lines.append("")
                 lines.append("")
 
-    if is_impl and singleton_classes:
-        lines.append(AUTO_INIT_START)
-        lines.append(
-            "def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:"
-        )
-        lines.append(
-            '    """Registers constituent singletons into the lifecycle registry."""'
-        )
-        lines.append(
-            "    reg = get_default_registry() if registry is None else registry"
-        )
-        for cls_name, bases, tier_val in singleton_classes:
-            keys = [cls_name] + [b for b in bases if b != cls_name]
-            keys_formatted = ", ".join(keys)
-            lines.append("    reg.register_singleton(")
-            lines.append(f"        {cls_name},")
-            lines.append(f"        keys=[{keys_formatted}],")
-            lines.append(f"        tier={tier_val},")
-            lines.append("    )")
-        lines.append("")
-        lines.append("")
-        lines.append("_initialize_ = __initialize__")
-        lines.append(AUTO_INIT_END)
-        lines.append("")
+
 
     return "\n".join(lines).strip() + "\n"
 
@@ -922,6 +904,13 @@ def main() -> int:
         )
 
         has_declared_deps = bool(raw_deps or args.pyi or pyi_paths or allowed_deps)
+        if os.path.exists(args.module_path):
+            pre_singleton_errors = check_singleton_registration(args.module_path)
+            if pre_singleton_errors:
+                for err in pre_singleton_errors:
+                    sys.stderr.write(err + "\n")
+                return 1
+
         if (
             has_declared_deps
             and os.path.exists(args.module_path)
@@ -1136,6 +1125,13 @@ def main() -> int:
                 allowed_deps.add(s)
 
         has_declared_deps = bool(raw_deps or args.pyi or pyi_paths or allowed_deps)
+        if os.path.exists(args.module_path):
+            pre_singleton_errors = check_singleton_registration(args.module_path)
+            if pre_singleton_errors:
+                for err in pre_singleton_errors:
+                    sys.stderr.write(err + "\n")
+                return 1
+
         if (
             has_declared_deps
             and os.path.exists(args.module_path)

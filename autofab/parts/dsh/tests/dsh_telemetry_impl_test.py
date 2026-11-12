@@ -11,15 +11,15 @@ from typing import Any
 import unittest
 from unittest.mock import patch
 
-from support.lib.lifecycle import LifecycleRegistry, enter_phase
+from support.lib.lifecycle import LifecycleTestCase, enter_phase
 from autofab.parts.agent.lib import session as agent_session
 from autofab.parts.dsh.lib import dsh_telemetry, dsh_telemetry_impl
 
 
-class DshTelemetryImplTest(unittest.TestCase):
+class DshTelemetryImplTest(LifecycleTestCase):
     def setUp(self) -> None:
+        super().setUp()
         self.test_dir = tempfile.mkdtemp()
-        self.registry = LifecycleRegistry()
         dsh_telemetry_impl.__initialize__(self.registry)
         self.phase_cm = enter_phase(agent_session.agent_session, registry=self.registry)
         self.phase_cm.__enter__()

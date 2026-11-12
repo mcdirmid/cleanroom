@@ -11,7 +11,7 @@ import unittest
 from contextlib import redirect_stdout
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_singleton
+from support.lib.lifecycle import LifecycleTestCase, enter_phase
 from autofab.parts.agent.lib import session as agent_session
 from support.lib import app_info, experiments
 from autofab.parts.control.lib import (
@@ -120,6 +120,18 @@ class FakeWorkspaceProvisioner:
     ) -> None:
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         shutil.copy2(src, dst)
+
+    def unlock_workspace_directories(self, workspace_dir: str) -> None:
+        pass
+
+    def lock_workspace_directories(
+        self,
+        workspace_dir: str,
+        role_name: Optional[str] = None,
+        dir_scope: str = "",
+        repo_root: Optional[str] = None,
+    ) -> None:
+        pass
 
 
 class FakeWorkspaceSynchronizer:
@@ -372,9 +384,12 @@ class FakeWorkspaceChecker:
         )
 
 
-class WorkspaceCommandsImplTest(unittest.TestCase):
+class WorkspaceCommandsImplTest(LifecycleTestCase):
     def setUp(self) -> None:
-        self.registry = LifecycleRegistry()
+        super().setUp()
+        experiments.clear_active_experiments()
+        self._orig_experiment_env = os.environ.get("AUTOFAB_EXPERIMENT")
+        os.environ.pop("AUTOFAB_EXPERIMENT", None)
         self.fake_roles = [
             role_registry.RoleDefinition(
                 role_name="lib",
@@ -463,6 +478,11 @@ class WorkspaceCommandsImplTest(unittest.TestCase):
             json.dump({"role_name": "lib", "dir_scope": "pkg", "parts_dir": "pkg"}, f)
 
     def tearDown(self) -> None:
+        if hasattr(self, "_orig_experiment_env") and self._orig_experiment_env is not None:
+            os.environ["AUTOFAB_EXPERIMENT"] = self._orig_experiment_env
+        else:
+            os.environ.pop("AUTOFAB_EXPERIMENT", None)
+        experiments.clear_active_experiments()
         os.chdir(self.old_cwd)
         shutil.rmtree(self.test_dir, ignore_errors=True)
         self.phase_cm.__exit__(None, None, None)

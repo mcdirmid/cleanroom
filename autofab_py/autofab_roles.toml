@@ -36,7 +36,7 @@ role_deps = []
 star_role_deps = ["scenario"]
 common_spec_roles = ["high"]
 tools = [
-    "autofab.support.lib.build_lint_common",
+    "autofab_py.support.lib.build_lint_common",
 ]
 active_component_types = ["interface", "implementation"]
 verify_template = "# Scenario files verified against high_to_scenario.md"
@@ -54,7 +54,7 @@ star_role_deps = ["planning"]
 feedback_role_deps = ["high"]
 common_spec_roles = ["high"]
 tools = [
-    "autofab.support.lib.build_lint_common",
+    "autofab_py.support.lib.build_lint_common",
 ]
 active_component_types = ["implementation", "interface"]
 verify_template = "# Planning canvas verified against high_to_planning.md"
@@ -72,7 +72,7 @@ star_role_deps = ["low"]
 feedback_role_deps = ["planning"]
 common_spec_roles = ["planning"]
 tools = [
-    "autofab.support.lib.build_lint_common",
+    "autofab_py.support.lib.build_lint_common",
 ]
 active_component_types = ["implementation", "assembly", "interface", "external"]
 verify_template = "uv run python -m autofab_py.support.lib.low_lint {unit_dir}/low/{unit_name}.pyi && uv run pyright --project $([ -f pyright_spec.json ] && echo pyright_spec.json || find . -name pyright_spec.json -not -path '*/.*' | head -n 1) {unit_dir}/low/{unit_name}.pyi"

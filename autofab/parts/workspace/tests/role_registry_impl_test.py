@@ -4,7 +4,7 @@ import json
 import os
 import tempfile
 import unittest
-from support.lib.lifecycle import LifecycleRegistry, enter_phase
+from support.lib.lifecycle import LifecycleTestCase, enter_phase
 from autofab.parts.agent.lib import session as agent_session
 from autofab.parts.workspace.lib import (
     workspace_asm,
@@ -14,9 +14,9 @@ from autofab.parts.workspace.lib import (
 from support.lib import app_info
 
 
-class WorkspaceRegistryImplTest(unittest.TestCase):
+class WorkspaceRegistryImplTest(LifecycleTestCase):
     def setUp(self) -> None:
-        self.registry = LifecycleRegistry()
+        super().setUp()
         workspace_asm.__initialize__(self.registry)
         self.ws_registry = role_registry_impl.WorkspaceRegistry()
         self.registry.register_instance(

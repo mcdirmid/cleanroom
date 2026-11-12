@@ -55,6 +55,9 @@ Given: a state transition method decorated with `@transition(TargetClass.method)
 6. The caller constrains an argument using `Domain.type` with a subscripted generic type annotation (such as `Callable[[], Any]` or `Collection[str]`).
    Observed: `Domain.type` extracts the runtime origin to validate value conformity and generate valid samples without raising `TypeError` for subscripted generics.
 
+7. The caller defines an argument requirement with a fuzz domain override `require_arg(arg, Domain.integers(min_value=0), fuzz_domain=Domain.integers(min_value=0, max_value=5))`.
+   Observed: during fuzz generation arguments are sampled strictly from the fuzz domain to bound generation sizes and prevent runaway iterations, while values outside the fuzz domain but within the canonical domain validate successfully during fixed scenario testing.
+
 ## Scenario 5 — State machine declaration and fake adapter
 
 Given: a state machine subclass defining 1:1 state transitions and model state.

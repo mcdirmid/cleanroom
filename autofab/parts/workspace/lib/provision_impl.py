@@ -9,14 +9,9 @@ import os
 import re
 import shutil
 import subprocess
-from typing import Any, List, Optional, Sequence
+from typing import Any, List, Optional, Sequence, Set
 
-from support.lib.lifecycle import (
-    LifecycleRegistry,
-    Singleton,
-    get_default_registry,
-    get_singleton,
-)
+from support.lib.lifecycle import auto_initialize, get_singleton, singleton
 
 try:
     from support.lib import app_info, markdown_preprocessor
@@ -357,13 +352,141 @@ def _find_matching_files(root_dir: str, patterns: Sequence[str]) -> List[str]:
     return results
 
 
+def unlock_workspace_directories(workspace_dir: str) -> None:
+    """Restores write permissions (0o755) on all directories within a workspace."""
+    if not os.path.isdir(workspace_dir):
+        return
+    try:
+        os.chmod(workspace_dir, 0o755)
+    except OSError:
+        pass
+    for dirpath, dirs, _ in os.walk(workspace_dir, followlinks=False):
+        for d in dirs:
+            dp = os.path.join(dirpath, d)
+            if not os.path.islink(dp):
+                try:
+                    os.chmod(dp, 0o755)
+                except OSError:
+                    pass
+
+
+def _classify_workspace_directories(
+    workspace_dir: str,
+    role_def: Optional[role_registry.RoleDefinition] = None,
+    dir_scope: str = "",
+) -> Set[str]:
+    """Returns the set of directory paths that must remain writable (0o755)."""
+    ws_abs = os.path.realpath(workspace_dir)
+    writable_dirs: Set[str] = {ws_abs, os.path.join(ws_abs, "bin")}
+
+    writable_patterns = list(role_def.writable_file_patterns) if role_def else []
+    if not writable_patterns:
+        return writable_dirs
+
+    for dirpath, _, files in os.walk(ws_abs, followlinks=False):
+        rel_dir = os.path.relpath(dirpath, ws_abs)
+        if rel_dir == ".":
+            rel_dir = ""
+        path_parts = rel_dir.split(os.sep) if rel_dir else []
+        # Exclude support, guides, and bin from ever being classified as writable target dirs
+        if "support" in path_parts or "guides" in path_parts or "bin" in path_parts:
+            continue
+
+        for f in files:
+            rel_f = os.path.join(rel_dir, f) if rel_dir else f
+            rel_norm = rel_f.replace(os.sep, "/")
+            fname = os.path.basename(rel_norm)
+            if any(
+                fnmatch.fnmatch(rel_norm, p)
+                or fnmatch.fnmatch(rel_norm, f"*/{p}")
+                or fnmatch.fnmatch(rel_norm, f"*{p}")
+                or fnmatch.fnmatch(fname, p)
+                for p in writable_patterns
+            ):
+                cur = os.path.abspath(dirpath)
+                while cur.startswith(ws_abs):
+                    writable_dirs.add(cur)
+                    if cur == ws_abs:
+                        break
+                    cur = os.path.dirname(cur)
+                break
+
+        for pat in writable_patterns:
+            pat_norm = pat.replace("\\", "/")
+            pat_dir = os.path.dirname(pat_norm).lstrip("*").lstrip("/")
+            if pat_dir and rel_dir.replace(os.sep, "/").endswith(pat_dir):
+                cur = os.path.abspath(dirpath)
+                while cur.startswith(ws_abs):
+                    writable_dirs.add(cur)
+                    if cur == ws_abs:
+                        break
+                    cur = os.path.dirname(cur)
+
+    return writable_dirs
+
+
+def lock_workspace_directories(
+    workspace_dir: str,
+    role_def: Optional[role_registry.RoleDefinition] = None,
+    dir_scope: str = "",
+    role_name: Optional[str] = None,
+    repo_root: Optional[str] = None,
+) -> None:
+    """Locks non-writable directories in a workspace to 0o555 while preserving 0o755 on target directories."""
+    if not os.path.isdir(workspace_dir):
+        return
+    resolved_role_def = role_def
+    if resolved_role_def is None and role_name:
+        try:
+            reg = get_singleton(role_registry.WorkspaceRegistry)
+            resolved_role_def = reg.resolve_role_definition(
+                role_name, repo_root=repo_root, dir_scope=dir_scope
+            )
+        except Exception:
+            resolved_role_def = None
+
+    writable_dirs = _classify_workspace_directories(
+        workspace_dir, role_def=resolved_role_def, dir_scope=dir_scope
+    )
+
+    # First unlock everything so we can traverse cleanly
+    unlock_workspace_directories(workspace_dir)
+
+    for dirpath, dirs, _ in os.walk(workspace_dir, topdown=False, followlinks=False):
+        d_abs = os.path.realpath(dirpath)
+        if d_abs not in writable_dirs:
+            try:
+                os.chmod(d_abs, 0o555)
+            except OSError:
+                pass
+
+
+@singleton
 class WorkspaceProvisioner(provision.WorkspaceProvisioner):
     """Realizes role workspace directory provisioning, permissions, and runner deployment."""
 
-    tier = agent_session.agent_session
 
     def __init__(self) -> None:
         pass
+
+    # Contract: MUST restore write permissions (0o755) on all directories in a role workspace.
+    def unlock_workspace_directories(self, workspace_dir: str) -> None:
+        unlock_workspace_directories(workspace_dir)
+
+    # Contract: MUST lock non-writable directories in a role workspace to 0o555 while preserving 0o755 on declared target directories.
+    def lock_workspace_directories(
+        self,
+        workspace_dir: str,
+        role_name: Optional[str] = None,
+        dir_scope: str = "",
+        repo_root: Optional[str] = None,
+    ) -> None:
+        lock_workspace_directories(
+            workspace_dir,
+            role_name=role_name,
+            dir_scope=dir_scope,
+            repo_root=repo_root,
+        )
 
     # Contract: Copies a file and applies exact read-only, writable, or executable permissions.
     def copy_file_with_permissions(
@@ -448,6 +571,9 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
             role_name, dir_scope, resolved_root, custom_dest
         )
 
+        if os.path.isdir(workspace_dir):
+            unlock_workspace_directories(workspace_dir)
+
         if reset and os.path.isdir(workspace_dir):
             stale_candidates = set(app_info.get_pending_work_filenames()) | set(
                 app_info.get_blame_buffer_filenames()
@@ -482,14 +608,15 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
 
         scaffolder = get_singleton(scaffold.WorkspaceScaffolder)
 
+        ws_scope = dir_scope.strip("/").split("/")[-1] if dir_scope else ""
         scope_dir = os.path.join(resolved_root, dir_scope)
         if os.path.isdir(scope_dir):
             for dirpath, _, filenames in os.walk(scope_dir):
                 rel_d = os.path.relpath(dirpath, scope_dir)
                 ws_d = (
-                    os.path.join(workspace_dir, dir_scope, rel_d)
+                    os.path.join(workspace_dir, ws_scope, rel_d)
                     if rel_d != "."
-                    else os.path.join(workspace_dir, dir_scope)
+                    else os.path.join(workspace_dir, ws_scope)
                 )
                 os.makedirs(ws_d, exist_ok=True)
                 if "__init__.py" in filenames:
@@ -511,7 +638,7 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
                 if stub_synth.is_stub_dep_file(rel, role_def, resolved_root):
                     continue
                 src_f = os.path.join(scope_dir, rel)
-                dst_f = os.path.join(workspace_dir, dir_scope, rel)
+                dst_f = os.path.join(workspace_dir, ws_scope, rel)
                 _copy_projected_file(src_f, dst_f, is_writable=True)
 
             readonly_rel = _find_matching_files(
@@ -521,13 +648,13 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
                 if stub_synth.is_stub_dep_file(rel, role_def, resolved_root):
                     continue
                 src_f = os.path.join(scope_dir, rel)
-                dst_f = os.path.join(workspace_dir, dir_scope, rel)
+                dst_f = os.path.join(workspace_dir, ws_scope, rel)
                 _copy_projected_file(src_f, dst_f, is_writable=False)
 
             initial_manifest: dict[str, dict[str, str]] = {}
             for rel in writable_rel:
                 src_f = os.path.join(scope_dir, rel)
-                dst_f = os.path.join(workspace_dir, dir_scope, rel)
+                dst_f = os.path.join(workspace_dir, ws_scope, rel)
                 if os.path.isfile(src_f) and os.path.isfile(dst_f):
                     s_h = _compute_file_sha256(src_f)
                     w_h = _compute_file_sha256(dst_f)
@@ -535,7 +662,7 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
                         initial_manifest[rel] = {"main_hash": s_h, "ws_hash": w_h}
             for rel in readonly_rel:
                 src_f = os.path.join(scope_dir, rel)
-                dst_f = os.path.join(workspace_dir, dir_scope, rel)
+                dst_f = os.path.join(workspace_dir, ws_scope, rel)
                 if os.path.isfile(src_f) and os.path.isfile(dst_f):
                     s_h = _compute_file_sha256(src_f)
                     w_h = _compute_file_sha256(dst_f)
@@ -632,13 +759,18 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
                     ptext,
                     flags=re.DOTALL,
                 )
-                if dir_scope:
-                    clean_scope = dir_scope.strip("/").split("/")[0]
+                clean_scope = dir_scope.strip("/").split("/")[0] if dir_scope else ""
+                if clean_scope:
                     ptext = ptext.replace(f'"{clean_scope}",', "").replace(
                         f'"{clean_scope}"', ""
                     )
+                if dir_scope:
                     ptext = ptext.replace(f'"{dir_scope}",', "").replace(
                         f'"{dir_scope}"', ""
+                    )
+                if ws_scope and ws_scope != clean_scope:
+                    ptext = ptext.replace(f'"{ws_scope}",', "").replace(
+                        f'"{ws_scope}"', ""
                     )
                 ptext = re.sub(
                     r"testpaths\s*=\s*\[[^\]]*\]",
@@ -646,10 +778,9 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
                     ptext,
                 )
                 pypaths_cfg = ['"."']
-                if dir_scope:
-                    clean_scope = dir_scope.strip("/").split("/")[0]
-                    pypaths_cfg.append(f'"{clean_scope}"')
-                    pypaths_cfg.append(f'"{clean_scope}/parts"')
+                if ws_scope:
+                    pypaths_cfg.append(f'"{ws_scope}"')
+                    pypaths_cfg.append(f'"{ws_scope}/parts"')
                 pypaths_str = f"pythonpath = [{', '.join(pypaths_cfg)}]"
                 if "pythonpath" in ptext:
                     ptext = re.sub(
@@ -750,15 +881,16 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
         scaffolder.write_role_metadata(
             workspace_dir,
             role_def.role_name,
-            dir_scope,
+            ws_scope,
             resolved_root,
             model=resolved_model_name,
             batch_size=resolved_batch_size,
             max_feedback_chars=resolved_max_feedback_chars,
             fused_roles=role_def.fused_roles or None,
             common_spec_roles=role_def.common_spec_roles or None,
+            main_dir_scope=dir_scope,
         )
-        scaffolder.write_role_agents_guide(workspace_dir, role_def, dir_scope)
+        scaffolder.write_role_agents_guide(workspace_dir, role_def, ws_scope)
         is_auditor = not bool(role_def.writable_file_patterns) or bool(
             role_def.audit_tag
         )
@@ -781,23 +913,11 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-30T05:28:00Z
-# LAST_CHANGED: 2026-11-05T11:45:00Z
-# CHANGE: Record initial inbound pull manifest upon commissioning workspace
+# LAST_CHANGED: 2026-11-11T14:00:00Z
+# CHANGE: Add dynamic workspace directory locking and unlocking across role rounds
 # COVERAGE_AUDIT: 2026-10-15T17:42:47Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
-
-# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
-def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
-    """Registers constituent singletons into the lifecycle registry."""
-    reg = get_default_registry() if registry is None else registry
-    reg.register_singleton(
-        WorkspaceProvisioner,
-        keys=[WorkspaceProvisioner, provision.WorkspaceProvisioner],
-        tier=WorkspaceProvisioner.tier,
-    )
-
-
+__initialize__ = auto_initialize()
 _initialize_ = __initialize__
-# --- END CLEANROOM AUTO-GENERATED ---

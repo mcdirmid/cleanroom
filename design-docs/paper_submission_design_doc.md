@@ -178,6 +178,58 @@ The rapid emergence of autonomous Developer AI (DevAI) has fundamentally broken 
 5. **The Autofab Synthesis-as-Compilation Paradigm: Advancing Beyond Post-Hoc SGCR**:
    While SGCR marks a vital step forward for pull request auditing, Autofab takes its core insight to its logical conclusion. Post-hoc SGCR still treats code as the primary artifact and relies on humans to inspect, debug, and patch the code when alerts fire. Autofab asks: *if specifications are the ground truth against which code must be evaluated, why author, review, or maintain the procedural code at all?* Autofab elevates specification grounding from a post-hoc pull request audit into a **generative compiler**: human engineers curate typed interface specifications ($S = \langle \Sigma, \mathcal{C} \rangle$), while isolated, statistically independent neural agents compile those specifications into disposable, double-blind verified bytecode.
 
+### 1.1.2 Dark Software Factory Infrastructure (StrongDM, Fabro) and the Modern DevAI Triad: Comprehension Debt, The Autonomy Trap, and Evaluation Gaming
+
+The emergence of "dark software factories"—lights-out development environments where code is neither authored nor line-by-line reviewed by humans—has recently crystallized in industrial initiatives such as **StrongDM's Software Factory** and **Fabro**. While Autofab shares their central diagnosis that human code inspection is an unsustainable bottleneck, Autofab provides a fundamentally different mathematical, epistemic, and programming-language-theoretic foundation to confront the modern DevAI failure triad: **Comprehension Debt**, **The Autonomy Trap**, and **Evaluation Gaming**.
+
+#### 1. The Dark Software Factory Landscape: StrongDM & Fabro
+- **StrongDM (Industrial Lights-Out Manufacturing)**: Formulated around the provocative mandates that *"code must not be written by humans"* and *"code must not be reviewed by humans"*, StrongDM relies on human engineers authoring high-level markdown specifications and behavioral test scenarios, while autonomous agents iterate inside sandboxed Docker containers. The factory runs heavy compute loops ($1,000/day/engineer in model tokens) against test harnesses and digital twin environments until tests pass.
+- **Fabro (Workflow Graph Orchestration & Multi-Model Ensembles)**: Fabro operationalizes autonomous software delivery by defining engineering processes as version-controlled workflow DAGs. It mixes and matches model tiers across vendors (e.g., Anthropic, OpenAI, Google) within a single pipeline—using fast models for implementation and frontier models for cross-critique and code review in isolated cloud sandboxes.
+
+#### 2. The Modern DevAI Triad and How Autofab Resolves It
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│               THE MODERN DevAI TRIAD vs. THE AUTOFAB COMPILATION REMEDY                 │
+├───────────────────────┬──────────────────────────────────┬──────────────────────────────┤
+│ DevAI Failure Mode    │ Dark Factory Vulnerability       │ Autofab PL & Epistemic Fix   │
+├───────────────────────┼──────────────────────────────────┼──────────────────────────────┤
+│ 1. Comprehension Debt │ Massive AI code diffs accumulate │ Code as Disposable Bytecode; │
+│    (Evaporation of    │ that no human understands;       │ High Specification Density;  │
+│     mental models)    │ team loses reasoning capacity.   │ Human is Spec Custodian.     │
+├───────────────────────┼──────────────────────────────────┼──────────────────────────────┤
+│ 2. The Autonomy Trap  │ Premature autonomy forces        │ Safety Pivot over Liveness;  │
+│    (Unconstrained     │ "liveness" (shipping bad code);  │ Fail-Safe Non-Convergence;   │
+│     drift & loops)    │ agents break environments.       │ Closed-World Sandboxing.     │
+├───────────────────────┼──────────────────────────────────┼──────────────────────────────┤
+│ 3. Evaluation Gaming  │ Agents rewrite tests, game       │ Primal-Dual Game (I = 0);    │
+│    (Metric hacking &  │ coverage, or agree on shared     │ Bipartite Boundary ([s+],[s-]);│
+│     confirmation)     │ omissions via vendor mixing.     │ Pretense Stateful Fuzzing.   │
+└───────────────────────┴──────────────────────────────────┴──────────────────────────────┘
+```
+
+##### A. Comprehension Debt: From Code Maintenance to Specification Density
+*The Pathology*: When developers surrender line-by-line coding to agents without formal boundaries, a toxic gap emerges between the sheer volume of code in a repository and the team's ability to reason about it. The system appears green on the surface, but the underlying theory evaporates. When edge-case regressions or production incidents occur, engineers cannot safely modify architectures because nobody understands the procedural nuances.
+*Autofab's Resolution*:
+- **Code as Ephemeral Bytecode**: Comprehension debt only exists when procedural code is treated as the permanent intellectual property humans must maintain. Autofab demotes code (`lib/`) and unit tests (`tests/`) to disposable compiler bytecode. Humans **never** read, audit, or debug synthesized implementation files.
+- **High Specification Density ($\text{Lines}(S) \ll \text{Lines}(P) + \text{Lines}(V)$)**: Specifications are purely declarative and relational. Relational contracts ($X \times Y \to \mathbb{B}$) eliminate procedural boilerplate (allocations, loop indexing, defensive try-catches). Human cognition is concentrated entirely on dense, high-level behavioral contracts.
+- **The Death of Code Debuggers**: If a system behaves unexpectedly, the implementation faithfully matched the specification; the flaw lies in the specification contracts. Developers never open code debuggers; they debug specifications using deterministic contract diagnostic traces.
+
+##### B. The Autonomy Trap: Safety-First Fail-Stop vs. The Liveness Delusion
+*The Pathology*: Propelled by the ambition of fully lights-out pipelines, organizations grant agents full execution freedom and loop autonomy before establishing formal verification boundaries. In an unconstrained loop, agents prioritize "liveness" (emitting running code at all costs). When faced with ambiguous specifications or environmental friction, agents guess workarounds, create ungrounded dependencies, and converge on silent runtime corruptions.
+*Autofab's Resolution*:
+- **The Safety Pivot (§1.5, §2.9)**: Traditional dark factories treat non-convergence as an operational failure and force consensus via iterative retry loops. Autofab rejects this liveness delusion. If a specification is ambiguous, contradictory, or ungrounded, the Primal Synthesizer and Dual Certifier clash discordantly, causing **deterministic fail-stop non-convergence**. Deadlock or oscillation is treated as a foundational safety victory that halts compilation before defective bytecode can execute.
+- **Assume-Guarantee Compositional Soundness (§2.5)**: In Autofab, components are physically forbidden from peeking into dependency implementations (`lib/B.py`). They interact solely via typed interface stubs ($\Sigma_B$) and explicit contracts ($\mathcal{C}_B$), preventing agents from "writing around" uncontracted dependency quirks.
+- **Circuit Breaker Governance (§4.2)**: To prevent rogue spinning, duplicate diagnostic hashes trigger automatic auditor kills and context refreshes, while a 3-strike impasse terminates fail-stop to alert the human custodian.
+
+##### C. Evaluation Gaming: Zero-Sum Epistemic Confinement vs. Metric Hacking
+*The Pathology*: In agentic pipelines, models optimize for the path of least resistance. If an agent has write access to both code and tests (or if critic and coder debate in a shared context), the agent games the evaluation: modifying test assertions to match broken code, writing vacuous assertions (`assert True`), exploiting mock drift, or gaming line coverage without exercising edge cases. Even multi-model ensembles (Fabro) fall prey to the Knight-Leveson effect, as different LLMs share identical pre-training blind spots on complex algorithmic boundaries.
+*Autofab's Resolution*:
+- **Primal-Dual Zero-Sum Certificate Game ($\mathcal{I}(P; V \mid S) = 0$)**: The Synthesizer ($\mathcal{S}$) has read-only access to specs and zero access to tests; the Certifier ($\mathcal{D}$) has read-only access to specs and zero access to code. Neither agent can alter the other's artifacts or negotiate.
+- **The Bipartite Boundary Principle ($[s^+]$ and $[s^-]$)**: Prevents happy-path gaming. Every contract must be bi-conditional (*"holds if, but only if..."*), and static analysis (`spec_qa`) rejects one-sided contracts, forcing the test certifier to assert both valid inputs and domain boundary exceptions.
+- **AST-Normalized Coverage ($\mathbf{Cov} = 100\%$) & Pretense Stateful Fuzzing**: Normalized coverage strips docstrings and comments, defeating superficial syntax reachability. To defeat the *Structural Coverage Illusion* (where 100% reachability misses permutation defects), Autofab deploys **Pretense** (Hypothesis stateful fuzzing), probing thousands of randomized state-machine sequences against verified in-memory fakes.
+- **Non-Prescriptive Blame Operator**: When verification fails, the contaminated auditor strips all test assertions and patches, translating the failure strictly into an abstract specification contract citation ($[s_i]$). The synthesizer must fix the code by re-reading the specification, preventing test-overfitting and prompt-hacking.
+
 ### 1.2 The Human Developer: Specification Custodian and Reviewer
 In a paradigm where programming language code is demoted to ephemeral intermediate bytecode, what is the role of the human developer? Human engineers are not eliminated; rather, their cognitive labor is elevated from low-level mechanical debugging to architectural curation:
 
@@ -725,14 +777,14 @@ Autofab addresses edge-case identification and state permutation coverage throug
 4. **AST Branch Mining & Coverage Verification**:
    To defeat superficial coverage, Pass 2 parses the synthesized AST to extract all conditional branch predicates, requiring the test suite to witness both positive and negative activation branches.
 5. **Stateful State-Machine Fuzzing & Verified Fake Synthesis (Pretense / Pretense Next)**:
-   To bridge the gap between static branch reachability and temporal state permutations, Autofab incorporates **Pretense**—a state-machine-driven testing, verification, and fake synthesis engine powered by Hypothesis conjecture fuzzing (`hypothesis.stateful.RuleBasedStateMachine`).
+   To bridge the gap between static branch reachability and temporal state permutations, Autofab incorporates **Pretense**—a state-machine-driven testing, verification, and fake synthesis engine powered by Hypothesis conjecture fuzzing (`hypothesis.stateful.RuleBasedStateMachine`), formally specified in [`design-docs/pretense.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/pretense.md).
    
    Historically, property-based testing suffered from severe authoring friction: generating structured inputs for complex stateful systems required authoring massive, fragile `@st.composite` strategies. Pretense solves this friction by automating state-machine synthesis directly from typed interface stubs (`low/*.pyi`):
    - **Interface State Machines (`<name>_pretense.py`)**: Model abstract state transitions with strict 1:1 method mappings (`@transition(TargetClass.method)`), natural Python branching, and single-argument `assert` statements. This state machine serves as an executable specification and automatically synthesizes a **Verified In-Memory Fake** (`<Target>Fake`).
    - **Implementation Pseudo-State Machines (`<name>_impl_pretense.py`)**: Possess zero duplicate state, wrapping the concrete library implementation ($P$) via concentric onion dispatch (`call_target()`) and compile-time **AST Chopping** that automatically preserves pre-state snapshots and verifies differentials ($Lib \equiv Fake$).
    - **Dynamic Collaborator Seeding**: Rather than allowing static pre-seeding antipatterns (`make_sut()` loops), Pretense enforces a blank initial state invariant (`PRE_LINT_NO_PRE_SEEDING`) and dynamically feeds collaborator fakes into the SUT via `@transition.seeding` rules.
    
-   By exploring thousands of randomized call sequences and shrinking failures to minimal deterministic counterexample traces, Pretense exposes temporal race conditions, stale cache leaks, and desynchronization bugs that completely escape standard unit tests.
+   By exploring thousands of randomized call sequences and shrinking failures to minimal deterministic counterexample traces, Pretense exposes temporal race conditions, stale cache leaks, and desynchronization bugs that completely escape standard unit tests. (Full architectural details and its 21 Foundational Principles are documented in [`design-docs/pretense.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/pretense.md)).
 
 #### 2.6.4 Mining Edge Cases from Implementation Code: The Branch-to-Specification Reflection Loop
 A fundamental question in neural synthesis is: *Can we systematically discover edge cases by mining the implementation code?*
@@ -2515,9 +2567,28 @@ We evaluate the three verification methodologies across our four-tier model spec
 
 #### 5.10.2 Defect Detection: Exposing the 3 Soundness Bugs Missed by Unit Tests
 
-When `dag_engine_lite` was synthesized under standard unit testing (Regimen 3A), the test suites achieved **95% line coverage and 90% branch coverage**. Despite passing all unit tests cleanly, the implementation contained three critical soundness defects:
-1. **Off-by-One Retry Accounting**: Retrying $R$ times instead of permitting $R+1$ total execution attempts.
-2. **Node Re-Registration Stale Edge Accumulation**: Re-registering an existing node accumulated duplicate, stale dependency edges in the internal graph dictionary rather than pruning prior bindings.
+The empirical genesis of Pretense (detailed in [`design-docs/pretense.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/pretense.md)) arose from a striking empirical anomaly observed on the `dag_engine_lite` benchmark: when synthesized under single-model unit testing (Regimen 3A) using **Qwen3.6-35B-A3B-oQ6-mtp**, the test suite achieved **95.0% line coverage and 90.0% branch coverage** with 0 Pyright type errors and 60/60 tests passing (100%).
+
+However, executing independent foreign test suites authored from the exact same formal Low-Level Specification (`low/*.pyi`) by different model families (**DeepSeek-V3/Flash**, **Gemini 3.8 Flash**, and **Gemini 4 Argon**) via the differential cross-testing runner (`bin/run_cross_tests.py`) immediately exposed **three genuine soundness defects** in Qwen's implementation:
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│               CROSS-MODEL DIFFERENTIAL VERIFICATION OUTCOMES (ON P_qwen)               │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                        │
+│   Certifier Test Suite (V)             Pass / Fail Rate   Soundness Status             │
+│   ──────────────────────────────────   ────────────────   ──────────────────────────   │
+│   Qwen Autofab (Self: V_qwen)          60 / 60 (100.0%)   PASS (Coincident Blind Spot) │
+│   DeepSeek Autofab (V_deepseek)        47 / 48 ( 97.9%)   FAIL (Off-by-One Retry Bug)  │
+│   Gemini 3.8 Flash (V_gemini_flash)    32 / 36 ( 88.9%)   FAIL (3 Defects Exposed)     │
+│   Gemini 4 Argon (V_gemini_argon)      19 / 20 ( 95.0%)   FAIL (Dynamic Retry Bug)     │
+│                                                                                        │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+The three soundness defects missed by static unit testing were:
+1. **Off-by-One Retry Accounting (`DAGRunner.run`)**: Retrying failed tasks $R$ times instead of permitting $R+1$ total attempts. Placing retry incrementation inside the `except` block meant successful recoveries on attempt 1 never reached the counter.
+2. **Node Re-Registration Stale Edge Accumulation (`DAG.add_node`)**: Re-registering an existing node accumulated duplicate, stale dependency edges in internal graph mappings (`_upstream`, `_downstream`) rather than pruning prior bindings.
 3. **Cross-Component Scheduler Desynchronization**: Internal task worker queues experienced state drift relative to DAG wave transitions under concurrent event arrivals.
 
 **Pretense Detection Outcome**:
@@ -2525,6 +2596,7 @@ When `dag_engine_lite` was synthesized under standard unit testing (Regimen 3A),
 - Invariant assertions on graph cycle detection and worker queue consistency triggered immediately upon node re-registration and retry boundary exhaustion.
 - Hypothesis's minimal-trace shrinker reduced a 42-step random walk to a 3-step deterministic counterexample reproducing the exact stale-edge accumulation bug.
 - The defect was attributed to `lib`, driving the library synthesizer to implement proper graph edge pruning upon node re-registration.
+- The complete post-mortem of Pretense 1 and its evolution into Pretense Next across its 21 Foundational Architectural Principles are documented in [`design-docs/pretense.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/pretense.md).
 
 #### 5.10.3 Cognitive Load Analysis on Fast Models: Pretense 1 vs. Pretense Next
 
@@ -2641,7 +2713,7 @@ A natural question in programming languages is whether formal symbolic execution
 2. **Automating Property-Based Fuzzing via Pretense & Pretense Next**:
    Property-based testing frameworks like `Hypothesis` traditionally generate pseudo-random *inputs*. For complex systems software, constructing meaningful inputs (such as a valid mock graph with acyclic topological order and multi-tier precedence) historically required authoring massive `@st.composite` strategy generators that exceeded the complexity of the code under test. Unconstrained random fuzzing generated inputs that failed front-door syntax parsing rather than exercising deep semantic boundary logic.
    
-   Autofab's **Pretense engine** eliminates this authoring friction through neural synthesis grounded in typed interface stubs (`low/*.pyi`):
+   Autofab's **Pretense engine** (specified in [`design-docs/pretense.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/pretense.md)) eliminates this authoring friction through neural synthesis grounded in typed interface stubs (`low/*.pyi`):
    - Rather than requiring manual strategy scaffolding, the dual certifier automatically derives **1:1 state transitions** (`@transition(TargetClass.method)`), mapping parameters directly from interface signatures;
    - Interfaces synthesize **Verified In-Memory Fakes** with native single-argument `assert` checks, establishing high-fidelity test doubles without mocking libraries;
    - Implementation pseudo-state machines execute **concentric onion dispatch** (`call_target()`) using compile-time **AST Chopping** to capture pre-state snapshots and evaluate post-state invariants;
@@ -2759,6 +2831,57 @@ Optimizing non-functional software properties (latency, memory footprint, throug
 2. **Adversarial Proxy Exploitation & Goodhart's Law in Formal ML**:
    - *Theoretical Context*: Manheim & Garrabrant (2018) formalize four variants of Goodhart's Law: *regressional*, *extremal*, *causal*, and *adversarial*. In adversarial Goodharting, an optimization agent exploits discrepancies between a proxy metric $M$ and the true goal $G$.
    - *Contrast with Autofab*: When LLMs are prompted with raw execution profiles or flame graphs, they act as adversarial Goodhart optimizers: hardcoding test responses, removing security sanitization, and trading unbounded memory bloat for superficial CPU gains. Autofab's **Hidden Benchmark Firewall** (§2.12, §4.4) is the first multi-agent architecture to treat profiling suites as blinded testbeds, using the Performance Auditor as an epistemic firewall that translates physical bottlenecks into high-level architectural patterns framed strictly in specification data properties.
+
+### 6.7 Dark Software Factory Infrastructure: StrongDM, Fabro, and Lights-Out Synthesis
+
+A rapidly expanding industrial movement has emerged around **"Dark Software Factories"** (derived from lights-out manufacturing where automated plants operate without human intervention, formalized in Dan Shapiro's Level 5 AI autonomy taxonomy). Systems such as **StrongDM's Software Factory** and **Fabro** aim to eliminate human developer toil by fully automating code generation, testing, and deployment.
+
+While Autofab shares their core intuition—that human line-by-line inspection of AI-generated code is an unsustainable bottleneck—Autofab fundamentally departs from dark software factories in its mathematical foundations, epistemic boundaries, and verification rigor:
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│               DARK SOFTWARE FACTORIES vs. AUTOFAB COMPILATION CALCULUS                                 │
+├───────────────────────┬───────────────────────────────┬───────────────────────────────┬────────────────┤
+│ DIMENSION             │ STRONGDM (SOFTWARE FACTORY)   │ FABRO (WORKFLOW ORCHESTRATOR) │ AUTOFAB        │
+├───────────────────────┼───────────────────────────────┼───────────────────────────────┼────────────────┤
+│ Foundational Metaphor │ Lights-Out Manufacturing      │ Workflow Graph Orchestration  │ Language       │
+│                       │ & Containerized Build Loops   │ & Multi-Model Ensembles       │ Compiler       │
+├───────────────────────┼───────────────────────────────┼───────────────────────────────┼────────────────┤
+│ Source of Truth       │ Markdown Specs & Scenarios;   │ Workflow DAG definitions;     │ Typed Interface│
+│                       │ Digital Twin Mocks            │ Live Codebase & Git History   │ Model S = ⟨Σ,C⟩│
+├───────────────────────┼───────────────────────────────┼───────────────────────────────┼────────────────┤
+│ Primary Artifact      │ Executable Code & Containers  │ Code Diffs & PR Manifests     │ Typed Stubs    │
+│                       │ (Iteratively Patched)         │ (Reviewed across Models)      │ & Contracts    │
+├───────────────────────┼───────────────────────────────┼───────────────────────────────┼────────────────┤
+│ Confinement Model     │ Sandbox Containers            │ Cloud VM Sandboxes            │ Double Hermetic│
+│                       │ (Interactive Agent-Harness)   │ (Cross-Model Review Dialogue) │ Confinement    │
+│                       │                               │                               │ (I = 0)        │
+├───────────────────────┼───────────────────────────────┼───────────────────────────────┼────────────────┤
+│ Diversity Strategy    │ Heavy Token Compute           │ Multi-Vendor Ensembles        │ Task Asymmetry │
+│                       │ ($1,000/day/engineer)         │ (OpenAI + Anthropic + Google) │ (Single LLM,   │
+│                       │                               │                               │ Cov(θ_P,θ_V)≤0)│
+├───────────────────────┼───────────────────────────────┼───────────────────────────────┼────────────────┤
+│ Debugging Philosophy  │ Interactive REPL Edit-Test    │ Conversational Multi-Agent    │ Mills' Anti-   │
+│                       │ Loops in Sandboxes            │ Peer Critique & Self-Repair   │ Debugging Rule │
+├───────────────────────┼───────────────────────────────┼───────────────────────────────┼────────────────┤
+│ Soundness Guarantee   │ Heuristic (Until tests pass)  │ Heuristic (PR gate approval)  │ Formal Partial │
+│                       │                               │                               │ Correctness    │
+└───────────────────────┴───────────────────────────────┴───────────────────────────────┴────────────────┘
+```
+
+1. **Compilation-as-Synthesis vs. Process Automation**:
+   - *State of the Art*: StrongDM and Fabro treat software generation as an *orchestration and automation* problem—wiring prompts, tools, cloud sandboxes, and test runners into continuous integration pipelines. Code remains the primary deliverable; tests and digital twins serve as operational filters.
+   - *Autofab Advance*: Autofab treats program synthesis as a **formal compiler**. The human developer curates a Typed Interface Specification ($S = \langle \Sigma, \mathcal{C} \rangle$). The procedural code (`lib/`) and unit test certifiers (`tests/`) are **ephemeral bytecode** that can be wiped (`rm -rf lib/ tests/`) and deterministically regenerated.
+2. **Task Asymmetry vs. The Multi-Vendor Fallacy**:
+   - *State of the Art*: Industrial frameworks like Fabro advocate mixing model vendors (e.g., using GPT-4 for coding and Claude 3.5 Sonnet for review) to prevent single-model blind spots.
+   - *Autofab Advance*: As proven via Littlewood & Miller's (1989) covariance model (§2.8.2), heterogeneous foundation models trained on overlapping open-source corpora share positive error covariance ($\mathbf{Cov} > 0$) when performing the *same constructive task* ($X \to Y$). Vendor diversity fails on non-trivial boundary edge cases. Autofab achieves non-positive covariance ($\mathbf{Cov} \le 0$) on a **single LLM** by enforcing structural **Task Asymmetry**: the Primal Synthesizer computes procedural algorithms ($X \to Y$), while the Dual Certifier synthesizes relational property invariants ($X \times Y \to \mathbb{B}$) and state-machine transitions ($X \times \mathcal{S} \to X' \times \mathcal{S}'$).
+3. **The Anti-Debugging Principle vs. Interactive Test Hacking**:
+   - *State of the Art*: StrongDM allows coding agents to run interactive edit-compile-test loops inside containers, spending massive token budgets ($1,000/day/engineer) to iterate until tests pass.
+   - *Autofab Advance*: Harlan Mills' Anti-Debugging Principle (§2.7.2) observed that giving developers or LLMs access to an interactive test-debug loop encourages trial-and-error patch hacking—finding local syntactic fixes that satisfy immediate assert failures while breaking global invariants. In Autofab, the Synthesizer ($\mathcal{S}$) is strictly banned from executing tests or inspecting test syntax. The Auditor acts as an epistemic firewall, translating test failures strictly into non-prescriptive specification contract discrepancies ($[s_i]$).
+4. **Dismantling the DevAI Trap Triad**:
+   - *Comprehension Debt*: Dark factories that treat code as permanent accumulate vast unread diffs that no human understands. Autofab eliminates comprehension debt by discarding procedural code entirely: human mental models operate purely over dense, declarative behavioral specifications ($\text{Lines}(S) \ll \text{Lines}(P) + \text{Lines}(V)$).
+   - *The Autonomy Trap*: Dark factories prioritize *liveness*—looping agents until they output runnable code, risking silent defect escape. Autofab enforces the *Safety Pivot* (§1.5, §2.9): ambiguous or broken specifications cause discordant clashing and deterministic fail-stop non-convergence with diagnostic blame, protecting production environments from rogue agent drift.
+   - *Evaluation Gaming*: Dark factories where agents debate in shared contexts or write their own tests succumb to evaluation gaming (test weakening, mock drift, vacuous assertions). Autofab enforces the Primal-Dual zero-sum certificate game under physical kernel confinement ($\mathcal{I}(P; V \mid S) = 0$), paired with AST-normalized branch coverage ($\mathbf{Cov} = 100\%$) and Pretense state-machine fuzzing.
 
 ---
 

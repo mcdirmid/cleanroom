@@ -3,7 +3,7 @@
 import os
 import tempfile
 import unittest
-from support.lib.lifecycle import LifecycleRegistry, enter_phase
+from support.lib.lifecycle import LifecycleTestCase, enter_phase
 from autofab.parts.agent.lib import session as agent_session
 from autofab.parts.metadata.lib import src_metadata
 from autofab.parts.workspace.lib import role_registry
@@ -66,9 +66,9 @@ class FakeWorkspaceRegistry:
         ]
 
 
-class WorkspaceDirtinessImplTest(unittest.TestCase):
+class WorkspaceDirtinessImplTest(LifecycleTestCase):
     def setUp(self) -> None:
-        self.registry = LifecycleRegistry()
+        super().setUp()
         self.registry.register_instance(
             FakeWorkspaceRegistry(),
             keys=[role_registry.WorkspaceRegistry],

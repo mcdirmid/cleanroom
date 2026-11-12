@@ -74,20 +74,22 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
         max_unproductive_turns: Optional[int] = None,
         target_node: Optional[str] = None,
         max_unproductive_rounds: Optional[int] = None,
+        concurrent_subagents: Optional[int] = None,
     ) -> subagent_coordinator.OrchestrationSummary:
         """Orchestrates iterative multi-agent execution until DAG convergence or failure.
 
         GROUNDING:
         - Resets preexisting role workspace directories for declared roles via role_registry
           and filesystem operations, restricting workspace provisioning and execution exclusively to a designated fused role when target_role resolves to a fused role definition.
-        - Resolves subagent batch size, token limits, and maximum unproductive round thresholds from model configurations and persists
+        - Resolves subagent batch size, token limits, maximum unproductive round thresholds, and concurrent subagent limits from model configurations and persists
           effective batch sizes into role workspaces.
         - Restricts work discovery and execution to target_node and its transitive dependencies via
           work.WorkspaceWorkManager.compute_role_work_queue when target_node is specified.
         - Iterates dynamic process supervision until work queues are clean, a round fails,
           consecutive unproductive rounds on unresolved targets exceed the threshold (suppressing unproductive counts and reminders when assigned ready targets are resolved or cleaned in the repository), or max_waves is exceeded (draining in-flight active workers to completion or cleanly interrupting active workers upon loop termination),
           terminating active workers, clearing persistent session state, recommissioning workspaces with a clean baseline, and injecting restart advisories when identical blame signatures are delivered twice in a row on unchanged targets (halting orchestration when a role exceeds 10 restarts, and clearing consecutive blame tracking when an author submits modifications to a previously blamed target),
-          evaluating work queues on each polling interval to dispatch newly unblocked roles without awaiting completion of active workers while withholding downstream roles whose upstream dependencies on the same target unit are actively executing or scheduled for concurrent dispatch,
+          terminating active rounds for both worker and auditor, clearing persistent session state, recommissioning both workspaces with clean baselines, and injecting clean-slate advisories when a worker role rejects feedback from an auditor twice consecutively on a target without intervening author code modifications,
+          evaluating work queues on each polling interval to dispatch newly unblocked roles without awaiting completion of active workers while withholding downstream roles whose upstream dependencies on the same target unit are actively executing or scheduled for concurrent dispatch (limiting concurrent execution to at most one subagent prioritizing the most recently run role when concurrent_subagents is 1),
           prior to dispatching each role, purging preexisting blame buffers, pulling updated files and refreshing system files from the canonical repository root via sync.WorkspaceSynchronizer.pull and sync.WorkspaceSynchronizer.refresh_system_files, and recording assigned ready targets in the pending work buffer via work.WorkspaceWorkManager.set_pending_work,
           consuming workspace blame buffers upon round completion,
           interrupting idling workers that have resolved assigned targets and hold zero pending items across consecutive intervals past an initialization grace period,
@@ -115,14 +117,16 @@ class SubagentCoordinator(subagent_coordinator.SubagentCoordinator):
         self,
         repo_root: str,
         model_name: Optional[str] = None,
-    ) -> tuple[Optional[int], Optional[int], Optional[int]]:
-        """Dynamically resolves subagent batch sizes, token limits, and unproductive round thresholds.
+    ) -> tuple[Optional[int], Optional[int], Optional[int], Optional[int]]:
+        """Dynamically resolves subagent batch sizes, token limits, unproductive round thresholds, and concurrent subagent limits.
 
         GROUNDING:
         - Resolves parameters from model configurations matching model_name, defaulting when absent.
 
         POSTCONDITIONS:
-        - MUST dynamically resolve subagent batch sizes, conversation token limits, and maximum unproductive rounds thresholds from model configurations.
+        - MUST dynamically resolve subagent batch sizes, conversation token limits, maximum unproductive rounds thresholds, and concurrent subagents bounds from model configurations.
+        - WHEN concurrent_subagents is configured, MUST validate that its value equals 1, raising ValueError otherwise.
+        - WHEN concurrent_subagents is configured and the model harness is antigravity, MUST raise ValueError.
         """
         ...
 
@@ -131,13 +135,13 @@ def __orphan__() -> None:
     """Orphan contracts for model configuration and parameter resolution.
 
     POSTCONDITIONS:
-    - MUST dynamically resolve subagent batch sizes, conversation token limits, and maximum unproductive rounds thresholds from model configurations.
+    - MUST dynamically resolve subagent batch sizes, conversation token limits, maximum unproductive rounds thresholds, and concurrent subagents bounds from model configurations.
     """
     ...
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-11-06T02:49:00Z
-# LAST_CHANGED: 2026-11-09T22:10:00Z
-# CHANGE: Authoritative orchestration state updates across role dispatch, round completion, and convergence
+# LAST_CHANGED: 2026-11-10T21:20:00Z
+# CHANGE: Add concurrent_subagents to resolve_model_parameters and orchestrate contracts
 # SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---

@@ -702,6 +702,180 @@ class TestLifecycle(unittest.TestCase):
 
         self.assertIn("good_service_closed", teardown_called)
 
+    def test_reflective_singleton_keys_and_tier_inference(self) -> None:
+        """CUJ: @singleton infers protocol keys and tier reflectively."""
+        from support.lib.lifecycle import (
+            ChildTierOf,
+            SystemTier,
+            infer_singleton_keys,
+            infer_singleton_tier,
+        )
+
+        class CustomSessionTier(ChildTierOf[SystemTier]):
+            pass
+
+        class SvcProto(Singleton[CustomSessionTier], Protocol):
+            def execute(self) -> str: ...
+
+        @singleton
+        class SvcImpl(SvcProto):
+            def execute(self) -> str:
+                return "ok"
+
+        # Keys should include SvcImpl and SvcProto
+        keys = infer_singleton_keys(SvcImpl)
+        self.assertIn(SvcImpl, keys)
+        self.assertIn(SvcProto, keys)
+
+        # Tier should be resolved to CustomSessionTier
+        tier = infer_singleton_tier(SvcImpl)
+        self.assertEqual(tier.name, "custom_session")
+
+        # Test registering into a clean registry without explicit keys or tier
+        test_reg = LifecycleRegistry()
+        desc = test_reg.register_singleton(SvcImpl)
+        self.assertEqual(desc.phase, "custom_session")
+        self.assertIn(SvcProto, desc.keys)
+        self.assertIn(SvcImpl, desc.keys)
+
+    def test_register_mock_inference(self) -> None:
+        """CUJ: register_mock infers protocol keys and tier automatically."""
+        class MockQueueProto(Singleton, Protocol):
+            def push(self, item: str) -> None: ...
+
+        class MockQueueDouble:
+            def __init__(self) -> None:
+                self.items: list[str] = []
+
+            def push(self, item: str) -> None:
+                self.items.append(item)
+
+        test_reg = LifecycleRegistry()
+        mock_inst = MockQueueDouble()
+        desc = test_reg.register_mock(mock_inst, MockQueueProto)
+        self.assertEqual(desc.phase, "system")
+        self.assertIn(MockQueueProto, desc.keys)
+
+        with enter_phase(system, registry=test_reg) as scope:
+            resolved = scope.get_singleton(MockQueueProto)
+            resolved.push("test-item")
+            self.assertEqual(mock_inst.items, ["test-item"])
+
+    def test_register_module_and_auto_initialize(self) -> None:
+        """CUJ: register_module discovers singletons and handles assembly constituents."""
+        import types
+
+        # Create dummy impl module
+        dummy_impl = types.ModuleType("dummy_impl")
+
+        class DummyProto(Singleton, Protocol):
+            def ping(self) -> str: ...
+
+        @singleton
+        class DummyImpl(DummyProto):
+            def ping(self) -> str:
+                return "pong"
+
+        DummyImpl.__module__ = "dummy_impl"
+        setattr(dummy_impl, "DummyImpl", DummyImpl)
+        setattr(dummy_impl, "DummyProto", DummyProto)
+
+        # Create dummy assembly module
+        dummy_asm = types.ModuleType("dummy_asm")
+        setattr(dummy_asm, "CONSTITUENTS", [dummy_impl])
+
+        test_reg = LifecycleRegistry()
+        test_reg.register_module(dummy_asm)
+
+        with enter_phase(system, registry=test_reg) as scope:
+            svc = scope.get_singleton(DummyProto)
+            self.assertEqual(svc.ping(), "pong")
+
+    def test_lifecycle_test_case_with_fake(self) -> None:
+        """CUJ: LifecycleTestCase auto-registers fakes and provisions scopes."""
+        from support.lib.lifecycle import LifecycleTestCase, fake
+
+        class EmailService(Singleton, Protocol):
+            def send(self, msg: str) -> None: ...
+
+        class AppService(Singleton):
+            def run(self) -> str:
+                email = get_singleton(EmailService)
+                email.send("hello")
+                return "ran"
+
+        class SampleTest(LifecycleTestCase):
+            target = AppService
+
+            @fake(EmailService)
+            class FakeEmail:
+                def __init__(self) -> None:
+                    self.sent: list[str] = []
+
+                def send(self, msg: str) -> None:
+                    self.sent.append(msg)
+
+        test_case = SampleTest()
+        test_case.setUp()
+        try:
+            # Check that fake_email was injected onto test_case
+            self.assertTrue(hasattr(test_case, "fake_email"))
+            app = test_case.get_singleton(AppService)
+            self.assertEqual(app.run(), "ran")
+            self.assertEqual(getattr(test_case, "fake_email").sent, ["hello"])
+            # Verify get_fake method
+            fake_inst = test_case.get_fake(EmailService)
+            self.assertIs(fake_inst, getattr(test_case, "fake_email"))
+            # Verify sut was populated
+            self.assertIs(test_case.sut, app)
+        finally:
+            test_case.tearDown()
+
+    def test_auto_discovery_substring_precedence(self) -> None:
+        """CUJ: Verify that longer class names take precedence over shorter prefixes (DAGRunner over DAG)."""
+        import types
+        from support.lib.lifecycle import LifecycleTestCase, singleton
+
+        # Mock module with both DAG and DAGRunner
+        dummy_mod = types.ModuleType("dummy.lib.dummy_engine_impl")
+
+        @singleton
+        class DAG(Singleton):
+            pass
+
+        @singleton
+        class DAGRunner(Singleton):
+            pass
+
+        DAG.__module__ = "dummy.lib.dummy_engine_impl"
+        DAGRunner.__module__ = "dummy.lib.dummy_engine_impl"
+        setattr(dummy_mod, "DAG", DAG)
+        setattr(dummy_mod, "DAGRunner", DAGRunner)
+
+        import sys
+        sys.modules["dummy.lib.dummy_engine_impl"] = dummy_mod
+        try:
+            class DAGRunnerTest(LifecycleTestCase):
+                pass
+
+            test_case = DAGRunnerTest()
+            test_case.__class__.__module__ = "dummy.tests.dummy_engine_test"
+            # Target module can be discovered via imported singletons
+            dummy_test_mod = types.ModuleType("dummy.tests.dummy_engine_test")
+            setattr(dummy_test_mod, "DAG", DAG)
+            setattr(dummy_test_mod, "DAGRunner", DAGRunner)
+            sys.modules["dummy.tests.dummy_engine_test"] = dummy_test_mod
+
+            test_case.setUp()
+            try:
+                # SUT must be DAGRunner, NOT DAG
+                self.assertIsInstance(test_case.sut, DAGRunner)
+            finally:
+                test_case.tearDown()
+        finally:
+            sys.modules.pop("dummy.lib.dummy_engine_impl", None)
+            sys.modules.pop("dummy.tests.dummy_engine_test", None)
+
 
 if __name__ == "__main__":
     unittest.main()

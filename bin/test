@@ -5,6 +5,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
+ARGS=()
+DO_REFRESH=1
+for arg in "$@"; do
+    if [ "$arg" = "--no-refresh-sys" ]; then
+        DO_REFRESH=0
+    else
+        ARGS+=("$arg")
+    fi
+done
+set -- ${ARGS[@]+"${ARGS[@]}"}
 TARGET="${1:-}"
 
 # Dynamically discover packages and methodologies via parts configuration files
@@ -225,13 +235,10 @@ else:
 ' "${TARGET:-}"
 
 if [[ " $* " == *" --spec-only "* ]] || [[ " $* " == *" --linters-only "* ]]; then
-    exit 0
-fi
-
-if [ -n "$TARGET" ] && [ "${TARGET:0:1}" != "-" ]; then
+    :
+elif [ -n "$TARGET" ] && [ "${TARGET:0:1}" != "-" ]; then
     case "$TARGET" in
         *.md)
-            exit 0
             ;;
         *.pyi)
             echo "=== Type Checking Specification Stub: $TARGET ==="
@@ -240,14 +247,13 @@ if [ -n "$TARGET" ] && [ "${TARGET:0:1}" != "-" ]; then
                 SPEC_PROJ="update_python_with_ai/pyright_spec.json"
             fi
             uv run pyright --project "$SPEC_PROJ" "$TARGET"
-            exit 0
             ;;
         *_pretense.py)
             echo "=== Type Checking: $TARGET ==="
             uv run pyright "$TARGET"
             echo ""
             echo "=== Pretense Tests: $TARGET ==="
-            exec uv run pretense "$TARGET"
+            uv run pretense "$TARGET"
             ;;
         *)
             echo "=== Type Checking: $TARGET ==="
@@ -295,4 +301,10 @@ else
     else
         echo "No Pretense test targets found (skipped)."
     fi
+fi
+
+if [ "$DO_REFRESH" -eq 1 ]; then
+    echo ""
+    echo "=== Refreshing System Files across Role Workspaces ==="
+    uv run autofab refresh-sys
 fi

@@ -69,7 +69,9 @@ class SubmissionCoordinator(submit.SubmissionCoordinator):
         - Rejects verification and test file targets for auditor roles and read-only or
           out-of-scope targets for producer roles through the implementation's own write
           permission check and its own directory scope check over
-          file_alias.AliasManager.workspace_root and the resolved target path.
+          file_alias.AliasManager.workspace_root and the resolved target path, while
+          politely accepting auditor submissions without uncommitted staged blame without
+          mutating canonical repository metadata.
         - Stamps in-band audit tags and updates canonical in-band change metadata through
           src_metadata.SourceMetadataCoordinator.stamp_audit and
           src_metadata.SourceMetadataCoordinator.record_change while stripping ephemeral

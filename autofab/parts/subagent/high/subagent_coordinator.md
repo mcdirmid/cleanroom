@@ -28,11 +28,11 @@ A system's *subagent coordinator* schedules and orchestrates autonomous subagent
 
 When coordinating multi-agent execution:
 
-- The subagent coordinator provides dynamic model parameter resolution (`resolve_model_parameters`) to extract batch sizes, conversation token limits, and maximum unproductive round thresholds from declarative model configurations.
+- The subagent coordinator provides dynamic model parameter resolution (`resolve_model_parameters`) to extract batch sizes, conversation token limits, maximum unproductive round thresholds, and concurrent subagent bounds from declarative model configurations, validating that concurrent subagents must be 1 if set and disallowing concurrent subagents when the model harness is antigravity.
 
 - The subagent coordinator resets preexisting role workspaces upon initiating orchestration to ensure clean initial state.
 
-- The subagent coordinator dynamically resolves subagent batch sizes, conversation token limits, and maximum unproductive round thresholds from declarative model configurations matching designated model names or identifiers.
+- The subagent coordinator dynamically resolves subagent batch sizes, conversation token limits, maximum unproductive round thresholds, and concurrent subagent bounds from declarative model configurations matching designated model names or identifiers.
 
 - The subagent coordinator evaluates DAG work queues across declared roles, dynamically identifying roles with ready work up to an optional target role boundary without static role hardcoding.
 
@@ -40,13 +40,15 @@ When coordinating multi-agent execution:
 
 - The subagent coordinator ensures absent role workspaces are commissioned via workspace provisioning on demand before dispatching directives, persisting effective batch size bounds into workspace configurations.
 
-- The subagent coordinator dispatches role directives to unblocked ready roles concurrently, tracking active worker handles without static wave partitioning, evaluating unblocked work queues across inactive roles on each polling interval to dispatch newly ready roles without awaiting completion of active workers.
+- The subagent coordinator dispatches role directives to unblocked ready roles concurrently when concurrent subagents is unset, or strictly sequentially when concurrent subagents is set to 1; under single-subagent concurrency, at most one active worker runs at any time, and whenever no worker is active and multiple candidate roles are unblocked, the subagent coordinator schedules the most recently run role first based on historical dispatch timestamps, falling back to topological DAG order for roles that have never run.
 
 - The subagent coordinator periodically polls active workers through the harness adapter at a configurable polling interval (defaulting to 10 seconds), reaping completed rounds, consuming workspace blame buffers, interrupting idling workers holding zero pending work items across consecutive polling intervals, and propagating blame defects into the build graph. Preexisting workspace blame buffers are purged prior to dispatching new rounds to ensure idle or subsequent rounds do not inherit stale blame signatures.
 
 - The subagent coordinator tracks consecutive unproductive rounds yielding zero submitted and zero blamed targets, halting orchestration when unproductive rounds on unresolved targets exceed a threshold configured per model or globally (defaulting to 5).
 
 - The subagent coordinator tracks consecutive rounds where a worker delivers an identical blame signature on unchanged targets; when a worker delivers the identical blame twice in a row without intervening author modifications, the subagent coordinator terminates the active worker, clears persistent session state, recommissions its workspace with a clean baseline, and injects a restart advisory into subsequent task prompts, halting orchestration when a worker exceeds a maximum budget of 10 restarts. When an author role submits modifications to a previously blamed target, consecutive blame tracking against that target is cleared for affected roles. Downstream auditor roles are withheld from concurrent dispatch while upstream dependency workers are actively executing or scheduled for concurrent dispatch in the same cycle.
+
+- The subagent coordinator tracks consecutive rejections between worker roles and upstream auditor roles. When a worker rejects feedback from an auditor twice consecutively on a target without intervening author code modifications, the subagent coordinator terminates active rounds for both the worker and auditor, clears persistent session state for both roles, recommissions both workspaces with clean baselines, resets consecutive rejection tracking for that target, and injects a clean-slate impasse advisory into subsequent task prompts for both roles.
 
 - When an active worker completes a round without submitting, blaming, or failing its assigned targets, the subagent coordinator tracks the unresolved status and injects an actionable reminder into the subsequent role dispatch directive, reminding the worker that conversational commentary without tools is prohibited and that it must verify targets via check_files and conclude the round via submit, blame, or fail.
 
@@ -64,7 +66,7 @@ When coordinating multi-agent execution:
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-11-09T22:10:00Z
-CHANGE: Authoritative orchestration state snapshot publishing across dispatch, harvest, and convergence events
+LAST_CHANGED: 2026-11-10T21:20:00Z
+CHANGE: Add concurrent_subagents resolution, validation, and MRU sequential dispatch contracts
 SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->

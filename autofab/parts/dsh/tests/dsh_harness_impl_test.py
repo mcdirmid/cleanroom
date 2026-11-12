@@ -10,7 +10,7 @@ import unittest
 from unittest.mock import patch
 from typing import Any, Dict, List, Optional, Sequence
 
-from support.lib.lifecycle import LifecycleRegistry, enter_phase
+from support.lib.lifecycle import LifecycleTestCase, enter_phase
 from support.lib import app_info
 from autofab.parts.agent.lib import session as agent_session
 from autofab.parts.dsh.lib import dsh_asm, dsh_harness, dsh_telemetry
@@ -90,9 +90,15 @@ class FakeWorkspaceWorkManager:
 class FakeDshTelemetryParser:
     tier = agent_session.agent_session
 
-    def __init__(self, server_available: bool = True, fail_rpc: bool = False) -> None:
+    def __init__(
+        self,
+        server_available: bool = True,
+        fail_rpc: bool = False,
+        rpc_prefix: str = "dsh_rpc::",
+    ) -> None:
         self.server_available = server_available
         self.fail_rpc = fail_rpc
+        self.rpc_prefix = rpc_prefix
         self.next_session_id: Optional[str] = None
         self.dispatched: list[dict[str, Any]] = []
         self.polled_handles: list[str] = []
@@ -147,7 +153,7 @@ class FakeDshTelemetryParser:
                 "dir_scope": dir_scope,
             }
         )
-        return f"dsh_rpc::{sid}::mock-msg-1"
+        return f"{self.rpc_prefix}{sid}::mock-msg-1"
 
     dispatch_turn_rpc = dispatch_round_rpc
 
@@ -201,12 +207,12 @@ class FakeDshTelemetryParser:
         return 0
 
 
-class DshHarnessImplTest(unittest.TestCase):
+class DshHarnessImplTest(LifecycleTestCase):
     """Test cases for DshTelemetryParser, DshHarnessAdapter, and DshHarnessManager."""
 
     def setUp(self) -> None:
+        super().setUp()
         self.test_dir = tempfile.mkdtemp()
-        self.registry = LifecycleRegistry()
         dsh_asm.__initialize__(self.registry)
         self.mock_harness_registry = MockHarnessRegistry()
         self.registry.register_instance(
@@ -603,6 +609,58 @@ class DshHarnessImplTest(unittest.TestCase):
             self.assertIsNotNone(result.telemetry)
             assert result.telemetry is not None
             self.assertEqual(result.telemetry.total_tokens, 950)
+
+    def test_dispatch_and_await_role_via_web_rpc_session_continuity(self) -> None:
+        """Scenario 2 & 8: Verifies dsh_rpc_web:: task handle extracts session ID and enables round continuity."""
+        with enter_phase(agent_session.agent_session, registry=self.registry):
+            fake_parser = FakeDshTelemetryParser(
+                server_available=True, rpc_prefix="dsh_rpc_web::"
+            )
+            fake_parser.next_session_id = "session-web-abc-123"
+            adapter = DshHarnessAdapter(
+                model_name="DeepSeek-V41-Flash",
+                simulation_mode=False,
+                parser=fake_parser,
+            )
+
+            self.work_mgr.set_pending_work(self.test_dir, ["lib/foo.py"])
+            dispatch = subagent_coordinator.RoleDispatch(
+                role_name="lib",
+                workspace_dir=self.test_dir,
+                dir_scope="//pkg",
+                ready_targets=("lib/foo.py",),
+                batch_size=1,
+                task_prompt="",
+            )
+
+            handle = adapter.dispatch_role(dispatch)
+            self.work_mgr.remove_pending_target(self.test_dir, "lib/foo.py")
+            result = adapter.await_role(handle)
+            self.assertEqual(result.status, "clean")
+
+            # Verify session ID was persisted to role workspace state directory
+            session_file = os.path.join(
+                self.test_dir, ".autofab", "dsh_session_id.txt"
+            )
+            self.assertTrue(os.path.isfile(session_file))
+            with open(session_file, "r", encoding="utf-8") as sf:
+                self.assertEqual(sf.read().strip(), "session-web-abc-123")
+
+            # Next round dispatches reusing the saved session ID
+            self.work_mgr.set_pending_work(self.test_dir, ["lib/bar.py"])
+            dispatch2 = subagent_coordinator.RoleDispatch(
+                role_name="lib",
+                workspace_dir=self.test_dir,
+                dir_scope="//pkg",
+                ready_targets=("lib/bar.py",),
+                batch_size=1,
+                task_prompt="",
+            )
+            handle2 = adapter.dispatch_role(dispatch2)
+            self.assertEqual(len(fake_parser.dispatched), 2)
+            self.assertEqual(
+                fake_parser.dispatched[1]["session_id"], "session-web-abc-123"
+            )
 
     def test_poll_role_via_rpc_active_and_completed(self) -> None:
         """Scenario 5: Non-blocking polling over RPC bridge returns None while active and result when completed."""
@@ -1125,8 +1183,8 @@ if __name__ == "__main__":
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-30T19:50:00Z
-# LAST_CHANGED: 2026-11-09T22:10:00Z
-# CHANGE: Test update_orchestration_state snapshot persistence
+# LAST_CHANGED: 2026-11-11T16:30:00Z
+# CHANGE: Test dsh_rpc_web:: session extraction and round continuity
 # COVERAGE_AUDIT: 2026-10-18T19:13:51Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---

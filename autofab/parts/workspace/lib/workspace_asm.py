@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Optional
-from support.lib.lifecycle import LifecycleRegistry
+from support.lib.lifecycle import auto_initialize
 from . import (
     provision_impl,
     role_registry_impl,
@@ -22,12 +22,7 @@ CONSTITUENTS = (
 
 
 # Contract: Initializes workspace assembly component and delegates registration to all constituent modules.
-def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
-    """Initializes the workspace assembly component and its constituents."""
-    for constituent in CONSTITUENTS:
-        constituent.__initialize__(registry)
-
-
+__initialize__ = auto_initialize()
 _initialize_ = __initialize__
 
 # --- CLEANROOM METADATA ---

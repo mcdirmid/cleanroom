@@ -21,7 +21,7 @@ When coordinating multi-agent execution:
 
 - The realization resets preexisting role workspaces for declared roles upon initiating orchestration.
 
-- The realization resolves subagent batch sizes, conversation token limits, and maximum unproductive round thresholds from declarative model configurations matching designated model names or identifiers.
+- The realization resolves subagent batch sizes, conversation token limits, maximum unproductive round thresholds, and concurrent subagent limits from declarative model configurations matching designated model names or identifiers, enforcing that concurrent subagents must be 1 if set and rejecting models using the antigravity harness if concurrent subagents is set.
 
 - The realization queries commissioned workspaces and evaluates unblocked dirty role work queues.
 
@@ -29,7 +29,7 @@ When coordinating multi-agent execution:
 
 - The realization commissions absent role workspaces on demand when ready tasks are identified, recording effective batch size limits into role descriptors.
 
-- The realization dispatches role directives concurrently for roles possessing ready work, purging preexisting blame buffers from the role workspace, pulling updated files and refreshing system files from the canonical repository root into the role workspace and recording assigned ready targets in the pending work buffer prior to dispatching each role, tracking active worker handles without static wave partitioning, evaluating unblocked dirty work queues across inactive roles on each polling interval to dispatch newly ready roles immediately without waiting for in-flight active workers to conclude while withholding downstream roles whose upstream dependencies on the same target unit are active or scheduled for concurrent dispatch.
+- The realization dispatches role directives concurrently for roles possessing ready work when concurrent subagents is unset, or strictly limits concurrent execution to at most one subagent when concurrent subagents is set to 1; under single-subagent execution, if multiple candidate roles are unblocked and no worker is active, the realization selects the most recently run role according to prior dispatch timestamps, falling back to topological order for unrun roles, purging preexisting blame buffers from the role workspace, pulling updated files and refreshing system files from the canonical repository root into the role workspace and recording assigned ready targets in the pending work buffer prior to dispatching each role, tracking active worker handles without static wave partitioning, evaluating unblocked dirty work queues across inactive roles on each polling interval to dispatch newly ready roles immediately without waiting for in-flight active workers to conclude while withholding downstream roles whose upstream dependencies on the same target unit are active or scheduled for concurrent dispatch.
 
 - The realization periodically polls active workers through non-blocking checks on the configured harness adapter at a configurable interval (defaulting to 10 seconds), collecting role round results and consuming workspace blame buffers upon completion, enforcing an initialization grace period before evaluating idle worker state, interrupting idling workers that have resolved all assigned targets and hold zero pending work items across consecutive polling intervals past the grace period, and harvesting persistent idling workers directly when harness termination stalls.
 
@@ -53,7 +53,7 @@ When coordinating multi-agent execution:
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-11-06T02:49:00Z
-LAST_CHANGED: 2026-11-09T22:10:00Z
-CHANGE: Authoritative orchestration state updates across role dispatch, round completion, and convergence
+LAST_CHANGED: 2026-11-10T21:20:00Z
+CHANGE: Add concurrent_subagents resolution, validation, and MRU sequential dispatch contracts
 SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 -->

@@ -3,13 +3,13 @@ import tempfile
 import textwrap
 import unittest
 
-from support.lib.lifecycle import LifecycleRegistry
+from support.lib.lifecycle import LifecycleTestCase
 from autofab.parts.workspace_cli.lib import coverage, coverage_impl
 
 
-class ToolCoverageImplTest(unittest.TestCase):
+class ToolCoverageImplTest(LifecycleTestCase):
     def setUp(self) -> None:
-        self.registry = LifecycleRegistry()
+        super().setUp()
         self.evaluator = coverage_impl.CoverageEvaluator()
         self.registry.register_instance(
             self.evaluator,

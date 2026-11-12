@@ -30,9 +30,13 @@ The workspace provisioner:
 
 - Writes workspace role configuration into a hidden role descriptor file recording role identity and optional model profile settings without exposing host repository paths, configures test runner isolation to restrict test discovery to the local workspace, and synthesizes a role-tailored `AGENTS.md` guide file establishing agent constraints and tool invocation workflows.
 
+- Locks non-writable workspace directories to read-only permissions (`0o555`) while preserving write permissions (`0o755`) on declared writable target directories and workspace roots when a role agent is active in the workspace, preventing out-of-scope mutations.
+
+- Unlocks workspace directories with write permissions (`0o755`) upon round completion or when performing system synchronization and teardown, enabling seamless file synchronization and clean directory removal.
+
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-22T13:50:00Z
-LAST_CHANGED: 2026-10-22T13:50:00Z
-CHANGE: Restrict workspace provisioning exclusively to target scope and bound methodology package assets
+LAST_CHANGED: 2026-11-11T14:00:00Z
+CHANGE: Define dynamic workspace directory locking and unlocking across role rounds
 SPEC_QA_AUDIT: 2026-10-15T17:42:47Z
 -->

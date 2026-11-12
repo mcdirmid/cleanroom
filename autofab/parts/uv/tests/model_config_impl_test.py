@@ -4,7 +4,7 @@ import os
 import sys
 import tempfile
 import unittest
-from support.lib.lifecycle import LifecycleRegistry, enter_phase
+from support.lib.lifecycle import LifecycleRegistry, LifecycleTestCase, enter_phase
 from support.lib import app_info
 from autofab.parts.agent.lib.agent_config import AgentConfig
 from autofab.parts.dag.lib.dag_config import DagConfig
@@ -15,8 +15,9 @@ from autofab.parts.uv.lib.model_config_impl import (
 )
 
 
-class UvModelConfigImplTest(unittest.TestCase):
+class UvModelConfigImplTest(LifecycleTestCase):
     def setUp(self) -> None:
+        super().setUp()
         self.orig_cwd = os.getcwd()
         self.orig_env = dict(os.environ)
         self.orig_argv = list(sys.argv)

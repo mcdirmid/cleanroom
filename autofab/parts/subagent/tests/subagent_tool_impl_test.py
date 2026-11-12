@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 from typing import Optional
 
-from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_default_registry
+from support.lib.lifecycle import LifecycleTestCase, enter_phase
 from autofab.parts.agent.lib import session as agent_session
 from autofab.parts.subagent.lib import (
     subagent_coordinator,
@@ -54,8 +54,10 @@ class FakeCoordinator:
         max_unproductive_turns: Optional[int] = None,
         target_node: Optional[str] = None,
         max_unproductive_rounds: Optional[int] = None,
+        concurrent_subagents: Optional[int] = None,
     ) -> subagent_coordinator.OrchestrationSummary:
         self.last_target_role = target_role
+        self.last_concurrent_subagents = concurrent_subagents
         self.last_max_unproductive_rounds = (
             max_unproductive_rounds
             if max_unproductive_rounds is not None
@@ -115,12 +117,11 @@ class FakeHarnessResolver:
         return DummyAdapter()
 
 
-class SubagentToolImplTest(unittest.TestCase):
+class SubagentToolImplTest(LifecycleTestCase):
     """Test cases for SubagentToolRunner implementation."""
 
     def setUp(self) -> None:
-        self.registry = LifecycleRegistry()
-        __initialize__(self.registry)
+        super().setUp()
 
         self.fake_resolver = FakeHarnessResolver()
         self.fake_coord = FakeCoordinator(converged=True)

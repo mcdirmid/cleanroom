@@ -54,7 +54,6 @@ Auditing follows a strict normative triage chain: if a behavior is absent from h
 - [ ] Every interface scenario observation is judged against `low/<name>.pyi` as supported, partial, or unstated
 - [ ] Every implementation scenario observation is traced to an imported collaborator capability, delegated capability, or private mechanism
 - [ ] A realization reading internal state is traced to the operation that writes that state; unstated preconditions in thin specifications are accepted if marked as inferred in `Given:`
-- [ ] When a scenario contradicts mutually consistent high, planning, and low specifications, treat the scenario as an outlier: submit the unit and record the discrepancy in feedback
 
 ## Materiality test and false-positive suppression
 

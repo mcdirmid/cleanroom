@@ -101,8 +101,36 @@ Given: multi-agent supervision running in a designated scope with active workers
 1. The coordinator dispatches roles and reaps completed workers.
    Observed: authoritative orchestration state snapshots detailing active scopes, current wave counts, active running workers, idle completed workers, assigned targets, and convergence outcomes are published across dispatch, round completion, and DAG convergence events.
 
+## Scenario 15 — Resetting auditor and worker on consecutive rejection impasse
+
+Given: an auditor blames a target and the worker role delivers consecutive rejections without modifying code.
+
+1. The coordinator detects that the worker role rejected the auditor's feedback twice in a row on the same target.
+   Observed: the coordinator interrupts active tasks for both the worker and the auditor, wipes their workspaces, recommissions fresh workspaces with clean baselines and sessions, resets consecutive rejection tracking for that target, and injects a clean-slate impasse advisory into subsequent task prompts for both roles.
+
+## Scenario 16 — Sequential role dispatch under concurrent_subagents = 1 and MRU selection
+
+Given: model configuration defines concurrent_subagents = 1 and roles role_a and role_b are unblocked and ready to execute.
+
+1. The coordinator evaluates ready work queues and initiates execution.
+   Observed: only one subagent is launched; when role_a completes and both role_a and role_b have ready work, role_a is chosen because it was most recently run.
+
+## Scenario 17 — Rejecting concurrent_subagents configuration on antigravity harness
+
+Given: a model configuration binds to harness antigravity and specifies concurrent_subagents = 1.
+
+1. The coordinator resolves model parameters or initiates orchestration.
+   Observed: execution halts with a ValueError indicating concurrent_subagents is not allowed for antigravity models.
+
+## Scenario 18 — Rejecting invalid concurrent_subagents values other than 1
+
+Given: a model configuration specifies concurrent_subagents = 2.
+
+1. The coordinator resolves model parameters or initiates orchestration.
+   Observed: execution halts with a ValueError indicating only 1 is supported for concurrent_subagents.
+
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
-LAST_CHANGED: 2026-11-09T22:10:00Z
-CHANGE: Add scenario for authoritative orchestration state snapshot publishing
+LAST_CHANGED: 2026-11-10T21:20:00Z
+CHANGE: Add concurrent_subagents resolution, validation, and MRU sequential dispatch scenarios
 -->

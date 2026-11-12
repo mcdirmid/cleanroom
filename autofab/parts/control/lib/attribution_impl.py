@@ -6,13 +6,7 @@ import stat
 import sys
 import tomllib
 from typing import Any, Dict, List, Optional, Sequence, Tuple
-from support.lib.lifecycle import (
-    LifecycleRegistry,
-    LifecycleResolutionError,
-    Singleton,
-    get_default_registry,
-    get_singleton,
-)
+from support.lib.lifecycle import LifecycleResolutionError, auto_initialize, get_singleton, singleton
 from autofab.parts.agent.lib import file_alias, node_config, agent_session
 from autofab.parts.dag.lib import dag_storage
 from autofab.parts.metadata.lib import src_metadata
@@ -277,10 +271,10 @@ def _resolve_bound_file_path(blame_string: str) -> Optional[str]:
     return None
 
 
+@singleton
 class AttributionCoordinator(attribution.AttributionCoordinator):
     """Coordinates upstream blame attribution, single-paragraph validation, and failure cascades."""
 
-    tier = agent_session.agent_session
 
     # Contract: Converts value through AliasManager.to_alias and intersects resulting alias with blame_targets_by_node for the supplied node.
     def match_blame_target(
@@ -578,7 +572,18 @@ class AttributionCoordinator(attribution.AttributionCoordinator):
         part_dir, unit_name, blamed_role = _parse_unit_from_file_path(
             dep_path, ref_root
         )
-        main_dep_path = os.path.join(main_root, os.path.relpath(dep_path, ref_root))
+        rel = os.path.relpath(dep_path, ref_root).replace("\\", "/")
+        main_scope = str(meta.get("main_dir_scope") or "").strip("/") if meta else ""
+        ws_scope = str(meta.get("dir_scope") or "").strip("/") if meta else ""
+        main_rel = rel
+        if (
+            main_scope
+            and ws_scope
+            and main_scope != ws_scope
+            and rel.startswith(ws_scope + "/")
+        ):
+            main_rel = main_scope + "/" + rel[len(ws_scope) + 1 :]
+        main_dep_path = os.path.join(main_root, main_rel)
 
         # Validate that caller is configured to deliver feedback to blamed_role
         role_defs = _get_role_definitions()
@@ -660,9 +665,40 @@ class AttributionCoordinator(attribution.AttributionCoordinator):
                 affected_nodes=[],
             )
 
+        caller_role = (meta.get("role_name") or meta.get("role")) if meta else None
+        clean_caller = (
+            caller_role.split(":")[-1].strip().lower() if caller_role else ""
+        )
+        if clean_caller and "#" in clean_caller:
+            clean_caller = clean_caller.split("#")[-1]
+        is_auditor = (
+            src_metadata.is_auditor_role(clean_caller) if clean_caller else False
+        )
+
+        if is_auditor:
+            return attribution.AttributionOutcome(
+                accepted=True,
+                message=(
+                    f"[AUDITOR TASK FAILURE] Recorded failure for auditor role '{clean_caller}' "
+                    f"on target '{target_file}': {failure_reason}. "
+                    f"Canonical repository file left unmutated."
+                ),
+                affected_nodes=[],
+            )
+
         ref_root = main_root if full_p.startswith(main_root) else ws_root
-        rel_p = os.path.relpath(full_p, ref_root)
-        main_p = os.path.join(main_root, rel_p)
+        rel_p = os.path.relpath(full_p, ref_root).replace("\\", "/")
+        main_scope = str(meta.get("main_dir_scope") or "").strip("/") if meta else ""
+        ws_scope = str(meta.get("dir_scope") or "").strip("/") if meta else ""
+        main_rel = rel_p
+        if (
+            main_scope
+            and ws_scope
+            and main_scope != ws_scope
+            and rel_p.startswith(ws_scope + "/")
+        ):
+            main_rel = main_scope + "/" + rel_p[len(ws_scope) + 1 :]
+        main_p = os.path.join(main_root, main_rel)
         target_to_mutate = main_p if os.path.exists(main_p) else full_p
 
         src_metadata.mark_dirty(target_to_mutate, reason=failure_reason)
@@ -693,17 +729,5 @@ class AttributionCoordinator(attribution.AttributionCoordinator):
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
-
-# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
-def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
-    """Registers constituent singletons into the lifecycle registry."""
-    reg = get_default_registry() if registry is None else registry
-    reg.register_singleton(
-        AttributionCoordinator,
-        keys=[AttributionCoordinator, attribution.AttributionCoordinator],
-        tier=AttributionCoordinator.tier,
-    )
-
-
+__initialize__ = auto_initialize()
 _initialize_ = __initialize__
-# --- END CLEANROOM AUTO-GENERATED ---

@@ -12,7 +12,7 @@ import time
 from typing import Any, Callable, List, Optional
 import unittest
 
-from support.lib.lifecycle import LifecycleRegistry, enter_phase, system
+from support.lib.lifecycle import LifecycleTestCase
 from benchmarks.parts.dag_engine.lib import dag_engine
 from benchmarks.parts.dag_engine.lib.dag_engine_impl import (
     DAG,
@@ -31,12 +31,11 @@ def _returning(value: Any) -> Callable[[], Any]:
     return action
 
 
-class DAGEngineImplTest(unittest.TestCase):
+class DAGEngineImplTest(LifecycleTestCase):
     """Contract tests for the graph, scheduler, and runner implementations."""
 
     def setUp(self) -> None:
-        self.registry = LifecycleRegistry()
-        __initialize__(self.registry)
+        super().setUp()
         self.dag = DAG()
 
     def _scheduler(self) -> WaveScheduler:

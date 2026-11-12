@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 import os
 from typing import Mapping, Optional, Protocol, Sequence
 from support.lib.lifecycle import Singleton
@@ -167,8 +168,18 @@ class SubagentCoordinator(Singleton[AgentSessionTier], Protocol):
         max_unproductive_turns: Optional[int] = None,
         target_node: Optional[str] = None,
         max_unproductive_rounds: Optional[int] = None,
+        concurrent_subagents: Optional[int] = None,
     ) -> OrchestrationSummary:
         """Orchestrates iterative multi-agent execution until DAG convergence or failure."""
+        ...
+
+    # Contract: dynamically resolve model parameters
+    def resolve_model_parameters(
+        self,
+        repo_root: str,
+        model_name: Optional[str] = None,
+    ) -> tuple[Optional[int], Optional[int], Optional[int], Optional[int]]:
+        """Dynamically resolves subagent batch sizes, token limits, and unproductive round thresholds."""
         ...
 
 
@@ -176,26 +187,44 @@ class SubagentCoordinator(Singleton[AgentSessionTier], Protocol):
 def resolve_log_dir(workspace_dir: str) -> str:
     """Resolves the canonical repository logs directory for a role workspace."""
     try:
-        from support.lib.lifecycle import Singleton, get_singleton
-        import importlib
+        from support.lib.lifecycle import get_singleton
+        try:
+            from autofab.parts.workspace.lib import role_registry
+        except ImportError:
+            import role_registry  # type: ignore
 
-        ws_reg_mod = importlib.import_module("role_registry")
-        reg = get_singleton(ws_reg_mod.WorkspaceRegistry)  # type: ignore
+        reg = get_singleton(role_registry.WorkspaceRegistry)
         main_root = reg.discover_repository_root(workspace_dir)
         log_dir = os.path.join(main_root, "logs")
     except Exception:
         parent = os.path.dirname(os.path.realpath(workspace_dir))
         ws_containers = app_info.get_role_workspaces_containers()
+        main_cand = None
         if os.path.basename(parent) in ws_containers:
             p_root = os.path.dirname(parent)
             ws_base = os.path.basename(workspace_dir)
-            main_cand = None
-            for entry in sorted(os.listdir(p_root), key=len, reverse=True):
-                if entry not in ws_containers and ws_base.startswith(f"{entry}_"):
-                    cand = os.path.join(p_root, entry)
-                    if os.path.isdir(cand):
-                        main_cand = cand
-                        break
+            for desc_marker in app_info.get_role_descriptors():
+                desc_path = os.path.join(workspace_dir, desc_marker)
+                if os.path.isfile(desc_path):
+                    try:
+                        with open(desc_path, "r", encoding="utf-8") as f:
+                            rdata = json.load(f)
+                        root = rdata.get("main_repository_root")
+                        if root and os.path.isdir(root):
+                            main_cand = root
+                            break
+                    except Exception:
+                        pass
+            if not main_cand:
+                for entry in sorted(os.listdir(p_root), key=len, reverse=True):
+                    if entry not in ws_containers:
+                        cand = os.path.join(p_root, entry)
+                        if os.path.isdir(cand) and (
+                            os.path.isdir(os.path.join(cand, ".git"))
+                            or os.path.isfile(os.path.join(cand, "pyproject.toml"))
+                        ):
+                            main_cand = cand
+                            break
             if main_cand:
                 log_dir = os.path.join(main_cand, "logs")
             else:

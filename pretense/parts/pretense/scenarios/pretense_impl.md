@@ -42,7 +42,7 @@ Given: a shrunken sequence of trace steps leading to an assertion violation.
 Given: a test suite containing an infinite loop or hanging operation.
 
 1. The watchdog monitor arms a timer warning and a faulthandler timeout.
-   Observed: the timer prints an active step warning before expiration, and faulthandler dumps the active traceback to standard error and terminates execution if the timeout limit is reached.
+   Observed: the timer prints an active step warning before expiration, interrupts the main thread to signal test runners, and faulthandler dumps the active traceback to standard error and terminates execution if the timeout limit is reached.
 
 2. The watchdog monitor executes a quick test that completes before timeout.
    Observed: watchdog timers are cleanly disarmed upon completion without interrupting the process.

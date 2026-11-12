@@ -13,7 +13,7 @@ from unittest.mock import patch, MagicMock
 from pathlib import Path
 from typing import Any
 
-from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_singleton, system
+from support.lib.lifecycle import LifecycleTestCase, enter_phase, system
 from support.lib import app_info, experiments
 from autofab.parts.benchmark.lib import benchmark
 from autofab.parts.benchmark.lib.benchmark_impl import (  # cleanroom: allow-private-import
@@ -24,9 +24,9 @@ from autofab.parts.benchmark.lib.benchmark_impl import (  # cleanroom: allow-pri
 )
 
 
-class BenchmarkImplTest(unittest.TestCase):
+class BenchmarkImplTest(LifecycleTestCase):
     def setUp(self) -> None:
-        self.registry = LifecycleRegistry()
+        super().setUp()
         experiments.clear_active_experiments()
 
     def tearDown(self) -> None:
@@ -823,7 +823,8 @@ class BenchmarkImplTest(unittest.TestCase):
     def test_flight_scope_teardown_on_failure(self) -> None:
         """CUJ: Preserving failed flight scope in-place with status failed and skipping recycling on subsequent runs."""
         with tempfile.TemporaryDirectory() as tmp_dir:
-            repo_root = Path(tmp_dir)
+            repo_root = Path(tmp_dir) / "repo"
+            repo_root.mkdir()
             flight_scope = "benchmarks/runs/sample_part_model_1"
             flight_scope_dir = repo_root / flight_scope
             flight_scope_dir.mkdir(parents=True, exist_ok=True)
@@ -1011,12 +1012,9 @@ class BenchmarkImplTest(unittest.TestCase):
                     record, unit, results_dir=str(results_dir)
                 )
                 self.assertIsNotNone(archived)
-                log_archive = (
-                    results_dir
-                    / unit.task_id
-                    / f"{model.identifier.replace('/', '_')}"
-                    / f"{app_info.APP_NAME}_1.log"
-                )
+                assert archived is not None
+                dest_dir = Path(archived[0]).parent
+                log_archive = dest_dir / f"{app_info.APP_NAME}_1.log"
                 self.assertTrue(log_archive.is_file())
                 self.assertIn("[CHANGE]", log_archive.read_text(encoding="utf-8"))
 

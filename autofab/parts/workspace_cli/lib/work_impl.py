@@ -9,13 +9,7 @@ import os
 import re
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
-from support.lib.lifecycle import (
-    LifecycleRegistry,
-    LifecycleResolutionError,
-    Singleton,
-    get_default_registry,
-    get_singleton,
-)
+from support.lib.lifecycle import LifecycleResolutionError, auto_initialize, get_singleton, singleton
 from autofab.parts.agent.lib import session as agent_session
 from autofab.parts.control.lib import work_scheduler
 from autofab.parts.metadata.lib import src_metadata
@@ -288,10 +282,10 @@ def _get_role_upstream_chain(
 
 
 # Contract: WorkspaceWorkManager realizes work discovery across directory scopes and pending buffer tracking in agent_session tier.
+@singleton
 class WorkspaceWorkManager(work.WorkspaceWorkManager):
     """Realizes work discovery across directory scopes and pending buffer tracking."""
 
-    tier = agent_session.agent_session
 
     def __init__(self) -> None:
         pass
@@ -778,17 +772,5 @@ class WorkspaceWorkManager(work.WorkspaceWorkManager):
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
-
-# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
-def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
-    """Registers constituent singletons into the lifecycle registry."""
-    reg = get_default_registry() if registry is None else registry
-    reg.register_singleton(
-        WorkspaceWorkManager,
-        keys=[work.WorkspaceWorkManager, WorkspaceWorkManager],
-        tier=agent_session.agent_session,
-    )
-
-
+__initialize__ = auto_initialize()
 _initialize_ = __initialize__
-# --- END CLEANROOM AUTO-GENERATED ---

@@ -49,7 +49,7 @@ When attributing blame to a culprit file:
 
 When recording task failure for a file target:
 
-- The attribution coordinator resolves the target file path, appends verification failure diagnostics, marks dirty status directly in the canonical repository, and synchronizes the updated files back to the local role workspace.
+- The attribution coordinator resolves the target file path and active caller role from workspace metadata or execution environment: for authoring roles, appends verification failure diagnostics and marks dirty status directly in the canonical repository, synchronizing the updated file back to the local role workspace; for auditor roles, records task failure strictly within the auditor workspace without mutating or appending feedback to the audited file in the canonical repository.
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-30T11:00:00Z

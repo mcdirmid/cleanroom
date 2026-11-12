@@ -9,12 +9,7 @@ import subprocess
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-from support.lib.lifecycle import (
-    LifecycleRegistry,
-    Singleton,
-    get_default_registry,
-    get_singleton,
-)
+from support.lib.lifecycle import auto_initialize, get_singleton, singleton
 from autofab.parts.agent.lib import session as agent_session
 from autofab.parts.subagent.lib import subagent_coordinator, subagent_harness
 
@@ -209,6 +204,17 @@ class AntigravityHarnessAdapter(antigravity_harness.AntigravityHarnessAdapter):
     # Contract: AntigravityHarnessAdapter.dispatch_role - initiates subagent turn in designated workspace and returns task handle.
     def dispatch_role(self, dispatch: subagent_coordinator.RoleDispatch) -> str:
         """Dispatches work directive to an Antigravity role workspace."""
+        try:
+            from autofab.parts.workspace.lib import provision
+            prov = get_singleton(provision.WorkspaceProvisioner)
+            prov.lock_workspace_directories(
+                dispatch.workspace_dir,
+                role_name=dispatch.role_name,
+                dir_scope=dispatch.dir_scope,
+            )
+        except Exception:
+            pass
+
         self._handle_counter += 1
         handle = f"antigravity-task-{self._handle_counter}-{dispatch.role_name}"
 
@@ -355,6 +361,13 @@ class AntigravityHarnessAdapter(antigravity_harness.AntigravityHarnessAdapter):
         elif blamed:
             status = "blamed"
 
+        try:
+            from autofab.parts.workspace.lib import provision
+            prov = get_singleton(provision.WorkspaceProvisioner)
+            prov.unlock_workspace_directories(dispatch.workspace_dir)
+        except Exception:
+            pass
+
         return subagent_coordinator.RoleTurnResult(
             role=dispatch.role_name,
             status=status,
@@ -380,10 +393,10 @@ class AntigravityHarnessAdapter(antigravity_harness.AntigravityHarnessAdapter):
 
 
 # Contract: AntigravityHarnessManager realizes management of Antigravity execution adapters and transcript parsing in the agent session tier.
+@singleton
 class AntigravityHarnessManager(antigravity_harness.AntigravityHarnessManager):
     """Realizes management of Antigravity execution adapters and transcript parsing."""
 
-    tier = agent_session.agent_session
 
     def __init__(self) -> None:
         self._parser = TranscriptTelemetryParser()
@@ -432,17 +445,5 @@ class AntigravityHarnessManager(antigravity_harness.AntigravityHarnessManager):
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
-
-# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
-def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
-    """Registers constituent singletons into the lifecycle registry."""
-    reg = get_default_registry() if registry is None else registry
-    reg.register_singleton(
-        AntigravityHarnessManager,
-        keys=[antigravity_harness.AntigravityHarnessManager, AntigravityHarnessManager],
-        tier=agent_session.agent_session,
-    )
-
-
+__initialize__ = auto_initialize()
 _initialize_ = __initialize__
-# --- END CLEANROOM AUTO-GENERATED ---

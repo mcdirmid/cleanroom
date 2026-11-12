@@ -6,6 +6,7 @@ from typing import Any, Callable, Collection, Dict, FrozenSet, List, Mapping, Op
 from support.lib.framework import operation, override, singleton_type
 from support.lib.lifecycle import Singleton, SystemTier, get_singleton
 import dag_engine_lite
+import kahn_topology_ext
 
 
 @singleton_type("system")
@@ -14,6 +15,7 @@ class DAG(dag_engine_lite.DAG):
 
     GROUNDING:
     - Maintains adjacency dictionaries _nodes, _upstream, and _downstream mapping node identifiers to definitions and sets.
+    - Delegates deterministic topological sorting, cycle path reconstruction, and critical path dynamic programming to kahn_topology_ext.
     """
 
     @operation
@@ -58,6 +60,7 @@ class DAG(dag_engine_lite.DAG):
         - Raises dag_engine_lite.NodeNotFoundError if absent.
         - Removes node_id from all incident upstream and downstream neighbor sets.
         - Deletes node_id from _nodes, _upstream, and _downstream.
+        - Purges removed node from active wave scheduler tracking.
         """
         ...
 
@@ -132,6 +135,7 @@ class DAG(dag_engine_lite.DAG):
         """Computes a deterministic topological ordering of all nodes.
 
         GROUNDING:
+        - Coordinates with kahn_topology_ext for Kahn's algorithm with priority-ordered max-heap selection.
         - Computes in-degree counts from _upstream mapping.
         - Initializes ready list with nodes having in-degree zero, sorted by priority descending then node_id ascending.
         - Iteratively extracts candidate with highest priority, appends to order, and decrements downstream in-degrees.
@@ -172,6 +176,7 @@ class DAG(dag_engine_lite.DAG):
         """Computes the longest weighted dependency path through the graph.
 
         GROUNDING:
+        - Coordinates with kahn_topology_ext for dynamic programming earliest completion accumulation and critical path backtracking.
         - Computes topological order using topological_sort().
         - Resolves duration weights mapping defaulting to 1.0 for unspecified nodes.
         - Computes earliest completion times using dynamic programming: earliest[node] = max((earliest[p] for p in upstream), default=0.0) + duration[node].
@@ -315,8 +320,9 @@ class DAGRunner(dag_engine_lite.DAGRunner):
         ...
 
 # --- AUTOFAB METADATA ---
-# LAST_CLEANED: 2026-11-10T07:51:09Z
+# LAST_CLEANED: 2026-11-12T04:48:06Z
 # LAST_CHANGED: 2026-11-02T19:35:00Z
 # CHANGE: Specify DuplicateNodeError on add_node for already registered node identifiers
-# SPEC_QA_AUDIT: 2026-11-10T07:51:09Z
+# CODE_HASH: fe469b59671c
+# SPEC_QA_AUDIT: 2026-11-12T04:48:06Z
 # --- END AUTOFAB METADATA ---

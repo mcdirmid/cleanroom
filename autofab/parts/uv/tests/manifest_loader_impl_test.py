@@ -28,7 +28,7 @@ from autofab.parts.dag.lib.dag_storage import (
     RoleAddress,
     UnitAddress,
 )
-from support.lib.lifecycle import LifecycleRegistry, enter_phase
+from support.lib.lifecycle import LifecycleTestCase, enter_phase
 from support.lib import app_info
 
 
@@ -114,15 +114,14 @@ class FakeAgentStorage:
         return bool(self._messages.get(node))
 
 
-class TestUvManifestLoaderImpl(unittest.TestCase):
+class TestUvManifestLoaderImpl(LifecycleTestCase):
     def setUp(self) -> None:
+        super().setUp()
         self.test_dir = tempfile.mkdtemp()
         self.old_cwd = os.getcwd()
         os.chdir(self.test_dir)
         os.environ["BUILD_WORKSPACE_DIRECTORY"] = self.test_dir
 
-        self.registry = LifecycleRegistry()
-        __initialize__(self.registry)
 
         self.target_utils = FakeUvTarget()
         self.storage = FakeAgentStorage()

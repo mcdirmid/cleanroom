@@ -250,18 +250,10 @@ def run_cross_test(
         normalized = re.sub(r"benchmark_\d+", "benchmark_1", normalized)
         normalized = re.sub(r"benchmarks\.runs\.[a-zA-Z0-9_]+", "benchmark_1", normalized)
         if fname == f"{suite_name}_impl.py" and "__initialize__" not in normalized:
-            normalized += f"""
+            normalized += """
 
-def __initialize__(registry=None) -> None:
-    from support.lib.lifecycle import get_default_registry
-    reg = get_default_registry() if registry is None else registry
-    for attr_name in ("DAG", "WaveScheduler", "DAGRunner", "VersionEngine", "PackageRepository", "DependencySolver"):
-        cls = globals().get(attr_name)
-        proto = getattr({suite_name}, attr_name, None)
-        if cls is not None and proto is not None:
-            tier = getattr(cls, "tier", "system")
-            reg.register_singleton(cls, keys=[cls, proto], tier=tier)
-
+from support.lib.lifecycle import auto_initialize
+__initialize__ = auto_initialize()
 _initialize_ = __initialize__
 """
         (target_lib_dir / fname).write_text(normalized, encoding="utf-8")

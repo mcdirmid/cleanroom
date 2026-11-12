@@ -128,6 +128,6 @@ Given: an active role workspace operating under a workspace-write sandbox policy
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-30T11:00:00Z
-LAST_CHANGED: 2026-11-05T20:03:00Z
-CHANGE: Set UV_CACHE_DIR in check_impl verification environment for sandbox containment
+LAST_CHANGED: 2026-11-11T23:00:00Z
+CHANGE: Evaluate canonical main_dir_scope when discovering work from main in isolated workspaces
 -->

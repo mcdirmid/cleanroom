@@ -506,12 +506,12 @@ class TestSemverSolverImplReal(unittest.TestCase):
         self.assertEqual(outcome.selected_versions["alpha"], Version(2, 0, 0))
 
     def test_parse_version_error_projects_message_string(self) -> None:
-        self.checked_versionengine.violating(InvalidVersionError).parse_version("01.2.3")
         invalid = InvalidVersionError("invalid semantic version syntax", "01.2.3")
         self.assertIsInstance(invalid.message, str)
         self.assertEqual(invalid.raw_text, "01.2.3")
         self.assertTrue(str(invalid))
         self.assertTrue(str(SemVerError("semantic versioning failure")))
+        self.checked_versionengine.violating(InvalidVersionError).parse_version("01.2.3")
 
     def test_resolve_accepts_bounded_root_assigned_before_dependent(self) -> None:
         self.checked_packagerepository.register_package(PackageRelease("alpha", Version(1, 0, 0)))

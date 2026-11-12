@@ -10,7 +10,7 @@ import unittest
 from unittest.mock import patch
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_default_registry
+from support.lib.lifecycle import LifecycleTestCase, enter_phase
 from support.lib import app_info
 from autofab.parts.agent.lib import session as agent_session
 from autofab.parts.subagent.lib import subagent_coordinator
@@ -60,6 +60,18 @@ class FakeWorkspaceProvisioner:
             role_definition=r_def,
             directory_scope=dir_scope,
         )
+
+    def unlock_workspace_directories(self, workspace_dir: str) -> None:
+        pass
+
+    def lock_workspace_directories(
+        self,
+        workspace_dir: str,
+        role_name: Optional[str] = None,
+        dir_scope: str = "",
+        repo_root: Optional[str] = None,
+    ) -> None:
+        pass
 
 
 class FakeWorkspaceSynchronizer:
@@ -276,12 +288,11 @@ def _make_item(
     )
 
 
-class SubagentCoordinatorImplTest(unittest.TestCase):
+class SubagentCoordinatorImplTest(LifecycleTestCase):
     """Test cases for SubagentCoordinator implementation."""
 
     def setUp(self) -> None:
-        self.registry = LifecycleRegistry()
-        __initialize__(self.registry)
+        super().setUp()
 
         self.fake_provisioner = FakeWorkspaceProvisioner()
         self.registry.register_instance(
@@ -1063,18 +1074,20 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
                     "max_unproductive_rounds = 7\n\n[models.moe_model]\nbatch_size = 4\nconversation_max_tokens = 45000\nmax_unproductive_rounds = 12\n"
                 )
 
-            batch, tokens, unprod = resolve_model_parameters(tmp_dir, "moe_model")
+            batch, tokens, unprod, concurrent = resolve_model_parameters(tmp_dir, "moe_model")
             self.assertEqual(batch, 4)
             self.assertEqual(tokens, 45000)
             self.assertEqual(unprod, 12)
+            self.assertIsNone(concurrent)
 
             # Test top-level fallback
-            batch2, tokens2, unprod2 = resolve_model_parameters(
+            batch2, tokens2, unprod2, concurrent2 = resolve_model_parameters(
                 tmp_dir, "unknown_model"
             )
             self.assertIsNone(batch2)
             self.assertIsNone(tokens2)
             self.assertEqual(unprod2, 7)
+            self.assertIsNone(concurrent2)
         finally:
             shutil.rmtree(tmp_dir, ignore_errors=True)
 
@@ -1088,14 +1101,15 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
             cand_cfg = os.path.join(cand_dir, "model_configs.toml")
             with open(cand_cfg, "w", encoding="utf-8") as f:
                 f.write(
-                    "[models.qwen_test]\nsubagent_batch_size = 3\nconversation_max_tokens = 96000\nmax_unproductive_rounds = 3\n"
+                    "[models.qwen_test]\nsubagent_batch_size = 3\nconversation_max_tokens = 96000\nmax_unproductive_rounds = 3\nconcurrent_subagents = 1\n"
                 )
             os.environ[cfg_env_key] = cand_cfg
 
-            batch, tokens, unprod = resolve_model_parameters(tmp_dir, "qwen_test")
+            batch, tokens, unprod, concurrent = resolve_model_parameters(tmp_dir, "qwen_test")
             self.assertEqual(batch, 3)
             self.assertEqual(tokens, 96000)
             self.assertEqual(unprod, 3)
+            self.assertEqual(concurrent, 1)
         finally:
             if old_env is not None:
                 os.environ[cfg_env_key] = old_env
@@ -1103,6 +1117,27 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
                 os.environ.pop(cfg_env_key, None)
             shutil.rmtree(tmp_dir, ignore_errors=True)
             shutil.rmtree(cand_dir, ignore_errors=True)
+
+    def test_resolve_model_parameters_validates_concurrent_subagents(self) -> None:
+        """Requirement: MUST validate concurrent_subagents == 1 and disallow for antigravity models."""
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            cfg_file = os.path.join(tmp_dir, "model_configs.toml")
+            # 1. Invalid value 2
+            with open(cfg_file, "w", encoding="utf-8") as f:
+                f.write("[models.invalid_subagents]\nconcurrent_subagents = 2\n")
+            with self.assertRaises(ValueError) as ctx:
+                resolve_model_parameters(tmp_dir, "invalid_subagents")
+            self.assertIn("only 1 is supported", str(ctx.exception))
+
+            # 2. Antigravity harness rejection
+            with open(cfg_file, "w", encoding="utf-8") as f:
+                f.write("[models.ag_model]\nharness = 'antigravity'\nconcurrent_subagents = 1\n")
+            with self.assertRaises(ValueError) as ctx2:
+                resolve_model_parameters(tmp_dir, "ag_model")
+            self.assertIn("antigravity", str(ctx2.exception))
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
 
     def test_stress_multi_wave_deep_diamond_and_star_dependency_hierarchy(self) -> None:
         """Requirement: MUST iterate through multi-wave deep diamond and star dependency hierarchies until convergence."""
@@ -1816,6 +1851,116 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
             self.assertEqual(summary.blamed_count, 2)
             self.assertEqual(summary.submitted_count, 1)
 
+    def test_orchestrate_restarts_auditor_and_worker_on_consecutive_rejections(self) -> None:
+        """Scenario 15: Two consecutive rejections between auditor and worker restart both roles."""
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            fake_reg = FakeWorkspaceRegistry(
+                [self.impl_role_lib, self.role_qa], base_dir=tmp_dir
+            )
+            work_states = [
+                {"lib": (([_make_item("pkg_a/lib/core.py", "lib")], ()))},
+                {"lib": (([_make_item("pkg_a/lib/core.py", "lib")], ()))},
+                {
+                    "lib": (([_make_item("pkg_a/lib/core.py", "lib")], ())),
+                    "qa": (([_make_item("pkg_a/lib/core.py", "qa")], ())),
+                },
+                {"lib": (((), ())), "qa": (((), ()))},
+            ]
+            state_idx = [0]
+
+            class DynamicWorkManager(FakeWorkspaceWorkManager):
+                def compute_role_work_queue(
+                    self,
+                    role_name: str,
+                    dir_scope: str,
+                    repo_root: str,
+                    target_unit: Optional[str] = None,
+                ) -> Tuple[Sequence[work.WorkQueueItem], Sequence[work.WorkQueueItem]]:
+                    idx = min(state_idx[0], len(work_states) - 1)
+                    return work_states[idx].get(role_name, ((), ()))
+
+            self.registry.register_instance(
+                fake_reg,
+                keys=[role_registry.WorkspaceRegistry],
+                tier=agent_session.agent_session,
+            )
+            self.registry.register_instance(
+                DynamicWorkManager({}),
+                keys=[work.WorkspaceWorkManager],
+                tier=agent_session.agent_session,
+            )
+
+            round_count = [0]
+            interrupted_handles: List[str] = []
+
+            class RejectionHarness(FakeHarnessAdapter):
+                def poll_role(
+                    self, task_handle: str
+                ) -> Optional[subagent_coordinator.RoleRoundResult]:
+                    round_count[0] += 1
+                    state_idx[0] += 1
+                    if round_count[0] <= 2:
+                        # Lib delivers rejections
+                        ws_dir = fake_reg.compute_workspace_dir(
+                            "lib", "pkg_a", tmp_dir
+                        )
+                        os.makedirs(ws_dir, exist_ok=True)
+                        r_buf_p = os.path.join(ws_dir, ".autofab_reject_buffer.json")
+                        with open(r_buf_p, "w", encoding="utf-8") as f:
+                            json.dump(
+                                [
+                                    {
+                                        "target": "pkg_a/lib/core.py",
+                                        "worker": "lib",
+                                        "auditor": "qa",
+                                        "reason": f"Code is compliant (reject {round_count[0]})",
+                                    }
+                                ],
+                                f,
+                            )
+                        return subagent_coordinator.RoleRoundResult(
+                            role="lib",
+                            status="clean",
+                            submitted_targets=(),
+                        )
+                    # After 2 rejections and restart, lib submits code and qa passes
+                    if "lib" in task_handle:
+                        return subagent_coordinator.RoleRoundResult(
+                            role="lib",
+                            status="clean",
+                            submitted_targets=("pkg_a/lib/core.py",),
+                        )
+                    return subagent_coordinator.RoleRoundResult(
+                        role="qa",
+                        status="clean",
+                        submitted_targets=("pkg_a/lib/core.py",),
+                    )
+
+                def interrupt_role(self, task_handle: str) -> None:
+                    interrupted_handles.append(task_handle)
+
+            harness = RejectionHarness()
+
+            with enter_phase(
+                agent_session.agent_session, registry=self.registry
+            ) as scope:
+                coord = scope.get_singleton(subagent_coordinator.SubagentCoordinator)
+                init_commissioned = list(self.fake_provisioner.commissioned)
+                summary = coord.orchestrate(
+                    "pkg_a", harness, repo_root=tmp_dir, poll_interval=0.001
+                )
+                self.assertTrue(summary.is_converged)
+                # Both lib and qa were recommissioned after 2nd rejection
+                commissioned_after = self.fake_provisioner.commissioned[
+                    len(init_commissioned) :
+                ]
+                recom_roles = [c[0] for c in commissioned_after]
+                self.assertIn("lib", recom_roles)
+                self.assertIn("qa", recom_roles)
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+
     def test_orchestrate_trips_circuit_breaker_on_tenth_restart_failure(self) -> None:
         """Scenario 17: Halting orchestration upon exceeding 10 restarts from repeated blame."""
         fake_reg = FakeWorkspaceRegistry([self.role_qa])
@@ -2389,6 +2534,113 @@ class SubagentCoordinatorImplTest(unittest.TestCase):
             self.assertEqual(harness.state_updates[0]["dir_scope"], "pkg_a")
             # Final update is converged
             self.assertTrue(harness.state_updates[-1]["converged"])
+
+    def test_orchestrate_with_concurrent_subagents_mru_selection(self) -> None:
+        """Requirement: MUST enforce single active worker and prioritize MRU role when concurrent_subagents == 1."""
+        role_a = role_registry.RoleDefinition(
+            role_name="role_a",
+            guide_path="guides/a.md",
+            writable_file_patterns=["parts/*/a/*.py"],
+            readonly_file_patterns=[],
+            feedback_role_deps=[],
+            role_deps=[],
+            star_role_deps=[],
+            stub_role_deps=[],
+            src_pattern="{unit_dir}/a/{unit_name}.py",
+        )
+        role_b = role_registry.RoleDefinition(
+            role_name="role_b",
+            guide_path="guides/b.md",
+            writable_file_patterns=["parts/*/b/*.py"],
+            readonly_file_patterns=[],
+            feedback_role_deps=[],
+            role_deps=[],
+            star_role_deps=[],
+            stub_role_deps=[],
+            src_pattern="{unit_dir}/b/{unit_name}.py",
+        )
+        fake_reg = FakeWorkspaceRegistry([role_a, role_b])
+        fake_work = FakeWorkspaceWorkManager(
+            {
+                "role_a": (([_make_item("parts/p/a/1.py", "role_a")], ())),
+                "role_b": (([_make_item("parts/p/b/1.py", "role_b")], ())),
+            }
+        )
+        self.registry.register_instance(
+            fake_reg,
+            keys=[role_registry.WorkspaceRegistry],
+            tier=agent_session.agent_session,
+        )
+        self.registry.register_instance(
+            fake_work,
+            keys=[work.WorkspaceWorkManager],
+            tier=agent_session.agent_session,
+        )
+
+        dispatched_roles: List[str] = []
+        active_counts: List[int] = []
+
+        class ConcurrentHarness(FakeHarnessAdapter):
+            def __init__(self) -> None:
+                super().__init__()
+                self.current_active = 0
+                self.role_a_rounds = 0
+                self.handle_to_role: Dict[str, str] = {}
+
+            def dispatch_role(
+                self, dispatch: subagent_coordinator.RoleDispatch
+            ) -> str:
+                self.current_active += 1
+                active_counts.append(self.current_active)
+                dispatched_roles.append(dispatch.role_name)
+                h = super().dispatch_role(dispatch)
+                self.handle_to_role[h] = dispatch.role_name
+                return h
+
+            def poll_role(
+                self, task_handle: str
+            ) -> Optional[subagent_coordinator.RoleRoundResult]:
+                self.current_active -= 1
+                role = self.handle_to_role.get(task_handle) or task_handle.replace("handle_", "")
+                if role == "role_a":
+                    self.role_a_rounds += 1
+                    if self.role_a_rounds == 1:
+                        # role_a still has more work unblocked!
+                        fake_work.queue_data["role_a"] = (
+                            ([_make_item("parts/p/a/2.py", "role_a")], ())
+                        )
+                    else:
+                        fake_work.queue_data["role_a"] = ((), ())
+                    return subagent_coordinator.RoleRoundResult(
+                        role="role_a",
+                        status="clean",
+                        submitted_targets=("parts/p/a/1.py",),
+                    )
+                elif role == "role_b":
+                    fake_work.queue_data["role_b"] = ((), ())
+                    return subagent_coordinator.RoleRoundResult(
+                        role="role_b",
+                        status="clean",
+                        submitted_targets=("parts/p/b/1.py",),
+                    )
+                return None
+
+        harness = ConcurrentHarness()
+
+        with enter_phase(agent_session.agent_session, registry=self.registry) as scope:
+            coord = scope.get_singleton(subagent_coordinator.SubagentCoordinator)
+            summary = coord.orchestrate(
+                "pkg_a",
+                harness,
+                poll_interval=0.001,
+                concurrent_subagents=1,
+            )
+            self.assertTrue(summary.is_converged)
+            # Never more than 1 active worker simultaneously
+            self.assertTrue(all(c == 1 for c in active_counts))
+            # role_a ran first, then when both role_a and role_b were available,
+            # role_a was chosen because it was most recently run!
+            self.assertEqual(dispatched_roles, ["role_a", "role_a", "role_b"])
 
 
 if __name__ == "__main__":

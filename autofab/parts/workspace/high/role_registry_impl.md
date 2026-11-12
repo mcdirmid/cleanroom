@@ -19,7 +19,7 @@ The workspace registry discovers the canonical repository root by ascending the 
 
 The workspace registry resolves role definitions and lists all declared roles by delegating to role resolution services.
 
-The workspace registry computes a role workspace directory path by combining the parent directory of the repository root with the role name and the directory scope, sanitizing directory delimiters into underscores to produce a collision-free sibling workspace.
+The workspace registry computes a role workspace directory path by combining the parent directory of the repository root with the role name and the leaf directory scope name (omitting enclosing container path prefixes), sanitizing directory delimiters into underscores to produce a collision-free sibling workspace.
 
 The workspace registry tracks active workspace descriptors in memory and discovers provisioned workspaces across the role workspaces directory by reading each workspace's role metadata descriptor. Registering a workspace records the descriptor in memory, and unregistering removes the matching workspace descriptor.
 

@@ -240,7 +240,10 @@ def resolve_log_path(target_or_path: str, repo_root: str | None = None) -> str:
 
 def append_log(target_or_path: str, message: str, repo_root: str | None = None) -> str:
     """Appends action record message to .autofab.log."""
-    log_path = resolve_log_path(target_or_path, repo_root=repo_root)
+    if repo_root:
+        log_path = os.path.join(os.path.realpath(repo_root), DEFAULT_LOG_FILE)
+    else:
+        log_path = resolve_log_path(target_or_path, repo_root=repo_root)
     os.makedirs(os.path.dirname(os.path.abspath(log_path)), exist_ok=True)
     with open(log_path, "a", encoding="utf-8") as f:
         f.write(message.rstrip("\n") + "\n")

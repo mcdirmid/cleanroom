@@ -9,7 +9,7 @@ import tempfile
 from typing import Any, Optional
 import unittest
 
-from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_default_registry
+from support.lib.lifecycle import LifecycleTestCase, enter_phase
 from support.lib import app_info
 from autofab.parts.agent.lib import session as agent_session
 from autofab.parts.subagent.lib import (
@@ -65,12 +65,12 @@ class FakeWorkspaceWorkManager:
         return False
 
 
-class SubagentHarnessImplTest(unittest.TestCase):
+class SubagentHarnessImplTest(LifecycleTestCase):
     """Test cases for CommandHarnessAdapter and HarnessResolver."""
 
     def setUp(self) -> None:
+        super().setUp()
         self.test_dir = tempfile.mkdtemp()
-        self.registry = LifecycleRegistry()
         subagent_harness_impl.__initialize__(self.registry)
         self.work_mgr = FakeWorkspaceWorkManager()
         self.registry.register_instance(

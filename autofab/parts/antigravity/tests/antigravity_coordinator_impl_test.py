@@ -9,7 +9,7 @@ import tempfile
 import unittest
 
 from support.lib import app_info
-from support.lib.lifecycle import LifecycleRegistry, enter_phase
+from support.lib.lifecycle import LifecycleTestCase, enter_phase
 from autofab.parts.agent.lib import session as agent_session
 from autofab.parts.antigravity.lib import (
     antigravity_coordinator,
@@ -19,12 +19,12 @@ from autofab.parts.antigravity.lib import (
 from autofab.parts.subagent.lib import subagent_coordinator
 
 
-class AntigravityCoordinatorImplTest(unittest.TestCase):
+class AntigravityCoordinatorImplTest(LifecycleTestCase):
     """Test cases for AntigravityCoordinatorGenerator and AntigravityWorkspaceConfigurer."""
 
     def setUp(self) -> None:
+        super().setUp()
         self.test_dir = tempfile.mkdtemp()
-        self.registry = LifecycleRegistry()
         antigravity_coordinator_impl.__initialize__(self.registry)
 
     def tearDown(self) -> None:

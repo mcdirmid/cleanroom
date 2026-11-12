@@ -45,6 +45,7 @@ run_timeout_seconds = 3600.0
 #   rate_out            (float, optional) : Outbound cost in USD per 1,000,000 completion tokens.
 #   timeout_seconds     (float, optional) : Per-request timeout in seconds.
 #   subagent_batch_size (int, optional)   : Maximum concurrent role subagent dispatches.
+#   concurrent_subagents (int, optional)  : Maximum concurrent running subagents (only 1 supported; unset = unlimited). Disallowed for antigravity models.
 # ==============================================================================
 
 # ==============================================================================
@@ -64,7 +65,73 @@ rate_cached_in = 0.0
 rate_out = 0.0
 timeout_seconds = 100.0
 run_timeout_seconds = 14400.0
-subagent_batch_size = 3
+subagent_batch_size = 1
+concurrent_subagents = 1
+
+[models.tiel-coder-qwen-moe]
+model = "tiel-coder-qwen-moe"
+provider = "mlx"
+harness = "dsh"
+tier = 1
+tier_label = "Local Engine"
+rate_uncached_in = 0.0
+rate_cached_in = 0.0
+rate_out = 0.0
+timeout_seconds = 100.0
+subagent_batch_size = 1
+concurrent_subagents = 1
+
+[models.qwen-next-flash]
+model = "qwen-next-flash"
+provider = "mlx"
+harness = "dsh"
+tier = 1
+tier_label = "Local Engine"
+rate_uncached_in = 0.0
+rate_cached_in = 0.0
+rate_out = 0.0
+timeout_seconds = 100.0
+subagent_batch_size = 1
+concurrent_subagents = 1
+
+[models.qwen-dense]
+model = "qwen-dense"
+provider = "mlx"
+harness = "dsh"
+tier = 1
+tier_label = "Local Engine"
+rate_uncached_in = 0.0
+rate_cached_in = 0.0
+rate_out = 0.0
+timeout_seconds = 100.0
+subagent_batch_size = 1
+concurrent_subagents = 1
+
+[models.gemma-moe]
+model = "gemma-moe"
+provider = "mlx"
+harness = "dsh"
+tier = 1
+tier_label = "Local Engine"
+rate_uncached_in = 0.0
+rate_cached_in = 0.0
+rate_out = 0.0
+timeout_seconds = 100.0
+subagent_batch_size = 1
+concurrent_subagents = 1
+
+[models.gemma-dense]
+model = "gemma-dense"
+provider = "mlx"
+harness = "dsh"
+tier = 1
+tier_label = "Local Engine"
+rate_uncached_in = 0.0
+rate_cached_in = 0.0
+rate_out = 0.0
+timeout_seconds = 100.0
+subagent_batch_size = 1
+concurrent_subagents = 1
 
 # --- Tier 2: Budget Frontier APIs ---
 

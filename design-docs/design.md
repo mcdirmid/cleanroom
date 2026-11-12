@@ -223,6 +223,9 @@ Autofab's subagent coordinator (`autofab/parts/subagent/`) orchestrates multi-ag
    - Downstream workers halt execution; the coordinator schedules the culprit node for re-cleaning in the next wave with the critique provided in context.
    - Once the upstream defect is repaired and marked clean, dependent nodes unblock and resume downstream compilation automatically.
 
+4. **Hardware Contention Control & Subagent Concurrency Bounding (`concurrent_subagents`)**:
+   To support local single-GPU execution without memory starvation or compute queue contention, model profiles can specify `concurrent_subagents = 1` (default for Tier 1 local offline models, unset/unlimited for cloud APIs, disallowed for Antigravity models). When active, the coordinator restricts concurrent execution to at most one subagent at a time. If multiple candidate roles become unblocked simultaneously, the coordinator schedules the **most recently run role** (MRU) first to maximize prompt cache locality and maintain sequential momentum across feedback cycles.
+
 #### Process Interruption & Cancellation Sandbox Cleanup
 To prevent orphan child processes, zombie subagents, and filesystem clutter during user cancellation:
 - `SubagentCoordinator.orchestrate` traps interruption signals (`SIGINT`, `SIGTERM`, `KeyboardInterrupt`).

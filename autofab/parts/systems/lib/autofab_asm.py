@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Optional
-from support.lib.lifecycle import LifecycleRegistry
+from support.lib.lifecycle import auto_initialize
 from autofab.parts.control.lib import control_asm
 from autofab.parts.core.lib import file_paths_impl
 from autofab.parts.dag.lib import dag_asm
@@ -21,12 +21,7 @@ CONSTITUENTS = (
 )
 
 
-# Contract: Aggregates all Autofab UV subsystems into the master root system assembly.
-def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
-    for mod in CONSTITUENTS:
-        mod.__initialize__(registry)
-
-
+__initialize__ = auto_initialize()
 _initialize_ = __initialize__
 
 # --- AUTOFAB METADATA ---

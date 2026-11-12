@@ -21,6 +21,7 @@ The `model_config_ext` external component specifies the declarative TOML configu
 - `temperature`: Generation temperature float value.
 - `max_tokens`: Maximum tokens limit integer.
 - `subagent_batch_size` / `batch_size`: Batch processing limit.
+- `concurrent_subagents`: Maximum concurrent running subagents (only 1 supported; unset = unlimited; disallowed for antigravity models).
 - `conversation_max_tokens`: Context window token limit.
 - `max_feedback_chars`: Maximum feedback characters threshold.
 - `max_failures`: Maximum test failures threshold before test runner halts (defaulting to 5 for local engines and 100 for non-local models).
@@ -62,7 +63,7 @@ def load_model_configs(config_path: str) -> Mapping[str, Any]:
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-19T18:45:00Z
-# LAST_CHANGED: 2026-10-19T18:45:00Z
-# CHANGE: Enhance model_config_ext stub with declarative TOML schema, tiers, and rate cards
+# LAST_CHANGED: 2026-11-10T21:20:00Z
+# CHANGE: Add concurrent_subagents schema field and constraints
 # LOW_QA_AUDIT: 2026-10-19T18:45:00Z
 # --- END CLEANROOM METADATA ---

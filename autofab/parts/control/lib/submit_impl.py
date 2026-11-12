@@ -3,15 +3,10 @@ import json
 import os
 import shutil
 import stat
+import subprocess
 import sys
 from typing import Any, Dict, List, Optional, Sequence, Tuple
-from support.lib.lifecycle import (
-    LifecycleRegistry,
-    LifecycleResolutionError,
-    Singleton,
-    get_default_registry,
-    get_singleton,
-)
+from support.lib.lifecycle import LifecycleResolutionError, auto_initialize, get_singleton, singleton
 from autofab.parts.agent.lib import file_alias, node_config, agent_session
 from autofab.parts.dag.lib import dag_storage
 from autofab.parts.metadata.lib import src_metadata
@@ -297,7 +292,7 @@ def _update_pull_manifest(
         pass
 
 
-def _resolve_target_path(target: str, repo_root: str) -> str:
+def _resolve_target_path(target: str, repo_root: str, dir_scope: str = "") -> str:
     target_str = target.strip()
     norm_root = os.path.realpath(repo_root)
     if os.path.isabs(target_str):
@@ -308,6 +303,12 @@ def _resolve_target_path(target: str, repo_root: str) -> str:
     cand2 = os.path.realpath(os.path.join(norm_root, target_str.lstrip("/")))
     if os.path.exists(cand2):
         return cand2
+    if dir_scope:
+        cand3 = os.path.realpath(
+            os.path.join(norm_root, dir_scope, target_str.lstrip("/"))
+        )
+        if os.path.exists(cand3):
+            return cand3
     return cand1
 
 
@@ -359,6 +360,7 @@ def _check_readonly_integrity(
         if dir_scope and os.path.isdir(os.path.join(ws_root, dir_scope))
         else ws_root
     )
+    has_git = os.path.isdir(os.path.join(ws_root, ".git"))
     for root, dirs, files in os.walk(scan_root):
         dirs[:] = [
             d
@@ -379,7 +381,37 @@ def _check_readonly_integrity(
         if "__init__.py" in files:
             init_ws = os.path.join(root, "__init__.py")
             rel_p = os.path.relpath(init_ws, ws_root)
+
+            # 1. If ws_root is a git repository, check whether rel_p is clean relative to HEAD
+            if has_git:
+                try:
+                    res = subprocess.run(
+                        ["git", "diff", "--quiet", "HEAD", "--", rel_p],
+                        cwd=ws_root,
+                        capture_output=True,
+                    )
+                    if res.returncode == 0:
+                        continue
+                except Exception:
+                    pass
+
+            # 2. Locate main_init across multiple potential layouts in main_root
             main_init = os.path.join(main_root, rel_p)
+            if not os.path.isfile(main_init):
+                for candidate_prefix in (
+                    dir_scope,
+                    os.path.join("benchmarks", "runs", dir_scope) if dir_scope else "",
+                    os.path.join("benchmarks", "runs"),
+                    os.path.join("benchmarks", "parts"),
+                    "benchmarks",
+                ):
+                    if not candidate_prefix:
+                        continue
+                    cand = os.path.join(main_root, candidate_prefix, rel_p)
+                    if os.path.isfile(cand):
+                        main_init = cand
+                        break
+
             if os.path.isfile(main_init):
                 try:
                     with open(init_ws, "rb") as f_ws, open(main_init, "rb") as f_main:
@@ -389,7 +421,7 @@ def _check_readonly_integrity(
                             )
                 except OSError:
                     pass
-            else:
+            elif not has_git:
                 try:
                     with open(init_ws, "r", encoding="utf-8", errors="replace") as f_ws:
                         if f_ws.read().strip():
@@ -455,7 +487,7 @@ def _resolve_submit_target(
     dir_scope: str = "",
 ) -> Tuple[Optional[str], Optional[str]]:
     target_str = target.strip()
-    cand_path = _resolve_target_path(target_str, repo_root)
+    cand_path = _resolve_target_path(target_str, repo_root, dir_scope)
     if os.path.isfile(cand_path):
         try:
             _, u_name, _ = _parse_unit_from_file_path(cand_path, repo_root)
@@ -530,10 +562,10 @@ def _is_auditor_node(node: dag_storage.DagNode) -> bool:
     return src_metadata.is_auditor_role(role_clean)
 
 
+@singleton
 class SubmissionCoordinator(submit.SubmissionCoordinator):
     """Coordinates submission gating, change summary rules, and graph status mutation."""
 
-    tier = agent_session.agent_session
 
     def __init__(self) -> None:
         pass
@@ -654,6 +686,8 @@ class SubmissionCoordinator(submit.SubmissionCoordinator):
             or (meta.get("role_name") or meta.get("role") if meta else "")
             or ""
         )
+        main_scope = str(meta.get("main_dir_scope") or "").strip("/") if meta else ""
+        ws_scope = str(meta.get("dir_scope") or "").strip("/") if meta else ""
         clean_role = r_name.split(":")[-1].strip().lower()
         d_scope = (meta.get("dir_scope") or meta.get("parts_dir", "")) if meta else ""
 
@@ -742,9 +776,17 @@ class SubmissionCoordinator(submit.SubmissionCoordinator):
                 fb_def = role_defs.get(fb_role)
                 fb_pat = _role_src_pattern(fb_def) if fb_def else ""
                 if fb_pat:
+                    main_part_dir = part_dir
+                    if (
+                        main_scope
+                        and ws_scope
+                        and main_scope != ws_scope
+                        and part_dir.startswith(ws_scope + "/")
+                    ):
+                        main_part_dir = main_scope + "/" + part_dir[len(ws_scope) + 1 :]
                     fb_cand = os.path.join(
                         main_root,
-                        fb_pat.format(unit_dir=part_dir, unit_name=active_unit),
+                        fb_pat.format(unit_dir=main_part_dir, unit_name=active_unit),
                     )
                     if os.path.isfile(fb_cand) and fb_cand not in targets_to_audit:
                         targets_to_audit.append(fb_cand)
@@ -763,8 +805,16 @@ class SubmissionCoordinator(submit.SubmissionCoordinator):
             # Reflect attested audits to local role workspace if present
             if ws_root != main_root:
                 for tf in targets_to_audit:
-                    rel = os.path.relpath(tf, main_root)
-                    wt = os.path.join(ws_root, rel)
+                    rel = os.path.relpath(tf, main_root).replace("\\", "/")
+                    ws_rel = rel
+                    if (
+                        main_scope
+                        and ws_scope
+                        and main_scope != ws_scope
+                        and rel.startswith(main_scope + "/")
+                    ):
+                        ws_rel = ws_scope + "/" + rel[len(main_scope) + 1 :]
+                    wt = os.path.join(ws_root, ws_rel)
                     if os.path.isfile(tf) and os.path.isfile(wt):
                         _copy_file_with_perms(tf, wt, readonly=True)
 
@@ -840,11 +890,19 @@ class SubmissionCoordinator(submit.SubmissionCoordinator):
 
         # 4. Copy modified file to canonical main workspace
         rel_path = (
-            os.path.relpath(target_path, ws_root)
+            os.path.relpath(target_path, ws_root).replace("\\", "/")
             if target_path.startswith(ws_root)
-            else os.path.relpath(target_path, main_root)
+            else os.path.relpath(target_path, main_root).replace("\\", "/")
         )
-        main_file = os.path.join(main_root, rel_path)
+        main_rel_path = rel_path
+        if (
+            main_scope
+            and ws_scope
+            and main_scope != ws_scope
+            and rel_path.startswith(ws_scope + "/")
+        ):
+            main_rel_path = main_scope + "/" + rel_path[len(ws_scope) + 1 :]
+        main_file = os.path.join(main_root, main_rel_path)
         part_dir, u_name, _ = _parse_unit_from_file_path(target_path, ws_root)
         active_unit = unit_name or u_name
 
@@ -867,7 +925,15 @@ class SubmissionCoordinator(submit.SubmissionCoordinator):
             for pat in src_pats:
                 comp_rel = pat.format(unit_dir=part_dir, unit_name=active_unit)
                 ws_comp = os.path.join(ws_root, comp_rel)
-                main_comp = os.path.join(main_root, comp_rel)
+                main_comp_rel = comp_rel
+                if (
+                    main_scope
+                    and ws_scope
+                    and main_scope != ws_scope
+                    and comp_rel.startswith(ws_scope + "/")
+                ):
+                    main_comp_rel = main_scope + "/" + comp_rel[len(ws_scope) + 1 :]
+                main_comp = os.path.join(main_root, main_comp_rel)
                 if os.path.abspath(ws_comp) == os.path.abspath(target_path):
                     continue
                 if os.path.isfile(ws_comp):
@@ -895,17 +961,5 @@ class SubmissionCoordinator(submit.SubmissionCoordinator):
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
-
-# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
-def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
-    """Registers constituent singletons into the lifecycle registry."""
-    reg = get_default_registry() if registry is None else registry
-    reg.register_singleton(
-        SubmissionCoordinator,
-        keys=[SubmissionCoordinator, submit.SubmissionCoordinator],
-        tier=SubmissionCoordinator.tier,
-    )
-
-
+__initialize__ = auto_initialize()
 _initialize_ = __initialize__
-# --- END CLEANROOM AUTO-GENERATED ---

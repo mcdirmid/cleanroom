@@ -9,14 +9,7 @@ from autofab.parts.dag.lib import dag_storage
 from autofab.parts.core.lib import file_paths
 from . import manifest_loader
 from . import target
-from support.lib.lifecycle import (
-    LifecycleRegistry,
-    LifecycleResolutionError,
-    Singleton,
-    get_default_registry,
-    get_singleton,
-    system,
-)
+from support.lib.lifecycle import LifecycleResolutionError, auto_initialize, get_singleton, singleton
 
 try:
     from support.lib import app_info
@@ -24,8 +17,8 @@ except Exception:
     import app_info  # type: ignore
 
 
+@singleton
 class UvManifestLoader(manifest_loader.UvManifestLoader):
-    tier = system
 
     def __init__(self) -> None:
         self._manifests: Dict[dag_storage.DagNode, manifest_loader.TargetManifest] = {}
@@ -684,17 +677,5 @@ class UvManifestLoader(manifest_loader.UvManifestLoader):
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
-
-# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
-def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
-    """Registers constituent singletons into the lifecycle registry."""
-    reg = get_default_registry() if registry is None else registry
-    reg.register_singleton(
-        UvManifestLoader,
-        keys=[UvManifestLoader, manifest_loader.UvManifestLoader],
-        tier=system,
-    )
-
-
+__initialize__ = auto_initialize()
 _initialize_ = __initialize__
-# --- END CLEANROOM AUTO-GENERATED ---

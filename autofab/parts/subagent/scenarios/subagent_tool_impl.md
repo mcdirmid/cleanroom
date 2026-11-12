@@ -28,9 +28,9 @@ Given: scope_a has unblocked roles across multiple development stages.
 
 Given: scope_a has unblocked roles and ready work targets.
 
-1. The caller runs the orchestrate command specifying `--batch-size 3`, `--timeout 1200`, `--max-context-tokens 100000`, `--max-unproductive-rounds 8`, and `--pretense`.
-   Observed: the coordinator and harness adapter receive the configured batch size, timeout, context compaction, and unproductive round limits, and pretense testing pipeline flag is accepted.
-   Realized by: the component's CLI options parsing `--batch-size`, `--timeout`, `--max-context-tokens`, `--max-unproductive-rounds` (or `--max-unproductive-turns`), and `--pretense` and propagating them to harness resolution and coordinator options.
+1. The caller runs the orchestrate command specifying `--batch-size 3`, `--timeout 1200`, `--max-context-tokens 100000`, `--max-unproductive-rounds 8`, `--experiment structured_blame`, and `--pretense`.
+   Observed: the coordinator and harness adapter receive the configured batch size, timeout, context compaction, unproductive round limits, and active experiment identifier, and pretense testing pipeline flag is accepted.
+   Realized by: the component's CLI options parsing `--batch-size`, `--timeout`, `--max-context-tokens`, `--max-unproductive-rounds` (or `--max-unproductive-turns`), `--experiment`, and `--pretense` and propagating them to harness resolution and coordinator options.
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z

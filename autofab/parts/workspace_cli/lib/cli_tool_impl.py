@@ -11,15 +11,7 @@ import subprocess
 import sys
 from typing import Optional, Sequence
 
-from support.lib.lifecycle import (
-    LifecycleRegistry,
-    LifecycleResolutionError,
-    Singleton,
-    enter_phase,
-    get_active_scope,
-    get_default_registry,
-    get_singleton,
-)
+from support.lib.lifecycle import LifecycleResolutionError, auto_initialize, enter_phase, get_active_scope, get_singleton, singleton
 from autofab.parts.agent.lib import session as agent_session
 from . import (
     commands,
@@ -172,10 +164,10 @@ def run_checkpoint(label: Optional[str] = None, repo_root: Optional[str] = None)
 
 
 # Contract: Realizes cli_tool.WorkspaceToolRunner singleton.
+@singleton
 class WorkspaceToolRunner(cli_tool.WorkspaceToolRunner):
     """Realizes command-line subagent tool execution for role workspaces."""
 
-    tier = agent_session.agent_session
 
     def __init__(self) -> None:
         pass
@@ -494,6 +486,7 @@ class WorkspaceToolRunner(cli_tool.WorkspaceToolRunner):
         )
         p_blame.add_argument(
             "--facet",
+            "--facets",
             dest="facet",
             default=None,
             help="Constrained noun phrase facet (max 8 words, max 60 chars)",
@@ -748,17 +741,5 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
-
-# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
-def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
-    """Registers constituent singletons into the lifecycle registry."""
-    reg = get_default_registry() if registry is None else registry
-    reg.register_singleton(
-        WorkspaceToolRunner,
-        keys=[cli_tool.WorkspaceToolRunner, WorkspaceToolRunner],
-        tier=agent_session.agent_session,
-    )
-
-
+__initialize__ = auto_initialize()
 _initialize_ = __initialize__
-# --- END CLEANROOM AUTO-GENERATED ---

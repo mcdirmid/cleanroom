@@ -61,6 +61,43 @@ def get_active_experiments() -> Set[str]:
                         break
                 if active:
                     break
+
+                toml_candidates = ("autofab.toml", "cleanroom.toml")
+                for t_name in toml_candidates:
+                    tp = os.path.join(curr, t_name)
+                    if os.path.isfile(tp):
+                        try:
+                            import tomllib
+
+                            with open(tp, "rb") as f:
+                                t_data = tomllib.load(f)
+                            for exp in t_data.get("experiments", []):
+                                token = _normalize_experiment(str(exp))
+                                if token:
+                                    active.add(token)
+                        except Exception:
+                            pass
+                        break
+                if active:
+                    break
+
+                ep = os.path.join(curr, ".env")
+                if os.path.isfile(ep):
+                    try:
+                        with open(ep, "r", encoding="utf-8") as f:
+                            for line in f:
+                                line = line.strip()
+                                if line.startswith("AUTOFAB_EXPERIMENT="):
+                                    val = line.split("=", 1)[1].strip().strip("\"'")
+                                    for item in val.split(","):
+                                        token = _normalize_experiment(item)
+                                        if token:
+                                            active.add(token)
+                    except Exception:
+                        pass
+                if active:
+                    break
+
                 curr = os.path.dirname(curr)
         except Exception:
             pass

@@ -57,7 +57,7 @@ class DshHarnessAdapter(dsh_harness.DshHarnessAdapter):
         GROUNDING:
         - Awaits RPC round completion or process termination without mandatory timeout unless configured, computes buffer
           differences seeded from ready targets or disk pending work via work, inspects autofab_files_ext.BLAME_BUFFER_FILE and
-          candidate event logs across workspace root and scoped directories scanning only lines beyond pre-dispatch file offsets for attributed defects and action records matching change, clean, submitted, and audit records, scrapes active session identifiers from event logs and
+          candidate event logs across workspace root and scoped directories scanning only lines beyond pre-dispatch file offsets for attributed defects and action records matching change, clean, submitted, and audit records, extracts active session identifiers from RPC task handles (supporting dsh_rpc:: and dsh_rpc_web::) or scrapes from event logs and
           saves to the state directory session ID file (recycling after N rounds defaulting to 8 rounds with clean session reset, resetting session on failure), assigns unresolved status when zero targets are submitted or blamed or when interrupted without clean completion,
           tracks session token baselines across rounds, calculates incremental round deltas from cumulative session metrics across persistent session rounds to prevent double-counting (evicting baselines upon failed rounds or session reset),
           parses session telemetry via dsh_telemetry, and constructs subagent_coordinator.RoleRoundResult.
@@ -161,7 +161,7 @@ class DshHarnessManager(dsh_harness.DshHarnessManager):
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-30T19:50:00Z
-# LAST_CHANGED: 2026-11-10T20:30:00Z
-# CHANGE: Increase default worker session recycling threshold from 4 rounds to 8 rounds
+# LAST_CHANGED: 2026-11-11T16:30:00Z
+# CHANGE: Support Web RPC task handles (dsh_rpc_web::) for session ID extraction and round continuity
 # SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---

@@ -160,8 +160,32 @@ Given: multi-agent supervision running in a designated scope with active workers
    Observed: authoritative orchestration state snapshots detailing active scopes, current wave counts, active running workers, idle completed workers, assigned targets, and convergence outcomes are published across dispatch, round completion, and DAG convergence events.
    Realized by: the component invoking `update_orchestration_state` on the execution harness adapter upon dispatch, worker completion, and convergence.
 
+### Scenario 18 — Sequential role dispatch under concurrent_subagents = 1 and MRU selection
+
+Given: model configuration defines concurrent_subagents = 1 and roles role_a and role_b are unblocked and ready to execute.
+
+1. The coordinator evaluates ready work queues and initiates execution.
+   Observed: only one subagent is launched; when role_a completes and both role_a and role_b have ready work, role_a is chosen because it was most recently run.
+   Realized by: the component gating dispatch when active workers exist, and sorting candidate unblocked roles by last dispatched timestamp descending.
+
+### Scenario 19 — Rejecting concurrent_subagents configuration on antigravity harness
+
+Given: a model configuration binds to harness antigravity and specifies concurrent_subagents = 1.
+
+1. The coordinator resolves model parameters or initiates orchestration.
+   Observed: execution halts with a ValueError indicating concurrent_subagents is not allowed for antigravity models.
+   Realized by: the component checking model harness during parameter resolution and raising ValueError if concurrent_subagents is specified for an antigravity model.
+
+### Scenario 20 — Rejecting invalid concurrent_subagents values other than 1
+
+Given: a model configuration specifies concurrent_subagents = 2.
+
+1. The coordinator resolves model parameters or initiates orchestration.
+   Observed: execution halts with a ValueError indicating only 1 is supported for concurrent_subagents.
+   Realized by: the component validating concurrent_subagents value and raising ValueError if value != 1.
+
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-11-06T02:49:00Z
-LAST_CHANGED: 2026-11-09T22:10:00Z
-CHANGE: Add scenario for authoritative orchestration state snapshot publishing
+LAST_CHANGED: 2026-11-10T21:20:00Z
+CHANGE: Add concurrent_subagents resolution, validation, and MRU sequential dispatch scenarios
 -->

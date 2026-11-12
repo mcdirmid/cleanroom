@@ -20,7 +20,7 @@ The implementation matches blame strings against upstream file aliases, sanitize
 - The attribution coordinator updates dependent node states to failed in the active session. [update_dependent_nodes_failed]
 - The attribution coordinator formats blame and failure outcome messages using user-facing file aliases. [format_attribution_outcome_aliases]
 - The attribution coordinator resolves culprit files and executes in-band feedback mutations directly in the canonical repository. [execute_file_blame_mechanics]
-- The attribution coordinator resolves target files and appends failure diagnostics to in-band metadata. [execute_file_failure_mechanics]
+- The attribution coordinator resolves target files, discovering role context from workspace metadata or execution environment to execute failure mechanics: appending failure diagnostics and marking dirty status in the canonical repository for authoring roles, or recording task failure strictly in local workspace state without mutating or appending feedback to canonical repository files for auditor roles. [execute_file_failure_mechanics]
 
 ### Woven Contracts
 
@@ -28,7 +28,7 @@ The implementation matches blame strings against upstream file aliases, sanitize
 - When an explanation contains newlines, the coordinator sanitizes it into a continuous paragraph without rejecting. [sanitize_critique_newlines]
 - When blame validation succeeds, the coordinator stores the feedback message, updates the culprit to dirty, marks dependents as failed, and formats outcomes using file aliases. [store_feedback_message, update_culprit_status_dirty, update_dependent_nodes_failed, format_attribution_outcome_aliases, attribution: [mark_source_attributed]]
 - When blaming a culprit file, the coordinator sanitizes newlines, writes in-band feedback directly in the canonical repository, and constructs formatted blame messages. [sanitize_critique_newlines, execute_file_blame_mechanics, attribution: [execute_file_blame_mutation], src_metadata: [append_feedback_entry, update_metadata_disk]]
-- When failing a target file, the coordinator writes failure diagnostics and copies files. [execute_file_failure_mechanics, attribution: [execute_file_failure_mutation], src_metadata: [append_feedback_entry, update_metadata_disk]]
+- When failing a target file, the coordinator executes failure mechanics according to role context, updating canonical metadata for authoring roles or local workspace state for auditor roles. [execute_file_failure_mechanics, attribution: [execute_file_failure_mutation], src_metadata: [append_feedback_entry, update_metadata_disk]]
 
 ## Grounding
 

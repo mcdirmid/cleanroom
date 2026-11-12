@@ -165,14 +165,18 @@ registry.register_singleton(
 ```
 '''
 
+import unittest
 from typing import (
     Any,
     Callable,
     ContextManager,
+    Dict,
     Optional,
     Protocol,
     Sequence,
     TypeVar,
+    Union,
+    overload,
     runtime_checkable,
 )
 
@@ -180,8 +184,8 @@ T = TypeVar("T")
 
 
 class LifecycleError(Exception): ...
-class LifecycleIsolationError(LifecycleError): ...
 class LifecycleResolutionError(LifecycleError): ...
+class LifecycleIsolationError(LifecycleResolutionError): ...
 class LifecycleInitializationError(LifecycleError): ...
 
 
@@ -250,6 +254,11 @@ __all__ = [
     "enter_phase",
     "begin_phase",
     "singleton",
+    "fake",
+    "auto_initialize",
+    "infer_singleton_keys",
+    "infer_singleton_tier",
+    "LifecycleTestCase",
 ]
 
 
@@ -259,6 +268,10 @@ def get_tier[T: LifecycleTier](tier_type: type[T]) -> T:
 
 
 
+
+
+def infer_singleton_keys(impl: type[Any]) -> Sequence[type[Any]]: ...
+def infer_singleton_tier(impl_or_key: type[Any]) -> LifecycleTier: ...
 
 
 class SingletonDescriptor:
@@ -293,6 +306,14 @@ class LifecycleScope:
     ) -> None: ...
     def get(self, key: type[T]) -> T: ...
     def get_singleton(self, key: type[T]) -> T: ...
+    def get_fake(self, key: type[T]) -> T: ...
+    def register_mock(
+        self,
+        mock_or_cls: Any,
+        key: Optional[type[Any]] = None,
+        *,
+        tier: Optional[LifecycleTier | type[LifecycleTier] | str] = None,
+    ) -> SingletonDescriptor: ...
     def __call__(self, key: type[T]) -> T: ...
     def open(self) -> LifecycleScope: ...
     def activate(self) -> ContextManager[LifecycleScope]: ...
@@ -338,17 +359,28 @@ class LifecycleRegistry:
         self,
         impl: type[Any],
         *,
-        keys: Sequence[type[Any]],
+        keys: Optional[Sequence[type[Any]]] = None,
         tier: Optional[LifecycleTier | type[LifecycleTier] | str] = None,
     ) -> SingletonDescriptor: ...
     def register_instance(
         self,
         instance: Any,
         *,
-        keys: Sequence[type[Any]],
+        keys: Optional[Sequence[type[Any]]] = None,
         phase: Optional[LifecycleTier | type[LifecycleTier] | str] = None,
         tier: Optional[LifecycleTier | type[LifecycleTier] | str] = None,
     ) -> SingletonDescriptor: ...
+    def register_mock(
+        self,
+        mock_or_cls: Any,
+        key: Optional[type[Any]] = None,
+        *,
+        tier: Optional[LifecycleTier | type[LifecycleTier] | str] = None,
+    ) -> SingletonDescriptor: ...
+    def register_module(
+        self,
+        module: Any,
+    ) -> Sequence[SingletonDescriptor]: ...
     def find_descriptor(self, key: type[Any]) -> Optional[SingletonDescriptor]: ...
 
 
@@ -384,12 +416,82 @@ def begin_phase(
 ) -> LifecycleScope: ...
 
 
+@overload
+def singleton(cls: type[T], /) -> type[T]: ...
+
+@overload
 def singleton(
     *,
-    keys: Sequence[type[Any]],
-    phase: LifecycleTier | str = ...,
+    keys: Optional[Sequence[type[Any]]] = None,
+    tier: Optional[LifecycleTier | str] = None,
+    phase: Optional[LifecycleTier | str] = None,
     registry: Optional[LifecycleRegistry] = None,
 ) -> Callable[[type[T]], type[T]]: ...
+
+@overload
+def singleton(
+    keys_or_tier: Union[Sequence[type[Any]], LifecycleTier, str],
+    /,
+    *,
+    keys: Optional[Sequence[type[Any]]] = None,
+    tier: Optional[LifecycleTier | str] = None,
+    phase: Optional[LifecycleTier | str] = None,
+    registry: Optional[LifecycleRegistry] = None,
+) -> Callable[[type[T]], type[T]]: ...
+
+def singleton(
+    target_or_arg: Optional[Any] = None,
+    /,
+    *,
+    keys: Optional[Sequence[type[Any]]] = None,
+    tier: Optional[LifecycleTier | str] = None,
+    phase: Optional[LifecycleTier | str] = None,
+    registry: Optional[LifecycleRegistry] = None,
+) -> Any: ...
+
+
+@overload
+def fake(target_or_key: type[T], /) -> Any: ...
+
+@overload
+def fake(
+    target_or_key: Optional[type[Any]] = None,
+    *,
+    tier: Optional[LifecycleTier | str] = None,
+) -> Callable[[type[T]], type[T]]: ...
+
+def fake(
+    target_or_key: Optional[Any] = None,
+    *,
+    tier: Optional[LifecycleTier | str] = None,
+) -> Any: ...
+
+
+def auto_initialize(
+    registry_or_module: Optional[Any] = None,
+    *,
+    registry: Optional[LifecycleRegistry] = None,
+) -> Any: ...
+
+
+class LifecycleTestCase(unittest.TestCase):
+    target: Optional[Any]
+    tier: Optional[LifecycleTier | str]
+    registry: LifecycleRegistry
+    scope: LifecycleScope
+    fakes: Dict[type[Any], Any]
+    sut: Any
+    def setUp(self) -> None: ...
+    def tearDown(self) -> None: ...
+    def get_singleton(self, key: type[T]) -> T: ...
+    def get_fake(self, key: type[T]) -> T: ...
+    def register_mock(
+        self,
+        mock_or_cls: Any,
+        key: Optional[type[Any]] = None,
+        *,
+        tier: Optional[LifecycleTier | str] = None,
+    ) -> SingletonDescriptor: ...
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-07T05:04:27Z

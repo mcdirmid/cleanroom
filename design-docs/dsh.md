@@ -292,7 +292,35 @@ This ensures DSH Web UI reflects real-time wave progression, target assignments,
 
 ---
 
-## 8. Verification & Operational Health
+## 8. Subagent Concurrency & Hardware Contention Control (`concurrent_subagents`)
+
+### The Single-GPU Contention Problem
+Local offline models (such as Qwen MoE, Gemma MoE, and local MLX/Ollama backends running under Tier 1) operate on shared single-GPU hardware with unified memory architectures. While cloud API providers can scale horizontally to service dozens of parallel subagents, running multiple concurrent subagents against a single local GPU causes severe resource contention:
+- GPU memory saturation and context thrashing.
+- Unnecessary request queue serialization at the model server level.
+- High step latency degradation across interleaved agent steps.
+
+### Declarative Schema & Configuration
+To eliminate local hardware contention, Autofab introduces the `concurrent_subagents` configuration parameter:
+- **Location**: Defined in `model_configs.toml` under `[models.<profile>]` (and optionally in `~/.config/autofab/credentials.toml`).
+- **Permitted Values**:
+  - `None` / Unset: Unlimited concurrency (standard parallel wave dispatch for cloud API models).
+  - `1`: Strictly enforces single-subagent execution, dispatching at most one subagent at any time.
+  - Any value other than `1` (or `None`) is invalid and rejected with a `ValueError`.
+- **Harness Restriction**: `concurrent_subagents` is **strictly disallowed for models using the `antigravity` harness**. Antigravity manages subagents through interactive desktop sessions and does not support headless hardware contention limits. Attempting to set `concurrent_subagents` on an Antigravity model raises a configuration error.
+- **Tier 1 Local Defaults**: All local offline models (`qwen-moe`, `tiel-coder-qwen-moe`, `qwen-next-flash`, `qwen-dense`, `gemma-moe`, `gemma-dense`) set `concurrent_subagents = 1` alongside `subagent_batch_size = 1`.
+
+### Most Recently Used (MRU) Priority Scheduling Policy
+When `concurrent_subagents = 1`, the Python coordinator schedules work sequentially:
+1. **Active Worker Guard**: At any point in the supervision loop, if `len(active_workers) >= 1`, no new subagents are dispatched until the running worker concludes its round and is harvested.
+2. **Dynamic Role Selection via MRU**: When no subagent is actively executing (`len(active_workers) == 0`) and multiple unblocked candidate roles are available in `ready_roles_map`:
+   - The coordinator prioritizes the **most recently run role** (the role whose previous dispatch timestamp is most recent).
+   - If multiple unblocked candidate roles have never run, selection falls back to the natural topological/declaration order in the DAG.
+3. **Benefits**: MRU scheduling ensures conversational context locality, prompt cache reuse on the local GPU, and focused iterative progress through role feedback loops before switching contexts.
+
+---
+
+## 9. Verification & Operational Health
 
 The DSH integration is verified against the entire test suite and production benchmark flights:
 - **Repo Verification**: `bin/test` passes 100% clean (0 errors, code 0).

@@ -353,16 +353,17 @@ def validate_structured_blame(
 
     # 5. Validate witness constraints (literal key-value pairs)
     if blame.witness:
-        if len(blame.witness) > 200:
+        clean_witness = blame.witness.strip()
+        if len(clean_witness) > 250:
             errors.append(
-                f"Witness exceeds maximum length of 200 characters ({len(blame.witness)} chars provided)."
+                f"Witness exceeds maximum length of 250 characters ({len(clean_witness)} chars provided)."
             )
-        if re.search(r"\bline[s]?\s*=\s*\d+|:\d+\b", blame.witness, re.IGNORECASE):
+        if re.search(r"\bline[s]?\s*=\s*\d+|:\d+\b", clean_witness, re.IGNORECASE):
             errors.append(
                 "Witness cannot contain source line numbers. Source line numbers must be placed "
                 "in the dedicated 'Lines:' component (e.g. 'Lines: 42-50')."
             )
-        if "=" not in blame.witness:
+        if "=" not in clean_witness:
             errors.append(
                 f"Witness must contain literal key-value pairs (e.g. 'exp=..., obs=...'): '{blame.witness}'"
             )

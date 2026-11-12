@@ -612,8 +612,7 @@ check "c23 class skeleton" "$tmp/c23/lib/worker_impl.py" 'class Worker:'
 check "c23 tier" "$tmp/c23/lib/worker_impl.py" 'tier = agent_session'
 check "c23 init todo" "$tmp/c23/lib/worker_impl.py" '# TODO___init___body'
 check "c23 method todo" "$tmp/c23/lib/worker_impl.py" '# TODO_process_item_body'
-check "c23 initialize" "$tmp/c23/lib/worker_impl.py" 'def __initialize__(registry: Optional\[LifecycleRegistry\] = None) -> None:'
-check "c23 register singleton" "$tmp/c23/lib/worker_impl.py" 'reg.register_singleton('
+check "c23 singleton decorator" "$tmp/c23/lib/worker_impl.py" '@singleton'
 
 # Case 24: module containing uninitialized <TargetClass> placeholder -> replaced with skeleton.
 mkdir -p "$tmp/c24/lib" "$tmp/c24/grounding"
@@ -1429,6 +1428,40 @@ if ( cd "$tmp/c43" && python3 "$bin/lib_lint.py" lib/runner.py --pyi low/runner.
 else
     echo "FAIL: c43 expected success for broad exception with intentional-catch pragma" >&2
     fail=1
+fi
+
+# Case 44: top-level __initialize__() invocation -> rejected with error
+mkdir -p "$tmp/c44/lib" "$tmp/c44/low"
+cat > "$tmp/c44/low/runner_impl.pyi" <<'EOF'
+from support.lib.framework import singleton_type
+@singleton_type("system")
+class Runner:
+    tier: str = "system"
+    def run_task(self) -> int:
+        ...
+EOF
+cat > "$tmp/c44/lib/runner_impl.py" <<'EOF'
+from support.lib.framework import singleton_type
+
+@singleton_type("system")
+class Runner:
+    tier: str = "system"
+    def run_task(self) -> int:
+        return 1
+
+__initialize__()
+EOF
+if ( cd "$tmp/c44" && python3 "$bin/lib_lint.py" lib/runner_impl.py --pyi low/runner_impl.pyi 2>"$tmp/c44/err.log" ); then
+    echo "FAIL: c44 expected failure on top-level __initialize__() call" >&2
+    fail=1
+else
+    if grep -q "top-level invocation of '__initialize__()' is prohibited" "$tmp/c44/err.log"; then
+        echo "PASS: c44 rejected top-level __initialize__() call with explicit error"
+    else
+        echo "FAIL: c44 did not report prohibited top-level __initialize__() error" >&2
+        cat "$tmp/c44/err.log" >&2
+        fail=1
+    fi
 fi
 
 exit "$fail"

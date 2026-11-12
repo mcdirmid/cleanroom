@@ -76,7 +76,7 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
 
         GROUNDING:
         - Coordinates flight execution over subprocess dispatch or simulation, parses step and round log files
-          or subagent session transcripts modified during execution, computes rate card costs, and evaluates two-pass quality gates with dynamically assembled package and support environments.
+          or subagent session transcripts modified during execution, computes rate card costs, and evaluates two-pass quality gates with dynamically assembled package, flight scope container, and support environments.
 
         POSTCONDITIONS:
         - MUST execute the flight under the requested harness or simulation mode.
@@ -239,7 +239,7 @@ def __orphan__() -> None:
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-19T18:45:00Z
-# LAST_CHANGED: 2026-11-10T08:43:00Z
-# CHANGE: Retain failed benchmark workspaces in-place with failed status without .failed renaming, recycling only finished runs
+# LAST_CHANGED: 2026-11-11T23:15:00Z
+# CHANGE: Resolve flight scope container in verification gate pythonpath and type-checking paths
 # SPEC_QA_AUDIT: 2026-10-19T19:35:00Z
 # --- END CLEANROOM METADATA ---

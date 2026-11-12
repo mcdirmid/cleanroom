@@ -192,6 +192,7 @@ class SubagentCoordinator(Singleton[AgentSessionTier], Protocol):
         max_unproductive_turns: Optional[int] = None,
         target_node: Optional[str] = None,
         max_unproductive_rounds: Optional[int] = None,
+        concurrent_subagents: Optional[int] = None,
     ) -> OrchestrationSummary:
         """Orchestrates iterative multi-agent execution until DAG convergence or failure.
 
@@ -202,14 +203,16 @@ class SubagentCoordinator(Singleton[AgentSessionTier], Protocol):
         - WHEN a role round reports status failed, MUST stop execution and return non-converged summary with failure details.
         - WHEN consecutive unproductive rounds for a role on unresolved targets exceed the threshold (defaulting to 5), MUST stop execution and return non-converged summary with impasse details.
         - WHEN a worker delivers the identical blame signature twice in a row on unchanged targets, MUST terminate the active worker, clear persistent session state, recommission the workspace with a clean baseline, and inject a restart advisory into subsequent task prompts.
+        - WHEN a worker role rejects feedback from an auditor twice consecutively on a target without intervening author modifications, MUST terminate active rounds for both worker and auditor, clear persistent session state for both roles, recommission both workspaces with clean baselines, reset consecutive rejection tracking for that target, and inject clean-slate advisories into subsequent task prompts for both roles.
         - WHEN a worker exceeds 10 restarts, MUST stop execution and return non-converged summary indicating circuit breaker tripped.
         - WHEN an author role submits modifications to a previously blamed target, MUST clear consecutive blame tracking against that target.
         - MUST prevent concurrent dispatch of downstream roles while upstream dependency workers are actively executing or scheduled for concurrent dispatch.
+        - WHEN concurrent_subagents is 1, MUST restrict concurrent worker execution to at most one subagent at a time, selecting the most recently run role when multiple candidate roles are unblocked.
         - MUST purge preexisting blame buffers prior to role dispatch and consume workspace blame buffers upon round completion.
         - WHEN a role round concludes without submitting, blaming, or failing assigned targets, MUST inject an actionable reminder into the task prompt of the subsequent role dispatch directive.
         - MUST emit real-time progress notifications detailing role dispatch, round outcomes, token consumption, and work queue state.
         - WHEN all units evaluate clean across all roles, MUST automatically delete all provisioned role workspaces in scope and return converged summary.
-        - MUST dynamically resolve subagent batch sizes, conversation token limits, and maximum unproductive rounds thresholds from model configurations.
+        - MUST dynamically resolve subagent batch sizes, conversation token limits, maximum unproductive rounds thresholds, and concurrent subagents bounds from model configurations.
         - MUST persist effective batch size bounds into provisioned role workspace configurations.
         - MUST aggregate cumulative token usage and monetary expenditure in orchestration summary.
         - WHEN target_node is specified, MUST restrict work queue discovery and execution to target_node and its transitive dependencies.
@@ -235,11 +238,13 @@ class SubagentCoordinator(Singleton[AgentSessionTier], Protocol):
         self,
         repo_root: str,
         model_name: Optional[str] = None,
-    ) -> tuple[Optional[int], Optional[int], Optional[int]]:
-        """Dynamically resolves subagent batch sizes, token limits, and unproductive round thresholds.
+    ) -> tuple[Optional[int], Optional[int], Optional[int], Optional[int]]:
+        """Dynamically resolves subagent batch sizes, token limits, unproductive round thresholds, and concurrent subagent limits.
 
         POSTCONDITIONS:
-        - MUST dynamically resolve subagent batch sizes, conversation token limits, and maximum unproductive rounds thresholds from model configurations.
+        - MUST dynamically resolve subagent batch sizes, conversation token limits, maximum unproductive rounds thresholds, and concurrent subagents bounds from model configurations.
+        - WHEN concurrent_subagents is configured, MUST validate that its value equals 1, raising ValueError otherwise.
+        - WHEN concurrent_subagents is configured and the model harness is antigravity, MUST raise ValueError.
         """
         ...
 
@@ -249,13 +254,13 @@ def __orphan__() -> None:
 
     POSTCONDITIONS:
     - MUST resolve the canonical repository logs directory for a role workspace.
-    - MUST dynamically resolve subagent batch sizes, conversation token limits, and maximum unproductive rounds thresholds from model configurations.
+    - MUST dynamically resolve subagent batch sizes, conversation token limits, maximum unproductive rounds thresholds, and concurrent subagents bounds from model configurations.
     """
     ...
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-26T20:38:00Z
-# LAST_CHANGED: 2026-11-09T22:10:00Z
-# CHANGE: Add update_orchestration_state operation to HarnessAdapter protocol
+# LAST_CHANGED: 2026-11-10T21:20:00Z
+# CHANGE: Add concurrent_subagents to resolve_model_parameters and orchestrate contracts
 # SPEC_QA_AUDIT: 2026-10-15T17:42:46Z
 # --- END CLEANROOM METADATA ---

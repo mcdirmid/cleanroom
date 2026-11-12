@@ -21,12 +21,7 @@ except Exception:
 
 from support.lib import app_info
 from support.lib.framework import unreachable
-from support.lib.lifecycle import (
-    LifecycleRegistry,
-    Singleton,
-    get_default_registry,
-    system,
-)
+from support.lib.lifecycle import auto_initialize, singleton
 from autofab.parts.agent.lib import agent_config
 from autofab.parts.dag.lib import dag_config
 
@@ -192,8 +187,8 @@ def _get_config_data() -> _ConfigData:
     return _ConfigData()
 
 
+@singleton
 class AgentConfig(agent_config.AgentConfig):
-    tier = system
 
     def __init__(self) -> None:
         self._cfg = _get_config_data()
@@ -229,8 +224,8 @@ class AgentConfig(agent_config.AgentConfig):
         return agent_config.SupersedeArgKeepLimit(self._cfg.supersede_arg_keep)
 
 
+@singleton
 class DagConfig(dag_config.DagConfig):
-    tier = system
 
     def __init__(self) -> None:
         self._cfg = _get_config_data()
@@ -254,22 +249,5 @@ class DagConfig(dag_config.DagConfig):
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
-
-# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
-def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
-    """Registers constituent singletons into the lifecycle registry."""
-    reg = get_default_registry() if registry is None else registry
-    reg.register_singleton(
-        AgentConfig,
-        keys=[AgentConfig, agent_config.AgentConfig],
-        tier=system,
-    )
-    reg.register_singleton(
-        DagConfig,
-        keys=[DagConfig, dag_config.DagConfig],
-        tier=system,
-    )
-
-
+__initialize__ = auto_initialize()
 _initialize_ = __initialize__
-# --- END CLEANROOM AUTO-GENERATED ---

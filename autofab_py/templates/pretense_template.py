@@ -18,7 +18,7 @@ from pretense import (
     transition,
 )
 from pretense.compiler import compile_hypothesis_test_case
-from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_singleton, system
+from support.lib.lifecycle import LifecycleTestCase, fake, get_singleton, system
 
 # ==============================================================================
 # 1. State Machine Specification (Model & 1:1 Transitions — Interface Components)
@@ -112,7 +112,7 @@ proto = TargetStateMachine()
 #     def setUp(self) -> None:
 #         # Single service:
 #         self.fake = make_target_fake()
-#         self.sm = TargetStateMachine(sut=self.fake)
+#         self.sm = TargetStateMachine(singletons={TargetClass: self.fake})
 #         # Multi-service:
 #         # self.fakes = make_target_fakes()
 #         # self.sm = TargetStateMachine()
@@ -155,16 +155,15 @@ proto = TargetStateMachine()
 # 5. Real Implementation Tests (Implementation Components)
 # ==============================================================================
 
-class TestTargetImplReal(unittest.TestCase):
+class TestTargetImplReal(LifecycleTestCase):
     """Verifies that concrete library implementation satisfies contracts."""
 
+    # Target class and singletons under test are registered automatically by LifecycleTestCase.
+    # self.sut provides the primary service under test.
     def setUp(self) -> None:
-        self.registry = LifecycleRegistry()
-        # __initialize__(self.registry)
-        self.phase_scope = enter_phase(system, registry=self.registry)
-        self.phase_scope.__enter__()
+        super().setUp()
         # For single service:
-        # self.real = get_singleton(TargetClass)
+        # self.real = self.sut
         # self.sm = TargetStateMachine(singletons={TargetClass: self.real})
         # self.checked = self.sm.as_checked(TargetClass, self.real)
         # For multi-service:
@@ -174,9 +173,6 @@ class TestTargetImplReal(unittest.TestCase):
         # self.checked_a = self.sm.as_checked(ServiceA, self.service_a)
         # self.checked_b = self.sm.as_checked(ServiceB, self.service_b)
 
-    def tearDown(self) -> None:
-        self.phase_scope.__exit__(None, None, None)
-
     def test_real_conformance(self) -> None:
         # Drive operational scenarios via self.checked.<method>(*args)
         # to achieve 100% statement coverage under --no-fuzz --cov.
@@ -184,8 +180,7 @@ class TestTargetImplReal(unittest.TestCase):
         # fixed scenario tests should contain no redundant manual assertions (self.assertEqual, self.assertTrue).
         #
         # Contract violation testing (covering contracted *Error branches in lib):
-        # with self.checked.violating(ExpectedError):
-        #     self.checked.method_that_violates(...)
+        # self.checked.violating(ExpectedError).method_that_violates(...)
         #
         # Collaborator isolation: if earlier calls exhaust a collaborator (e.g. advance a scheduler to finished),
         # subsequent loops on that instance (e.g. runner.run()) exit immediately. Use separate test methods

@@ -62,6 +62,7 @@ class SubmissionCoordinator(Singleton[AgentSessionTier], Protocol):
         POSTCONDITIONS:
         - When executed in an isolated workspace, MUST discover role context and directory scope from workspace manifest metadata designated by autofab_files_ext if omitted.
         - When auditor role attempts to submit a verification or test file, MUST reject submission.
+        - When auditor role attempts to submit an audited target without uncommitted staged blame, MUST politely accept submission without error and without mutating the canonical repository.
         - When producer role attempts to submit a read-only target, MUST reject submission.
         - When producer role attempts to submit a file target outside the directory scope, MUST reject submission.
         - When target is modified and change summary is omitted, MUST reject submission.

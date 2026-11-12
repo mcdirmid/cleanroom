@@ -6,13 +6,7 @@ import json
 import os
 from typing import Dict, List, Optional, Sequence, Set
 
-from support.lib.lifecycle import (
-    LifecycleRegistry,
-    LifecycleResolutionError,
-    Singleton,
-    get_default_registry,
-    get_singleton,
-)
+from support.lib.lifecycle import LifecycleResolutionError, auto_initialize, get_singleton, singleton
 from autofab.parts.agent.lib import session as agent_session
 from autofab.parts.core.lib import file_paths
 
@@ -128,10 +122,10 @@ def _fallback_to_ambient_working_directory() -> str:
 
 
 # Contract: Realizes role_registry.WorkspaceRegistry singleton.
+@singleton
 class WorkspaceRegistry(role_registry.WorkspaceRegistry):
     """Realizes role configuration resolution and active workspace tracking."""
 
-    tier = agent_session.agent_session
 
     def __init__(self) -> None:
         self._workspaces: Dict[str, role_registry.WorkspaceDescriptor] = {}
@@ -207,8 +201,9 @@ class WorkspaceRegistry(role_registry.WorkspaceRegistry):
         if ":" in clean:
             clean = clean.split(":")[-1]
         norm_role = clean.strip("/").lower()
+        ws_scope = dir_scope.strip("/").split("/")[-1] if dir_scope else ""
         folder_name = _sanitize_directory_folder_name(
-            f"{norm_role}_{dir_scope.strip('/')}"
+            f"{norm_role}_{ws_scope}"
         )
         return _create_workspace_path_under(
             os.path.join(parent_dir, app_info.get_default_role_workspaces_container()),
@@ -266,12 +261,13 @@ class WorkspaceRegistry(role_registry.WorkspaceRegistry):
                                         role_identifier = rdata.get("role_name", "")
                                         if not role_identifier:
                                             continue
+                                        main_scope = rdata.get("main_dir_scope") or rdata.get("dir_scope", "")
                                         dir_scope = rdata.get("dir_scope", "")
                                         try:
                                             r_def = self.resolve_role_definition(
                                                 role_identifier,
                                                 repo_root=repo,
-                                                dir_scope=dir_scope,
+                                                dir_scope=main_scope,
                                             )
                                         except (KeyError, ValueError, OSError):
                                             continue
@@ -327,17 +323,5 @@ class WorkspaceRegistry(role_registry.WorkspaceRegistry):
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
-
-# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
-def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
-    """Registers constituent singletons into the lifecycle registry."""
-    reg = get_default_registry() if registry is None else registry
-    reg.register_singleton(
-        WorkspaceRegistry,
-        keys=[role_registry.WorkspaceRegistry, WorkspaceRegistry],
-        tier=agent_session.agent_session,
-    )
-
-
+__initialize__ = auto_initialize()
 _initialize_ = __initialize__
-# --- END CLEANROOM AUTO-GENERATED ---

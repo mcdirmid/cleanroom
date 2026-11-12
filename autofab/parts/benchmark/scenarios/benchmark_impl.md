@@ -39,7 +39,7 @@ Given: a directory containing Autofab round log files (e.g. `.autofab_round_*.lo
 Given: a benchmark unit directory containing high specifications, library code, and test suites.
 
 1. The verification gate runs static and runtime checks with dynamically assembled package and support paths.
-   Observed: reports spec linter pass status, pyright error count, and unit test pass/fail counts without missing import errors for repository support libraries.
+   Observed: reports spec linter pass status, pyright error count, and unit test pass/fail counts without missing import errors for repository support libraries or package-qualified flight scope imports.
 
 ## Scenario 6 — Flight trace JSON persistence
 
@@ -60,13 +60,13 @@ Given: a list of completed flight records and an optional output file path.
 Given: a completed flight for model `qwen-35b` on benchmark unit `dag_engine` with synthesized `lib/`, `tests/`, and `.autofab.log` files in the ephemeral flight scope.
 
 1. The benchmark evaluator provisions the flight scope.
-   Observed: allocates a concise unique flight scope directory under the benchmark runs container (e.g. `benchmarks/runs/dag_engine_qwen_35b_1`), deletes all existing conversations matching `[dag_engine_qwen_35b_1]` from DeepSeek Harness, copies the target unit directory and configuration into `<flight_scope_dir>/parts/<unit>`, explicitly configures the methodology pipeline as `pipeline = "pretense"` or `pipeline = "standard"`, rewrites benchmark package imports to reference the flight scope package while disallowing bare parts imports, drains pre-existing `lib/` and `tests/` directories, and marks specifications clean up to `spec_qa` within the flight scope to isolate code and test generation.
+   Observed: allocates a concise unique flight scope directory under the benchmark runs container (e.g. `benchmarks/runs/dag_engine_qwen_35b_1`), deletes all existing conversations matching `[benchmarks/runs/dag_engine_qwen_35b_1]` from DeepSeek Harness, copies the target unit directory and configuration into `<flight_scope_dir>/parts/<unit>`, explicitly configures the methodology pipeline as `pipeline = "pretense"` or `pipeline = "standard"`, rewrites benchmark package imports to reference the flight scope package while disallowing bare parts imports, drains pre-existing `lib/` and `tests/` directories, and marks specifications clean up to `spec_qa` within the flight scope to isolate code and test generation.
 
 1. The benchmark evaluator archives the artifacts.
    Observed: creates `lib_1.py`, `test_1.py`, and `autofab_1.log` under `benchmarks/results/dag_engine/qwen-35b/`, embedding flight telemetry comments in `lib_1.py`.
 
 1. The caller checks the benchmark unit workspace and flight scope.
-   Observed: the unit's `lib/` and `tests/` directories have been drained clean, and the flight scope directory contains `flight_status.json` recording finished status and verification outcome, keeping the flight scope directory and associated role workspaces preserved on disk for external harness inspection.
+   Observed: the unit's `lib/` and `tests/` directories have been drained clean, and the flight scope directory contains `flight_status.json` recording finished status and verification outcome, keeping the flight scope directory preserved on disk for external harness inspection while role workspaces have been decommissioned upon clean convergence.
 
 1. A second run is executed concurrently for the same model and benchmark.
    Observed: provisions a separate ephemeral flight scope under `benchmarks/runs/`, operates without cross-flight collision, and creates `lib_2.py`, `test_2.py`, and `autofab_2.log` in the results directory without colliding with run 1.
@@ -175,7 +175,7 @@ Given: the benchmark evaluator and CLI argument parser.
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-19T18:45:00Z
-LAST_CHANGED: 2026-11-10T08:43:00Z
-CHANGE: Retain failed benchmark workspaces in-place with failed status without .failed renaming, recycling only finished runs
+LAST_CHANGED: 2026-11-11T23:15:00Z
+CHANGE: Resolve flight scope container in verification gate pythonpath and type-checking paths
 SPEC_QA_AUDIT: 2026-10-19T19:35:00Z
 -->

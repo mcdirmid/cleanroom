@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Optional
-from support.lib.lifecycle import LifecycleRegistry, get_default_registry
+from support.lib.lifecycle import auto_initialize
 from autofab.parts.core.lib import file_paths_impl
 from . import manifest_loader_impl
 from . import node_config_impl
@@ -15,13 +15,7 @@ CONSTITUENTS = (
 
 
 # Contract: aggregates workspace manifest loading, target resolution, file paths resolution, and node configuration implementations into a unified Autofab workspace subsystem assembly
-def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
-    """Aggregates workspace manifest loading, target resolution, file paths resolution, and node configuration implementations into a unified Autofab workspace subsystem assembly."""
-    reg = get_default_registry() if registry is None else registry
-    for constituent in CONSTITUENTS:
-        constituent.__initialize__(reg)
-
-
+__initialize__ = auto_initialize()
 _initialize_ = __initialize__
 
 # --- CLEANROOM METADATA ---

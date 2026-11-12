@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 from typing import Dict, List, Optional, Sequence, Set
 
-from support.lib.lifecycle import LifecycleRegistry, enter_phase, system
+from support.lib.lifecycle import LifecycleRegistry, LifecycleTestCase, enter_phase, system
 from autofab.parts.dag.lib import dag_config, dag_storage, subgraph
 from autofab.parts.dag.lib.subgraph_impl import (
     DagSubgraph,
@@ -73,10 +73,9 @@ class MockDagStorage:
         return node in self._dirty
 
 
-class DagSubgraphImplTest(unittest.TestCase):
+class DagSubgraphImplTest(LifecycleTestCase):
     def setUp(self) -> None:
-        self.registry = LifecycleRegistry()
-        __initialize__(self.registry)
+        super().setUp()
         self.config = MockDagConfig(node_visit_limit=3, batch_size=2)
         self.registry.register_instance(
             self.config,

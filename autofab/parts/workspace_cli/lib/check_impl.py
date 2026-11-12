@@ -13,13 +13,7 @@ import subprocess
 import sys
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from support.lib.lifecycle import (
-    LifecycleRegistry,
-    LifecycleResolutionError,
-    Singleton,
-    get_default_registry,
-    get_singleton,
-)
+from support.lib.lifecycle import LifecycleResolutionError, auto_initialize, get_default_registry, get_singleton, singleton
 from autofab.parts.agent.lib import node_config, session as agent_session
 from autofab.parts.control.lib import submit
 from autofab.parts.workspace.lib import (
@@ -1067,10 +1061,10 @@ def _verify_antigravity_argon_model(
 
 
 # Contract: Realizes work discovery and file verification for role workspaces in agent_session tier.
+@singleton
 class WorkspaceChecker(check.WorkspaceChecker):
     """Executes work discovery and file verification for role workspaces."""
 
-    tier = agent_session.agent_session
 
     # Contract: Evaluates dirty work in local workspace and prints ready tasks, synchronizing from main repository and respecting batch_size and max_feedback_chars.
     def run_get_work(
@@ -1214,9 +1208,44 @@ class WorkspaceChecker(check.WorkspaceChecker):
                 if (meta and main_root and os.path.isdir(main_root))
                 else ws_root
             )
-            ready_items, blocked_items = _compute_role_work_queue(
-                role_name, d_scope, eval_root
+            main_scope = (
+                str(meta.get("main_dir_scope") or "").strip("/") if meta else ""
             )
+            eval_scope = (
+                main_scope
+                if (eval_root == main_root and main_scope)
+                else d_scope
+            )
+            ready_items, blocked_items = _compute_role_work_queue(
+                role_name, eval_scope, eval_root
+            )
+            if (
+                ws_root != main_root
+                and meta
+                and main_scope
+                and d_scope
+                and main_scope != d_scope
+            ):
+                for it in ready_items:
+                    tf = it.get("target_file", "")
+                    if tf.startswith(main_scope + "/"):
+                        it["target_file"] = d_scope + "/" + tf[len(main_scope) + 1 :]
+                    it["dependencies"] = [
+                        d_scope + "/" + dep[len(main_scope) + 1 :]
+                        if dep.startswith(main_scope + "/")
+                        else dep
+                        for dep in it.get("dependencies", [])
+                    ]
+                    it["contract_files"] = [
+                        d_scope + "/" + cf[len(main_scope) + 1 :]
+                        if cf.startswith(main_scope + "/")
+                        else cf
+                        for cf in it.get("contract_files", [])
+                    ]
+                for it in blocked_items:
+                    tf = it.get("target_file", "")
+                    if tf.startswith(main_scope + "/"):
+                        it["target_file"] = d_scope + "/" + tf[len(main_scope) + 1 :]
 
         if is_auditor and ready_items:
             marker = os.path.join(
@@ -1370,7 +1399,7 @@ class WorkspaceChecker(check.WorkspaceChecker):
                         pass
                 if item_guide:
                     print(f"      Companion Guide to Follow:")
-                    print(f"        - {item_guide}")
+                    print(f"        - {item_guide} (workspace root path; do not prefix with scope)")
                 if item.get("reasons"):
                     print("      Dirty Reasons:")
                     for r in item["reasons"]:
@@ -1489,6 +1518,17 @@ class WorkspaceChecker(check.WorkspaceChecker):
                 print(
                     f"\nACTIONABLE NEXT STEP: Read contracts and companion guide, implement changes, verify with 'bin/check_files', then run 'bin/submit <file> \"<summary>\"'{blame_clause} (or 'bin/fail <target_file> \"<reason>\"' on unresolvable impasse).\n"
                 )
+        if ready_items:
+            try:
+                prov = get_singleton(provision.WorkspaceProvisioner)
+                prov.lock_workspace_directories(
+                    ws_root,
+                    role_name=role_name,
+                    dir_scope=d_scope,
+                    repo_root=main_root,
+                )
+            except Exception:
+                pass
         return 1 if ready_items else 0
 
     # Contract: Executes role-specific verification checks, linters, and type checking for targets, regenerating if missing.
@@ -1912,23 +1952,11 @@ class WorkspaceChecker(check.WorkspaceChecker):
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-30T11:00:00Z
-# LAST_CHANGED: 2026-11-09T20:05:00Z
-# CHANGE: Format non-auditor check_files success with feedback/changes resolution notice
+# LAST_CHANGED: 2026-11-11T23:00:00Z
+# CHANGE: Evaluate canonical main_dir_scope when discovering work from main in isolated workspaces
 # COVERAGE_AUDIT: 2026-10-18T19:13:51Z
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
-
-# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
-def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
-    """Registers constituent singletons into the lifecycle registry."""
-    reg = get_default_registry() if registry is None else registry
-    reg.register_singleton(
-        WorkspaceChecker,
-        keys=[check.WorkspaceChecker, WorkspaceChecker],
-        tier=agent_session.agent_session,
-    )
-
-
+__initialize__ = auto_initialize()
 _initialize_ = __initialize__
-# --- END CLEANROOM AUTO-GENERATED ---

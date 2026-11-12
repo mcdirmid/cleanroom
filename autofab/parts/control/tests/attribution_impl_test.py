@@ -1,7 +1,7 @@
 """Unit tests for attribution_impl."""
 
 import unittest
-from support.lib.lifecycle import LifecycleRegistry, enter_phase, system
+from support.lib.lifecycle import LifecycleTestCase, enter_phase, system
 from autofab.parts.agent.lib import node_config, agent_session
 from autofab.parts.dag.lib import dag_storage
 from autofab.parts.control.lib import attribution
@@ -63,9 +63,9 @@ class MockNodeConfig:
         self.blame_targets_by_node = {}
 
 
-class ControlAttributionImplTest(unittest.TestCase):
+class ControlAttributionImplTest(LifecycleTestCase):
     def setUp(self) -> None:
-        self.registry = LifecycleRegistry()
+        super().setUp()
         self.coordinator = AttributionCoordinator()
         self.registry.register_instance(
             self.coordinator,

@@ -22,6 +22,8 @@ Uncontrolled read-write access across an entire codebase leads to accidental cro
 - The workspace provisioner writes role configuration into autofab_files_ext.ROLE_DESCRIPTOR_FILE in the workspace root. [write_role_configuration]
 - The workspace provisioner configures test runner isolation to restrict test discovery to the local workspace. [configure_test_runner_isolation]
 - The workspace provisioner synthesizes role-tailored AGENTS.md instructions in the workspace root. [write_role_agents_instructions]
+- The workspace provisioner locks non-writable directories in a role workspace to read-only permissions (0o555) while preserving write permissions (0o755) on declared target directories. [lock_workspace_directories]
+- The workspace provisioner restores write permissions (0o755) on all directories in a role workspace. [unlock_workspace_directories]
 
 ### Woven Contracts
 

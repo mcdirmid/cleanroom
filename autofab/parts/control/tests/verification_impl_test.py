@@ -1,7 +1,7 @@
 """Unit tests for verification_impl."""
 
 import unittest
-from support.lib.lifecycle import LifecycleRegistry, enter_phase, system
+from support.lib.lifecycle import LifecycleTestCase, enter_phase
 from autofab.parts.agent.lib import node_config, agent_session
 from autofab.parts.dag.lib import dag_storage
 from autofab.parts.control.lib import verification
@@ -28,9 +28,9 @@ class MockCheck:
         return self.is_passing, self.diagnostic
 
 
-class ControlVerificationImplTest(unittest.TestCase):
+class ControlVerificationImplTest(LifecycleTestCase):
     def setUp(self) -> None:
-        self.registry = LifecycleRegistry()
+        super().setUp()
         self.evaluator = VerificationEvaluator()
         self.registry.register_instance(
             self.evaluator,

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import unittest
-from support.lib import slug_lint
+from autofab_py.support.lib import slug_lint
 
 
 class SlugLintTest(unittest.TestCase):

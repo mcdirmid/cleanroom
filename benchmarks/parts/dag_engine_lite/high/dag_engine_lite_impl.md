@@ -1,5 +1,6 @@
 # dag_engine_lite_impl implementation component
 
+imports: kahn_topology_ext
 implements: dag_engine_lite
 
 ## Purpose
@@ -9,6 +10,8 @@ The dag_engine_lite_impl implementation component realizes concrete Directed Acy
 Reliable task graph execution requires deterministic topological evaluation without arbitrary orderings, efficient critical path resolution, and resilient sequential wave coordination. Without concrete data structures and disciplined state scheduling, execution risks cyclic hangs, unhandled task errors, and incorrect transitive state invalidation. The dag_engine_lite_impl implementation component provides adjacency graph storage, depth-first cycle verification, wave-based state machines, and sequential runners to execute task graphs safely and deterministically.
 
 **Out of scope:** The dag_engine_lite_impl implementation component does not distribute tasks across network nodes or persist task checkpoints to disk; these are handled by other components.
+
+**Delegated:** The dag_engine_lite_impl implementation component delegates to kahn_topology_ext for Kahn's topological sorting, cycle detection, and critical path dynamic programming mechanics.
 
 ## Types and Behavior
 
@@ -37,8 +40,9 @@ A *concrete DAG runner* realizes the DAG runner protocol by executing graph wave
 Execution advances by iteratively polling the wave scheduler, running unblocked node actions with retry attempts, propagating failure policies when marking node failures in the scheduler, and compiling terminal node outcomes into a consolidated DAG run report with succeeded, failed, skipped, and cancelled node sequences.
 
 <!-- AUTOFAB METADATA
-LAST_CLEANED: 2026-11-10T07:51:09Z
+LAST_CLEANED: 2026-11-12T04:48:06Z
 LAST_CHANGED: 2026-11-02T19:35:00Z
 CHANGE: Specify duplicate node error on add_node for already registered node identifiers
-SPEC_QA_AUDIT: 2026-11-10T07:51:09Z
+CODE_HASH: bb910515b5e3
+SPEC_QA_AUDIT: 2026-11-12T04:48:06Z
 -->

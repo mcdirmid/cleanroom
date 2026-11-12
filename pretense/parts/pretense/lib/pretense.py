@@ -582,6 +582,8 @@ def require_arg(
     domain: Union[Domain[Sequence[E]], Domain[List[E]], Domain[Tuple[E, ...]]],
     preferred: Optional[Sequence[Sequence[E]]] = None,
     error: Optional[Union[Type[BaseException], BaseException]] = None,
+    *,
+    fuzz_domain: Optional[Domain[Any]] = None,
 ) -> None: ...
 @overload
 def require_arg(
@@ -593,6 +595,8 @@ def require_arg(
     ],
     preferred: Optional[Sequence[Optional[Sequence[E]]]] = None,
     error: Optional[Union[Type[BaseException], BaseException]] = None,
+    *,
+    fuzz_domain: Optional[Domain[Any]] = None,
 ) -> None: ...
 @overload
 def require_arg(
@@ -600,12 +604,16 @@ def require_arg(
     domain: Domain[T],
     preferred: Optional[Sequence[T]] = None,
     error: Optional[Union[Type[BaseException], BaseException]] = None,
+    *,
+    fuzz_domain: Optional[Domain[Any]] = None,
 ) -> None: ...
 @overload
 def require_arg(
     val: T,
     domain: Domain[T],
     preferred: Union[Type[BaseException], BaseException],
+    *,
+    fuzz_domain: Optional[Domain[Any]] = None,
 ) -> None: ...
 def require_arg(
     val: Any,
@@ -614,6 +622,8 @@ def require_arg(
         Union[Sequence[Any], Type[BaseException], BaseException]
     ] = None,
     error: Optional[Union[Type[BaseException], BaseException]] = None,
+    *,
+    fuzz_domain: Optional[Any] = None,
 ) -> None:
     """Argument domain validation and preferred candidate binding."""
     if _disable_preconditions.get():
@@ -2712,7 +2722,7 @@ def _parse_linear_transition(
     has_suts_param = False
 
     req_codes: List[Any] = []
-    param_domains: Dict[str, Tuple[Any, Optional[Any]]] = {}
+    param_domains: Dict[str, Tuple[Any, ...]] = {}
 
     try:
         src = textwrap.dedent(inspect.getsource(orig_fn))
@@ -2799,6 +2809,7 @@ def _parse_linear_transition(
                                     f"<{attr_name}_pref_{arg_name}>",
                                     "eval",
                                 )
+                        fuzz_dom_code = None
                         if pref_code is None:
                             for kw in call.keywords:
                                 if kw.arg == "preferred":
@@ -2808,8 +2819,16 @@ def _parse_linear_transition(
                                         "eval",
                                     )
                                     break
+                        for kw in call.keywords:
+                            if kw.arg == "fuzz_domain":
+                                fuzz_dom_code = compile(
+                                    ast.Expression(body=kw.value),
+                                    f"<{attr_name}_fuzzdom_{arg_name}>",
+                                    "eval",
+                                )
+                                break
                         if arg_name:
-                            param_domains[arg_name] = (domain_code, pref_code)
+                            param_domains[arg_name] = (domain_code, pref_code, fuzz_dom_code)
     except Exception:
         pass
 
@@ -2875,11 +2894,11 @@ def _build_linear_transition(
                     base_desc = _parse_linear_transition(
                         base_raw_fn, base_spec, attr_name
                     )
-                    for p_name, (d_code, pr_code) in base_desc.get(
+                    for p_name, p_dom_info in base_desc.get(
                         "param_domains", {}
                     ).items():
                         if p_name not in param_domains:
-                            param_domains[p_name] = (d_code, pr_code)
+                            param_domains[p_name] = p_dom_info
                             for k, v in base_desc.get("globals", {}).items():
                                 eval_globs.setdefault(k, v)
                     if not req_codes and base_desc.get("req_codes"):
@@ -2952,10 +2971,24 @@ def _build_linear_transition(
                     raise PretenseSpecificationError(
                         f"Parameter '{p_name}' has no require_arg declaration in '{attr_name}'"
                     )
-                d_code, pr_code = param_domains[p_name]
+                p_dom_info = param_domains[p_name]
+                d_code = p_dom_info[0]
+                pr_code = p_dom_info[1]
+                fuzz_d_code = p_dom_info[2] if len(p_dom_info) > 2 else None
                 dom = eval(d_code, {**eval_globs, **eval_ns})
                 if not isinstance(dom, Domain):
                     dom = Domain.of(dom)
+
+                gen_dom = dom
+                if fuzz_d_code is not None:
+                    try:
+                        f_dom = eval(fuzz_d_code, {**eval_globs, **eval_ns})
+                        if f_dom is not None:
+                            gen_dom = (
+                                f_dom if isinstance(f_dom, Domain) else Domain.of(f_dom)
+                            )
+                    except Exception:
+                        gen_dom = dom
 
                 valid_pref: List[Any] = []
                 if pr_code is not None:
@@ -2966,7 +2999,7 @@ def _build_linear_transition(
                     except Exception:
                         valid_pref = []
 
-                strat = dom.to_strategy()
+                strat = gen_dom.to_strategy()
                 if getattr(strat, "is_empty", False) and not valid_pref:
                     raise UnsatisfiedAntecedentError(
                         f"Domain for parameter '{p_name}' cannot generate valid arguments in state: {state}"
@@ -2977,7 +3010,7 @@ def _build_linear_transition(
                     chosen_val = draw(st.sampled_from(valid_pref))
                 elif draw is not None:
                     try:
-                        chosen_val = _draw_from_domain(dom, draw)
+                        chosen_val = _draw_from_domain(gen_dom, draw)
                     except Exception as e:
                         if valid_pref:
                             chosen_val = draw(st.sampled_from(valid_pref))
@@ -3013,7 +3046,7 @@ def _build_linear_transition(
                     return None
                 eval_ns.update(drawn)
                 if p_name in param_domains:
-                    d_code, _ = param_domains[p_name]
+                    d_code = param_domains[p_name][0]
                     dom = eval(d_code, {**eval_globs, **eval_ns})
                     if not isinstance(dom, Domain):
                         dom = Domain.of(dom)
@@ -3300,14 +3333,11 @@ class StateMachine(Generic[StateT]):
 
     def as_checked(
         self, protocol_type: Type[T], real_instance: Optional[T] = None
-    ) -> T:
-        return cast(
-            T,
-            CheckedAdapter(
-                target_protocol=protocol_type,
-                state_machine=self,
-                real_instance=real_instance,
-            ),
+    ) -> CheckedAdapter[T]:
+        return CheckedAdapter(
+            target_protocol=protocol_type,
+            state_machine=self,
+            real_instance=real_instance,
         )
 
     def bind(self, target: Any) -> Any:
@@ -3636,7 +3666,7 @@ class StateMachine(Generic[StateT]):
         )
 
 
-class CheckedAdapter:
+class CheckedAdapter(Generic[T]):
     """Verification proxy conforming to an interface protocol that dispatches through a state machine and real singleton."""
 
     def __init__(
@@ -3658,14 +3688,14 @@ class CheckedAdapter:
         self,
         exc_type: Optional[Type[BaseException]] = None,
         match: str = "",
-    ) -> _ViolatingAdapter:
+    ) -> T:
         """Returns a violating adapter context for contract violation testing on the terminal transition."""
         if self._is_terminal:
             raise PretenseSpecificationError(
                 f"Cannot invoke violating() on terminal CheckedAdapter for '{getattr(self._target_protocol, '__name__', str(self._target_protocol))}'; "
                 "component is in an undefined state after a contract violation."
             )
-        return _ViolatingAdapter(self, exc_type=exc_type, match=match)
+        return cast(T, _ViolatingAdapter(self, exc_type=exc_type, match=match))
 
     def __getattr__(self, name: str) -> Any:
         if name.startswith("_"):

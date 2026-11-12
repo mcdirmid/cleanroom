@@ -50,6 +50,7 @@ class WorkspaceScaffolder(scaffold.WorkspaceScaffolder):
         max_feedback_chars: Optional[int] = None,
         fused_roles: Optional[Sequence[str]] = None,
         common_spec_roles: Optional[Sequence[str]] = None,
+        main_dir_scope: Optional[str] = None,
     ) -> None:
         """Writes role configuration metadata in the workspace root.
 

@@ -15,12 +15,7 @@ import types
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 import unittest
 
-from support.lib.lifecycle import (
-    LifecycleRegistry,
-    Singleton,
-    get_default_registry,
-    system,
-)
+from support.lib.lifecycle import auto_initialize, singleton
 from . import coverage
 
 
@@ -75,10 +70,10 @@ def _extract_contracted_errors(file_path: Path | str) -> Set[str]:
     return contracted_errors
 
 
+@singleton
 class CoverageEvaluator(coverage.CoverageEvaluator):
     """Realizes the system coverage evaluator as a system service providing AST analysis, traced unit test execution, and coverage report generation."""
 
-    tier = system
 
     def __init__(self) -> None:
         pass
@@ -879,17 +874,5 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
-
-# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
-def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
-    """Registers constituent singletons into the lifecycle registry."""
-    reg = get_default_registry() if registry is None else registry
-    reg.register_singleton(
-        CoverageEvaluator,
-        keys=[CoverageEvaluator, coverage.CoverageEvaluator],
-        tier=system,
-    )
-
-
+__initialize__ = auto_initialize()
 _initialize_ = __initialize__
-# --- END CLEANROOM AUTO-GENERATED ---

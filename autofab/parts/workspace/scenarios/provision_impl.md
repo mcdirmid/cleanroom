@@ -143,7 +143,7 @@ unbound directory, and the stub role dependency beta supplies `beta/lib/beta.py`
 
 1. The provisioner commissions the alpha workspace.
    Observed: the workspace holds the project configuration and the part build definition with the
-   same content as the main repository with readme attributes stripped from pyproject.toml, the bound methodology runtime support libraries are projected
+   same content as the main repository with readme attributes stripped from pyproject.toml, the directory scope projected into the workspace under the leaf directory scope name (omitting enclosing container path prefixes from the role workspace working tree), main_dir_scope recorded alongside dir_scope in the role descriptor, test runner pythonpath configured with workspace root, leaf scope root, and leaf scope parts, the bound methodology runtime support libraries are projected
    directly to `./support/lib` and the assigned companion guide to `./guides` at the workspace root with read-only permissions, unneeded templates and configuration files are omitted, the unbound
    directory is not copied into the workspace, and the stub for beta raises `NotImplementedError` instead of carrying `def beta(): return 7`.
    Realized by: the component's own selective copying, which passes build definitions, project
@@ -203,8 +203,20 @@ Given: an active experiment is configured in the environment, and a contract or 
    Observed: conditional markdown blocks are evaluated against active experiments so only matching branches remain in the copied markdown files in the role workspace.
    Realized by: the component's markdown conditional preprocessing during file copying.
 
+### Scenario 15 — Dynamic locking and unlocking across agent rounds
+
+Given: role alpha is commissioned for scope_a at `/ws/alpha_scope_a` with writable targets under `alpha/lib` and read-only dependencies under `beta/high` and `guides`.
+
+1. The provisioner locks workspace directories for role alpha.
+   Observed: directories containing exclusively read-only contracts (`beta/high`, `guides`) have permissions set to 0o555, while workspace root `/ws/alpha_scope_a`, `bin/`, and `alpha/lib` retain 0o755.
+   Realized by: the component's directory locking traversal resolving declared writable patterns and restricting non-writable directories.
+
+2. The provisioner unlocks workspace directories for role alpha.
+   Observed: all directories across the workspace tree are restored to 0o755 permissions.
+   Realized by: the component's recursive directory unlocking traversal restoring write permissions on all subdirectories.
+
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-30T05:28:00Z
-LAST_CHANGED: 2026-11-07T16:00:00Z
-CHANGE: Markdown conditional preprocessing during file copying
+LAST_CHANGED: 2026-11-11T14:00:00Z
+CHANGE: Add dynamic workspace directory locking and unlocking scenario
 -->

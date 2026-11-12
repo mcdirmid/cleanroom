@@ -4,16 +4,16 @@ from __future__ import annotations
 import os
 import tempfile
 import unittest
-from support.lib.lifecycle import LifecycleRegistry, enter_phase
+from support.lib.lifecycle import LifecycleTestCase, enter_phase
 from autofab.parts.agent.lib import session as agent_session
 from autofab.parts.workspace.lib import roles, roles_impl
 from autofab.parts.workspace.lib.roles_impl import RoleResolver
 from support.lib import app_info
 
 
-class WorkspaceRolesImplTest(unittest.TestCase):
+class WorkspaceRolesImplTest(LifecycleTestCase):
     def setUp(self) -> None:
-        self.registry = LifecycleRegistry()
+        super().setUp()
         roles_impl.__initialize__(self.registry)
         self.phase_cm = enter_phase(agent_session.agent_session, registry=self.registry)
         self.scope = self.phase_cm.__enter__()

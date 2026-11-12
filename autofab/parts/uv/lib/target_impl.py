@@ -3,16 +3,11 @@ from typing import Optional
 from . import target
 from autofab.parts.core.lib import file_paths
 from autofab.parts.dag.lib import dag_storage
-from support.lib.lifecycle import (
-    LifecycleRegistry,
-    Singleton,
-    get_default_registry,
-    system,
-)
+from support.lib.lifecycle import auto_initialize, get_singleton, singleton
 
 
+@singleton
 class UvTarget(target.UvTarget):
-    tier = system
 
     def __init__(self) -> None:
         pass
@@ -165,17 +160,5 @@ class UvTarget(target.UvTarget):
 # QA_AUDIT: 2026-10-15T17:42:47Z
 # --- END CLEANROOM METADATA ---
 
-
-# --- CLEANROOM AUTO-GENERATED: DO NOT EDIT ---
-def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
-    """Registers constituent singletons into the lifecycle registry."""
-    reg = get_default_registry() if registry is None else registry
-    reg.register_singleton(
-        UvTarget,
-        keys=[UvTarget, target.UvTarget],
-        tier=system,
-    )
-
-
+__initialize__ = auto_initialize()
 _initialize_ = __initialize__
-# --- END CLEANROOM AUTO-GENERATED ---

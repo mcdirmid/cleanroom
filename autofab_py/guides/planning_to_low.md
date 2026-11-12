@@ -64,11 +64,10 @@ Classes, type parameters, properties, operations, and tier memberships materiali
 ## Invariants, Preconditions, and Postconditions
 
 - [ ] Planning contracts map deterministically: state consistency rules to `INVARIANTS:`, invocation prerequisites to `PRECONDITIONS:`, operational outcomes to `POSTCONDITIONS:`
-- [ ] Caller preconditions under `PRECONDITIONS:` state obligations callers must satisfy; a precondition without an error indicates that if violated, bad undefined behavior will happen, and implementations accept these assumptions axiomatically without defensive checks or branches
-- [ ] Exception classes ending in `Error` (`*Error`) designate contract violation errors (checked preconditions indicating that if violated, an error is raised, and bad undefined things could still happen); operations checking preconditions defensively specify them strictly under `PRECONDITIONS:` using `- WHEN <condition>, MUST raise <Error>.`
-- [ ] Documenting contract violation errors (`*Error`) under `POSTCONDITIONS:` is strictly prohibited; `POSTCONDITIONS:` specifies operational outcomes and external `*Exception` failures only
-- [ ] Exception classes ending in `Exception` (`*Exception`) designate non-contract operational failures resulting from unanticipated external conditions and are specified under `POSTCONDITIONS:`
-- [ ] Docstring contract sections distinguish checked preconditions from postconditions: contract violation errors (`*Error`) are specified under `PRECONDITIONS:`, while operational `*Exception` failures are specified under `POSTCONDITIONS:`; docstring `Raises:` sections may document raised exceptions
+- [ ] Caller preconditions under `PRECONDITIONS:` state obligations callers must satisfy; a precondition without an error indicates undefined behavior if violated, accepted axiomatically by implementations without defensive branches
+- [ ] Contract violation errors (`*Error`): operations checking preconditions defensively specify them strictly under `PRECONDITIONS:` using `- WHEN <condition>, MUST raise <Error>.`; documenting `*Error` under `POSTCONDITIONS:` is strictly prohibited
+- [ ] Operational failure exceptions (`*Exception`): designate non-contract failures resulting from unanticipated external conditions and are specified under `POSTCONDITIONS:`
+- [ ] Docstring `Raises:` sections may document raised exceptions alongside `PRECONDITIONS:` and `POSTCONDITIONS:`
 - [ ] Subtypes inherit all `INVARIANTS:` and `POSTCONDITIONS:` from base types transitively and must not copy-paste base requirements verbatim
 - [ ] Conditional requirements and failure branches use exact normative syntax: `- WHEN <condition>, MUST <outcome>.`; unconditional postconditions use: `- MUST <outcome>.`
 - [ ] When an operation returns a response record or produces diagnostic feedback on failure, postconditions specify the exact error string template in double quotes
@@ -78,7 +77,6 @@ Classes, type parameters, properties, operations, and tier memberships materiali
 
 ## Grounding arguments in implementation specifications
 
-- [ ] Implementation stubs (`low/<name>_impl.pyi`) synthesize grounded knowledge requirements into natural language arguments under `GROUNDING:` in class and member docstrings, explicitly mentioning all imported collaborator components
 - [ ] `GROUNDING:` sections appear strictly in implementation stubs (`low/<name>_impl.pyi`) and are strictly prohibited in interface stubs (`low/<name>.pyi`)
-- [ ] `GROUNDING:` arguments explicitly name imported components, collaborator classes, and collaborator methods/properties, citing valid `Class.member` or `module.member` tokens
+- [ ] `GROUNDING:` arguments synthesize grounded knowledge into natural language in class and member docstrings, explicitly naming imported components, collaborator classes, and methods/properties (`Class.member` or `module.member`)
 - [ ] `GROUNDING:` arguments describe how internal backing collections and state fields are accessed or mutated to satisfy inherited deferred requirements without repeating base postconditions

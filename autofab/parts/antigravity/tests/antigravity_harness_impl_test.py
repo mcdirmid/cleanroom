@@ -11,7 +11,7 @@ from typing import Any
 import unittest
 
 from support.lib import app_info
-from support.lib.lifecycle import LifecycleRegistry, enter_phase
+from support.lib.lifecycle import LifecycleTestCase, enter_phase
 from autofab.parts.agent.lib import session as agent_session
 from autofab.parts.antigravity.lib import (
     antigravity_harness,
@@ -30,12 +30,12 @@ class MockHarnessRegistry:
         self.installed[platform_name] = factory
 
 
-class AntigravityHarnessImplTest(unittest.TestCase):
+class AntigravityHarnessImplTest(LifecycleTestCase):
     """Test cases for AntigravityHarnessManager and AntigravityHarnessAdapter."""
 
     def setUp(self) -> None:
+        super().setUp()
         self.test_dir = tempfile.mkdtemp()
-        self.registry = LifecycleRegistry()
         self.mock_harness_registry = MockHarnessRegistry()
         self.registry.register_instance(
             self.mock_harness_registry,
