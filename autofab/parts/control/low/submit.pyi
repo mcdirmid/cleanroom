@@ -65,9 +65,10 @@ class SubmissionCoordinator(Singleton[AgentSessionTier], Protocol):
         - When auditor role attempts to submit an audited target without uncommitted staged blame, MUST politely accept submission without error and without mutating the canonical repository.
         - When producer role attempts to submit a read-only target, MUST reject submission.
         - When producer role attempts to submit a file target outside the directory scope, MUST reject submission.
+        - When producer role attempts to submit an unmodified target while unacted in-band feedback metadata is present on the target file, MUST reject submission with an error instructing the caller to use bin/reject instead.
         - When target is modified and change summary is omitted, MUST reject submission.
         - When target is unmodified and change summary is supplied, MUST reject submission.
-        - When accepted, MUST update in-band metadata directly in main repository (stripping ephemeral code hashes) and reflect to workspace with refreshed ephemeral code hash.
+        - When accepted, MUST update in-band metadata directly in main repository, reflect to workspace, and refresh baseline `code_hash` in `.autofab/pull_manifest.json`.
         - MUST return SubmissionOutcome indicating acceptance status and message.
         """
         ...

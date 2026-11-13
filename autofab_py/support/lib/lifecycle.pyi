@@ -475,6 +475,17 @@ def auto_initialize(
 
 
 class LifecycleTestCase(unittest.TestCase):
+    """Base test case providing automatic singleton registration, fake auto-wiring, and scope management.
+
+    During `setUp()`:
+    - Resolves `target` (module or class) from `cls.target`, or by scanning imported `*.lib.*_impl` /
+      `*.lib.*_asm` types in the test module, or from `*_test` module naming. Note: `*_impl_pretense`
+      modules must either set `target = <impl_module_or_class>` or import an `_impl`/`_asm` class for
+      auto-discovery to populate `self.sut`.
+    - Initializes `self.registry`, enters `self.scope`, auto-registers `@fake` collaborators into
+      `self.fakes`, initializes the target module, and binds `self.sut` to the resolved singleton
+      (or `None` if no target module/class was discovered or registered).
+    """
     target: Optional[Any]
     tier: Optional[LifecycleTier | str]
     registry: LifecycleRegistry

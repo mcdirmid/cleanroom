@@ -28,7 +28,7 @@ class WorkspaceProvisioner(Singleton[AgentSessionTier], Protocol):
         - MUST resolve the role definition for the requested role and directory scope, and resolve the bound methodology package declared by the target scope's autofab_files_ext.AUTOFAB_CONFIG_FILE.
         - MUST create the workspace directory tree including a bin directory, copying only target scope files and promoted assets belonging to the bound methodology package, while strictly ignoring unbound repository root directories.
         - WHEN reset is true, MUST clear stale pending work buffers in the workspace.
-        - MUST copy writable target files with 0o644 permissions, projecting metadata headers to only retain CHANGE and FEEDBACK fields with an ephemeral CODE_HASH while omitting LAST_CLEANED, LAST_CHANGED, and audit tags.
+        - MUST copy writable target files with 0o644 permissions, projecting metadata headers to only retain CHANGE and FEEDBACK fields while omitting LAST_CLEANED, LAST_CHANGED, and audit tags, and recording baseline code hashes in `.autofab/pull_manifest.json`.
         - MUST copy upstream contract dependencies with 0o444 permissions, projecting metadata headers to only retain CHANGE and FEEDBACK fields while omitting LAST_CLEANED, LAST_CHANGED, and audit tags.
         - WHEN the role definition declares stub role dependencies, MUST synthesize read-only test stubs raising NotImplementedError from companion specifications without copying real implementation files.
         - MUST package executable runner tools into the bin directory with 0o755 permissions.

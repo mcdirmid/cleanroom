@@ -1,8 +1,8 @@
-# DeepSeek Harness (`dsh`) Integration, Web Daemon, Visual Hierarchy UI Plugin & Session Management
+# DeepSeek Harness (`dsh`) Subagent Architecture, Web Daemon, Direct JSON-RPC Orchestration & Visual Hierarchy UI Plugin
 
 > **Document Type:** Canonical Architectural Specification & System Guide  
 > **Status:** Production / Implemented  
-> **Scope:** DeepSeek Harness (`dsh`), DSH Web Daemon, Cordis UI Shell, Session Lifecycle, Workspace Retention, and Visual Subagent Hierarchy Plugin (`dsh-autofab-hierarchy`).
+> **Scope:** DeepSeek Harness (`dsh`), DSH Web Daemon, Cordis UI Shell, Direct JSON-RPC Remote Orchestration, Session Lifecycle, Workspace Retention, Hardware Contention Bounding (`concurrent_subagents`), and Visual Subagent Hierarchy Plugin (`dsh-autofab-hierarchy`).
 
 ---
 
@@ -17,9 +17,10 @@ Autofab provides deep, first-class integration with the DeepSeek Harness (`dsh`)
 │                                                                                        │
 │   DESKTOP / CLI HARNESS                          DSH WEB DAEMON (launchd)              │
 │   - Direct JSON-RPC socket streaming             - Port 3080 (Web UI / HTTP)           │
-│   - Local Unix sockets                           - Port 47821 (RPC Bridge)             │
-│   - Subprocess execution containment             - launchctl service management        │
-│                                                  - Dynamic active token auth           │
+│   - Local SQLite cookie auth (cookies.sqlite)    - Port 47821 (RPC Bridge)             │
+│   - Zero session.lock contention with UI         - launchctl service management        │
+│   - Headless CLI fallback (dsh exec)             - Dynamic active token auth           │
+│                                                  - /api browser-trust fence            │
 │                                                                                        │
 │                                      │                                                 │
 │                                      ▼                                                 │
@@ -43,15 +44,17 @@ Autofab provides deep, first-class integration with the DeepSeek Harness (`dsh`)
 │   │   - Ephemeral sibling workspaces & multi-segment scoping                       │   │
 │   │   - Retained runs under benchmarks/runs/<suite>_<model>_<index>/               │   │
 │   │   - Selective recycling: Finished recycled; Failed preserved in-place          │   │
+│   │   - Hardware contention control: concurrent_subagents = 1 (MRU scheduling)     │   │
 │   └────────────────────────────────────────────────────────────────────────────────┘   │
 └────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Key Architectural Tenets
-1. **Zero-Execution Coordinator**: The Autofab DAG coordinator executes in Python, performing topological wave clustering, dispatching role workers into isolated sub-workspaces, and monitoring progress without consuming generative tokens itself.
-2. **First-Class Session Addressing**: Role workers are created via DSH JSON-RPC as independent top-level sessions. This circumvents internal Gateway subagent validation errors while preserving full streaming telemetry.
+1. **Zero-Execution Coordinator**: The Autofab DAG coordinator executes in Python, performing topological wave clustering, dispatching role workers into isolated sub-workspaces, and monitoring progress without consuming generative tokens on source code authoring.
+2. **First-Class Session Addressing**: Role workers are created via DSH JSON-RPC as independent top-level sessions (`kind: "session"`). This circumvents internal Gateway subagent validation errors while preserving full streaming telemetry.
 3. **Presentation-Layer Visual Hierarchy**: DSH Web's sidebar is dynamically transformed by a native Cordis UI plugin (`dsh-autofab-hierarchy`), grouping flat worker sessions by flight scope into clean, collapsible run cards with live status indicators and run deletion controls.
 4. **Token Economy Parity**: DSH Web enforces the Cleanroom Lean Preset (`preset-standard`), exposing strictly `bash_run` to reduce tool token overhead from 5.5K to 1.7K tokens per step and compacting system prompts to 967 tokens, identically matching DSH Desktop.
+5. **Direct JSON-RPC Remote Orchestration**: Connects directly to running DSH server instances over HTTP/JSON-RPC, using SQLite cookie credentials to eliminate OS file-lock contention (`flock` on `session.lock`).
 
 ---
 
@@ -125,7 +128,32 @@ Rather than risking stability by modifying binary serialization formats or patch
 
 ---
 
-## 4. Native Cordis Client UI Plugin: `dsh-autofab-hierarchy`
+## 4. Direct JSON-RPC Remote Orchestration & File-Lock Elimination
+
+Autofab drives subagent rounds through a high-performance JSON-RPC client:
+
+### Elimination of Kernel Write-Lease Contention (`session.lock`)
+Earlier implementations executed subagents by spawning headless CLI commands (`dsh exec ...`). When run alongside an active Cordis desktop UI session, both processes attempted to acquire an exclusive kernel write-lease (`flock`) on `session.lock`:
+- This triggered lock contention, causing desktop UI sessions to fork or crash with `EAGAIN` / `EBUSY`.
+- The direct JSON-RPC client eliminates file-lock contention entirely by connecting directly to the running server over HTTP/RPC:
+  1. Reads session authentication tokens and ports from Cordis SQLite store (`cookies.sqlite`).
+  2. Issues remote RPC requests (`workspace/create`, `session/create`, `session/prompt`).
+  3. The server arbitrates session updates in memory without competing file leases.
+
+### Structured RPC Lifecycle
+```
+Autofab Coordinator ──(HTTP JSON-RPC)──> DSH Server (Port 47821)
+  ├── 1. POST /rpc {"method": "workspace/create", "params": {"path": "<role_ws>"}}
+  ├── 2. POST /rpc {"method": "session/create", "params": {"workspaceId": ...}}
+  └── 3. POST /rpc {"method": "session/prompt", "params": {"sessionId": ..., "text": ...}}
+```
+
+### Headless CLI Fallback
+If no active DSH server instance is detected (e.g. in minimal headless CI environments), Autofab gracefully falls back to executing subagent rounds via `dsh exec --workspace <role_ws>`.
+
+---
+
+## 5. Native Cordis Client UI Plugin: `dsh-autofab-hierarchy`
 
 The visual hierarchy is powered by a native Cordis plugin located at:
 `~/.dsh/profiles/web/plugins/dsh-autofab-hierarchy/`
@@ -171,14 +199,14 @@ The client script mounts directly inside DSH Web's browser runtime:
 1. **Sidebar Attachment**: Uses `MutationObserver` to locate the primary navigation sidebar container (`div[data-component="sidebar"]`) and injects the `#autofab-hierarchy-container` immediately above the **Ungrouped** header.
 2. **Suppression of Raw Ungrouped Items**: Identifies original flat session list items whose titles match `\[(.*?)\]\s*(.*)` and hides them (`display: none !important`), eliminating visual redundancy while keeping them hydrated in the background.
 3. **In-Place DOM Diffing**: Periodically polls `/autofab/api/state` (every 1,500 ms). Rather than destroying and re-rendering the sidebar on each poll, the client uses keyed in-place diffing:
-   - Scope containers are keyed by `data-scope`.
-   - Existing scope cards are updated in-place (`updateExistingFlightGroup`).
-   - Active roles update indicators smoothly without losing hover or focus states.
+    - Scope containers are keyed by `data-scope`.
+    - Existing scope cards are updated in-place (`updateExistingFlightGroup`).
+    - Active roles update indicators smoothly without losing hover or focus states.
 4. **Strict Zero-Emoji Policy & Vector SVG Icons**: All UI elements adhere strictly to the project's zero-emoji constraint. Status and role indicators are rendered via clean, scalable vector SVGs:
-   - Running indicator: Animated SVG circular spinning ring (`.autofab-spinner`).
-   - Idle / Completed indicator: Solid SVG green dot (`.autofab-dot-idle`).
-   - Role badges: Styled typographic pills (`.role-badge`).
-   - Action controls: Minimalist SVG trash icon for run deletion.
+    - Running indicator: Animated SVG circular spinning ring (`.autofab-spinner`).
+    - Idle / Completed indicator: Solid SVG green dot (`.autofab-dot-idle`).
+    - Role badges: Styled typographic pills (`.role-badge`).
+    - Action controls: Minimalist SVG trash icon for run deletion.
 
 ### Interactive Components
 ```
@@ -193,13 +221,13 @@ The client script mounts directly inside DSH Web's browser runtime:
 │   ▶ Prior waves (1)                                             │
 └─────────────────────────────────────────────────────────────────┘
 ```
-- **Scope Group Header**: Displays the scope name, sequential flight index, status pill (`RUNNING`, `FINISHED`, `FAILED`), and a hover trash button (`🗑`).
+- **Scope Group Header**: Displays scope name, sequential flight index, status pill (`RUNNING`, `FINISHED`, `FAILED`), and a hover trash button (`🗑`).
 - **Active Wave Card**: Lists current wave role workers. Clicking any role worker triggers `ctx.sessions.open(sessionId)` or dispatches a click to the underlying hidden session element, instantly focusing that worker in the main viewport with live streaming deltas.
 - **Prior Waves Accordion**: Prior dispatched waves collapse neatly into an interactive disclosure panel (`Prior waves (N)`), providing full historical traceability without cluttering the active workspace view.
 
 ---
 
-## 5. Scope Deletion & Session Lifecycle API
+## 6. Scope Deletion & Session Lifecycle API
 
 To prevent session accumulation across multiple test or benchmark runs, the visual hierarchy provides an interactive **Run Deletion** workflow:
 
@@ -221,7 +249,7 @@ To prevent session accumulation across multiple test or benchmark runs, the visu
 
 ---
 
-## 6. Workspace Retention & Selective Recycling Architecture
+## 7. Workspace Retention & Selective Recycling Architecture
 
 Autofab's benchmark harness coordinates closely with DSH Web to provide deterministic workspace retention under `benchmarks/runs/`.
 
@@ -267,7 +295,22 @@ To prevent toolchain truncation where `benchmarks/runs/...` was incorrectly chop
 
 ---
 
-## 7. Python Coordinator Telemetry & Integration Details
+## 8. Telemetry Daemon & Desktop Shell Integration
+
+### `dsh_telemetry` Background Daemon
+Autofab runs a non-blocking background telemetry service:
+- Operates over a local UNIX domain socket.
+- Listens for subagent round transitions and lifecycle events:
+  ```json
+  {
+    "event": "subagent_start",
+    "scope": "benchmarks/runs/ring_buffer_qwen_moe_1",
+    "role": "lib",
+    "workspace": "/Users/.../autofab_role_workspaces/lib_ring_buffer",
+    "timestamp": 1731300000.0
+  }
+  ```
+- Collects per-round execution metrics: token usage, round duration, tool invocation frequencies, and error recovery iterations.
 
 ### Session Title Formatting (`dsh_telemetry_impl.py`)
 Session titles are constructed deterministically upon worker initialization:
@@ -288,11 +331,10 @@ state_payload = {
 with open(state_file, "w") as f:
     json.dump(state_payload, f, indent=2)
 ```
-This ensures DSH Web UI reflects real-time wave progression, target assignments, and worker states without relying on fragile DOM scraping or unstructured log parsing.
 
 ---
 
-## 8. Subagent Concurrency & Hardware Contention Control (`concurrent_subagents`)
+## 9. Subagent Concurrency & Single-GPU Contention Control (`concurrent_subagents`)
 
 ### The Single-GPU Contention Problem
 Local offline models (such as Qwen MoE, Gemma MoE, and local MLX/Ollama backends running under Tier 1) operate on shared single-GPU hardware with unified memory architectures. While cloud API providers can scale horizontally to service dozens of parallel subagents, running multiple concurrent subagents against a single local GPU causes severe resource contention:
@@ -320,12 +362,28 @@ When `concurrent_subagents = 1`, the Python coordinator schedules work sequentia
 
 ---
 
-## 9. Verification & Operational Health
+## 10. Monorepo Part Structure & Future Evolution
+
+### Monorepo Components
+- **`autofab/parts/dsh/`**:
+  - `dsh_harness_impl.py`: Direct JSON-RPC client, headless CLI runner, session lifecycle manager, and state emission.
+  - `dsh_telemetry_impl.py`: UNIX domain socket telemetry server and event broadcaster.
+  - `dsh_workspace_impl.py`: DSH-specific workspace preparation and parameter translation.
+  - `dsh_asm.py`: Assembly bindings connecting `parts/dsh` to the systems orchestrator.
+
+### Future Architectural Evolution: Native Coordinator (`maxDepth: 2`)
+Autofab's current DSH architecture uses presentation-layer grouping because native `{ kind: "subagent" }` sessions are rejected by the API Gateway security fence.
+- If DSH updates its Gateway policy to permit external orchestration tools to pass valid parent-child origin records or if `maxDepth: 2` subagent hierarchies are officially supported, Autofab can transition the Python coordinator into a native top-level DSH session that spawns child subagents natively.
+- Until then, the presentation-layer visual hierarchy via `dsh-autofab-hierarchy` provides 100% stability, zero Gateway rejection risk, and seamless user navigation.
+
+---
+
+## 11. Verification & Operational Health
 
 The DSH integration is verified against the entire test suite and production benchmark flights:
 - **Repo Verification**: `bin/test` passes 100% clean (0 errors, code 0).
 - **Live Flight Pass Rates**:
   - `deepseek-flash` on `lru_cache` (Combined): PASS (19P / 0F, 0 pyright errors, $0.0753).
-  - `gemini-flash` on `ring_buffer` (Standard): PASS (16P / 0F, 0 pyright errors, $0.1382).
-  - `qwen-moe` on `ring_buffer` (Combined): PASS (20P / 0F, 0 pyright errors, $0.0000).
+  - `deepseek-flash` on `semver_solver` (Combined): PASS (48P / 0F, 0 errors, 649.0s, $0.1753).
+  - `qwen-moe` on `ring_buffer` (Combined Local): PASS (20P / 0F, 0 pyright errors, $0.0000).
 - **UI Responsiveness**: DOM diffing latency $< 15\text{ms}$; instant one-click session activation; immediate trash cleanup with server-side session termination.

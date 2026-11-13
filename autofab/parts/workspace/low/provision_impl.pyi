@@ -74,8 +74,8 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
         - Creates bin and target package folders, copies files matching
           role_registry.RoleDefinition.writable_file_patterns with 0o644 permissions
           (projecting metadata headers through src_metadata.SourceMetadataCoordinator
-          to expose only change and feedback fields with an ephemeral code hash
-          computed via src_metadata.SourceMetadataCoordinator.compute_file_code_hash),
+          to expose only change and feedback fields while recording baseline `code_hash`
+          in `.autofab/pull_manifest.json` via src_metadata.SourceMetadataCoordinator.compute_file_code_hash),
           copies files matching role_registry.RoleDefinition.readonly_file_patterns with
           0o444 permissions (projecting metadata headers through
           src_metadata.SourceMetadataCoordinator to expose only change and feedback fields),
@@ -86,7 +86,7 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
           runner entrypoint, writes role metadata containing role identity, directory scope, and
           optional model profile parameters into autofab_files_ext.ROLE_DESCRIPTOR_FILE without
           recording host repository paths, and formats AGENTS.md instructions carrying
-          role constraints, strict boundary rules, a contamination tripwire (distinguishing prohibited out-of-bounds files from permitted in-workspace code inspection), workspace undo and rollback instructions (git restore, git diff, bin/revert) for authoring roles with writable targets (omitting undo guidance and strictly prohibiting file edits and git commands for auditor roles with zero writable targets), permitted in-workspace shell commands and native harness tools while mandating round resolution through prescribed bin/ tools,
+          role constraints, strict boundary rules, a contamination tripwire (distinguishing prohibited out-of-bounds files from permitted in-workspace code inspection), workspace undo and rollback instructions (bin/revert) for authoring roles with writable targets (omitting undo guidance and strictly prohibiting file edits and git commands for auditor roles with zero writable targets), permitted in-workspace shell commands and native harness tools while mandating round resolution through prescribed bin/ tools,
           instructions for acting on blame and feedback (warning that static checks do not verify runtime behavior or feedback resolution and requiring target change header inspection before auditor blame delivery), a fail-stop reporting protocol with unresolvable impasse handling via bin/fail,
           and tool execution instructions.
         - Composes the role_registry.WorkspaceDescriptor from the workspace directory,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 import hashlib
+import json
 import os
 from pathlib import Path
 import re
@@ -19,6 +20,70 @@ _find_header_insertion_index = src_metadata._find_header_insertion_index
 _extract_block_boundaries = src_metadata._extract_block_boundaries
 parse_metadata_content = src_metadata.parse_metadata_content
 format_metadata_block = src_metadata.format_metadata_block
+
+
+def _find_pull_manifest(
+    file_path: Path, workspace_root: Optional[Path | str] = None
+) -> Optional[Tuple[Path, Path]]:
+    """Finds (ws_root, manifest_path) from workspace_root or by walking up from file_path."""
+    state_dirs = (".autofab", ".cleanroom")
+    if workspace_root is not None:
+        ws = Path(workspace_root).resolve()
+        for sd in state_dirs:
+            cand = ws / sd / "pull_manifest.json"
+            if cand.is_file():
+                return ws, cand
+        return None
+    curr = file_path.resolve().parent
+    while True:
+        for sd in state_dirs:
+            cand = curr / sd / "pull_manifest.json"
+            if cand.is_file():
+                return curr, cand
+        if curr.parent == curr:
+            return None
+        curr = curr.parent
+
+
+def _lookup_manifest_code_hash(
+    file_path: Path, workspace_root: Optional[Path | str] = None
+) -> Optional[str]:
+    """Looks up the baseline code_hash for file_path in .autofab/pull_manifest.json."""
+    found = _find_pull_manifest(file_path, workspace_root=workspace_root)
+    if found is None:
+        return None
+    ws_root, manifest_path = found
+    try:
+        data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    files_obj = data.get("files")
+    entries: dict[str, object] = files_obj if isinstance(files_obj, dict) else data
+    rel_from_ws = os.path.relpath(file_path.resolve(), ws_root).replace("\\", "/")
+    entry = entries.get(rel_from_ws)
+    if entry is None:
+        for desc_name in (".autofab_role.json", ".cleanroom_role.json"):
+            desc_path = ws_root / desc_name
+            if desc_path.is_file():
+                try:
+                    desc = json.loads(desc_path.read_text(encoding="utf-8"))
+                    ws_scope = desc.get("ws_dir_scope") or desc.get("dir_scope") or ""
+                    if ws_scope and rel_from_ws.startswith(ws_scope + "/"):
+                        entry = entries.get(rel_from_ws[len(ws_scope) + 1 :])
+                except (OSError, json.JSONDecodeError):
+                    pass
+                break
+    if entry is None:
+        for k, v in entries.items():
+            if isinstance(k, str) and rel_from_ws.endswith("/" + k):
+                entry = v
+                break
+    if isinstance(entry, dict):
+        val = entry.get("code_hash")
+        return val if isinstance(val, str) and val else None
+    return None
 
 
 class SourceMetadataCoordinator(src_metadata.SourceMetadataCoordinator):
@@ -79,16 +144,20 @@ class SourceMetadataCoordinator(src_metadata.SourceMetadataCoordinator):
         except OSError:
             return None
 
-    def is_code_modified(self, file_path: Path | str) -> bool:
-        # Contract: When file does not exist or has no recorded code hash, MUST return True; when on-disk hash differs, MUST return True; when matches, MUST return False.
+    def is_code_modified(
+        self,
+        file_path: Path | str,
+        workspace_root: Optional[Path | str] = None,
+    ) -> bool:
+        # Contract: When file does not exist or has no recorded baseline code hash, MUST return True; when on-disk hash differs, MUST return True; when matches, MUST return False.
         p = Path(file_path)
         if not p.is_file():
             return True
-        meta = self.extract_metadata(p)
-        if meta is None or not meta.code_hash:
+        baseline_hash = _lookup_manifest_code_hash(p, workspace_root=workspace_root)
+        if not baseline_hash:
             return True
         current_hash = self.compute_file_code_hash(p)
-        return current_hash != meta.code_hash
+        return current_hash != baseline_hash
 
     def is_metadata_altered(
         self,
@@ -133,8 +202,6 @@ class SourceMetadataCoordinator(src_metadata.SourceMetadataCoordinator):
         clear_last_cleaned: bool = False,
         last_changed: Optional[str] = None,
         change_summary: Optional[str] = None,
-        code_hash: Optional[str] = None,
-        clear_code_hash: bool = False,
         clear_feedback: bool = False,
         append_feedback: Optional[str] = None,
         audits: Optional[Dict[str, str]] = None,
@@ -175,13 +242,6 @@ class SourceMetadataCoordinator(src_metadata.SourceMetadataCoordinator):
             else existing_meta.change_summary
         )
 
-        if clear_code_hash:
-            new_code_hash: Optional[str] = None
-        elif code_hash is not None:
-            new_code_hash = code_hash
-        else:
-            new_code_hash = existing_meta.code_hash
-
         if clear_feedback:
             new_feedback: List[str] = []
         else:
@@ -216,7 +276,6 @@ class SourceMetadataCoordinator(src_metadata.SourceMetadataCoordinator):
             feedback=new_feedback,
             audits=new_audits,
             dirty=new_dirty,
-            code_hash=new_code_hash,
         )
 
         new_block_lines = format_metadata_block(new_meta, is_html)
@@ -253,8 +312,6 @@ class SourceMetadataCoordinator(src_metadata.SourceMetadataCoordinator):
         clear_last_cleaned: bool = False,
         last_changed: Optional[str] = None,
         change_summary: Optional[str] = None,
-        code_hash: Optional[str] = None,
-        clear_code_hash: bool = False,
         clear_feedback: bool = False,
         append_feedback: Optional[str] = None,
         audits: Optional[Dict[str, str]] = None,
@@ -275,8 +332,6 @@ class SourceMetadataCoordinator(src_metadata.SourceMetadataCoordinator):
             clear_last_cleaned=clear_last_cleaned,
             last_changed=last_changed,
             change_summary=change_summary,
-            code_hash=code_hash,
-            clear_code_hash=clear_code_hash,
             clear_feedback=clear_feedback,
             append_feedback=append_feedback,
             audits=audits,
@@ -297,7 +352,7 @@ class SourceMetadataCoordinator(src_metadata.SourceMetadataCoordinator):
         now = src_metadata.current_utc_timestamp()
         self.update_metadata(file_path, dirty=reason, last_cleaned=now)
 
-    # Contract: Sets LAST_CLEANED to now, updates code hash, and clears feedback and dirty tags.
+    # Contract: Sets LAST_CLEANED to now and clears feedback and dirty tags.
     def mark_clean(
         self, file_path: Path | str, default_change: str = "new file"
     ) -> None:
@@ -312,35 +367,27 @@ class SourceMetadataCoordinator(src_metadata.SourceMetadataCoordinator):
             if (existing and existing.change_summary)
             else default_change
         )
-        code_hash = self.compute_file_code_hash(p)
         self.update_metadata(
             p,
             last_cleaned=now,
             last_changed=last_changed,
             change_summary=change_summary,
-            code_hash=code_hash,
             clear_feedback=True,
             clear_dirty=True,
         )
 
-    # Contract: Marks node changed with updated timestamps, change description, and code hash.
+    # Contract: Marks node changed with updated timestamps and change description.
     def record_change(
         self,
         file_path: Path | str,
         change_description: str,
-        code_hash: Optional[str] = None,
     ) -> None:
         now = src_metadata.current_utc_timestamp()
-        p = Path(file_path)
-        computed_hash = code_hash
-        if computed_hash is None and p.is_file():
-            computed_hash = self.compute_file_code_hash(p)
         self.update_metadata(
             file_path,
             last_cleaned=now,
             last_changed=now,
             change_summary=change_description,
-            code_hash=computed_hash,
             clear_feedback=True,
             clear_audits=True,
             clear_dirty=True,

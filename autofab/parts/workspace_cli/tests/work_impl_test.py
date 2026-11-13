@@ -54,7 +54,6 @@ def _parse_metadata_text(content: str) -> Optional[src_metadata.FileMetadata]:
         feedback=[values["FEEDBACK"]] if "FEEDBACK" in values else [],
         audits=audits,
         dirty=values.get("DIRTY"),
-        code_hash=values.get("CODE_HASH"),
     )
 
 
@@ -94,7 +93,7 @@ class FakeSourceMetadataCoordinator:
         except OSError:
             return None
 
-    def is_code_modified(self, file_path) -> bool:
+    def is_code_modified(self, file_path, workspace_root=None) -> bool:
         return False
 
     def update_metadata(self, file_path, **kwargs) -> None:
@@ -110,7 +109,7 @@ class FakeSourceMetadataCoordinator:
         return None
 
     def record_change(
-        self, file_path, change_description: str, code_hash: Optional[str] = None
+        self, file_path, change_description: str
     ) -> None:
         return None
 

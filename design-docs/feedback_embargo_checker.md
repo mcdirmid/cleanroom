@@ -810,7 +810,7 @@ Combining the taxonomy of violation slugs, specification contract slugs, and con
 <WitnessSection>   ::= "Witness: " <LiteralKeyValueList>
 
 <AuditorPrefix>    ::= "post" | "pre" | "inv" | "test" | "cov" | "spec" | "plan" | "pret_qa" | "pret_cov"
-<NounPhrase>       ::= 1..8 Words of domain state/entity without verbs or prescriptive commands (max 60 chars)
+<NounPhrase>       ::= 1..8 Words of domain state/entity without verbs or prescriptive commands (max 120 chars)
 <LiteralKeyValueList> ::= One or more key-value pairs of literal values (max 200 chars, e.g. `input='>= 1.0.0', exp=InvalidRangeError, obs=None`)
 ```
 

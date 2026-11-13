@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 import tempfile
 import unittest
 from support.lib.lifecycle import LifecycleRegistry
@@ -38,7 +39,6 @@ from typing import Protocol
         self.assertEqual(meta.last_cleaned, "2026-10-02T14:55:48Z")
         self.assertEqual(meta.last_changed, "2026-10-02T14:50:12Z")
         self.assertEqual(meta.change_summary, "Added AgentConfig protocol.")
-        self.assertEqual(meta.code_hash, "abc123def456")
         self.assertEqual(meta.dirty, "test dirty")
         self.assertEqual(meta.audits.get("QA_AUDIT"), "2026-10-02T14:55:00Z")
         self.assertEqual(len(meta.feedback), 1)
@@ -60,7 +60,6 @@ CODE_HASH: ffe112233445
         self.assertEqual(meta.last_cleaned, "2026-10-02T14:40:00Z")
         self.assertEqual(meta.last_changed, "2026-10-02T14:35:10Z")
         self.assertEqual(meta.change_summary, "Define fallback hierarchy.")
-        self.assertEqual(meta.code_hash, "ffe112233445")
         self.assertEqual(meta.feedback, [])
 
     def test_extract_code_body_and_compute_hash(self) -> None:
@@ -159,6 +158,17 @@ def hello():
             assert meta is not None
             self.assertIsNotNone(meta.last_cleaned)
             self.assertEqual(meta.change_summary, "init")
+            # Without pull_manifest.json, is_code_modified returns True
+            self.assertTrue(self.coordinator.is_code_modified(fpath))
+            # With matching code_hash in .autofab/pull_manifest.json, returns False
+            manifest_dir = Path(td) / ".autofab"
+            manifest_dir.mkdir(parents=True, exist_ok=True)
+            code_h = self.coordinator.compute_file_code_hash(fpath)
+            assert code_h is not None
+            (manifest_dir / "pull_manifest.json").write_text(
+                json.dumps({"sub/test_file.py": {"code_hash": code_h}}),
+                encoding="utf-8",
+            )
             self.assertFalse(self.coordinator.is_code_modified(fpath))
 
             # append feedback with sender role attribution

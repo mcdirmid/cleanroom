@@ -36,10 +36,10 @@ Defect attribution is delivered exclusively via `blame`. Blame delivered to `tes
   `bin/blame <culprit_file> "[slug:<spec.slug>] [viol:<prefix>.<name>] Facet: <noun phrase> [Lines: <range>] [Witness: <key_value_pairs>]"`
   or via flags: `bin/blame <culprit_file> --slug <slug> --viol <viol> --facet "<noun phrase>" [--lines "<range>"] [--witness "<values>"]`
   - Specification slug: Must match a slug declared in `low/*.pyi`.
-  - Violation section: Either a generalized non-prescriptive noun phrase (`Violation: <noun phrase>`, max 8 words, max 60 chars, no action verbs) or a taxonomy tag (`[viol:<prefix>.<name>]`). Canonical violation phrases include `Violation: missing branch coverage`, `Violation: missing boundary endpoint`, and `Violation: unreachable logic`.
-  - Facet: Descriptive noun phrase of domain state/entity without verbs or commands (max 8 words, max 60 chars, e.g. `Facet: zero major caret boundary`). Action tokens and modal verbs (including `check`, `fix`, `change`, `update`, `delete`, `remove`, `add`, `assert`, `set`, `use`, `make`, `ensure`, `replace`, `modify`, `block`, `should`, `must`, `cannot`, `need`) are strictly forbidden; use domain nouns instead (e.g. `validation`, `inspection`, `ordering`, `boundary`, `presence`, `condition`, `purge`, `handling`).
+  - Violation section: Either a generalized non-prescriptive noun phrase (`Violation: <noun phrase>`, max 8 words, max 120 chars, no action verbs) or a taxonomy tag (`[viol:<prefix>.<name>]`). Canonical violation phrases include `Violation: missing branch coverage`, `Violation: missing boundary endpoint`, and `Violation: unreachable logic`.
+  - Facet: Descriptive noun phrase of domain state/entity without verbs or commands (max 8 words, max 120 chars, e.g. `Facet: zero major caret boundary`). Action tokens and modal verbs (including `check`, `fix`, `change`, `update`, `delete`, `remove`, `add`, `assert`, `set`, `use`, `make`, `ensure`, `replace`, `modify`, `block`, `should`, `must`, `cannot`, `need`) are strictly forbidden; use domain nouns instead (e.g. `validation`, `inspection`, `ordering`, `boundary`, `presence`, `condition`, `purge`, `handling`).
   - Lines (optional): Dedicated single line number or range strictly within the culprit file being blamed (e.g. `Lines: 45` or `Lines: 142-144`). When blaming tests, `Lines:` may reference only lines within the test file; never cite lines of `lib/*.py` or `low/*.pyi`. Cannot reference foreign files or paths.
-  - Witness: Literal key-value pairs (max 200 chars). When blaming tests, describe missing scenarios or conditions (e.g. `Witness: scenario='empty_dag', outcome='empty_report'`); citing `missing_spans` from `lib/*.py` when blaming tests is strictly prohibited (`missing_spans=[280, 285]` is used exclusively when blaming `lib/*.py` for unreachable logic). Conversational prose sentences and prescriptive instructions are prohibited. Line numbers belong in `Lines:`, not Witness.
+  - Witness: Literal key-value pairs (max 250 chars). When blaming tests, describe missing scenarios or conditions (e.g. `Witness: scenario='empty_dag', outcome='empty_report'`); citing `missing_spans` from `lib/*.py` when blaming tests is strictly prohibited (`missing_spans=[280, 285]` is used exclusively when blaming `lib/*.py` for unreachable logic). Conversational prose sentences and prescriptive instructions are prohibited. Line numbers belong in `Lines:`, not Witness.
 
 <!-- else -->
 
@@ -52,7 +52,7 @@ Defect attribution is delivered exclusively via `blame`. Blame delivered to `tes
 - [ ] Delivering courtesy blame to `lib/<name>.py` when it contains no unreachable code is prohibited
 - [ ] Translating spans: when blaming `tests/<name>_test.py`, translate uncovered implementation branches into contract requirements and missing test scenarios under the relevant specification slug rather than exposing `lib/<name>.py` line numbers or spans
 - [ ] Auditor escape valve: if 100% coverage appears unreachable without either testing a precondition violation or deleting contracted behavior, use `fail`
-- [ ] When 100% statement coverage is achieved, targets are auto-submitted by `bin/get_work`; upon deficit, blame is staged one item at a time via `blame` and committed via `submit`
+- [ ] When 100% statement coverage is achieved, targets are auto-submitted by `bin/get_work`; upon deficit, `bin/blame` can be invoked multiple times to accumulate staged blame items before committing all staged blame via `bin/submit`
 
 ## Lint checks
 

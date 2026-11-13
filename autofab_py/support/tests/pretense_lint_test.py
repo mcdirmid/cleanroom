@@ -31,8 +31,13 @@ for p in [
     if p not in sys.path and os.path.isdir(p):
         sys.path.insert(0, p)
 
-from autofab_py.support.lib.build_lint_common import check_no_top_level_probes
+from autofab_py.support.lib.build_lint_common import (
+    check_no_top_level_probes,
+    check_test_imports,
+)
 from autofab_py.support.lib.pretense_lint import (
+    _resolve_lib_dir_and_pkg,
+    is_uninitialized_pretense_module,
     check_interface_transition_coverage,
     check_lifted_expr_usage,
     check_multi_interface_inheritance,
@@ -41,9 +46,17 @@ from autofab_py.support.lib.pretense_lint import (
     check_no_call_target_in_interface,
     check_no_direct_real_access,
     check_no_direct_sm_access_in_real_tests,
+    check_no_domain_any,
+    check_no_local_exception_class,
+    check_no_module_level_sut,
+    check_no_violating_in_interface,
+    check_unbound_initial_state_factory,
+    check_setup_super_order,
+    check_no_super_in_impl_inner,
     check_impl_allowed_classes_only,
     check_terminal_violating,
     check_no_pre_seeding,
+    check_no_raise_in_state_machine,
     check_no_raises_for_errors,
     check_no_raises_in_test_cases,
     check_no_relative_parent_imports,
@@ -51,6 +64,11 @@ from autofab_py.support.lib.pretense_lint import (
     check_pretense_imports,
     check_pretense_next_transition,
     check_pretense_structure,
+    check_require_env_depends_on_env_state,
+    check_require_env_sticks_to_exception,
+    check_require_sticks_to_error,
+    check_violating_sticks_to_error,
+    check_impl_env_state_bindings,
     check_pretense_target_internals,
     check_transition_protocol_properties,
     generate_pretense_scaffold,
@@ -802,6 +820,30 @@ class PretenseLintTest(unittest.TestCase):
         assert isinstance(fn_node, (ast.FunctionDef, ast.AsyncFunctionDef))
         self.assertEqual(len(check_pretense_next_transition(fn_node, "test.py")), 0)
 
+        # PN009_REQUIRE_PURITY: sut_state(...) is allowed in require(), sut(...) is rejected
+        valid_sut_state_code = (
+            "@transition(Target.method)\n"
+            "def method(self, x: int) -> None:\n"
+            "    require(bool(sut_state(TaskQueueState).pending), WorkerError)\n"
+            "    ret: int = self.inner_method(x)\n"
+            "    assert ret == x\n"
+        )
+        fn_sut_state = ast.parse(valid_sut_state_code).body[0]
+        assert isinstance(fn_sut_state, (ast.FunctionDef, ast.AsyncFunctionDef))
+        self.assertEqual(len(check_pretense_next_transition(fn_sut_state, "test.py")), 0)
+
+        bad_sut_code = (
+            "@transition(Target.method)\n"
+            "def method(self, x: int) -> None:\n"
+            "    require(bool(sut().pending), WorkerError)\n"
+            "    ret: int = self.inner_method(x)\n"
+            "    assert ret == x\n"
+        )
+        fn_bad_sut = ast.parse(bad_sut_code).body[0]
+        assert isinstance(fn_bad_sut, (ast.FunctionDef, ast.AsyncFunctionDef))
+        sut_errs = check_pretense_next_transition(fn_bad_sut, "test.py")
+        self.assertTrue(any("PN009_REQUIRE_PURITY" in e for e in sut_errs))
+
         # PN_IFACE_INNER_TRANSITION_REQUIRED: missing inner transition call
         bad_no_inner = (
             "@transition(Target.method)\n"
@@ -1134,6 +1176,96 @@ class PretenseLintTest(unittest.TestCase):
         )
         self.assertEqual(len(errs_impl), 0)
 
+    def test_sut_method_call_in_interface_rejected(self) -> None:
+        # 1. Calling sut in inner_<method> is rejected
+        code_inner_sut = (
+            "from pretense import StateMachine, transition, sut\n"
+            "class DAGStateMachine(StateMachine[DAGState]):\n"
+            "    @transition\n"
+            "    def validate(self) -> None:\n"
+            "        self.inner_validate()\n"
+            "    def inner_validate(self) -> None:\n"
+            "        target = sut(DAG)\n"
+            "        target.validate()\n"
+        )
+        errs = check_no_call_target_in_interface(
+            ast.parse(code_inner_sut), "dag_pretense.py", is_interface=True
+        )
+        self.assertTrue(any("Calling 'sut(...)' inside inner transition" in e for e in errs))
+
+        # 2. Calling target method outside assert in transition is rejected
+        code_target_call = (
+            "from pretense import StateMachine, transition, sut\n"
+            "class DAGStateMachine(StateMachine[DAGState]):\n"
+            "    @transition\n"
+            "    def validate(self) -> None:\n"
+            "        target = sut(DAG)\n"
+            "        target.validate()\n"
+            "    def inner_validate(self) -> None:\n"
+            "        pass\n"
+        )
+        errs2 = check_no_call_target_in_interface(
+            ast.parse(code_target_call), "dag_pretense.py", is_interface=True
+        )
+        self.assertTrue(any("Calling SUT method 'validate' outside 'assert'" in e for e in errs2))
+
+        # 3. Assert on sut(...) is accepted
+        code_assert_ok = (
+            "from pretense import StateMachine, transition, sut\n"
+            "class DAGStateMachine(StateMachine[DAGState]):\n"
+            "    @transition\n"
+            "    def validate(self) -> None:\n"
+            "        self.inner_validate()\n"
+            "        assert sut(DAG).is_valid()\n"
+            "        target = sut(DAG)\n"
+            "        assert target.node_count == 1\n"
+            "    def inner_validate(self) -> None:\n"
+            "        pass\n"
+        )
+        errs3 = check_no_call_target_in_interface(
+            ast.parse(code_assert_ok), "dag_pretense.py", is_interface=True
+        )
+        self.assertEqual(len(errs3), 0)
+
+        # 4. Raising contract error (*Error) in inner_<method> in interface state machine is rejected
+        code_inner_raise = (
+            "from pretense import StateMachine, transition\n"
+            "class WriterStateMachine(StateMachine[WriterState]):\n"
+            "    @transition\n"
+            "    def write(self, payload: str) -> None:\n"
+            "        self.inner_write(payload)\n"
+            "    def inner_write(self, payload: str) -> None:\n"
+            "        if len(payload) == 0:\n"
+            "            raise PayloadEmptyError()\n"
+        )
+        errs_raise = check_no_call_target_in_interface(
+            ast.parse(code_inner_raise), "writer_pretense.py", is_interface=True
+        )
+        self.assertEqual(len(errs_raise), 1)
+        self.assertIn("must never raise contract errors", errs_raise[0])
+
+        # 5. Raising operational exception (*Exception) in inner_<method> in interface state machine is accepted
+        code_inner_exc = (
+            "from pretense import StateMachine, transition\n"
+            "class AllocatorStateMachine(StateMachine[AllocatorState]):\n"
+            "    @transition\n"
+            "    def allocate(self, amount: int) -> None:\n"
+            "        self.inner_allocate(amount)\n"
+            "    def inner_allocate(self, amount: int) -> None:\n"
+            "        if not self.state.active:\n"
+            "            raise VaultInactiveException('vault inactive')\n"
+        )
+        errs_exc = check_no_call_target_in_interface(
+            ast.parse(code_inner_exc), "allocator_pretense.py", is_interface=True
+        )
+        self.assertEqual(len(errs_exc), 0)
+
+        # 6. Implementation pseudo-state machine is accepted (is_interface=False)
+        errs4 = check_no_call_target_in_interface(
+            ast.parse(code_inner_sut), "dag_impl_pretense.py", is_interface=False
+        )
+        self.assertEqual(len(errs4), 0)
+
     def test_interface_transition_coverage_missing_or_incomplete(self) -> None:
         code_missing_suite = (
             "from pretense import StateMachine, transition\n"
@@ -1182,6 +1314,21 @@ class PretenseLintTest(unittest.TestCase):
             )
         )
 
+        # When compile_hypothesis_test_case is present, fixed tests are optional
+        # (only needed for branches/transitions not covered by fuzzing).
+        code_with_fuzz = (
+            "from pretense import StateMachine, transition, compile_hypothesis_test_case\n"
+            "class VaultStateMachine(StateMachine[VaultState]):\n"
+            "    @transition\n"
+            "    def deposit(self, amount: int) -> None:\n"
+            "        pass\n"
+            "FakeVaultFuzzTest = compile_hypothesis_test_case(proto=VaultStateMachine)\n"
+        )
+        errs_fuzz = check_interface_transition_coverage(
+            ast.parse(code_with_fuzz), "vault_pretense.py", is_interface=True
+        )
+        self.assertEqual(errs_fuzz, [])
+
     def test_interface_transition_coverage_passing(self) -> None:
         code_complete = (
             "import unittest\n"
@@ -1196,11 +1343,15 @@ class PretenseLintTest(unittest.TestCase):
             "    @transition.seeding\n"
             "    def seed_active(self, active: bool) -> None:\n"
             "        pass\n"
+            "    @transition(name='pending_count')\n"
+            "    def query_pending_count(self) -> int:\n"
+            "        pass\n"
             "class TestVaultFake(unittest.TestCase):\n"
             "    def test_all(self) -> None:\n"
             "        self.sm.seed_active(True)\n"
             "        self.fake.deposit(10)\n"
             "        self.fake.withdraw(5)\n"
+            "        _ = self.fake.pending_count\n"
             "        _ = self.fake.total\n"
         )
         errs = check_interface_transition_coverage(
@@ -1388,6 +1539,9 @@ class PretenseLintTest(unittest.TestCase):
             "class TestTargetImplReal(unittest.TestCase):\n"
             "    def test_precondition_violating(self) -> None:\n"
             "        self.checked.violating(ValueError).do_work()\n"
+            "    def test_operational_exception_assert_raises(self) -> None:\n"
+            "        with self.assertRaises(NetworkException):\n"
+            "            self.checked.do_work()\n"
         )
         good_tree = ast.parse(good_code)
         good_errs = check_no_raises_in_test_cases(good_tree, "good_file.py")
@@ -1427,7 +1581,7 @@ class PretenseLintTest(unittest.TestCase):
         self.assertTrue(all("require_arg" in e and "require(" in e for e in errs))
         self.assertTrue(all("DO NOT rename or redefine" in e for e in errs))
 
-        good_code = (
+        exc_code = (
             "from pretense import StateMachine, transition, raises\n\n"
             "class MyStateMachine(StateMachine):\n"
             "    @transition(Target.method1)\n"
@@ -1435,9 +1589,10 @@ class PretenseLintTest(unittest.TestCase):
             "        with raises(VaultInactiveException):\n"
             "            self.inner_method1()\n"
         )
-        good_tree = ast.parse(good_code)
-        good_errs = check_no_raises_for_errors(good_tree, "good_sm.py")
-        self.assertEqual(len(good_errs), 0)
+        exc_tree = ast.parse(exc_code)
+        exc_errs = check_no_raises_for_errors(exc_tree, "exc_sm.py")
+        self.assertEqual(len(exc_errs), 1)
+        self.assertTrue(any("PRE_LINT_NO_RAISES" in e for e in exc_errs))
 
     def test_no_assert_raises(self) -> None:
         """Verifies check_no_assert_raises rejects assertRaises and assertRaisesRegex (PN_NO_ASSERT_RAISES)."""
@@ -1463,6 +1618,9 @@ class PretenseLintTest(unittest.TestCase):
             "class TestTargetImplReal(unittest.TestCase):\n"
             "    def test_precondition_violating(self) -> None:\n"
             "        self.checked.violating(ValueError).do_work()\n"
+            "    def test_operational_exception_assert_raises(self) -> None:\n"
+            "        with self.assertRaises(NetworkException):\n"
+            "            self.checked.do_work()\n"
         )
         good_tree = ast.parse(good_code)
         good_errs = check_no_assert_raises(good_tree, "good_file.py")
@@ -1669,6 +1827,435 @@ class PretenseLintTest(unittest.TestCase):
             f"Module should be recognized as initialized, got: {errs}",
         )
 
+    def test_check_no_assert_or_state_mutation_in_interface_inner(self) -> None:
+        """Verifies check_no_call_target_in_interface rejects assert and self.state mutations in interface inner transitions."""
+        code_assert = (
+            "class TargetStateMachine(StateMachine[TargetState]):\n"
+            "    def inner_step(self, x: int) -> int:\n"
+            "        assert x > 0\n"
+            "        return x\n"
+        )
+        tree_assert = ast.parse(code_assert)
+        errs_assert = check_no_call_target_in_interface(tree_assert, "target_pretense.py", is_interface=True)
+        self.assertTrue(any("PRE_LINT_NO_ASSERT_IN_INNER" in e for e in errs_assert))
+
+        code_state = (
+            "class TargetStateMachine(StateMachine[TargetState]):\n"
+            "    def inner_step(self, x: int) -> int:\n"
+            "        self.state.count = x\n"
+            "        return x\n"
+        )
+        tree_state = ast.parse(code_state)
+        errs_state = check_no_call_target_in_interface(tree_state, "target_pretense.py", is_interface=True)
+        self.assertTrue(any("PRE_LINT_NO_STATE_MUTATION_IN_INNER" in e for e in errs_state))
+
+        good_code = (
+            "class TargetStateMachine(StateMachine[TargetState]):\n"
+            "    def inner_step(self, x: int) -> int:\n"
+            "        return x + self.state.count\n"
+        )
+        tree_good = ast.parse(good_code)
+        errs_good = check_no_call_target_in_interface(tree_good, "target_pretense.py", is_interface=True)
+        self.assertEqual(len(errs_good), 0)
+
+    def test_check_no_super_in_impl_inner(self) -> None:
+        """Verifies check_no_super_in_impl_inner rejects super() calls in implementation inner transitions."""
+        bad_code = (
+            "class TargetImplPseudoStateMachine(TargetStateMachine):\n"
+            "    def inner_step(self, x: int) -> int:\n"
+            "        return super().inner_step(x)\n"
+        )
+        tree_bad = ast.parse(bad_code)
+        errs_bad = check_no_super_in_impl_inner(tree_bad, "target_impl_pretense.py", is_impl=True)
+        self.assertTrue(any("PRE_LINT_NO_SUPER_IN_IMPL_INNER" in e for e in errs_bad))
+
+        # Ignored when is_impl is False
+        errs_iface = check_no_super_in_impl_inner(tree_bad, "target_pretense.py", is_impl=False)
+        self.assertEqual(len(errs_iface), 0)
+
+        good_code = (
+            "class TargetImplPseudoStateMachine(TargetStateMachine):\n"
+            "    def inner_step(self, x: int) -> int:\n"
+            "        target: TargetClass = sut(TargetClass)\n"
+            "        return target.step(x)\n"
+        )
+        tree_good = ast.parse(good_code)
+        errs_good = check_no_super_in_impl_inner(tree_good, "target_impl_pretense.py", is_impl=True)
+        self.assertEqual(len(errs_good), 0)
+
+    def test_check_no_domain_any(self) -> None:
+        """Verifies check_no_domain_any rejects Domain.any() and Domain.any across pretense state machines."""
+        bad_call = (
+            "class TargetStateMachine(StateMachine[TargetState]):\n"
+            "    @transition(TargetClass.foo)\n"
+            "    def foo(self, x: Any) -> None:\n"
+            "        require_arg(x, Domain.any())\n"
+        )
+        tree_call = ast.parse(bad_call)
+        errs_call = check_no_domain_any(tree_call, "target_pretense.py")
+        self.assertTrue(any("PRE_LINT_NO_DOMAIN_ANY" in e for e in errs_call))
+
+        bad_attr = (
+            "class TargetStateMachine(StateMachine[TargetState]):\n"
+            "    @transition(TargetClass.foo)\n"
+            "    def foo(self, x: Any) -> None:\n"
+            "        require_arg(x, Domain.any)\n"
+        )
+        tree_attr = ast.parse(bad_attr)
+        errs_attr = check_no_domain_any(tree_attr, "target_pretense.py")
+        self.assertTrue(any("PRE_LINT_NO_DOMAIN_ANY" in e for e in errs_attr))
+
+        good_code = (
+            "class TargetStateMachine(StateMachine[TargetState]):\n"
+            "    @transition(TargetClass.foo)\n"
+            "    def foo(self, x: str) -> None:\n"
+            "        require_arg(x, Domain.type(str))\n"
+        )
+        tree_good = ast.parse(good_code)
+        errs_good = check_no_domain_any(tree_good, "target_pretense.py")
+        self.assertEqual(len(errs_good), 0)
+
+    def test_check_require_sticks_to_error(self) -> None:
+        """Verifies require and require_arg reject operational exceptions (*Exception) and enforce contract errors (*Error)."""
+        bad_require_kw = (
+            "class TargetStateMachine(StateMachine[TargetState]):\n"
+            "    @transition(TargetClass.step)\n"
+            "    def step(self) -> None:\n"
+            "        require(self.state.is_ready, error=NetworkException)\n"
+        )
+        tree = ast.parse(bad_require_kw)
+        errs = check_require_sticks_to_error(tree, "target_pretense.py")
+        self.assertTrue(any("PRE_LINT_REQUIRE_MUST_BE_ERROR" in e and "NetworkException" in e for e in errs))
+
+        bad_require_pos = (
+            "class TargetStateMachine(StateMachine[TargetState]):\n"
+            "    @transition(TargetClass.step)\n"
+            "    def step(self) -> None:\n"
+            "        require(self.state.is_ready, NetworkException)\n"
+        )
+        tree_pos = ast.parse(bad_require_pos)
+        errs_pos = check_require_sticks_to_error(tree_pos, "target_pretense.py")
+        self.assertTrue(any("PRE_LINT_REQUIRE_MUST_BE_ERROR" in e and "NetworkException" in e for e in errs_pos))
+
+        bad_require_arg = (
+            "class TargetStateMachine(StateMachine[TargetState]):\n"
+            "    @transition(TargetClass.step)\n"
+            "    def step(self, x: int) -> None:\n"
+            "        require_arg(x, Domain.integers(), error=TimeoutException)\n"
+        )
+        tree_arg = ast.parse(bad_require_arg)
+        errs_arg = check_require_sticks_to_error(tree_arg, "target_pretense.py")
+        self.assertTrue(any("PRE_LINT_REQUIRE_MUST_BE_ERROR" in e and "TimeoutException" in e for e in errs_arg))
+
+        good_code = (
+            "class TargetStateMachine(StateMachine[TargetState]):\n"
+            "    @transition(TargetClass.step)\n"
+            "    def step(self, x: int) -> None:\n"
+            "        require(self.state.is_ready, error=InvalidStateError)\n"
+            "        require_arg(x, Domain.integers(), error=OutOfRangeError)\n"
+        )
+        tree_good = ast.parse(good_code)
+        errs_good = check_require_sticks_to_error(tree_good, "target_pretense.py")
+        self.assertEqual(len(errs_good), 0)
+
+    def test_check_require_env_sticks_to_exception(self) -> None:
+        """Verifies require_env rejects contract violation errors (*Error) and requires operational exceptions (*Exception)."""
+        bad_code_error = (
+            "class TargetStateMachine(StateMachine[TargetState]):\n"
+            "    @transition(TargetClass.step)\n"
+            "    def step(self) -> None:\n"
+            "        require_env(self.state.is_ready, InvalidStateError, 'failed')\n"
+        )
+        tree = ast.parse(bad_code_error)
+        errs = check_require_env_sticks_to_exception(tree, "target_pretense.py")
+        self.assertTrue(any("PRE_LINT_REQUIRE_ENV_MUST_BE_EXCEPTION" in e and "InvalidStateError" in e for e in errs))
+
+        bad_code_non_exception = (
+            "class TargetStateMachine(StateMachine[TargetState]):\n"
+            "    @transition(TargetClass.step)\n"
+            "    def step(self) -> None:\n"
+            "        require_env(self.state.is_ready, SomeFault, 'failed')\n"
+        )
+        tree_ne = ast.parse(bad_code_non_exception)
+        errs_ne = check_require_env_sticks_to_exception(tree_ne, "target_pretense.py")
+        self.assertTrue(any("PRE_LINT_REQUIRE_ENV_MUST_BE_EXCEPTION" in e and "SomeFault" in e for e in errs_ne))
+
+        good_code = (
+            "class TargetStateMachine(StateMachine[TargetState]):\n"
+            "    @transition(TargetClass.step)\n"
+            "    def step(self) -> None:\n"
+            "        require_env(self.state.is_ready, NetworkException, 'failed')\n"
+        )
+        tree_good = ast.parse(good_code)
+        errs_good = check_require_env_sticks_to_exception(tree_good, "target_pretense.py")
+        self.assertEqual(len(errs_good), 0)
+
+    def test_check_require_env_depends_on_env_state(self) -> None:
+        """Verifies require_env condition must reference a declared Env[...] field."""
+        bad_code = (
+            "from dataclasses import dataclass\n"
+            "from pretense import Env, StateMachine, require_env, transition\n"
+            "@dataclass\n"
+            "class TargetState:\n"
+            "    balance: int = 0\n"
+            "    vault_active: Env[bool] = True\n"
+            "class TargetStateMachine(StateMachine[TargetState]):\n"
+            "    @transition(TargetClass.step)\n"
+            "    def step(self) -> None:\n"
+            "        require_env(self.state.balance > 0, NetworkException, 'failed')\n"
+        )
+        errs = check_require_env_depends_on_env_state(ast.parse(bad_code), "target_pretense.py")
+        self.assertTrue(any("PRE_LINT_REQUIRE_ENV_NEEDS_ENV_STATE" in e for e in errs))
+
+        good_code = (
+            "from dataclasses import dataclass\n"
+            "from pretense import Env, StateMachine, require_env, transition\n"
+            "@dataclass\n"
+            "class TargetState:\n"
+            "    balance: int = 0\n"
+            "    vault_active: Env[bool] = True\n"
+            "class TargetStateMachine(StateMachine[TargetState]):\n"
+            "    @transition(TargetClass.step)\n"
+            "    def step(self) -> None:\n"
+            "        require_env(self.state.vault_active, NetworkException, 'failed')\n"
+        )
+        errs_good = check_require_env_depends_on_env_state(ast.parse(good_code), "target_pretense.py")
+        self.assertEqual(len(errs_good), 0)
+
+    def test_check_violating_sticks_to_error(self) -> None:
+        """Verifies .violating(...) rejects *Exception and allows *Error."""
+        bad_code = (
+            "class TestImplReal(LifecycleTestCase):\n"
+            "    def test_inactive(self) -> None:\n"
+            "        self.checked.violating(VaultInactiveException).allocate(10)\n"
+        )
+        errs = check_violating_sticks_to_error(ast.parse(bad_code), "target_impl_pretense.py")
+        self.assertTrue(any("PRE_LINT_VIOLATING_MUST_BE_ERROR" in e and "VaultInactiveException" in e for e in errs))
+
+        good_code = (
+            "class TestImplReal(LifecycleTestCase):\n"
+            "    def test_limit(self) -> None:\n"
+            "        self.checked.violating(AllocationLimitError).allocate(10)\n"
+        )
+        errs_good = check_violating_sticks_to_error(ast.parse(good_code), "target_impl_pretense.py")
+        self.assertEqual(len(errs_good), 0)
+
+    def test_check_impl_env_state_bindings(self) -> None:
+        """Verifies impl pseudo-SMs bind every Env[...] field from implemented interfaces."""
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            unit = root / "parts" / "alloc"
+            (unit / "high").mkdir(parents=True)
+            (unit / "pretense").mkdir(parents=True)
+            (unit / "high" / "alloc_impl.md").write_text("implements: alloc\n", encoding="utf-8")
+            (unit / "pretense" / "alloc_pretense.py").write_text(
+                "from dataclasses import dataclass\n"
+                "from pretense import Env\n"
+                "@dataclass\n"
+                "class AllocatorState:\n"
+                "    allocated: int = 0\n"
+                "    vault_active: Env[bool] = True\n",
+                encoding="utf-8",
+            )
+            (unit / "pretense" / "vault_pretense.py").write_text(
+                "from dataclasses import dataclass\n"
+                "from pretense import Env\n"
+                "@dataclass\n"
+                "class VaultState:\n"
+                "    is_active: Env[bool] = True\n",
+                encoding="utf-8",
+            )
+            impl_path = unit / "pretense" / "alloc_impl_pretense.py"
+
+            bad_impl = (
+                "from vault_pretense import make_vault_fake\n"
+                "class AllocatorImplPseudoStateMachine(AllocatorStateMachine):\n"
+                "    def __init__(self) -> None:\n"
+                "        super().__init__()\n"
+            )
+            errs = check_impl_env_state_bindings(ast.parse(bad_impl), str(impl_path))
+            self.assertTrue(any("PRE_LINT_UNBOUND_ENV_STATE" in e and "vault_active" in e for e in errs))
+            self.assertFalse(any("is_active" in e for e in errs))
+
+            good_impl = (
+                "from vault_pretense import make_vault_fake\n"
+                "class AllocatorImplPseudoStateMachine(AllocatorStateMachine):\n"
+                "    def __init__(self) -> None:\n"
+                "        super().__init__()\n"
+                "        self.bind('vault_active', lambda: self.sut_state(VaultState).is_active)\n"
+            )
+            errs_good = check_impl_env_state_bindings(ast.parse(good_impl), str(impl_path))
+            self.assertEqual(len(errs_good), 0)
+
+    def test_check_no_raise_in_state_machine(self) -> None:
+        """Verifies explicit raise statements are rejected in StateMachine and PseudoStateMachine classes."""
+        bad_code_raise_transition = (
+            "class TargetStateMachine(StateMachine[TargetState]):\n"
+            "    @transition(TargetClass.step)\n"
+            "    def step(self) -> None:\n"
+            "        if not self.state.is_ready:\n"
+            "            raise NetworkException('failed')\n"
+        )
+        tree = ast.parse(bad_code_raise_transition)
+        errs = check_no_raise_in_state_machine(tree, "target_pretense.py")
+        self.assertTrue(any("PRE_LINT_NO_RAISE" in e for e in errs))
+
+        bad_code_raise_inner = (
+            "class TargetImplPseudoStateMachine(TargetStateMachine):\n"
+            "    def inner_step(self) -> None:\n"
+            "        raise RuntimeError('failed')\n"
+        )
+        tree_inner = ast.parse(bad_code_raise_inner)
+        errs_inner = check_no_raise_in_state_machine(tree_inner, "target_impl_pretense.py")
+        self.assertTrue(any("PRE_LINT_NO_RAISE" in e for e in errs_inner))
+
+        good_code = (
+            "class TargetStateMachine(StateMachine[TargetState]):\n"
+            "    @transition(TargetClass.step)\n"
+            "    def step(self) -> None:\n"
+            "        require_env(self.state.is_ready, NetworkException, 'failed')\n"
+            "        self.inner_step()\n"
+            "    def inner_step(self) -> None:\n"
+            "        return None\n"
+            "class TestScenario(unittest.TestCase):\n"
+            "    def test_something(self) -> None:\n"
+            "        with self.assertRaises(NetworkException):\n"
+            "            pass\n"
+        )
+        tree_good = ast.parse(good_code)
+        errs_good = check_no_raise_in_state_machine(tree_good, "target_pretense.py")
+        self.assertEqual(len(errs_good), 0)
+
+    def test_resolve_lib_pkg_prefers_pyproject_over_inner_autofab_toml(self) -> None:
+        """Verifies scoped package resolution anchors at pyproject.toml rather than parts/autofab.toml."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = os.path.join(tmpdir, "ws")
+            pkg_dir = os.path.join(root, "run_scope", "parts", "ring_buffer")
+            lib_dir = os.path.join(pkg_dir, "lib")
+            pretense_dir = os.path.join(pkg_dir, "pretense")
+            os.makedirs(lib_dir)
+            os.makedirs(pretense_dir)
+
+            with open(os.path.join(root, "pyproject.toml"), "w", encoding="utf-8") as f:
+                f.write("[project]\nname = 'test'\n")
+            with open(
+                os.path.join(root, "run_scope", "parts", "autofab.toml"),
+                "w",
+                encoding="utf-8",
+            ) as f:
+                f.write("methodology = '//autofab_py'\n")
+
+            lib_mod = os.path.join(lib_dir, "ring_buffer.py")
+            with open(lib_mod, "w", encoding="utf-8") as f:
+                f.write("class RingBuffer: pass\n")
+
+            pretense_mod = os.path.join(pretense_dir, "ring_buffer_pretense.py")
+            with open(pretense_mod, "w", encoding="utf-8") as f:
+                f.write(
+                    "from run_scope.parts.ring_buffer.lib.ring_buffer import RingBuffer\n"
+                )
+
+            resolved_dir, resolved_pkg = _resolve_lib_dir_and_pkg(
+                pretense_mod, "run_scope/parts/ring_buffer/lib"
+            )
+            self.assertEqual(os.path.realpath(resolved_dir), os.path.realpath(lib_dir))
+            self.assertEqual(resolved_pkg, "run_scope.parts.ring_buffer.lib")
+
+            import_errs = check_test_imports(resolved_pkg, pretense_mod)
+            self.assertEqual(import_errs, [])
+
+    def test_is_uninitialized_recognizes_qualified_state_machine_base(self) -> None:
+        """Verifies module-qualified *StateMachine base classes count as initialized."""
+        code = (
+            "from run_scope.parts.ring_buffer.pretense import ring_buffer_pretense\n"
+            "from support.lib.lifecycle import LifecycleTestCase\n"
+            "class RingBufferImplPseudoStateMachine(ring_buffer_pretense.RingBufferStateMachine):\n"
+            "    pass\n"
+            "class TestRingBufferImplReal(LifecycleTestCase):\n"
+            "    def test_ok(self) -> None:\n"
+            "        pass\n"
+        )
+        self.assertFalse(is_uninitialized_pretense_module(code))
+
+    def test_no_local_exception_class(self) -> None:
+        bad = ast.parse("class BufferEmptyError(Exception):\n    pass\n")
+        errs = check_no_local_exception_class(bad, "ring_buffer_pretense.py")
+        self.assertTrue(any("PRE_LINT_NO_LOCAL_EXCEPTION_CLASS" in e for e in errs))
+
+        good = ast.parse("class RingBufferState:\n    pass\n")
+        self.assertEqual(check_no_local_exception_class(good, "ring_buffer_pretense.py"), [])
+
+    def test_no_module_level_sut(self) -> None:
+        bad_class = ast.parse(
+            "class RingBufferPseudoSM:\n"
+            "    target = sut(RingBuffer)\n"
+        )
+        errs = check_no_module_level_sut(bad_class, "ring_buffer_impl_pretense.py")
+        self.assertTrue(any("PRE_LINT_NO_MODULE_LEVEL_SUT" in e for e in errs))
+
+        good_method = ast.parse(
+            "class RingBufferPseudoSM:\n"
+            "    def inner_pop(self) -> int:\n"
+            "        target = sut(RingBuffer)\n"
+            "        return target.pop()\n"
+        )
+        self.assertEqual(check_no_module_level_sut(good_method, "ring_buffer_impl_pretense.py"), [])
+
+    def test_no_violating_in_interface(self) -> None:
+        bad = ast.parse("checked.violating(BufferEmptyError).pop()\n")
+        errs = check_no_violating_in_interface(bad, "ring_buffer_pretense.py", is_interface=True)
+        self.assertTrue(any("PRE_LINT_NO_VIOLATING_IN_INTERFACE" in e for e in errs))
+        self.assertEqual(
+            check_no_violating_in_interface(bad, "ring_buffer_impl_pretense.py", is_interface=False),
+            [],
+        )
+
+    def test_unbound_initial_state_factory(self) -> None:
+        bad = ast.parse(
+            "class SolverStateMachine:\n"
+            "    pass\n"
+            "Fuzz = compile_hypothesis_test_case(\n"
+            "    proto=proto,\n"
+            "    initial_state_factory=SolverStateMachine.make_initial_state,\n"
+            ")\n"
+        )
+        errs = check_unbound_initial_state_factory(bad, "solver_impl_pretense.py")
+        self.assertTrue(any("PRE_LINT_UNBOUND_INITIAL_STATE_FACTORY" in e for e in errs))
+
+        good = ast.parse(
+            "class SolverStateMachine:\n"
+            "    pass\n"
+            "proto = SolverStateMachine()\n"
+            "Fuzz = compile_hypothesis_test_case(\n"
+            "    proto=proto,\n"
+            "    initial_state_factory=proto.make_initial_state,\n"
+            ")\n"
+        )
+        self.assertEqual(
+            check_unbound_initial_state_factory(good, "solver_impl_pretense.py"),
+            [],
+        )
+
+    def test_setup_super_order(self) -> None:
+        bad = ast.parse(
+            "class TestSolverReal(LifecycleTestCase):\n"
+            "    def setUp(self) -> None:\n"
+            "        self.engine = get_singleton(RangeEngine)\n"
+            "        super().setUp()\n"
+        )
+        errs = check_setup_super_order(bad, "solver_impl_pretense.py")
+        self.assertTrue(any("PRE_LINT_SETUP_SUPER_ORDER" in e for e in errs))
+
+        good = ast.parse(
+            "class TestSolverReal(LifecycleTestCase):\n"
+            "    def setUp(self) -> None:\n"
+            "        super().setUp()\n"
+            "        self.engine = get_singleton(RangeEngine)\n"
+        )
+        self.assertEqual(check_setup_super_order(good, "solver_impl_pretense.py"), [])
 
 
 if __name__ == "__main__":

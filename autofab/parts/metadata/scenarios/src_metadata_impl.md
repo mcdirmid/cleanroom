@@ -14,14 +14,15 @@ candidate for the question of whether it belongs in the interface set instead.
 Given: the workspace file `/ws/alpha_scope_a/parts/widget/widget_spec.md` holds a metadata comment
 block recording last cleaned `2026-01-02T03:04:05Z`, last changed `2026-01-01T09:00:00Z`, change
 summary `split the widget contract`, one unacted feedback item carrying the explanation
-`the widget field type is not accepted`, no role audit timestamp for any role, no dirty reason, and
-code hash `a1b2c3d4e5f6`; the code body of that file is `widget contract body`.
+`the widget field type is not accepted`, no role audit timestamp for any role, and no dirty
+reason; the workspace `.autofab/pull_manifest.json` records baseline `code_hash` `a1b2c3d4e5f6`
+for `parts/widget/widget_spec.md`; the code body of that file is `widget contract body`.
 
 1. The caller asks for the metadata of the file.
    Observed: a record reporting last cleaned `2026-01-02T03:04:05Z`, last changed
    `2026-01-01T09:00:00Z`, change summary `split the widget contract`, one unacted feedback item
-   carrying `the widget field type is not accepted`, code hash `a1b2c3d4e5f6`, no role audit
-   timestamp for any role, and no dirty reason.
+   carrying `the widget field type is not accepted`, no role audit timestamp for any role, and no
+   dirty reason.
    Realized by: the component's own comment boundary location and in-band field parsing, with the
    comment delimiters, header placement, and field grammar supplied by `src_metadata_ext`, and the
    `src_metadata` interface exposed within the active `system` tier.
@@ -33,9 +34,9 @@ code hash `a1b2c3d4e5f6`; the code body of that file is `widget contract body`.
 
 1. The caller asks whether the file has code modifications.
    Observed: no code modifications, because the code body on disk still hashes to `a1b2c3d4e5f6`,
-   the code hash recorded in the file's metadata.
+   the baseline code hash recorded in `.autofab/pull_manifest.json`.
    Realized by: the component's own establishment of file existence on disk and its comparison of
-   the recomputed code hash against the recorded in-band code hash.
+   the recomputed code hash against the baseline `code_hash` in `.autofab/pull_manifest.json`.
 
 ### Scenario 2 — Marking a modified file dirty, documenting the change, and marking it clean
 
@@ -136,8 +137,8 @@ comment block, and the current UTC timestamp is `2026-01-07T08:09:10Z`.
 
 Given: the workspace files `/ws/alpha_scope_a/parts/widget/widget_spec.md` and
 `/ws/alpha_scope_a/parts/gadget/gadget_spec.md` have the identical code body
-`widget contract body` and differ only in their metadata comment blocks; the metadata of the widget
-file records code hash `a1b2c3d4e5f6`.
+`widget contract body` and differ only in their metadata comment blocks; `.autofab/pull_manifest.json`
+records baseline `code_hash` `a1b2c3d4e5f6` for `parts/widget/widget_spec.md`.
 
 1. The caller asks for the code hash of each file.
    Observed: one and the same code hash for both files, because their code bodies are identical.
@@ -152,8 +153,8 @@ file records code hash `a1b2c3d4e5f6`.
 1. The caller asks whether the widget file has code modifications.
    Observed: code modifications, because the code body `widget contract statement` no longer hashes
    to `a1b2c3d4e5f6`.
-   Realized by: the component's own comparison of the recomputed code hash against the recorded
-   in-band code hash.
+   Realized by: the component's own comparison of the recomputed code hash against the baseline
+   `code_hash` in `.autofab/pull_manifest.json`.
 
 ## Implementation-only
 
@@ -183,8 +184,8 @@ written in line hash comments, and a shell script whose shebang line precedes a 
 line hash comments.
 
 1. The caller asks for the metadata of each of the four files.
-   Observed: for each file the timestamps, change summary, unacted feedback items, role audits, and
-   code hash recorded in its own block, with the frontmatter delimiter, the shebang lines, and the
+   Observed: for each file the timestamps, change summary, unacted feedback items, and role audits
+   recorded in its own block, with the frontmatter delimiter, the shebang lines, and the
    encoding directive preserved outside the block.
    Realized by: the comment syntax, header placement, and boundary extraction conventions of
    `src_metadata_ext`, applied by the component's own boundary location.

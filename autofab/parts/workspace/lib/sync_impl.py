@@ -204,13 +204,10 @@ def write_file_with_perms(
 
 
 def _project_for_role_workspace(content: str, filename: str, is_writable: bool) -> str:
-    """Projects in-band metadata for role workspace: only change, feedback, and ephemeral code hash."""
+    """Projects in-band metadata for role workspace: only change and feedback."""
     meta = src_metadata.extract_metadata_from_text(content, filename)
     if meta is None:
         return content
-    code_hash = None
-    if is_writable:
-        code_hash = src_metadata.compute_code_hash(content, filename)
     return src_metadata.rewrite_metadata_in_text(
         content,
         filename,
@@ -218,8 +215,6 @@ def _project_for_role_workspace(content: str, filename: str, is_writable: bool) 
         last_changed="",
         clear_audits=True,
         clear_dirty=True,
-        code_hash=code_hash,
-        clear_code_hash=not is_writable,
     )
 
 
@@ -504,12 +499,13 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
                         if is_writable:
                             local_code_mod = False
                             try:
-                                local_code_mod = src_metadata.is_code_modified(dst_f)
+                                local_code_mod = src_metadata.is_code_modified(
+                                    dst_f, workspace_root=workspace_dir
+                                )
                             except OSError:
                                 local_code_mod = False
 
-                            meta = src_metadata.extract_metadata(dst_f)
-                            ws_base_code_h = meta.code_hash if meta else None
+                            ws_base_code_h = manifest_entry.get("code_hash")
                             src_code_h = src_metadata.compute_file_code_hash(src_f)
                             upstream_code_changed = bool(
                                 ws_base_code_h
@@ -524,10 +520,13 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
                             elif local_code_mod:
                                 # Upstream only modified metadata, local code has uncommitted edits: keep local edits
                                 needs_copy = False
-                                pull_manifest[rel] = {
+                                entry = {
                                     "main_hash": current_src_hash,
                                     "ws_hash": current_ws_hash or "",
                                 }
+                                if ws_base_code_h:
+                                    entry["code_hash"] = ws_base_code_h
+                                pull_manifest[rel] = entry
                             else:
                                 # Local code is clean: pull updated upstream version
                                 needs_copy = True
@@ -537,18 +536,26 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
                 else:
                     # Unmanifested workspace (e.g. preexisting workspace or unit test baseline)
                     local_modified = False
+                    src_code_h = None
                     if is_writable:
                         try:
-                            local_modified = src_metadata.is_code_modified(dst_f)
+                            src_code_h = src_metadata.compute_file_code_hash(src_f)
+                            dst_code_h = src_metadata.compute_file_code_hash(dst_f)
+                            local_modified = bool(
+                                src_code_h and dst_code_h and src_code_h != dst_code_h
+                            )
                         except OSError:
                             local_modified = False
 
                     if local_modified:
                         # Preserving subagent edits: do NOT clobber! Record baseline so future pulls track changes from now on.
-                        pull_manifest[rel] = {
+                        entry = {
                             "main_hash": current_src_hash,
                             "ws_hash": current_ws_hash or "",
                         }
+                        if src_code_h:
+                            entry["code_hash"] = src_code_h
+                        pull_manifest[rel] = entry
                         needs_copy = False
                     else:
                         try:
@@ -574,18 +581,26 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
                                 needs_copy = True
 
                         if not needs_copy:
-                            pull_manifest[rel] = {
+                            entry = {
                                 "main_hash": current_src_hash,
                                 "ws_hash": current_ws_hash or "",
                             }
+                            c_h = src_metadata.compute_file_code_hash(dst_f)
+                            if c_h:
+                                entry["code_hash"] = c_h
+                            pull_manifest[rel] = entry
 
             if needs_copy:
                 _copy_projected_file(src_f, dst_f, is_writable=is_writable)
                 pulled_count += 1
-                pull_manifest[rel] = {
+                entry = {
                     "main_hash": current_src_hash,
                     "ws_hash": _compute_file_sha256(dst_f) or "",
                 }
+                c_h = src_metadata.compute_file_code_hash(dst_f)
+                if c_h:
+                    entry["code_hash"] = c_h
+                pull_manifest[rel] = entry
             else:
                 if is_writable:
                     try:
@@ -746,15 +761,43 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
                     copy_file_with_perms(
                         lib_init, os.path.join(d_lib, "__init__.py"), readonly=True
                     )
+                import py_compile
+
                 for fname in os.listdir(s_lib):
                     sf = os.path.join(s_lib, fname)
                     if not os.path.isfile(sf):
                         continue
                     if _is_runtime_support_library(fname):
-                        df = os.path.join(d_lib, fname)
-                        if os.path.isfile(sf):
-                            copy_file_with_perms(sf, df, readonly=True)
-                            refreshed_count += 1
+                        if fname.endswith(".py") and not fname.endswith("__init__.py"):
+                            base_name = fname[:-3]
+                            pyc_dest = os.path.join(d_lib, f"{base_name}.pyc")
+                            try:
+                                py_compile.compile(
+                                    sf, pyc_dest, optimize=2, doraise=True
+                                )
+                                os.chmod(pyc_dest, 0o444)
+                                refreshed_count += 1
+                            except Exception:
+                                pass
+                            stub_src = os.path.join(s_lib, f"{base_name}.pyi")
+                            if os.path.isfile(stub_src):
+                                copy_file_with_perms(
+                                    stub_src,
+                                    os.path.join(d_lib, f"{base_name}.pyi"),
+                                    readonly=True,
+                                )
+                            stale_py = os.path.join(d_lib, fname)
+                            if os.path.isfile(stale_py):
+                                try:
+                                    os.chmod(stale_py, 0o644)
+                                    os.remove(stale_py)
+                                except OSError:
+                                    pass
+                        else:
+                            df = os.path.join(d_lib, fname)
+                            if os.path.isfile(sf):
+                                copy_file_with_perms(sf, df, readonly=True)
+                                refreshed_count += 1
 
         bin_dir = os.path.join(workspace_dir, "bin")
         provisioner = get_singleton(provision.WorkspaceProvisioner)
@@ -930,6 +973,7 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
         main_scope_dir = _resolve_main_scope_dir(workspace_dir, main_root, dir_scope)
 
         if os.path.isdir(ws_scope_dir):
+            pull_manifest = _load_pull_manifest(workspace_dir)
             writable_files = _find_matching_files(
                 ws_scope_dir, role_def.writable_file_patterns
             )
@@ -941,11 +985,17 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
                 if not os.path.isfile(main_f):
                     is_modified = True
                 else:
-                    is_modified = src_metadata.is_code_modified(ws_f)
+                    is_modified = src_metadata.is_code_modified(
+                        ws_f, workspace_root=workspace_dir
+                    )
 
                 if is_modified:
-                    ws_meta = src_metadata.extract_metadata(ws_f)
-                    baseline_hash = ws_meta.code_hash if ws_meta else None
+                    manifest_entry = pull_manifest.get(rel)
+                    baseline_hash = (
+                        manifest_entry.get("code_hash")
+                        if isinstance(manifest_entry, dict)
+                        else None
+                    )
                     main_hash = (
                         src_metadata.compute_file_code_hash(main_f)
                         if os.path.isfile(main_f)
@@ -961,7 +1011,6 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
                     change = meta.change_summary if meta else "harvested changes"
                     src_metadata.record_change(main_f, change)
                     src_metadata.mark_clean(main_f)
-                    src_metadata.update_metadata(main_f, clear_code_hash=True)
                     if role_def.audit_tag:
                         src_metadata.stamp_audit(main_f, role_def.audit_tag)
                         stamped_audits.append(rel)
@@ -969,15 +1018,18 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
                     harvested_count += 1
 
             if harvested_count > 0:
-                pull_manifest = _load_pull_manifest(workspace_dir)
                 for rel in writable_files:
                     ws_f = os.path.join(ws_scope_dir, rel)
                     main_f = os.path.join(main_scope_dir, rel)
                     if os.path.isfile(main_f) and os.path.isfile(ws_f):
                         mh = _compute_file_sha256(main_f)
                         wh = _compute_file_sha256(ws_f)
+                        ch = src_metadata.compute_file_code_hash(ws_f)
                         if mh and wh:
-                            pull_manifest[rel] = {"main_hash": mh, "ws_hash": wh}
+                            entry = {"main_hash": mh, "ws_hash": wh}
+                            if ch:
+                                entry["code_hash"] = ch
+                            pull_manifest[rel] = entry
                 _save_pull_manifest(workspace_dir, pull_manifest)
 
         return sync.SyncResult(

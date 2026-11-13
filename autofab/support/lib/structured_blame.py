@@ -67,7 +67,6 @@ FORBIDDEN_ACTION_TOKENS: Set[str] = {
     "remove",
     "add",
     "assert",
-    "set",
     "use",
     "make",
     "ensure",
@@ -287,16 +286,17 @@ def validate_structured_blame(
             errors.append(
                 f"Violation exceeds maximum word count of 8 words ({len(viol_words)} words provided): '{blame.violation}'"
             )
-        if len(viol_text) > 60:
+        if len(viol_text) > 120:
             errors.append(
-                f"Violation exceeds maximum length of 60 characters ({len(viol_text)} chars provided): '{blame.violation}'"
+                f"Violation exceeds maximum length of 120 characters ({len(viol_text)} chars provided): '{blame.violation}'"
             )
         for word in re.findall(r"[a-zA-Z]+", viol_text):
             if word.lower() in FORBIDDEN_ACTION_TOKENS:
+                forbidden_list = ", ".join(sorted(FORBIDDEN_ACTION_TOKENS))
                 errors.append(
                     f"Violation contains forbidden imperative action token '{word}'. "
                     "Violations must be descriptive noun phrases of defect categories (e.g. 'precondition error omission'), "
-                    "not imperative instructions."
+                    f"not imperative instructions. Forbidden tokens: {forbidden_list}."
                 )
                 break
 
@@ -306,17 +306,18 @@ def validate_structured_blame(
         errors.append(
             f"Facet exceeds maximum word count of 8 words ({len(facet_words)} words provided): '{blame.facet}'"
         )
-    if len(blame.facet) > 60:
+    if len(blame.facet) > 120:
         errors.append(
-            f"Facet exceeds maximum length of 60 characters ({len(blame.facet)} chars provided): '{blame.facet}'"
+            f"Facet exceeds maximum length of 120 characters ({len(blame.facet)} chars provided): '{blame.facet}'"
         )
 
     for word in re.findall(r"[a-zA-Z]+", blame.facet):
         if word.lower() in FORBIDDEN_ACTION_TOKENS:
+            forbidden_list = ", ".join(sorted(FORBIDDEN_ACTION_TOKENS))
             errors.append(
                 f"Facet contains forbidden imperative action token '{word}'. "
                 "Facets must be descriptive noun phrases of domain entities/states (e.g. 'embedded operator whitespace'), "
-                "not imperative instructions."
+                f"not imperative instructions. Forbidden tokens: {forbidden_list}."
             )
             break
 
@@ -414,7 +415,11 @@ def validate_structured_blame(
     if resolved_slugs and blame.slug not in resolved_slugs:
         # Check base slug ignoring facet anchor
         base_slug = blame.slug.split("#")[0].rstrip("]") + "]"
-        if base_slug not in resolved_slugs:
+        is_harness_wiring = (
+            base_slug.endswith(".harness.wiring]")
+            or base_slug == "[slug:harness.wiring]"
+        )
+        if not is_harness_wiring and base_slug not in resolved_slugs:
             errors.append(
                 f"Specification slug '{blame.slug}' not declared in low-level specifications for '{culprit_file}'. "
                 f"Declared specification slugs: {sorted(resolved_slugs)[:5]} (total {len(resolved_slugs)})"

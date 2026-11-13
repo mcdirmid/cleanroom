@@ -94,12 +94,13 @@ class SourceMetadataCoordinator(src_metadata.SourceMetadataCoordinator):
     def is_code_modified(
         self,
         file_path: Path | str,
+        workspace_root: Optional[Path | str] = None,
     ) -> bool:
-        """Evaluates whether file on disk has code modifications compared to in-band code hash.
+        """Evaluates whether file on disk has code modifications compared to the role workspace pull manifest baseline.
 
         GROUNDING:
-        - Grounded via extract_metadata to read recorded code hash, compute_file_code_hash to get
-          current disk hash, and equality comparison.
+        - Grounded via locating `.autofab/pull_manifest.json` from workspace_root or enclosing parent
+          directories, compute_file_code_hash to get current disk hash, and equality comparison.
         """
         ...
 
@@ -113,8 +114,6 @@ class SourceMetadataCoordinator(src_metadata.SourceMetadataCoordinator):
         clear_last_cleaned: bool = False,
         last_changed: Optional[str] = None,
         change_summary: Optional[str] = None,
-        code_hash: Optional[str] = None,
-        clear_code_hash: bool = False,
         clear_feedback: bool = False,
         append_feedback: Optional[str] = None,
         audits: Optional[Dict[str, str]] = None,
@@ -140,8 +139,6 @@ class SourceMetadataCoordinator(src_metadata.SourceMetadataCoordinator):
         clear_last_cleaned: bool = False,
         last_changed: Optional[str] = None,
         change_summary: Optional[str] = None,
-        code_hash: Optional[str] = None,
-        clear_code_hash: bool = False,
         clear_feedback: bool = False,
         append_feedback: Optional[str] = None,
         audits: Optional[Dict[str, str]] = None,
@@ -191,11 +188,11 @@ class SourceMetadataCoordinator(src_metadata.SourceMetadataCoordinator):
         file_path: Path | str,
         default_change: str = "new file",
     ) -> None:
-        """Sets LAST_CLEANED to now, updates code hash, and clears feedback and dirty tags.
+        """Sets LAST_CLEANED to now and clears feedback and dirty tags.
 
         GROUNDING:
-        - Grounded via extract_metadata to resolve previous change state, compute_file_code_hash,
-          and update_metadata with clear_feedback and clear_dirty set to True.
+        - Grounded via extract_metadata to resolve previous change state and update_metadata with
+          clear_feedback and clear_dirty set to True.
         """
         ...
 
@@ -205,13 +202,12 @@ class SourceMetadataCoordinator(src_metadata.SourceMetadataCoordinator):
         self,
         file_path: Path | str,
         change_description: str,
-        code_hash: Optional[str] = None,
     ) -> None:
-        """Marks node changed with updated timestamps, change description, and code hash.
+        """Marks node changed with updated timestamps and change description.
 
         GROUNDING:
-        - Grounded via compute_file_code_hash and update_metadata with current UTC timestamp for
-          both last cleaned and last changed, clearing feedback, audits, and dirty tags.
+        - Grounded via update_metadata with current UTC timestamp for both last cleaned and last
+          changed, clearing feedback, audits, and dirty tags.
         """
         ...
 

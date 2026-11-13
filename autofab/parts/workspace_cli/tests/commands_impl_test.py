@@ -584,9 +584,7 @@ class WorkspaceCommandsImplTest(LifecycleTestCase):
 
         self.assertEqual(ret_sub, 0)
         self.assertIn("[BLAME DELIVERED] Committed 1 blame item(s)", out_sub)
-        self.assertIn(
-            "MANDATORY: Run 'bin/get_work' now to inspect remaining units.", out_sub
-        )
+        self.assertIn("[ROUND CONCLUSION DIRECTIVE]", out_sub)
         buf_path = os.path.join(self.test_dir, commands_impl.BLAME_BUFFER_FILE)
         self.assertTrue(os.path.isfile(buf_path))
         with open(buf_path, "r", encoding="utf-8") as f:

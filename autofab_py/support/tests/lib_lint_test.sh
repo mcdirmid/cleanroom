@@ -1389,7 +1389,7 @@ else
     fail=1
 fi
 
-# Case 42: broad exception with pragma directive -> accepted by lib_lint
+# Case 42: broad exception with cleanroom: allow-broad-exception pragma -> rejected by lib_lint
 mkdir -p "$tmp/c42/lib" "$tmp/c42/low"
 cat > "$tmp/c42/low/runner.pyi" <<'EOF'
 def run_task() -> None:
@@ -1402,14 +1402,15 @@ def run_task() -> None:
     except Exception:  # cleanroom: allow-broad-exception
         pass
 EOF
-if ( cd "$tmp/c42" && python3 "$bin/lib_lint.py" lib/runner.py --pyi low/runner.pyi ); then
-    echo "PASS: c42 accepted broad exception with cleanroom: allow-broad-exception pragma"
+c42_out=$( ( cd "$tmp/c42" && python3 "$bin/lib_lint.py" lib/runner.py --pyi low/runner.pyi ) 2>&1 || true )
+if echo "$c42_out" | grep -q "broad exception"; then
+    echo "PASS: c42 rejected broad exception with cleanroom: allow-broad-exception pragma"
 else
-    echo "FAIL: c42 expected success for broad exception with pragma directive" >&2
+    echo "FAIL: c42 expected rejection for broad exception with pragma directive, got: $c42_out" >&2
     fail=1
 fi
 
-# Case 43: broad exception with intentional-catch pragma -> accepted by lib_lint
+# Case 43: broad exception with intentional-catch pragma -> rejected by lib_lint
 mkdir -p "$tmp/c43/lib" "$tmp/c43/low"
 cat > "$tmp/c43/low/runner.pyi" <<'EOF'
 def run_task() -> int:
@@ -1423,10 +1424,11 @@ def run_task() -> int:
         # intentional-catch
         return 0
 EOF
-if ( cd "$tmp/c43" && python3 "$bin/lib_lint.py" lib/runner.py --pyi low/runner.pyi ); then
-    echo "PASS: c43 accepted broad exception with intentional-catch pragma"
+c43_out=$( ( cd "$tmp/c43" && python3 "$bin/lib_lint.py" lib/runner.py --pyi low/runner.pyi ) 2>&1 || true )
+if echo "$c43_out" | grep -q "broad exception"; then
+    echo "PASS: c43 rejected broad exception with intentional-catch pragma"
 else
-    echo "FAIL: c43 expected success for broad exception with intentional-catch pragma" >&2
+    echo "FAIL: c43 expected rejection for broad exception with intentional-catch pragma, got: $c43_out" >&2
     fail=1
 fi
 

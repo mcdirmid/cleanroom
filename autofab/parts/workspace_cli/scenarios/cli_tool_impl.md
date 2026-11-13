@@ -140,7 +140,7 @@ Given: role alpha is active in scope_a.
 Given: role alpha is active in scope_a with two ready targets, and the pending work buffer is empty.
 
 1. The caller runs the work subcommand for scope_a with batch size one.
-   Observed: a console report presenting exclusively the first ready target without extraneous remaining or blocked queue details, only the first target recorded in pending work, and an exit code of one indicating work is ready.
+   Observed: a console report presenting exclusively the first ready target without extraneous remaining or blocked queue details, only the first target recorded in pending work, and an exit code of zero.
    Realized by: the component's get_work argument parsing, which extracts the batch size constraint, bounds the ready items queried from `work`, records only the bounded targets into the pending work buffer, and formats the presentation report.
 
 ### Scenario 10 — Commissioning all roles for a directory scope

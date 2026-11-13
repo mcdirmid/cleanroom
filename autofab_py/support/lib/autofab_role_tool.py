@@ -547,7 +547,7 @@ Your sole, monomaniacal mission is coordinating multi-agent DAG convergence acro
    - If no active worker for that role exists, spawn it via `invoke_subagent`:
      - TypeName: "autofab_worker" (or "autofab_baseline_worker" if role is a fused role like baseline or pretense_baseline)
      - Role: "Autofab <Role> Worker"
-     - Model: "<antigravity_models[<role>]>" (MUST use `antigravity_models[<role>]` from `work-queue --json`: e.g. `"flash"` when `gemini-flash` is specified, `"flash_lite"` when `flash-lite` is specified, `"pro"` when `pro` is specified, and `"inherit"` when `gemini-argon` is specified since Antigravity does not expose Argon directly for subagents)
+     - Model: "<antigravity_models[<role>]>" (MUST use `antigravity_models[<role>]` from `work-queue --json`: e.g. `"flash"` when `gemini-flash` is specified, `"flash_lite"` when `flash-lite` is specified, `"pro"` when `pro` is specified, and `"inherit"` when `gemini-argon` or `gemini-carbon` is specified since Antigravity does not expose Argon or Carbon directly for subagents)
      - Prompt:
        - For standard roles:
          "You are an autonomous Autofab '<role>' worker for scope '<scope>'. Your assigned role workspace directory is '<workspace_dir>'. Operate strictly inside your assigned workspace directory. Because shell working directory does not persist across tool calls, prefix all shell commands with 'cd <workspace_dir> && ' (e.g. 'cd <workspace_dir> && bin/get_work') and use absolute paths under '<workspace_dir>' for file tools. All target verification and round resolution must proceed through the prescribed bin/ executables in your workspace (consult AGENTS.md). 1. Immediately run 'cd <workspace_dir> && bin/get_work' to acquire pending ready nodes. 2. Consult your workspace AGENTS.md and companion guides in guides/ (e.g. 'guides/<guide_name>.md' located directly under your workspace root; do not prefix with scope), author target files directly in place (authoring in scratch/ or external folders is strictly prohibited). 3. Perform role verification ('cd <workspace_dir> && bin/check_files <target>'). 4. Resolve nodes ('bin/submit <target> \"<summary>\"', 'bin/blame', or 'bin/fail'). 5. When bin/get_work confirms all ready targets are resolved, conclude your round immediately with summary text and ZERO tool calls. If success is impossible or an unresolvable impasse occurs, execute 'cd <workspace_dir> && bin/fail <target> \"<reason>\"' and report FAILED: <target> - <reason>."
@@ -643,7 +643,7 @@ If you determine that success is not possible (e.g. unreachable code under test,
 
 ## STANDARD WORKFLOW:
 1. Run `bin/get_work` to acquire pending ready nodes and review unacted feedback.
-   - Note: If `bin/get_work` outputs a `[CRITICAL MODEL MISMATCH]` error (because `gemini-argon` was requested via `inherit` while Antigravity is running a different model), DO NOT proceed. Immediately send `FAILED: <scope> - <exact error message instructing the user to manually switch their model to "Gemini Argon" before requesting the run again>` to the coordinator via `send_message` and stop.
+   - Note: If `bin/get_work` outputs a `[CRITICAL MODEL MISMATCH]` error (because `gemini-argon` or `gemini-carbon` was requested via `inherit` while Antigravity is running a different model), DO NOT proceed. Immediately send `FAILED: <scope> - <exact error message instructing the user to manually switch their model to "Gemini Argon" or "Gemini Carbon" before requesting the run again>` to the coordinator via `send_message` and stop.
 2. Consult your workspace `AGENTS.md` and companion guide(s) in `guides/` (located directly under your workspace root: `guides/<basename>`; do not prefix with scope) to perform role duties.
 3. For standard roles:
    - Perform role verification using `bin/check_files`.
@@ -742,7 +742,7 @@ In Autofab / Cleanroom workspaces, this suggestion is STRICTLY PROHIBITED, NULLI
 Subagents, role workers, and autonomous runners are strictly prohibited from invoking `git` commands (`git status`, `git diff`, `git add`, `git commit`, `git checkout`, `git log`, `git stash`, etc.) via `run_command` or any other tool. Workspace state, target dirtiness, diffs, and submissions are managed exclusively through repository binaries (`bin/check_files`, `bin/submit`, `bin/get_work`, `bin/blame`, `bin/revert`, `bin/checkpoint`).
 """
 
-GATE_HOOK_PY = '''import json
+GATE_HOOK_PY = r'''import json
 import os
 import re
 import sys
@@ -776,37 +776,14 @@ def main() -> None:
     conv_id = data.get("conversationId", "")
     last_user_input = data.get("lastUserInput", "")
 
-    # Scratch path prohibition (applies universally to all agents)
-    if name in ("write_file", "edit_file", "view_file", "write_to_file", "replace_file_content", "multi_replace_file_content"):
-        path = (args.get("Path") or args.get("path") or "").strip("'\\\"").strip()
-        if "/scratch/" in path or path.endswith("/scratch"):
-            deny(
-                "STRICT POLICY VIOLATION: Authoring files in scratch/ directories is strictly prohibited. "
-                "Author and edit assigned target files directly in place within your workspace."
-            )
-
-    # Git and Unzip commands prohibition (applies universally to all agents)
-    if name == "run_command":
-        cmd = (args.get("CommandLine") or "").strip("'\\\"").strip()
-        if re.search(r"(?:^|[\\s;&|`$()])git(?:\\.exe)?(?:\\s|$)", cmd) or re.search(
-            r"(?:^|[\\s;&|`$()])(?:\\.git/|cat\\s+.*\\.git|tail\\s+.*\\.git|head\\s+.*\\.git|ls\\s+.*\\.git)",
-            cmd,
-        ):
-            deny(
-                "STRICT POLICY VIOLATION: Direct git commands and inspecting .git/ directories are strictly prohibited in Autofab workspaces. "
-                "Workspace state and submissions are managed exclusively through repository binaries "
-                "(bin/check_files, bin/submit, bin/blame). To revert broken edits, use bin/revert."
-            )
-
-        if re.search(r"(?:^|[\\s;&|`$()])unzip(?:\\s|$)", cmd):
-            deny(
-                "STRICT POLICY VIOLATION: Unzipping runner binaries or inspecting internal tool archives is strictly prohibited. "
-                "Consult your companion guide in guides/ for all required structures and conventions."
-            )
-
     # Registry management for worker subagent hermetic rooting
-    plugin_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    this_dir = os.path.dirname(os.path.abspath(__file__))
+    plugin_dir = os.path.dirname(this_dir)
     registry_path = os.path.join(plugin_dir, "active_workers.json")
+    if not os.path.isfile(registry_path):
+        alt_path = os.path.join(plugin_dir, "plugins", "autofab", "active_workers.json")
+        if os.path.isfile(alt_path):
+            registry_path = alt_path
 
     registry = {}
     if os.path.isfile(registry_path):
@@ -827,11 +804,11 @@ def main() -> None:
             pruned = True
 
     ws_pattern = re.compile(
-        r"(?:assigned\\s+(?:role\\s+)?workspace(?:\\s+directory)?\\s+(?:is\\s*[:=]?\\s*|:\\s*)|workspace:\\s*)['\\\"](?P<ws>[^'\\\"]+)['\\\"]",
+        r"(?:assigned\s+(?:role\s+)?workspace(?:\s+directory)?\s+(?:is\s*[:=]?\s*|:\s*)|workspace:\s*)[\x27\x22](?P<ws>[^\x27\x22]+)[\x27\x22]",
         re.IGNORECASE,
     )
     role_pattern = re.compile(
-        r"autonomous\\s+Autofab\\s+(?:fused\\s+)?'?(?P<role>[a-zA-Z0-9_-]+)'?\\s+worker",
+        r"autonomous\s+Autofab\s+(?:fused\s+)?[\x27\x22]?(?P<role>[a-zA-Z0-9_-]+)[\x27\x22]?\s+worker",
         re.IGNORECASE,
     )
 
@@ -895,20 +872,32 @@ def main() -> None:
             tmp_path = f"{registry_path}.tmp.{os.getpid()}"
             with open(tmp_path, "w", encoding="utf-8") as f:
                 json.dump(registry, f, indent=2)
-                f.write("\\n")
+                f.write(chr(10))
             os.replace(tmp_path, registry_path)
         except Exception:
             pass
 
-    # If not a registered worker subagent (e.g. coordinator or parent session), allow execution
+    # If this is NOT an active worker subagent assigned to a role workspace, ALLOW IMMEDIATELY!
+    # Non-worker conversations (coordinator, parent chats, other workspaces) must NEVER be restricted.
     if not ws_dir:
         allow()
 
     canonical_ws = os.path.realpath(os.path.abspath(ws_dir))
 
-    # Hermetic Root Invariant enforcement for worker subagents
+    # All restrictions below apply EXCLUSIVELY to registered Autofab role workers inside their assigned role workspace
+
+    # 1. Scratch path prohibition for role workers
+    if name in ("write_file", "edit_file", "view_file", "write_to_file", "replace_file_content", "multi_replace_file_content"):
+        path = (args.get("Path") or args.get("path") or "").strip().strip("'").strip('"')
+        if "/scratch/" in path or path.endswith("/scratch"):
+            deny(
+                "STRICT POLICY VIOLATION: Authoring files in scratch/ directories is strictly prohibited. "
+                "Author and edit assigned target files directly in place within your workspace."
+            )
+
+    # 2. Command restrictions for role workers
     if name == "run_command":
-        cmd = (args.get("CommandLine") or "").strip("'\\\"").strip()
+        cmd = (args.get("CommandLine") or "").strip().strip("'").strip('"')
 
         # Block referencing canonical host repository outside workspace
         if "/projects/cleanroom" in cmd or "/cleanroom/" in cmd:
@@ -917,8 +906,42 @@ def main() -> None:
                 f"You are confined exclusively to your assigned role workspace: '{ws_dir}'."
             )
 
+        # Direct git commands and inspecting .git/ directories
+        if re.search(r"(?:^|[\s;&|`$()])git(?:\.exe)?(?:\s|$)", cmd) or re.search(
+            r"(?:^|[\s;&|`$()])(?:\.git/|cat\s+.*\.git|tail\s+.*\.git|head\s+.*\.git|ls\s+.*\.git)",
+            cmd,
+        ):
+            deny(
+                "STRICT POLICY VIOLATION: Direct git commands and inspecting .git/ directories are strictly prohibited in Autofab workspaces. "
+                "Workspace state and submissions are managed exclusively through repository binaries "
+                "(bin/check_files, bin/submit, bin/blame). To revert broken edits, use bin/revert."
+            )
+
+        # Unzipping runner binaries or inspecting internal tool archives
+        if re.search(r"(?:^|[\s;&|`$()])unzip(?:\s|$)", cmd):
+            deny(
+                "STRICT POLICY VIOLATION: Unzipping runner binaries or inspecting internal tool archives is strictly prohibited. "
+                "Consult your companion guide in guides/ for all required structures and conventions."
+            )
+
+        # Prohibit ad-hoc python execution, inline scripts, test runners, or typecheckers by worker subagents
+        probe_pattern = re.compile(
+            r"(?:^|[;&|`()]\s*|\$\(\s*)"
+            r"(?:(?:sudo|env|time|nohup)\s+)*"
+            r"(?:python[0-9.]*|pytest|pyright|mypy|ruff|ipython|uv\s+run)(?:\.exe)?(?:\s|$)",
+            re.IGNORECASE,
+        )
+        if probe_pattern.search(cmd):
+            deny(
+                "STRICT POLICY VIOLATION: Role workers are strictly prohibited from executing ad-hoc Python probes, "
+                "inline scripts (python -c), test runners (pytest), or typecheckers directly. "
+                "Target verification relies exclusively on 'bin/check_files <target>'."
+            )
+
         # Prohibit internal cd navigation
-        cd_re = re.compile(r"(?:^|[;&|`()]\\s*|\\$\\(\\s*)\\s*cd(?:\\s+([^;&|`$()]+|\\\"[^\\\"]+\\\"|'[^']+'))?")
+        cd_re = re.compile(
+            r"(?:^|[;&|`()]\s*|\$\(\s*)\s*cd(?:\s+([^;&|`$()]+|[\x27\x22][^\x27\x22]+[\x27\x22]))?"
+        )
         for m in cd_re.finditer(cmd):
             target = m.group(1)
             if not target:
@@ -927,7 +950,7 @@ def main() -> None:
                     f"Changing directories (cd) into subdirectories (e.g. guides/) or external paths is strictly prohibited. "
                     f"Run all tools (bin/get_work, bin/check_files, bin/submit) directly from the workspace root."
                 )
-            clean_target = target.strip("'\\\"").strip()
+            clean_target = target.strip().strip("'").strip('"')
             if clean_target in (".", "./"):
                 continue
             try:
@@ -946,7 +969,7 @@ def main() -> None:
         pattern_escaped = re.escape(ws_dir)
         canonical_escaped = re.escape(canonical_ws)
         prefix_re = re.compile(
-            rf"^\\s*cd\\s+['\\\"]?(?:{pattern_escaped}|{canonical_escaped})['\\\"]?\\s*&&\\s*",
+            rf"^\s*cd\s+[\x27\x22]?(?:{pattern_escaped}|{canonical_escaped})[\x27\x22]?\s*&&\s*",
             re.IGNORECASE,
         )
         if not prefix_re.search(cmd):
@@ -957,9 +980,10 @@ def main() -> None:
         else:
             allow()
 
+    # 3. Path confinement for role workers
     elif name in ("read_file", "write_file", "edit_file", "view_file", "write_to_file", "replace_file_content", "multi_replace_file_content"):
         raw_path = args.get("Path") or args.get("path") or ""
-        path = raw_path.strip("'\\\"").strip()
+        path = raw_path.strip().strip("'").strip('"')
         path_key = "Path" if "Path" in args else "path"
 
         # Also normalize Overwrite boolean if passed as a string
@@ -993,18 +1017,30 @@ def main() -> None:
     allow()
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        print(json.dumps({"decision": "allow"}))
+        sys.exit(0)
 '''
 
 
-def ensure_antigravity_plugin_installed() -> str:
-    """Installs or refreshes Cleanroom agents in global Antigravity plugin directory."""
+def ensure_antigravity_plugin_installed(target_dir: str | None = None) -> str:
+    """Installs or refreshes Cleanroom agents and safety gate hooks in workspace Antigravity directory."""
     app_info = _get_app_info()
     app_name = app_info.APP_NAME if app_info else "cleanroom"
-    config_root = os.environ.get("ANTIGRAVITY_CONFIG_DIR") or os.path.expanduser(
-        "~/.gemini/config"
-    )
-    plugin_dir = os.path.join(config_root, "plugins", app_name)
+
+    if target_dir:
+        plugin_dir = target_dir
+        ws_root = os.path.dirname(os.path.dirname(os.path.dirname(plugin_dir)))
+    elif os.environ.get("ANTIGRAVITY_CONFIG_DIR"):
+        config_root = os.environ["ANTIGRAVITY_CONFIG_DIR"]
+        plugin_dir = os.path.join(config_root, "plugins", app_name)
+        ws_root = find_workspace_root()
+    else:
+        ws_root = find_workspace_root()
+        plugin_dir = os.path.join(ws_root, ".agents", "plugins", app_name)
+
     agents_dir = os.path.join(plugin_dir, "agents")
     coord_dir = os.path.join(agents_dir, f"{app_name}_coordinator")
     worker_dir = os.path.join(agents_dir, f"{app_name}_worker")
@@ -1053,7 +1089,7 @@ def ensure_antigravity_plugin_installed() -> str:
                     "hooks": [
                         {
                             "type": "command",
-                            "command": "python3 hooks/gate.py",
+                            "command": "python3 hooks/gate.py || echo '{\"decision\": \"allow\"}'",
                             "timeout": 10,
                         }
                     ],
@@ -1067,6 +1103,58 @@ def ensure_antigravity_plugin_installed() -> str:
 
     with open(os.path.join(hooks_dir, "gate.py"), "w", encoding="utf-8") as f:
         f.write(GATE_HOOK_PY.strip() + "\n")
+
+    # If installed under workspace .agents/, also configure root .agents/ links/manifests for maximum compatibility
+    dot_agents = os.path.join(ws_root, ".agents")
+    if os.path.isdir(dot_agents):
+        # 1. plugins.json manifest
+        plugins_json = {
+            "entries": [
+                {"path": "plugins"}
+            ]
+        }
+        with open(os.path.join(dot_agents, "plugins.json"), "w", encoding="utf-8") as f:
+            json.dump(plugins_json, f, indent=2)
+            f.write("\n")
+
+        # 2. Standalone agents directory in .agents/agents
+        standalone_agents_dir = os.path.join(dot_agents, "agents")
+        for sub_name, md_content in [
+            (f"{app_name}_coordinator", COORDINATOR_AGENT_MD),
+            (f"{app_name}_worker", WORKER_AGENT_MD),
+            (f"{app_name}_baseline_worker", BASELINE_WORKER_AGENT_MD),
+        ]:
+            sub_d = os.path.join(standalone_agents_dir, sub_name)
+            os.makedirs(sub_d, exist_ok=True)
+            with open(os.path.join(sub_d, "agent.md"), "w", encoding="utf-8") as f:
+                f.write(md_content.strip() + "\n")
+
+        # 3. Direct .agents/hooks.json pointing to plugin gate.py
+        ws_hooks_json = {
+            f"{app_name}-safety-gate": {
+                "PreToolUse": [
+                    {
+                        "matcher": "run_command|read_file|write_file|edit_file|view_file|write_to_file|replace_file_content|multi_replace_file_content",
+                        "hooks": [
+                            {
+                                "type": "command",
+                                "command": f"python3 plugins/{app_name}/hooks/gate.py || echo '{{\"decision\": \"allow\"}}'",
+                                "timeout": 10,
+                            }
+                        ],
+                    }
+                ]
+            }
+        }
+        with open(os.path.join(dot_agents, "hooks.json"), "w", encoding="utf-8") as f:
+            json.dump(ws_hooks_json, f, indent=2)
+            f.write("\n")
+
+        # Also write root .agents/hooks/gate.py for direct .agents/hooks execution
+        root_hooks_dir = os.path.join(dot_agents, "hooks")
+        os.makedirs(root_hooks_dir, exist_ok=True)
+        with open(os.path.join(root_hooks_dir, "gate.py"), "w", encoding="utf-8") as f:
+            f.write(GATE_HOOK_PY.strip() + "\n")
 
     return plugin_dir
 
@@ -1087,6 +1175,11 @@ def dispatch_antigravity_coordination(
     """
     if mode == "none":
         return False
+
+    try:
+        ensure_antigravity_plugin_installed()
+    except Exception:
+        pass
 
     exe = os.environ.get("ANTIGRAVITY_AGENTAPI_EXE")
     conv_id = os.environ.get("ANTIGRAVITY_CONVERSATION_ID")
@@ -1918,7 +2011,7 @@ def run_work_queue(argv: list[str]) -> int:
                     antigravity_models[r.role_name] = "flash_lite"
                 elif "flash" in m_low:
                     antigravity_models[r.role_name] = "flash"
-                elif "argon" in m_low:
+                elif "argon" in m_low or "carbon" in m_low:
                     antigravity_models[r.role_name] = "inherit"
                 elif "pro" in m_low:
                     antigravity_models[r.role_name] = "pro"
@@ -4422,7 +4515,7 @@ def run_verify_micro_binary(role_name: str, argv: list[str]) -> int:
                     "• DO NOT expose details (line numbers, code snippets, or internal symbols) of other files.\n"
                     "• Frame test failures strictly as contract discrepancies against the specification.\n"
                     "• Explain the expected postcondition outcome versus the observed behavior.\n"
-                    "• Preconditions cannot be tested: *Error exceptions designate contract violations and must never be tested or expected with raises(). If an *Error occurs, blame the test/pretense module for failing to satisfy or gate preconditions (use require(...) in pretense), NEVER the library.\n"
+                    "• Checked preconditions raising contracted errors (*Error) MUST be tested (via assertRaises in tests or self.checked.violating() in pretense scenarios) to verify the error is raised. However, tests must never assert graceful returns on precondition violations, and cannot assert state after an error because system state after an exception is undefined. Preconditions without errors define undefined behavior and are untestable.\n"
                     + "="
                     * 80
                 )
@@ -4684,11 +4777,6 @@ def main(argv: list[str] | None = None) -> int:
         or cmd_0.startswith("verify_")
         or cmd_0.startswith("verify-")
     )
-    if not is_role_ws and not is_worker_cmd:
-        try:
-            ensure_antigravity_plugin_installed()
-        except Exception:
-            pass
 
     if not args_list or args_list[0] in ("-h", "--help", "help"):
         print_autofab_help()

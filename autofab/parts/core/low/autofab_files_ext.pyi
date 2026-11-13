@@ -61,7 +61,6 @@ Autofab source artifacts embed in-band lifecycle metadata in standardized commen
   - `LAST_CLEANED: str`: ISO-8601 UTC timestamp of last verified clean state.
   - `LAST_CHANGED: str`: ISO-8601 UTC timestamp of last intentional semantic modification.
   - `CHANGE: str`: Single-line summary of intentional modification.
-  - `CODE_HASH: str`: Hexadecimal SHA-256 (truncated to 12 characters) computed over code content outside the metadata block.
   - `COVERAGE_AUDIT: Optional[str]`: ISO-8601 UTC timestamp of coverage verification.
   - `QA_AUDIT: Optional[str]`: ISO-8601 UTC timestamp of QA verification.
   - `SPEC_QA_AUDIT: Optional[str]`: ISO-8601 UTC timestamp of Spec QA verification.

@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from typing import (
+    Annotated,
     Any,
     Callable,
     Collection,
@@ -9,6 +10,7 @@ from typing import (
     Dict,
     Generic,
     List,
+    Mapping,
     Optional,
     ParamSpec,
     Protocol,
@@ -25,6 +27,7 @@ from support.lib.framework import data_type, operation, poly_type, singleton_typ
 from support.lib.lifecycle import Singleton, SystemTier
 
 T = TypeVar("T", default=Any)
+T_co = TypeVar("T_co", covariant=True, default=Any)
 Target = TypeVar("Target", default=Any)
 P = ParamSpec("P", default=...)
 R = TypeVar("R", default=Any)
@@ -44,6 +47,15 @@ class NotBoundType:
 
 
 NotBound: NotBoundType
+
+
+@data_type
+class _EnvStateMarker:
+    """Marker metadata distinguishing environmental state fields on State dataclasses."""
+    ...
+
+
+Env = Annotated[T, _EnvStateMarker]
 
 
 @data_type
@@ -178,6 +190,29 @@ class require:
 class requires(require):
     """Precondition requirement assertion enforcing state machine antecedents."""
     ...
+
+
+@data_type
+class require_env:
+    """Virtual environmental requirement enforcing external operational conditions.
+
+    When `condition` is False: in Fake mode, immediately raises `exception_cls(*args, **kwargs)`;
+    in Implementation mode, expects the real SUT to raise `exception_cls` (failing if it returns normally).
+    """
+    def __init__(
+        self,
+        condition: bool,
+        exception_cls: Union[Type[BaseException], BaseException],
+        *args: Any,
+        **kwargs: Any,
+    ) -> None: ...
+    def __call__(
+        self,
+        condition: bool,
+        exception_cls: Union[Type[BaseException], BaseException],
+        *args: Any,
+        **kwargs: Any,
+    ) -> None: ...
 
 
 @data_type
@@ -361,16 +396,16 @@ class EnsuresCheck:
 
 
 @data_type
-class Domain(Generic[T]):
+class Domain(Generic[T_co]):
     """Specification of an argument domain uniting generative sampling and analytical validation."""
     strategy: Any
-    validator: Optional[Callable[[T], bool]]
+    validator: Optional[Callable[[Any], bool]]
     default: Any
 
     def __init__(
         self,
-        strategy: Union[Callable[..., T], Any],
-        validator: Optional[Callable[[T], bool]] = None,
+        strategy: Union[Callable[..., Any], Any],
+        validator: Optional[Callable[[Any], bool]] = None,
         default: Any = ...,
     ) -> None: ...
     def to_strategy(self) -> Any: ...
@@ -417,9 +452,13 @@ class Domain(Generic[T]):
     @classmethod
     def list_of(cls, elem_domain: Union[Domain[E], Type[E]], min_size: int = 0, max_size: int = 5, unique: bool = False) -> Domain[List[E]]: ...
     @classmethod
+    def collection(cls, elem_domain: Union[Domain[E], Type[E]], min_size: int = 0, max_size: int = 5, unique: bool = False) -> Domain[Collection[E]]: ...
+    @classmethod
     def set_of(cls, elem_domain: Union[Domain[E], Type[E]], min_size: int = 0, max_size: int = 5) -> Domain[Set[E]]: ...
     @classmethod
     def mapping_of(cls, key_domain: Union[Domain[K], Type[K]], val_domain: Union[Domain[V], Type[V]], min_size: int = 0, max_size: int = 5) -> Domain[Dict[K, V]]: ...
+    @classmethod
+    def mapping(cls, key_domain: Union[Domain[K], Type[K]], val_domain: Union[Domain[V], Type[V]], min_size: int = 0, max_size: int = 5) -> Domain[Mapping[K, V]]: ...
     @classmethod
     def optional(cls, inner_domain: Union[Domain[E], Type[E]]) -> Domain[Optional[E]]: ...
     @classmethod
@@ -642,10 +681,19 @@ class StateMachine(Generic[StateT]):
     def register_compiler(cls, compiler: Callable[..., Any]) -> None: ...
     def bind_singleton(self, target_type: Type[Any], instance: Any) -> None: ...
     def get_singleton(self, target_type: Type[T]) -> T: ...
-    def sut(self, target_type: Type[T]) -> T: ...
+    def sut(self, target_type: Type[T]) -> T:
+        """Resolves `target_type` from `self.singletons` (or active lifecycle registry/fakes). Raises if unbound or None."""
+        ...
     def as_fake(self, protocol_type: Optional[Type[T]] = None) -> T: ...
-    def as_checked(self, protocol_type: Type[T], real_instance: Optional[T] = None) -> CheckedAdapter[T]: ...
-    def bind(self, target: Any) -> Any: ...
+    def as_checked(self, protocol_type: Type[T], real_instance: Optional[T] = None) -> CheckedAdapter[T]:
+        """Returns a CheckedAdapter wrapping `real_instance` (and binding it into `singletons[protocol_type]` if provided)."""
+        ...
+    def bind_state(self, attr_name: str, getter: Callable[[], Any]) -> None: ...
+    @overload
+    def bind(self, attr_name: str, getter: Callable[[], Any]) -> None: ...
+    @overload
+    def bind(self, target: T) -> CheckedAdapter[T]: ...
+    def bind(self, target_or_attr: Any, getter: Optional[Callable[[], Any]] = None) -> Any: ...
     def make_state_machine(self, initial_state: Any) -> StateMachine: ...
     def check_invariants(self) -> None: ...
     def dispatch_transition(self, transition_name: Any, *args: Any, **kwargs: Any) -> Any: ...
@@ -726,7 +774,11 @@ class PretenseEngine(Singleton[SystemTier], Protocol):
 
 @data_type
 class synthesize_fake:
-    """Synthesizes a pure in-memory test double class from a state machine."""
+    """Synthesizes a pure in-memory test double class from a state machine.
+
+    On transition calls: `require(...)` / `require_arg(...)` guard failures raise `NoMatchingTransitionError`;
+    `require_env(...)` guard failures raise `exception_cls(*args, **kwargs)`.
+    """
     def __new__(cls, machine_cls: Type[StateMachine[Any]], fake_name: Optional[str] = None) -> Type[Any]: ...
     def __call__(self, machine_cls: Type[StateMachine[Any]], fake_name: Optional[str] = None) -> Type[Any]: ...
 

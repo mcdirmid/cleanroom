@@ -208,7 +208,7 @@ class CleanroomRoleToolTest(unittest.TestCase):
         self.assertIsNone(meta.last_cleaned)
         self.assertIsNone(meta.last_changed)
         self.assertEqual(meta.change_summary, "Implemented config parser")
-        self.assertIsNotNone(meta.code_hash)
+        self.assertNotIn("CODE_HASH:", open(target, encoding="utf-8").read())
 
         # Canonical file in main is also updated directly
         main_lib = os.path.join(self.fake_repo, "staging/parts/agent/lib/config.py")
@@ -217,7 +217,7 @@ class CleanroomRoleToolTest(unittest.TestCase):
         assert main_meta is not None
         self.assertIsNotNone(main_meta.last_cleaned)
         self.assertIsNotNone(main_meta.last_changed)
-        self.assertIsNone(main_meta.code_hash)
+        self.assertNotIn("CODE_HASH:", open(main_lib, encoding="utf-8").read())
         self.assertEqual(main_meta.change_summary, "Implemented config parser")
 
         # 3. Unmodified file submitted WITH summary -> fails (ret=1)
@@ -1657,10 +1657,19 @@ class TestAntigravitySafetyGate(unittest.TestCase):
 
     def test_gate_decision_matrix(self) -> None:
         import subprocess
-        gate_path = os.path.expanduser("~/.gemini/config/plugins/autofab/hooks/gate.py")
-        plugin_dir = os.path.dirname(os.path.dirname(gate_path))
+        ws_root = autofab_role_tool.find_workspace_root()
+        gate_path = os.path.join(ws_root, ".agents", "plugins", "autofab", "hooks", "gate.py")
+        if not os.path.isfile(gate_path):
+            gate_path = os.path.join(ws_root, ".agents", "hooks", "gate.py")
+        if not os.path.isfile(gate_path):
+            gate_path = os.path.expanduser("~/.gemini/config/plugins/autofab/hooks/gate.py")
 
         with tempfile.TemporaryDirectory() as test_ws:
+            if not os.path.isfile(gate_path):
+                temp_plugin = os.path.join(test_ws, ".agents", "plugins", "autofab")
+                autofab_role_tool.ensure_antigravity_plugin_installed(target_dir=temp_plugin)
+                gate_path = os.path.join(temp_plugin, "hooks", "gate.py")
+            plugin_dir = os.path.dirname(os.path.dirname(gate_path))
             conv_id = "test-gate-conv-matrix"
 
             def run_gate(payload: dict) -> dict:

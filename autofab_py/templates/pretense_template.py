@@ -86,18 +86,18 @@ proto = TargetStateMachine()
 # Single service fake factory:
 # def make_target_fake(state: Optional[TargetState] = None) -> TargetClass:
 #     """Synthesizes fake instance for TargetClass."""
-#     return FakeTarget(state=state or TargetState())
+#     return FakeTarget(state=state or proto.make_initial_state())
 
 # Multi-service fakes factory (when target has multiple singletons sharing state):
 # def make_target_fakes(state: Optional[TargetState] = None) -> Tuple[ServiceA, ServiceB]:
 #     """Synthesizes fake instances for component services sharing model state."""
-#     fake = FakeTarget(state=state or TargetState())
+#     fake = FakeTarget(state=state or proto.make_initial_state())
 #     return (fake, fake)
 
 # Fake Fuzzing (Exercises synthesized fake against state machine contracts):
 # FakeTargetFuzzTest = compile_hypothesis_test_case(
 #     proto=proto,
-#     initial_state_factory=TargetState,
+#     initial_state_factory=proto.make_initial_state,
 #     name="FakeTargetFuzzTest",
 # )
 
@@ -107,7 +107,7 @@ proto = TargetStateMachine()
 # ==============================================================================
 
 # class TestTargetFake(unittest.TestCase):
-#     """Verifies that the synthesized fake satisfies all transitions and seeding transitions."""
+#     """Optional fixed fake tests for transitions or branches not covered by FakeTargetFuzzTest."""
 #
 #     def setUp(self) -> None:
 #         # Single service:
@@ -117,12 +117,10 @@ proto = TargetStateMachine()
 #         # self.fakes = make_target_fakes()
 #         # self.sm = TargetStateMachine()
 #
-#     def test_transitions_coverage(self) -> None:
-#         """Exercises 100% of transitions and seeding transitions on the fake."""
-#         # PRE_LINT_INTERFACE_TRANSITION_COVERAGE requires that EVERY declared
-#         # @transition and @transition.seeding method is called at least once in Test<Target>Fake!
+#     def test_uncovered_branch(self) -> None:
+#         """Exercises edge branches or seeding transitions not reached by FakeTargetFuzzTest."""
 #         self.sm.seed_initial()
-#         # Exercise every declared transition and seeding transition on self.fake:
+#         # Exercise only what FakeTargetFuzzTest does not cover:
 #         # self.fake.process("sample_1", 10)
 #         # _ = self.fake.items
 
@@ -141,7 +139,6 @@ proto = TargetStateMachine()
 #
 #     # Override inner transitions ONLY to drive target and evaluate private invariant assertions:
 #     # def inner_process(self, item: str, count: int) -> str:
-#     #     super().inner_process(item, count)  # optional, fake return value ignored
 #     #     target: TargetClass = sut(TargetClass)
 #     #     # Pre-state observation:
 #     #     old_size = target.size
@@ -155,37 +152,37 @@ proto = TargetStateMachine()
 # 5. Real Implementation Tests (Implementation Components)
 # ==============================================================================
 
-class TestTargetImplReal(LifecycleTestCase):
-    """Verifies that concrete library implementation satisfies contracts."""
-
-    # Target class and singletons under test are registered automatically by LifecycleTestCase.
-    # self.sut provides the primary service under test.
-    def setUp(self) -> None:
-        super().setUp()
-        # For single service:
-        # self.real = self.sut
-        # self.sm = TargetStateMachine(singletons={TargetClass: self.real})
-        # self.checked = self.sm.as_checked(TargetClass, self.real)
-        # For multi-service:
-        # self.service_a = get_singleton(ServiceA)
-        # self.service_b = get_singleton(ServiceB)
-        # self.sm = TargetStateMachine(singletons={ServiceA: self.service_a, ServiceB: self.service_b})
-        # self.checked_a = self.sm.as_checked(ServiceA, self.service_a)
-        # self.checked_b = self.sm.as_checked(ServiceB, self.service_b)
-
-    def test_real_conformance(self) -> None:
-        # Drive operational scenarios via self.checked.<method>(*args)
-        # to achieve 100% statement coverage under --no-fuzz --cov.
-        # Operational postconditions and invariants are verified automatically by transition asserts;
-        # fixed scenario tests should contain no redundant manual assertions (self.assertEqual, self.assertTrue).
-        #
-        # Contract violation testing (covering contracted *Error branches in lib):
-        # self.checked.violating(ExpectedError).method_that_violates(...)
-        #
-        # Collaborator isolation: if earlier calls exhaust a collaborator (e.g. advance a scheduler to finished),
-        # subsequent loops on that instance (e.g. runner.run()) exit immediately. Use separate test methods
-        # (def test_<scenario>(self)) with fresh setUp() scopes or isolated SUT instances for independent flows.
-        pass
+# class TestTargetImplReal(LifecycleTestCase):
+#     """Verifies that concrete library implementation satisfies contracts."""
+#
+#     # Target class and singletons under test are registered automatically by LifecycleTestCase.
+#     # self.sut provides the primary service under test.
+#     def setUp(self) -> None:
+#         super().setUp()
+#         # For single service:
+#         # self.real = self.sut
+#         # self.sm = TargetStateMachine(singletons={TargetClass: self.real})
+#         # self.checked = self.sm.as_checked(TargetClass, self.real)
+#         # For multi-service:
+#         # self.service_a = get_singleton(ServiceA)
+#         # self.service_b = get_singleton(ServiceB)
+#         # self.sm = TargetStateMachine(singletons={ServiceA: self.service_a, ServiceB: self.service_b})
+#         # self.checked_a = self.sm.as_checked(ServiceA, self.service_a)
+#         # self.checked_b = self.sm.as_checked(ServiceB, self.service_b)
+#
+#     def test_real_conformance(self) -> None:
+#         # Drive operational scenarios via self.checked.<method>(*args)
+#         # to stabilize 100% statement coverage under --cov alongside fuzzing.
+#         # Operational postconditions and invariants are verified automatically by transition asserts;
+#         # fixed scenario tests should contain no redundant manual assertions (self.assertEqual, self.assertTrue).
+#         #
+#         # Contract violation testing (covering contracted *Error branches in lib):
+#         # self.checked.violating(ExpectedError).method_that_violates(...)
+#         #
+#         # Collaborator isolation: if earlier calls exhaust a collaborator (e.g. advance a scheduler to finished),
+#         # subsequent loops on that instance (e.g. runner.run()) exit immediately. Use separate test methods
+#         # (def test_<scenario>(self)) with fresh setUp() scopes or isolated SUT instances for independent flows.
+#         pass
 
 
 # ==============================================================================
@@ -195,7 +192,7 @@ class TestTargetImplReal(LifecycleTestCase):
 # Pattern A: Single Singleton SUT Factory
 # def make_sut() -> TargetClass:
 #     registry = LifecycleRegistry()
-#     __initialize__(registry)
+#     registry.register_singleton(TargetClass)
 #     scope = enter_phase(system, registry=registry)
 #     scope.__enter__()
 #     return get_singleton(TargetClass)
@@ -206,7 +203,8 @@ class TestTargetImplReal(LifecycleTestCase):
 #     def __init__(self) -> None:
 #         self.__dict__["_services"] = ()
 #         self.registry = LifecycleRegistry()
-#         __initialize__(self.registry)
+#         self.registry.register_singleton(ServiceA)
+#         self.registry.register_singleton(ServiceB)
 #         self.phase_scope = enter_phase(system, registry=self.registry)
 #         self.phase_scope.__enter__()
 #         self.service_a = get_singleton(ServiceA)

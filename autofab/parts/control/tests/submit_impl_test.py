@@ -271,19 +271,25 @@ class ControlSubmitImplTest(LifecycleTestCase):
             with open(main_file, "w", encoding="utf-8") as f:
                 f.write(main_content)
 
-            # Workspace file has only change and baseline code hash
+            # Workspace file has only change; baseline code_hash lives in .autofab/pull_manifest.json
             from autofab.parts.metadata.lib import src_metadata
 
             code_hash = src_metadata.compute_code_hash("x = 1\n", "sample.py")
             ws_content = (
                 "# --- CLEANROOM METADATA ---\n"
                 "# CHANGE: Initial implementation\n"
-                f"# CODE_HASH: {code_hash}\n"
                 "# --- END CLEANROOM METADATA ---\n"
                 "x = 2\n"
             )
             with open(ws_file, "w", encoding="utf-8") as f:
                 f.write(ws_content)
+
+            manifest_dir = os.path.join(ws_root, ".autofab")
+            os.makedirs(manifest_dir, exist_ok=True)
+            with open(
+                os.path.join(manifest_dir, "pull_manifest.json"), "w", encoding="utf-8"
+            ) as f:
+                json.dump({"parts/sample/lib/sample.py": {"code_hash": code_hash}}, f)
 
             with open(
                 os.path.join(ws_root, app_info.DEFAULT_ROLE_DESCRIPTOR),
@@ -313,11 +319,17 @@ class ControlSubmitImplTest(LifecycleTestCase):
             with open(ws_file, "r", encoding="utf-8") as f:
                 wf_content = f.read()
             self.assertIn("CHANGE: Updated x to 2", wf_content)
-            self.assertIn("CODE_HASH:", wf_content)
+            self.assertNotIn("CODE_HASH:", wf_content)
             self.assertNotIn("LAST_CLEANED:", wf_content)
             self.assertNotIn("LAST_CHANGED:", wf_content)
             new_hash = src_metadata.compute_code_hash("x = 2\n", "sample.py")
-            self.assertIn(f"CODE_HASH: {new_hash}", wf_content)
+            with open(
+                os.path.join(manifest_dir, "pull_manifest.json"), "r", encoding="utf-8"
+            ) as f:
+                updated_manifest = json.load(f)
+            self.assertEqual(
+                updated_manifest["parts/sample/lib/sample.py"]["code_hash"], new_hash
+            )
 
     def test_submit_fails_when_init_py_modified(self) -> None:
         import tempfile
@@ -393,6 +405,88 @@ class ControlSubmitImplTest(LifecycleTestCase):
             self.assertEqual(resolved_path, os.path.realpath(target_file))
             self.assertEqual(unit, "my_part_impl")
 
+    def test_submit_target_file_unmodified_with_feedback_rejected(self) -> None:
+        import json
+        from autofab.parts.metadata.lib import metadata_asm, src_metadata
+
+        metadata_asm.__initialize__(registry=self.registry)
+
+        with (
+            tempfile.TemporaryDirectory() as main_root,
+            tempfile.TemporaryDirectory() as ws_root,
+        ):
+            main_lib = os.path.join(main_root, "staging", "parts", "sample", "lib")
+            ws_lib = os.path.join(ws_root, "staging", "parts", "sample", "lib")
+            os.makedirs(main_lib, exist_ok=True)
+            os.makedirs(ws_lib, exist_ok=True)
+
+            main_file = os.path.join(main_lib, "sample.py")
+            ws_file = os.path.join(ws_lib, "sample.py")
+
+            main_content = (
+                "# --- CLEANROOM METADATA ---\n"
+                "# LAST_CLEANED: 2026-10-15T17:42:47Z\n"
+                "# LAST_CHANGED: 2026-10-14T17:45:00Z\n"
+                "# CHANGE: Initial implementation\n"
+                "# FEEDBACK:\n"
+                "# - [from qa] Fix missing edge case\n"
+                "# --- END CLEANROOM METADATA ---\n"
+                "x = 1\n"
+            )
+            with open(main_file, "w", encoding="utf-8") as f:
+                f.write(main_content)
+
+            code_hash = src_metadata.compute_code_hash("x = 1\n", "sample.py")
+            ws_content = (
+                "# --- CLEANROOM METADATA ---\n"
+                "# CHANGE: Initial implementation\n"
+                "# FEEDBACK:\n"
+                "# - [from qa] Fix missing edge case\n"
+                "# --- END CLEANROOM METADATA ---\n"
+                "x = 1\n"
+            )
+            with open(ws_file, "w", encoding="utf-8") as f:
+                f.write(ws_content)
+
+            manifest_dir = os.path.join(ws_root, ".autofab")
+            os.makedirs(manifest_dir, exist_ok=True)
+            with open(
+                os.path.join(manifest_dir, "pull_manifest.json"), "w", encoding="utf-8"
+            ) as f:
+                json.dump({"parts/sample/lib/sample.py": {"code_hash": code_hash}}, f)
+
+            with open(
+                os.path.join(ws_root, app_info.DEFAULT_ROLE_DESCRIPTOR),
+                "w",
+                encoding="utf-8",
+            ) as f:
+                json.dump({"role": "lib", "dir_scope": "staging"}, f)
+
+            with enter_phase(agent_session.agent_session, registry=self.registry):
+                outcome_no_summary = self.coordinator.submit_target_file(
+                    target=ws_file,
+                    summary=None,
+                    repo_root=main_root,
+                    workspace_root=ws_root,
+                    role_name="lib",
+                )
+                self.assertFalse(outcome_no_summary.accepted)
+                self.assertIn("use bin/reject instead", outcome_no_summary.message)
+
+                outcome_with_summary = self.coordinator.submit_target_file(
+                    target=ws_file,
+                    summary="Already addressed",
+                    repo_root=main_root,
+                    workspace_root=ws_root,
+                    role_name="lib",
+                )
+                self.assertFalse(outcome_with_summary.accepted)
+                self.assertIn("use bin/reject instead", outcome_with_summary.message)
+
+            with open(main_file, "r", encoding="utf-8") as f:
+                self.assertIn("# FEEDBACK:", f.read())
+            with open(ws_file, "r", encoding="utf-8") as f:
+                self.assertIn("# FEEDBACK:", f.read())
 
 
 if __name__ == "__main__":

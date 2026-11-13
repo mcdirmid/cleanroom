@@ -26,6 +26,7 @@ PRICING_RATES: Dict[str, Tuple[float, float, float]] = {
     "gemini-flash": (0.025, 0.10, 0.40),
     "gemini-pro": (0.3125, 1.25, 5.00),
     "gemini-argon": (0.50, 2.00, 10.00),
+    "gemini-carbon": (0.10, 2.00, 10.00),
     "default": (0.025, 0.10, 0.40),
 }
 
@@ -75,6 +76,10 @@ def _resolve_pricing_rates(
         return PRICING_RATES["gemini-flash"]
     elif "pro" in lower:
         return PRICING_RATES["gemini-pro"]
+    elif "argon" in lower:
+        return PRICING_RATES["gemini-argon"]
+    elif "carbon" in lower:
+        return PRICING_RATES["gemini-carbon"]
     return PRICING_RATES.get(lower, PRICING_RATES["default"])
 
 

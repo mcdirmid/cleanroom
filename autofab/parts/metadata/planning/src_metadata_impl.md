@@ -24,7 +24,7 @@ The implementation isolates comment delimiters according to file extensions, loc
 ### Woven Contracts
 
 - When extracting metadata from text or disk, the coordinator detects comment boundaries and parses header fields into a file metadata record. [detect_html_delimiters, detect_hash_delimiters, parse_header_fields, src_metadata: [extract_metadata_content, extract_metadata_disk]]
-- When checking for code modifications, the coordinator extracts the code body, computes the SHA-256 digest, and compares the digest against the recorded code hash. [slice_code_body, digest_code_body, compare_code_digests, src_metadata: [compute_code_hash_value, evaluate_code_modified]]
+- When checking for code modifications, the coordinator extracts the code body, computes the SHA-256 digest, and compares the digest against the baseline `code_hash` in `.autofab/pull_manifest.json`. [slice_code_body, digest_code_body, compare_code_digests, src_metadata: [compute_code_hash_value, evaluate_code_modified]]
 - When rewriting or updating metadata, the coordinator formats the block lines, appends or updates the block at the bottom of the file, and writes the content to disk. [format_header_lines, locate_insertion_index, write_file_content, src_metadata: [rewrite_metadata_text, update_metadata_disk]]
 
 ## Grounding

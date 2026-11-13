@@ -135,16 +135,16 @@ it has not been modified since its target was last clean; the current UTC timest
 3. The agent modifies `/ws/alpha_scope_a/parts/widget/widget_spec.md` and submits it as the
    alpha-role file target with the change summary `renamed the widget field`.
    Observed: an accepted submission outcome; the canonical repository file
-   `/repo/parts/widget/widget_spec.md` records the change summary `renamed the widget field` and
-   has any ephemeral code hash stripped; and the local role workspace file
-   `/ws/alpha_scope_a/parts/widget/widget_spec.md` carries the same updated content with its
-   ephemeral code hash refreshed to reflect the new code baseline.
+   `/repo/parts/widget/widget_spec.md` records the change summary `renamed the widget field`;
+   and the local role workspace file `/ws/alpha_scope_a/parts/widget/widget_spec.md` carries the
+   same updated content while `.autofab/pull_manifest.json` refreshes `code_hash` to reflect the
+   new code baseline.
 
 4. The agent submits `/ws/alpha_scope_a/parts/gadget/gadget_spec.md` as the alpha-role file target
    with no change summary.
    Observed: an accepted submission outcome, and the canonical repository file
    `/repo/parts/gadget/gadget_spec.md` records last cleaned `2026-01-12T00:00:00Z` and no change
-   summary, with any ephemeral code hash stripped.
+   summary.
 
 5. The agent submits `/ws/alpha_scope_a/parts/widget/widget_spec.md` without specifying role_name.
    Observed: the submission coordinator discovers the role name and directory scope from the workspace's `.autofab_role.json` manifest.
@@ -160,6 +160,17 @@ been modified since the target was last clean.
    Observed: the submission is refused with an explicit error explaining that session feedback is
    present and workspace files must be modified to address feedback before submitting or fail must
    be called, and the alpha-role target node for unit widget stays dirty.
+
+## Scenario 9 — Refusing unmodified file target submission when in-band feedback is present
+
+Given: role alpha is not an auditor role; `/ws/alpha_scope_a/parts/widget/widget_spec.md` is a
+read-write file for alpha inside the active directory scope patterns, carries unacted in-band
+`FEEDBACK:` metadata, and has not been modified since its baseline `code_hash` in `.autofab/pull_manifest.json`.
+
+1. The agent submits `/ws/alpha_scope_a/parts/widget/widget_spec.md` as the alpha-role file target
+   with no change summary (or with a change summary).
+   Observed: the submission is refused with an explicit error containing `"use bin/reject instead"`,
+   and the canonical repository file and feedback header remain untouched.
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z

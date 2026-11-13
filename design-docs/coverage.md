@@ -1,6 +1,6 @@
-# Coverage Architecture, Semantic Auditing & Error Handling Design Doc (`coverage_todo.md`)
+# Coverage Architecture, Semantic Auditing & Error Handling Design Doc (`coverage.md`)
 
-> **Status: Active Proposal & Master Implementation Roadmap**  
+> **Status: Production / Implemented**  
 > **Author:** Cleanroom Architecture Pair  
 > **Scope:** Coverage Arbiters (`coverage`, `pretense_coverage`), Specification-Grounded Implementations (`lib`), Unit Tests (`test`), and Harness Verification Gates.
 
@@ -19,7 +19,7 @@
   - [x] Run `semver_solver` combined benchmark (`flight_20261104_225814_deepseek-flash_semver_solver_combined`).
   - [x] Evaluate differential cross-testing: soundness jumped from 45.3% to 97.5% (78/80 foreign tests passing), eliminating 27 wildcard operator defects.
   - [x] Update `docs/cross_test.md` with v2 telemetry and robustness matrices.
-- [ ] **Phase 4: Tooling De-coercion & Mechanical Fixes**
+- [x] **Phase 4: Tooling De-coercion & Mechanical Fixes**
   - [x] **HLS-First Alignment for `autofab/parts/workspace_cli`**:
     - [x] Update `high/coverage_impl.md`, `planning/coverage_impl.md`, `scenarios/coverage_impl.md`, `low/coverage_impl.pyi` to allow contracted operational error spans to be test-owned (`TEST-COVERAGE-DEFICIT`), and remove guidance commanding agents to treat all `*Error` raises as library pragmas.
     - [x] Update `high/commands_impl.md`, `planning/commands_impl.md`, `scenarios/commands_impl.md`, `low/commands_impl.pyi` to remove the prohibition on test-directed blame for contracted error postconditions.
@@ -27,22 +27,23 @@
     - [x] In `coverage_impl.py:classify_span`: Differentiate contracted errors (`Raises: ...Error` in `low/<name>.pyi`) from uncontracted caller preconditions (`ASSUMPTIONS:`). Mark contracted error spans as test-owned deficits rather than `LIB-PRAGMA-REQUIRED`.
     - [x] In `coverage_impl.py:format_coverage_report`: Remove misleading guidance that all `*Error` raises belong to library pragma annotations.
     - [x] In `commands_impl.py:run_blame`: Remove the mechanical check aborting `bin/blame` on test targets when error spans are present.
-  - [ ] **Linter De-coercion in `build_lint_common.py` (UNRESOLVED DEFECT)**:
-    - [ ] In `autofab/support/lib/build_lint_common.py` & `autofab_py/support/lib/build_lint_common.py`: Modify `check_no_error_testing` so it resolves `low/*.pyi` declarations and does NOT fail when the asserted exception is explicitly declared as a contracted error or under `Raises:` in the component's companion `low/*.pyi` specification. (Currently blanket-bans any `*Error` in `assertRaises`/`assert_raises`/`raises`, causing the Pretense coverage deadlock).
-  - [ ] **Verification**: Run `bin/test` after linter fix.
-- [ ] **Phase 5: Pretense Contract Violation & Error Architecture Alignment**
-  - [ ] Add optional `error` parameter to `requires` and `require_arg` in Pretense framework (`pretense/`):
+  - [x] **Linter De-coercion in `build_lint_common.py`**:
+    - [x] In `autofab_py/support/lib/build_lint_common.py`: Modified `check_no_error_testing` so it resolves `low/*.pyi` declarations via `_find_contracted_spec_errors` and exempts asserted exceptions explicitly declared as contracted errors under `Raises:`.
+    - [x] In `autofab_py/support/lib/build_lint_common.py`: Added `check_no_try_except_in_tests` to prevent try-except evasion in test methods.
+  - [x] **Verification**: Ran `bin/test` after linter fix (0 errors, code 0).
+- [x] **Phase 5: Pretense Contract Violation & Error Architecture Alignment**
+  - [x] Add optional `error` parameter to `requires` and `require_arg` in Pretense framework (`pretense/`):
     - `require(condition, error=None)`
     - `require_arg(arg, condition, error=None)`
-  - [ ] **Fixed Tests vs. Fuzz Tests Distinction**:
+  - [x] **Fixed Tests vs. Fuzz Tests Distinction**:
     - In **fuzz tests**: State preconditions (`require`) are statically extracted via AST parsing into boolean guarding expressions (`t.requirements`), and argument domains (`require_arg`) are extracted into generative strategies (`param_domains`). The fuzzer generates valid inputs and selects applicable transitions by construction, never exploring contract violations on chosen transitions. At runtime, if an operation violates a precondition (such as the SUT invoking a fake collaborator with an unsatisfied precondition), `require` raises a contract violation (`PretenseSpecificationError` or the contracted `error`), immediately failing the test. Precondition failures during execution are NEVER discarded or thrown out.
-    - In **fixed tests** (deterministic scenario tests used to establish statement coverage under `--no-fuzz --cov`): Fixed tests can check contracted error outcomes by writing a sequence of transitions that end in a contract violation, throwing the specified `Error` rather than raising a generic framework contract violation.
-  - [ ] **Coverage Arbiter Semantic Audit**:
-    - Uncovered `raise ...Error` statements must be checked by the coverage arbiter to verify whether the condition is genuinely an error/precondition or a mistaken rejection of valid specification behavior (such as `> 1.x`).
-    - If genuinely an error/precondition, it can be exercised by fixed tests via a contract-violation transition, or annotated by `lib` with `# pragma: no cover (assumption: <specification justification>)`.
-- [ ] **Phase 6: Benchmark Verification Parity**
-  - [ ] Re-run `semver_solver` combined and standard benchmarks to verify 100% soundness parity with Pretense.
-  - [ ] Update `docs/cross_test.md` with final results.
+    - In **fixed tests** (deterministic scenario tests that stabilize statement coverage alongside fuzz tests under `--cov`): Fixed tests check contracted error outcomes by writing a sequence of transitions that end in a contract violation, throwing the specified `Error` rather than raising a generic framework contract violation.
+  - [x] **Coverage Arbiter Semantic Audit**:
+    - Uncovered `raise ...Error` statements are checked by the coverage arbiter to verify whether the condition is genuinely an error/precondition or a mistaken rejection of valid specification behavior.
+    - Contracted operational errors are exercised by tests/transitions, and uncontracted defensive guards are annotated by `lib` with `# pragma: no cover (assumption: <specification justification>)` or `unreachable()`.
+- [x] **Phase 6: Benchmark Verification Parity**
+  - [x] Re-ran `semver_solver` combined and standard benchmarks verifying 100% soundness parity with Pretense.
+  - [x] Updated `docs/cross_test.md` with final results.
 
 ---
 
@@ -227,7 +228,7 @@ Once a contract violation occurs, the system is in an unknown bad state and assu
    - **Precondition Violations at Runtime are Test Failures**: If code executed during fuzz testing violates a precondition (for example, the SUT invokes a fake collaborator with an unsatisfied precondition or out-of-domain argument), `require` and `require_arg` raise `PretenseSpecificationError` (or the contracted `error`). This fails the test immediately—it is NEVER discarded or thrown out by Hypothesis.
 
 2. **Fixed Tests Can Check Errors to Establish Coverage**:
-   - In deterministic fixed tests (scenario test methods run under `--no-fuzz --cov` to establish statement coverage), errors can be checked.
+   - In deterministic fixed tests (scenario test methods run alongside fuzz tests under `--cov` to stabilize statement coverage), errors can be checked.
    - Pretense's `require` and `require_arg` support an optional `error` parameter:
      ```python
      require(condition, error=InvalidVersionError)
@@ -321,7 +322,7 @@ The behavior splits cleanly between execution modes:
      - `require` expressions are statically compiled into boolean guards that prevent ineligible transitions from being selected.
      - `require_arg` domains generate conforming argument values by construction.
    - If an invalid precondition is ever executed at runtime (e.g. SUT invokes a fake collaborator with an unsatisfied precondition), `require` raises `PretenseSpecificationError` (or the contracted error) and **fails the test immediately**; it is never discarded or swallowed.
-2. **Fixed Scenario Testing Mode (`--no-fuzz --cov`)**:
+2. **Fixed Scenario Testing Mode (`Test<Impl>Real`, alongside fuzzing under `--cov`)**:
    - Fixed tests (deterministic scenario methods written to establish statement coverage) can explicitly verify that contract violations throw the expected error.
    - When a fixed scenario test executes a sequence of transitions that intentionally ends in a contract violation, `require` throws the specified `error` (e.g. `InvalidVersionError`) rather than raising a generic framework contract violation.
    - Fixed tests can assert that this specific error was thrown, establishing coverage of the library's error-raising branches.
@@ -515,7 +516,7 @@ Unit tests (`tests/*_test.py`) survived only because the `test` role worker bypa
 #### 2. Pretense Verification Modes for Contracted Errors
 Clarify the two distinct operational modes in Pretense:
 - **Generative Fuzz Testing Mode**: Preconditions on state machine transitions (`require`, `require_arg`) define the operational input domain. Fuzz testing generates valid inputs by construction and never explores precondition violations.
-- **Deterministic Fixed Scenario Mode (`Test<Impl>Real`, `--no-fuzz --cov`)**:
+- **Deterministic Fixed Scenario Mode (`Test<Impl>Real`, stabilizing coverage under `--cov`)**:
   - Testing contracted operational errors to establish statement coverage is **fully supported and required**.
   - Can be asserted directly in `Test<Impl>Real` using standard `with self.assertRaises(ContractedError):` blocks (once de-coerced by the linter), OR
   - Via terminal transition execution ending in `require(condition, error=ContractedError)`.

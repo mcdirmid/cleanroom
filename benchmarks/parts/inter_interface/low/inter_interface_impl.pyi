@@ -37,13 +37,12 @@ class Allocator(inter_interface.Allocator):
             amount: Positive integer amount to allocate.
 
         Raises:
-            inter_interface.AllocationLimitError: If amount is non-positive.
-            vault.InsufficientFundsError: If amount exceeds available vault balance.
+            inter_interface.AllocationLimitError: If amount is non-positive or exceeds available vault balance.
             vault.VaultInactiveException: If the collaborator vault is inactive.
 
         GROUNDING:
         - Validates amount > 0, raising inter_interface.AllocationLimitError otherwise.
-        - Delegates withdrawal to vault.Vault.withdraw(amount).
+        - Delegates withdrawal to vault.Vault.withdraw(amount), translating vault.InsufficientFundsError into inter_interface.AllocationLimitError.
         - Increments self._allocated by amount.
         """
         ...

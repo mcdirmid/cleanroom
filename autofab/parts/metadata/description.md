@@ -12,8 +12,8 @@ According to the high-level specifications in [`autofab/parts/metadata/high/`](f
 
 - [`src_metadata.md`](file:///Users/seanmcdirmid/projects/cleanroom/autofab/parts/metadata/high/src_metadata.md), [`src_metadata_ext.md`](file:///Users/seanmcdirmid/projects/cleanroom/autofab/parts/metadata/high/src_metadata_ext.md), & [`src_metadata_impl.md`](file:///Users/seanmcdirmid/projects/cleanroom/autofab/parts/metadata/high/src_metadata_impl.md): Defines the in-band metadata grammar, parser, SHA-256 code hasher, and in-place file rewriter.
   - Recognizes comment block delimiters across formats: HTML comments (`<!-- ... -->`) in Markdown files, and line hash comments (`# ...`) in Python, Starlark, and shell files.
-  - Extracts fields: `LAST_CLEANED`, `LAST_CHANGED`, `CHANGE` summary, `CODE_HASH` (the first 12 hex characters of the SHA-256 digest of the stripped code body), `FEEDBACK` entries, `DIRTY` tags, and role audit stamps (e.g. `SPEC_QA_AUDIT`).
-  - Evaluates file modification state by comparing the current code hash against the recorded code hash.
+  - Extracts fields: `LAST_CLEANED`, `LAST_CHANGED`, `CHANGE` summary, `FEEDBACK` entries, `DIRTY` tags, and role audit stamps (e.g. `SPEC_QA_AUDIT`).
+  - Evaluates file modification state by comparing the current code hash (the first 12 hex characters of the SHA-256 digest of the stripped code body) against the baseline code hash recorded in the role workspace's `.autofab/pull_manifest.json`.
   - Performs lossless in-place rewriting below shebangs, encoding lines, or markdown frontmatter delimiters, preserving all code formatting.
 - [`src_storage_impl.md`](file:///Users/seanmcdirmid/projects/cleanroom/autofab/parts/metadata/high/src_storage_impl.md): Realizes the persistent implementation of `node_storage` and `dag_storage`. It resolves declared target source files against workspace roots and evaluates node dirtiness dynamically:
   - A node is dirty if its source file is missing (generating a prompt to implement it).

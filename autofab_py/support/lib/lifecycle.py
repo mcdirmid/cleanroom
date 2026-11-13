@@ -1034,6 +1034,7 @@ class LifecycleTestCase(unittest.TestCase):
         # 1. Resolve target module or class under test
         target_mod: Optional[Any] = None
         target_cls: Optional[type[Any]] = None
+        extra_impl_mods: list[Any] = []
 
         explicit_target = getattr(self.__class__, "target", None)
         if explicit_target is not None:
@@ -1048,18 +1049,21 @@ class LifecycleTestCase(unittest.TestCase):
             elif hasattr(explicit_target, "__name__"):
                 target_mod = explicit_target
 
-        if target_mod is None and target_cls is None:
-            test_mod_name = self.__class__.__module__
-            test_mod = sys.modules.get(test_mod_name)
-            if test_mod is not None:
-                for val in list(test_mod.__dict__.values()):
-                    if isinstance(val, type):
-                        v_mod = getattr(val, "__module__", "")
-                        if ".lib." in v_mod and (v_mod.endswith("_impl") or v_mod.endswith("_asm")):
-                            cand_mod = sys.modules.get(v_mod)
-                            if cand_mod is not None:
+        test_mod_name = self.__class__.__module__
+        test_mod = sys.modules.get(test_mod_name)
+        if test_mod is not None:
+            for val in list(test_mod.__dict__.values()):
+                if isinstance(val, type):
+                    v_mod = getattr(val, "__module__", "")
+                    if ".lib." in v_mod and (v_mod.endswith("_impl") or v_mod.endswith("_asm")):
+                        cand_mod = sys.modules.get(v_mod)
+                        if cand_mod is not None:
+                            if target_mod is None and target_cls is None:
                                 target_mod = cand_mod
-                                break
+                            elif cand_mod is not target_mod and cand_mod not in extra_impl_mods:
+                                extra_impl_mods.append(cand_mod)
+
+        if target_mod is None and target_cls is None:
 
             if target_mod is None and test_mod_name.endswith("_test"):
                 target_stem = test_mod_name[:-5]
@@ -1157,11 +1161,15 @@ class LifecycleTestCase(unittest.TestCase):
             if target_cls is None and len(mod_singletons) == 1:
                 target_cls = mod_singletons[0]
 
-        # 2. Register target singletons into registry
+        # 2. Register target and imported collaborator singletons into registry
         if target_mod is not None and getattr(target_mod, "__name__", "") != self.__class__.__module__:
             self.registry.register_module(target_mod)
         elif target_cls is not None:
             self.registry.register_singleton(target_cls)
+
+        for extra_mod in extra_impl_mods:
+            if getattr(extra_mod, "__name__", "") != self.__class__.__module__:
+                self.registry.register_module(extra_mod)
 
         # 3. Discover and wire @fake declarations
         self._wire_fakes()

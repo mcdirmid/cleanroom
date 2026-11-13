@@ -441,6 +441,11 @@ To ensure zero regressions across existing production modules (`autofab/parts/`,
    - New or refactored tests can immediately adopt `LifecycleTestCase`.
 3. **Preservation of Dynamic Phases**:
    - All dynamic lifecycle management functions (`enter_phase`, `begin_phase`, `create_child`, `get_active_scope`) remain completely unchanged and fully supported.
+4. **Multi-Module Collaborator Auto-Registration in `LifecycleTestCase`**:
+   - `LifecycleTestCase.setUp()` registers the primary `*_impl` / `*_asm` module *and* any additional `.lib.*_impl` / `*_asm` collaborator modules imported into the test module (before `_wire_fakes()`), so Pretense `Test<Impl>Real` suites can access concrete collaborator singletons via `get_singleton(...)` without manual `LifecycleRegistry` or `__initialize__` calls.
+5. **Collaborator Auto-Registration in `compile_hypothesis_test_case` & `setUp()` Ordering Lint**:
+   - `compile_hypothesis_test_case` (`pretense/parts/pretense/lib/pretense_impl.py`) auto-registers imported `*_impl` and `*_asm` modules from `sut_factory.__globals__` into `get_default_registry()` before calling `sut_factory()`, matching `LifecycleTestCase.setUp()` and eliminating manual transitive singleton registration in `make_sut()`.
+   - `pretense_lint.py` enforces `PRE_LINT_SETUP_SUPER_ORDER`, rejecting `get_singleton(...)` or `sut(...)` calls placed before `super().setUp()` inside `LifecycleTestCase.setUp()`.
 
 ---
 

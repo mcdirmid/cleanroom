@@ -83,11 +83,24 @@
     - [Cost-Efficiency Dynamics](#cost-efficiency-dynamics)
     - [Empirical Multi-Component & Cross-Interface Telemetry (`task_queue`, `inter_interface`, `multi_interface`)](#empirical-multi-component--cross-interface-telemetry-task_queue-inter_interface-multi_interface)
 13. [Comparative Evolution Matrix](#13-comparative-evolution-matrix)
-14. [Combined Verification Methodology (`--method combined`) [TODO]](#14-combined-verification-methodology---method-combined-todo)
+14. [Combined Verification Methodology (`--method combined`) [DONE]](#14-combined-verification-methodology---method-combined-done)
     - [The Complementary Verification Thesis](#the-complementary-verification-thesis)
     - [Benchmark Runner CLI Interface (`--method`)](#benchmark-runner-cli-interface---method)
     - [DAG Role Topology & Dual-Branch Convergence](#dag-role-topology--dual-branch-convergence)
     - [Verification Gate & Artifact Archival](#verification-gate--artifact-archival)
+15. [Architectural Roadmap & Future Work](#15-architectural-roadmap--future-work)
+    - [TODO 1 [DONE]: Cross-Collaborator Fake Injection & Multi-Component Constraint Testing During Interface Fake Fuzzing](#todo-1-done-cross-collaborator-fake-injection--multi-component-constraint-testing-during-interface-fake-fuzzing)
+    - [TODO 2 [DONE]: Quantitative Code & Statement Coverage on Synthesized Fakes in Interface Verification](#todo-2-done-quantitative-code--statement-coverage-on-synthesized-fakes-in-interface-verification)
+    - [TODO 3 [DONE]: Strict Ban on `super()` and `assert` for Inner Transitions in State Machines](#todo-3-done-strict-ban-on-super-and-assert-for-inner-transitions-in-state-machines)
+    - [TODO 4 [DONE]: Compile Support Libraries (`support/lib/*.py`) to `.pyc` to Prevent Subagent Inspection](#todo-4-done-compile-support-libraries-supportlibpy-to-pyc-to-prevent-subagent-inspection)
+    - [TODO 5 [DONE]: Virtually Contracted Operational Exceptions via `require_env`, Collaborator State Binding, and Strict Ban on `raise`](#todo-5-done-virtually-contracted-operational-exceptions-via-require_env-collaborator-state-binding-and-strict-ban-on-raise)
+    - [TODO 6 [DONE]: Strict Ban on `Domain.any()` and Mandatory Typed Parameter Domains](#todo-6-done-strict-ban-on-domainany-and-mandatory-typed-parameter-domains)
+    - [TODO 7 [DONE]: Dynamic Argument-to-State Preconditions (`Domain.not_in`) and Generative Decoupling](#todo-7-done-dynamic-argument-to-state-preconditions-domainnot_in-and-generative-decoupling)
+    - [TODO 8 [DONE]: Comparative Source-of-Truth Arbitration in Pretense QA (`pretense_qa.md`)](#todo-8-done-comparative-source-of-truth-arbitration-in-pretense-qa-pretense_qamd)
+    - [TODO 9 [DONE]: Tooling Ergonomics, Feedback Deduplication, and Blame Facet Relaxation](#todo-9-done-tooling-ergonomics-feedback-deduplication-and-blame-facet-relaxation)
+    - [TODO 10 [DONE]: Multi-Round Reachability Decision Model for Coverage Arbiters (`pretense_coverage.md`)](#todo-10-done-multi-round-reachability-decision-model-for-coverage-arbiters-pretense_coveragemd)
+    - [TODO 11 [TODO]: Enforced Env State Declarations, Mandatory `self.bind`, and `_ext` Termination](#todo-11-todo-enforced-env-state-declarations-mandatory-selfbind-and-_ext-termination)
+    - [TODO 12 [DONE]: Combined Fixed + Fuzz Coverage Measurement on `lib/*.py`](#todo-12-done-combined-fixed--fuzz-coverage-measurement-on-libpy)
 
 ---
 
@@ -420,6 +433,8 @@ An interface state machine is an **epistemic shadow** of the implementation. It 
 2. **Opaque Evictions & Non-Deterministic Behaviors**: If an implementation makes an internal state decision (such as evicting an arbitrary cache entry) and that decision is not communicated in the return value:
    - The interface state machine cannot know which key was evicted.
    - Subsequent method preconditions cannot gate on key presence (`requires(key in self.state)` is prohibited).
+3. **Prohibition of SUT Method Calls in Interface State Machines**: An interface state machine must never invoke `sut(TargetClass).<method>()` or call any target methods. In interface state machines, `inner_<method>` exists purely to compute abstract fake return values from `self.state` (or return `None`). Calling target methods belongs **exclusively** to the implementation pseudo-state machine override (`<Impl>PseudoStateMachine`). If an interface state machine's `inner_<method>` or transition calls `sut(TargetClass).<method>()`, synthesizing a fake (`Fake<Target> = synthesize_fake(<Target>StateMachine)`) causes an **infinite mutual recursion loop** (`RecursionError`): `Fake<Target>.<method>` delegates to `transition(TargetClass.<method>)` $\to$ `self.inner_<method>()` $\to$ `sut(TargetClass).<method>()` $\to$ `Fake<Target>.<method>()`. In interface state machines, `sut(TargetClass)` is permitted **strictly within `assert` statements** to check observable properties/invariants on synthesized fakes.
+4. **Prohibition of Raising Exceptions in Interface Inner Transitions**: In interface state machines, `inner_<method>` exists strictly to compute fake return values from `self.state` (or return `None`). It must **never raise exceptions**. Contract errors (`*Error`) represent invalid inputs gated out of fuzzing via `require(...)`/`require_arg(...)` and tested in scenario tests via `self.checked.violating(ExpectedError)`. Operational postcondition exceptions (`*Exception`) are synthesized and asserted via `with raises(ExpectedException):` around the inner transition inside the outer transition. Allowing `inner_<method>` to raise exceptions breaks synthesized fake execution and circumvents contracted transition routing.
 
 ### Principle 4: Universal Unification into Native Python `assert` (Single-Argument Enforcement)
 All postconditions, pre-state invariant checks, and internal assertions are unified into native Python `assert`:
@@ -447,12 +462,14 @@ Synthesized fakes (`Fake<Iface> = synthesize_fake(<Iface>StateMachine)`) impleme
 - When executing in Fake mode, `sut(TargetClass)` resolves to the active `Fake<Target>` instance.
 - When `assert sut(LRUCache).size == len(self.state.items)` runs on a fake, it queries `fake.size` and verifies that the fake's internal state machine faithfully updates its observable properties.
 
-### Principle 7: Interface-Level Fake Property Fuzzing
+### Principle 7: Interface-Level Fake Property Fuzzing & Local Verification
 Because fakes execute under the full contract of `assert`, the interface component (`pretense/<name>_pretense.py`) includes **Hypothesis property fuzzing of the synthesized Fake**:
 ```python
 FakeLRUCacheFuzzTest = compile_hypothesis_test_case(LRUCacheStateMachine, FakeLRUCache)
 ```
 Fuzzing explores thousands of random transition sequences against `Fake<Target>`, guaranteeing that downstream components receive a certified, fully verified in-memory fake.
+
+Because interface state machines are self-contained and test only the synthesized fake (with no `lib/*.py` implementation file involved), no downstream `pretense_qa` auditor role is required. Instead, local checking (`bin/check_files` via `verify_template`) directly executes `uv run pretense` on interface modules, verifying `Test<Target>Fake` and `Fake<Target>FuzzTest` before submission. Real implementation testing and coverage audits belong strictly to implementation components via downstream `pretense_qa` and `pretense_coverage`.
 
 ### Principle 8: Pre-State Snapshots & Differentials via Inner Transitions
 Many formal postconditions are state differentials ($\Delta = \text{new} - \text{old}$):
@@ -484,7 +501,7 @@ The implementation layer is termed an **Implementation Pseudo State Machine** (`
 - Shares `<Iface>State` directly.
 - Contains **zero `require_arg` statements**; all parameter domains and strategies are inherited from the interface state machine (`PN_IMPL_NO_REQUIRE_ARG`).
 - Does **never mutate `self.state` directly** (`PN_IMPL_NO_STATE_MUTATION`). When an implementation pseudo state machine transition executes, domain constraints, preconditions, and model state updates are inherited from the parent interface state machine, invoking the overridden inner transition directly through standard method polymorphism without onion wrappers.
-- Overrides `inner_<method>(self, *args)` to invoke the concrete target and return the real return value:
+- Overrides `inner_<method>(self, *args)` to invoke the concrete target and return the real return value: invoking concrete SUT methods belongs **exclusively** here. Interface state machines must never call SUT methods in `inner_<method>` (causes infinite mutual recursion with synthesized fakes):
 ```python
 class LRUCacheImplPseudoStateMachine(LRUCacheStateMachine):
     def inner_put(self, key: str, value: Any) -> Any:
@@ -595,11 +612,10 @@ When a concrete component implements multiple interfaces (e.g. `multi_interface_
 3. **Static AST Linter Enforcement (`[PRE_LINT_MULTI_INTERFACE_INHERITANCE]`)**: Linters verify that the implementation pseudo-state machine inherits all implemented interface state machines declared in `implements:`.
 4. **Interleaved Stateful Fuzzing**: `compile_hypothesis_test_case` discovers transitions from all inherited base classes in MRO order. Hypothesis randomly interleaves operations across both interfaces against the single concrete implementation instance.
 
-### Principle 19: Interface Fixed Conformance Testing (`Test<Target>Fake`)
+### Principle 19: Interface Conformance Testing (`Fake<Target>FuzzTest` & `Test<Target>Fake`)
 Interface pretense modules (`pretense/<name>_pretense.py`) must provide a verified in-memory fake for downstream consumers. To guarantee that synthesized fakes execute all operational and seeding transitions correctly:
-1. **Mandatory Fixed Fake Test Suite**: Interface modules define `Test<Target>Fake(unittest.TestCase)` exercising 100% of declared `@transition` and `@transition.seeding` methods against `make_<target>_fake()`.
-2. **Linter Enforcement (`[PRE_LINT_INTERFACE_TRANSITION_COVERAGE]`)**: `pretense_lint.py` inspects `Test<Target>Fake` and verifies that every transition and seeding transition is invoked. If a transition is missing, the linter emits a failure:
-   `error: [PRE_LINT_INTERFACE_TRANSITION_COVERAGE] interface transition 'TargetStateMachine.<method>' is not covered in 'Test<Target>Fake'. Advice: Ensure its required conditions can be properly reached by existing transitions, or add seeding transitions if coverage is difficult.`
+1. **Fuzz-First Interface Coverage (`Fake<Target>FuzzTest` + `--cov`)**: `Fake<Target>FuzzTest = compile_hypothesis_test_case(...)` executes under `--cov` during `bin/check_files`, verifying that all code in the interface state machine is covered dynamically.
+2. **Optional Fixed Fake Tests (`Test<Target>Fake`)**: `Test<Target>Fake(unittest.TestCase)` is limited to transitions, seeding transitions, or edge branches not covered by `Fake<Target>FuzzTest`. `[PRE_LINT_INTERFACE_TRANSITION_COVERAGE]` in `pretense_lint.py` only requires `Test<Target>Fake` covering 100% of transitions statically when `compile_hypothesis_test_case` is absent.
 3. **Prohibition of `call_target` in Interface Modules (`[PRE_LINT_NO_CALL_TARGET_IN_INTERFACE]`)**: Interface state machines delegate to inner transitions (`ret = self.inner_<name>(...)`). `call_target` is reserved exclusively for implementation pseudo-state machines.
 
 ### Principle 20: Base Interface Transition Delegation & Method Polymorphism
@@ -735,9 +751,11 @@ During benchmarking of `semver_solver` under `combined` methodology (`benchmark_
 
 ### Reachability Rule: Contracted Errors vs. Uncontracted Guards
 
+Statement coverage on `lib/*.py` is measured across **both fixed scenario tests (`Test<Impl>Real`) and Hypothesis fuzz tests** (`uv run pretense ... --cov`, without `--no-fuzz`). While the stochastic nature of fuzzing can cause which nominal branches are covered to vary slightly from run to run, fixed scenario tests stabilize coverage over time: whenever a branch is missed or fluctuates out of coverage, `pretense_coverage` blames `pretense` to add a deterministic fixed scenario test covering it.
+
 When uncovered branches appear in `lib/*.py`:
-1. **Contract Violations with Contracted Errors (Must Be Reachable)**:
-   - A contract violation that has a contracted `*Error` in `low/*.pyi` **must be reachable** under fixed testing. Otherwise, there is no point in throwing an error.
+1. **Contract Violations with Contracted Errors (Must Be Reachable via Fixed Tests)**:
+   - A contract violation that has a contracted `*Error` in `low/*.pyi` **must be reachable** under fixed scenario testing (`checked.violating(...)`), because fuzz testing never explores contract violations by construction. Otherwise, there is no point in throwing an error.
    - The coverage arbiter requires the fixed scenario suite to reach and verify this error branch.
 2. **Contract Violations Without Contracted Errors (Assumed Unreachable)**:
    - Other defensive guards without contracted errors (caller precondition checks, internal consistency guards) may or may not be physically reachable.
@@ -896,7 +914,7 @@ Authored alongside the interface specification:
 2. `StateMachine[<Iface>State]` defining 1:1 transitions with `require_arg`, `requires`, pre-execution `assert`, and post-call `assert`.
 3. Seeding transitions (`@transition.seeding`) for populating model state or injecting failure states dynamically.
 4. Fake synthesis factory: `make_<iface>_fake = synthesize_fake(<Iface>StateMachine)`.
-5. **Mandatory Interface Fixed Test Suite** (`Test<Iface>Fake(unittest.TestCase)`), exercising 100% of declared `@transition` and `@transition.seeding` methods against the synthesized fake double (`PRE_LINT_INTERFACE_TRANSITION_COVERAGE`). Real SUT tests belong exclusively in the implementation pretense module.
+5. **Optional Interface Fixed Tests** (`Test<Iface>Fake(unittest.TestCase)`), limited to transitions, seeding transitions, or branches not covered by `Fake<Iface>FuzzTest` (`PRE_LINT_INTERFACE_TRANSITION_COVERAGE` only mandates 100% static fixed-test coverage when `compile_hypothesis_test_case` is absent). Real SUT tests belong exclusively in the implementation pretense module.
 6. **Compiled Hypothesis Fake Fuzz Test** (`Fake<Iface>FuzzTest = compile_hypothesis_test_case(...)`), verifying the fake under all contract assertions.
 
 ### Implementation Pseudo State Machine (`<name>_impl_pretense.py`)
@@ -914,9 +932,9 @@ Authored alongside the library implementation:
 Fakes can be initialized into non-default states for unit test priming or fuzz exploration:
 ```python
 @transition.seeding
-def seed_cache(self, capacity: int, initial_items: dict[str, Any]) -> None:
+def seed_cache(self, capacity: int, initial_items: dict[str, str]) -> None:
     require_arg(capacity, Domain.integers(min_value=1), preferred=[100])
-    require_arg(initial_items, Domain.mapping_of(Domain.text(), Domain.any()))
+    require_arg(initial_items, Domain.mapping_of(Domain.text(), Domain.text()))
     self.state.capacity = capacity
     self.state.items = OrderedDict(list(initial_items.items())[:capacity])
 ```
@@ -1088,9 +1106,9 @@ class LRUCacheStateMachine(StateMachine[LRUCacheState]):
         super().__init__(state=state or LRUCacheState())
 
     @transition.seeding
-    def seed(self, capacity: int, items: dict[str, Any]) -> None:
+    def seed(self, capacity: int, items: dict[str, str]) -> None:
         require_arg(capacity, Domain.integers(min_value=1), preferred=[100])
-        require_arg(items, Domain.mapping_of(Domain.text(), Domain.any()))
+        require_arg(items, Domain.mapping_of(Domain.text(), Domain.text()))
         self.state.capacity = capacity
         self.state.items = OrderedDict(list(items.items())[:capacity])
 
@@ -1109,9 +1127,9 @@ class LRUCacheStateMachine(StateMachine[LRUCacheState]):
         return None
 
     @transition(LRUCache.get)
-    def get(self, key: str, default: Optional[Any] = None) -> Any:
+    def get(self, key: str, default: Optional[str] = None) -> Optional[str]:
         require_arg(key, Domain.text())
-        require_arg(default, Domain.any(), preferred=[None])
+        require_arg(default, Domain.optional(Domain.text()), preferred=[None])
         assert sut(LRUCache).size == len(self.state.items)
         assert sut(LRUCache).is_empty == (len(self.state.items) == 0)
         old_hits = sut(LRUCache).hits
@@ -1130,13 +1148,13 @@ class LRUCacheStateMachine(StateMachine[LRUCacheState]):
             assert sut(LRUCache).hits == old_hits
         return ret
 
-    def inner_get(self, key: str, default: Optional[Any] = None) -> Any:
+    def inner_get(self, key: str, default: Optional[str] = None) -> Optional[str]:
         return self.state.items.get(key, default)
 
     @transition(LRUCache.put)
-    def put(self, key: str, value: Any) -> Optional[Tuple[str, Any]]:
+    def put(self, key: str, value: str) -> Optional[Tuple[str, str]]:
         require_arg(key, Domain.text())
-        require_arg(value, Domain.any())
+        require_arg(value, Domain.text())
         assert sut(LRUCache).size <= sut(LRUCache).capacity
         old_evictions = sut(LRUCache).eviction_count
         evicted = self.inner_put(key, value)
@@ -1256,9 +1274,9 @@ The linter enforces:
 - `[PRE_LINT_NO_LAMBDA]`: Prohibits lambdas in transition definitions.
 - `[PRE_LINT_NO_PRE_SEEDING]`: Prohibits loops (`for`, `while`), mutating method calls, and non-blank state initialization inside `make_sut()`. SUT and collaborator fakes must start in default initial states; state transitions occur via seeding transitions or nominal method calls.
 - `[PRE_LINT_NO_STATE_POKING]`: Prohibits direct mutation or mutating calls on `.state` or `self.state` in test methods.
-- `[PRE_LINT_NO_CALL_TARGET_IN_INTERFACE]`: Prohibits `call_target` in interface state machines (`call_target` belongs exclusively to implementation pseudo-state machines).
+- `[PRE_LINT_NO_CALL_TARGET_IN_INTERFACE]`: Prohibits `call_target`, calling `sut(...)` inside `inner_<method>`, raising exceptions in `inner_<method>`, and calling SUT methods outside `assert` statements in interface state machines (invoking the method under test on the SUT belongs exclusively to implementation pseudo-state machines; interface state machines only reference `sut(...)` inside `assert` statements to verify observable properties on fakes).
 - `[PRE_LINT_MULTI_INTERFACE_INHERITANCE]`: Enforces that multi-interface implementation pseudo-state machines inherit all implemented interface state machines declared in HLS `implements:`.
-- `[PRE_LINT_INTERFACE_TRANSITION_COVERAGE]`: Requires interface pretense modules to define `Test<Target>Fake(unittest.TestCase)` exercising 100% of declared `@transition` and `@transition.seeding` methods against the synthesized fake.
+- `[PRE_LINT_INTERFACE_TRANSITION_COVERAGE]`: When `compile_hypothesis_test_case` is absent, requires interface pretense modules to define `Test<Target>Fake(unittest.TestCase)` exercising 100% of declared `@transition` and `@transition.seeding` methods against the synthesized fake; when `Fake<Target>FuzzTest` is present, fixed tests are optional and limited to uncovered branches.
 - `[PRE_LINT_NO_TOP_LEVEL_PROBE]`: Prohibits executing top-level test calls, exploratory scripts, or assertions at module import time.
 - `[PRE_LINT_NO_SKIP]`: Strictly prohibits skipping tests via `@unittest.skip*`, `pytest.skip()`, or `SkipTest`.
 
@@ -1269,7 +1287,7 @@ The linter enforces:
 ### Roles: `pretense`, `pretense_qa`, `pretense_coverage`
 - **`pretense`**: Double-blind author of interface state machines (`<name>_pretense.py`) and implementation pseudo state machines (`<name>_impl_pretense.py`).
 - **`pretense_qa`**: Verifies deterministic scenario tests and bounded Hypothesis fuzzing (`--max-examples=50`).
-- **`pretense_coverage`**: Asserts 100% statement coverage and semantic contract postcondition completeness across `lib/*.py` without blanket `*Error` exclusions. Enforces that contracted operational errors are reachable in fixed scenario tests, while uncontracted caller preconditions are assumed unreachable (annotated with `unreachable()` or `# pragma: no cover (assumption: <reason>)`).
+- **`pretense_coverage`**: Asserts 100% statement coverage and semantic contract postcondition completeness across `lib/*.py` without blanket `*Error` exclusions, measuring coverage across **both fixed scenario tests and Hypothesis fuzz tests** (`uv run pretense ... --cov`, without `--no-fuzz`). While fuzzing randomness may cause borderline nominal coverage to shift slightly between runs, fixed scenario tests stabilize coverage over time when missed branches are flagged. Enforces that contracted operational errors are reachable in fixed scenario tests, while uncontracted caller preconditions are assumed unreachable (annotated with `unreachable()` or `# pragma: no cover (assumption: <reason>)`).
 
 ### Symmetrical Blame Attribution
 The QA arbiter evaluates defects symmetrically:
@@ -1333,7 +1351,7 @@ These benchmarks demonstrate that Pretense reliably scales from single-component
 | **Impl State Machine** | Duplicate `<Impl>State` with parallel syncing | **Implementation Pseudo State Machine (Zero state)** |
 | **Contract Invariants** | Ad-hoc `ensure(...)` crashing on dummy contexts | **Universal native `assert` on SUT and Fake** |
 | **Fake Verification** | Untested synthesized fake | **Interface-level Hypothesis fake fuzzing** |
-| **Interface Fixed Tests** | None (tests only in impl) | **Mandatory `Test<Target>Fake` with 100% transition coverage** |
+| **Interface Fixed Tests** | None (tests only in impl) | **Optional `Test<Target>Fake` (for branches missed by `Fake<Target>FuzzTest` + `--cov`)** |
 | **Dead-Ends & Coverage** | Unreachable fallbacks cause test failures | **`unreachable("reason")` + `# pragma: no cover (assumption: <reason>)` (No blanket regex exclusions)** |
 | **Collaborator Testing** | Mock-style proxy interceptors (`as_checked`) | **Dynamic scope (`sut(Collaborator)`) checking Fake state** |
 | **Collaborator Seeding** | Static pre-seeding antipattern in `make_sut()` | **Dynamic `@transition.seeding` via `collaborators` in Hypothesis** |
@@ -1347,9 +1365,9 @@ These benchmarks demonstrate that Pretense reliably scales from single-component
 
 ---
 
-## 14. Combined Verification Methodology (`--method combined`) [TODO]
+## 14. Combined Verification Methodology (`--method combined`) [DONE]
 
-> **Status: TODO (Design complete, implementation pending)**
+> **Status: DONE (Fully implemented in benchmark harness and DAG orchestrator)**
 
 ### The Complementary Verification Thesis
 
@@ -1416,5 +1434,233 @@ flowchart TD
 Upon DAG convergence, the benchmark verification gate (`_VerificationGate`) validates the composite test artifacts:
 1. **Static Analysis (Pyright)**: Validates type integrity across `lib/`, `tests/`, and `pretense/`.
 2. **Unit Test Gate (Pytest)**: Executes `uv run pytest <unit_dir>/tests/` and records test counts and assertion outcomes.
-3. **Pretense Gate (Pretense)**: Executes `uv run pretense <unit_dir>/pretense/ --no-fuzz --cov` to verify state-machine transitions and coverage.
+3. **Pretense Gate (Pretense)**: Executes `uv run pretense <unit_dir>/pretense/ --cov` (running both fixed scenario tests and Hypothesis fuzz tests) to verify state-machine transitions and statement coverage on `lib`.
 4. **Artifact Archival**: Archives `lib_<N>.py`, `test_<N>.py`, and `pretense_<N>.py` under the destination directory tagged with the `-combined` folder suffix.
+
+---
+
+## 15. Architectural Roadmap & Future Work
+
+### TODO 1 [DONE]: Cross-Collaborator Fake Injection & Multi-Component Constraint Testing During Interface Fake Fuzzing
+- **Status**: **DONE** (Implemented in `pretense/parts/pretense/lib/pretense_impl.py`).
+- **Implementation Summary**:
+  - `compile_hypothesis_test_case` in `pretense_impl.py` was updated to inspect foreign collaborator requirements during pure interface fake fuzzing (`Fake<Target>FuzzTest`). When an interface requires foreign collaborators (`sut(CollaboratorClass)` or `sut_state(CollabState)`), the compiler synthesizes dynamic collaborator fakes (`synthesize_fake(collab_type)`) and populates `self.sm.singletons`, `_ACTIVE_SUTS`, and `sut_state`.
+  - Enables cross-collaborator state preconditions and postconditions to observe and mutate collaborator fake state across randomized transitions during pure interface fuzzing.
+- **Context & Problem Statement**: During interface fake fuzzing (`Fake<Target>FuzzTest`), the primary SUT is the synthesized fake itself (`Fake<Target> = synthesize_fake(TargetStateMachine)`). However, when an interface specification imports and expresses constraints on foreign collaborator interfaces (e.g. `sut(CollaboratorClass)` or `sut_state(CollabState)` in multi-component architectures), the foreign collaborator instances resolved during interface fake fuzzing must themselves be synthesized collaborator fakes (`Fake<Collaborator>`).
+- **Target Suite & Benchmarking**: Rigorously test and benchmark this pattern using the `benchmarks/parts/inter_interface` suite (and `multi_interface`).
+- **Requirements**:
+  1. Ensure `compile_hypothesis_test_case` supports injecting registered collaborator fakes during pure interface fuzzing when no concrete implementation or lifecycle registry exists.
+  2. Verify that cross-collaborator state preconditions and postcondition assertions on `sut_state(CollabState)` correctly observe and update collaborator fake state across randomized transitions.
+  3. Validate that seeding transitions on collaborator fakes interleave properly during interface-level fake property fuzzing.
+
+### TODO 2 [DONE]: Quantitative Code & Statement Coverage on Interface State Machines in Interface Verification
+- **Status**: **DONE** (Integrated `--cov` in `autofab_py/autofab_roles.toml` for `pretense` role, scoped strictly to `pretense/<iface>_pretense.py` with fuzzing enabled).
+- **Implementation Summary**:
+  - Added `--cov` flag to the interface pretense verification command in `autofab_py/autofab_roles.toml`.
+  - Updated `pretense_impl.py` so that `--cov` on an interface pretense module measures statement coverage **only for the interface pretense file itself** (`pretense/<iface>_pretense.py`, never `lib/<iface>.py` or any other file), and keeps Hypothesis fuzzing enabled unless `--no-fuzz` is explicitly passed.
+- **Context & Problem Statement**: `pretense_coverage` audits statement coverage on concrete library implementations (`lib/*.py`) during the implementation pipeline (`uv run pretense --no-fuzz --cov`). Interface pretense modules (`pretense/<iface>_pretense.py`), however, have no concrete library implementation to measure against (`lib/<iface>.py` is an abstract interface/stub), yet we still need to ensure that every transition and branch in an interface state machine is reachable during fuzz testing and `Test<Target>Fake` before downstream consumers depend on it.
+- **Requirements**:
+  1. Measure statement coverage strictly on the interface pretense file itself (`pretense/<iface>_pretense.py`) during `bin/check_files` in the `pretense` role—never on `lib/<iface>.py` or any other file.
+  2. Keep Hypothesis fuzzing enabled during interface `--cov` verification so coverage confirms that every transition and branch in the interface state machine is reachable during fuzz testing (alongside `Test<Target>Fake`).
+  3. *(Historical — superseded by TODO 12)* Previously reserved `--no-fuzz --cov` against `lib/*.py` for implementation pretense verification (`pretense_coverage`); implementation coverage now runs with both fixed tests and fuzz tests enabled (`--cov` without `--no-fuzz`).
+
+### TODO 3 [DONE]: Strict Ban on `super()` and `assert` for Inner Transitions in State Machines
+- **Status**: **DONE** (Enforced in `autofab_py/support/lib/pretense_lint.py` via `PRE_LINT_NO_SUPER_IN_IMPL_INNER` and `PRE_LINT_NO_ASSERT_IN_INNER`).
+- **Implementation Summary**:
+  - Implemented AST linter check `check_no_super_in_impl_inner` (`PRE_LINT_NO_SUPER_IN_IMPL_INNER`) prohibiting `super()` in implementation `inner_<method>` overrides.
+  - Implemented AST linter check prohibiting `assert` statements (`PRE_LINT_NO_ASSERT_IN_INNER`) and model state mutations (`self.state`) in interface `inner_<method>` definitions.
+  - Added unit test suite in `autofab_py/support/tests/pretense_lint_test.py` covering all positive and negative AST cases.
+  - Updated `autofab_py/guides/pretense.md` and role prompt templates.
+- **Context & Problem Statement**:
+  - Implementation pseudo-state machines (`<Impl>PseudoStateMachine`) inherit interface state machines (`<Iface>StateMachine`) and override inner transition methods (`inner_<method>`) to delegate directly to the concrete target (`target: TargetClass = sut(TargetClass)` followed by `return target.<method>(...)`). An implementation pseudo-state machine must never invoke `super().inner_<method>(...)`: the inherited interface inner transition is designed exclusively to compute abstract fake return values (or return `None`) for synthesized fakes. Calling `super()` inside an implementation override defeats target delegation, introduces invalid fake return semantics, and risks executing unviable base logic.
+  - Furthermore, `inner_<method>` in an interface state machine has strictly one responsibility: computing the fake return value (or raising a seeded operational exception). It must **never** contain `assert` statements, and must **never** mutate model state (`self.state`). Contract assertions and state machine mutations belong exclusively to the outer `@transition` method, which executes identically whether backed by a fake or a concrete SUT.
+- **Requirements**:
+  1. Add an AST linter rule (`PRE_LINT_NO_SUPER_IN_IMPL_INNER` in `pretense_lint.py`) that strictly prohibits `super()` calls inside `inner_<method>` definitions within implementation pseudo-state machines (`*_impl_pretense.py`).
+  2. Add an AST linter rule (`PRE_LINT_NO_ASSERT_IN_INNER` in `pretense_lint.py`) that strictly prohibits `assert` statements and state mutations inside interface `inner_<method>` definitions (`*_pretense.py`).
+  3. Enforce that implementation `inner_<method>` overrides strictly bridge to the SUT via `sut(TargetClass).<method>(...)` and return the target result directly.
+  4. Update `autofab_py/guides/pretense.md` and role prompt templates to explicitly document the strict prohibition of `super()`, `assert`, and state mutations in inner transitions.
+
+### TODO 4 [DONE]: Compile Support Libraries (`support/lib/*.py`) to `.pyc` to Prevent Subagent Inspection
+- **Status**: **DONE** (Implemented in `autofab/parts/workspace/lib/provision_impl.py` and `sync_impl.py`).
+- **Implementation Summary**:
+  - Workspace provisioning and syncing precompile all runtime support modules (`support/lib/*.py`) to bytecode (`.pyc`).
+  - Role workspaces receive only `.pyi` type stubs and compiled `.pyc` sourceless bytecode, omitting `.py` source files completely.
+  - Updated unit tests in `provision_impl_test.py` and `sync_impl_test.py` to assert presence of `.pyc` and absence of `.py`.
+- **Context & Problem Statement**: When subagents encounter test or verification failures, they frequently attempt to inspect or reverse-engineer framework internals (such as reading `support/lib/lifecycle.py` to examine dynamic singleton reflection or test discovery). While Pyright type-checks strictly against `.pyi` stubs (completely ignoring `.py` when stubs are present), CPython requires executable code at runtime. Provisioning raw `.py` source files exposes framework internals to subagents, cluttering agent context and prompting counter-productive monkeypatching or runtime introspection.
+- **Requirements**:
+  1. Update workspace provisioning and synchronization (`autofab/parts/workspace/lib/provision_impl.py` and `sync_impl.py`) to precompile all runtime support modules (`support/lib/*.py`) into bytecode (`.pyc` / `__pycache__`).
+  2. Provision only `.pyi` type stubs (for Pyright type checking and contract visibility) and compiled `.pyc` bytecode (for runtime execution) into role workspaces, omitting `.py` source files entirely.
+  3. Ensure Pyright type checks with zero errors against the `.pyi` stubs and test execution imports `.pyc` sourceless bytecode cleanly, completely cutting off subagent access to framework source code.
+
+### TODO 5 [DONE]: Virtually Contracted Operational Exceptions via `require_env`, Collaborator State Binding, and Strict Ban on `raise`
+- **Status**: **DONE** (Implemented in `pretense/parts/pretense/lib/pretense.py`, `pretense_impl.py`, `pretense_lint.py`, and verified in `inter_interface` benchmark).
+- **Implementation Summary**:
+  - Implemented `require_env(condition, exception_cls, *args, **kwargs)` in Pretense core runtime (`pretense.py`, `.pyi`, exported in `pretense/__init__.py`).
+  - Added dual-sided dispatch: in fake mode (`synthesize_fake`), raises `exception_cls(*args, **kwargs)`; in impl verification mode (`CheckedAdapter` and `compile_hypothesis_test_case`), verifies that the real SUT raises `exception_cls`, failing with `AssertionError` if the SUT returned normally.
+  - Implemented collaborator state binding (`self.bind(attr_name, getter)` / `self.bind_state`) in `StateMachine` to evaluate dynamic virtual state against collaborator fakes via `sut_state(CollabState)`.
+  - Added AST lint rules in `pretense_lint.py`:
+    - `PRE_LINT_REQUIRE_MUST_BE_ERROR`: `require` and `require_arg` must stick to `*Error` classes.
+    - `PRE_LINT_REQUIRE_ENV_MUST_BE_EXCEPTION`: `require_env` must stick to `*Exception` classes.
+    - `PRE_LINT_NO_RAISE`: Strictly prohibits explicit `raise` statements within state machines.
+  - Aligned the `inter_interface` benchmark (`vault` and `inter_interface`) to exercise `VaultInactiveException` via `require_env` and `self.bind`.
+- **Context & Problem Statement**:
+  - In Cleanroom and Pretense, an operation usually succeeds; it only raises an operational exception (`*Exception`) when underlying environmental conditions or foreign collaborators fail (e.g. `InactiveVaultException`, `DiskFullException`, `NetworkTimeoutException`).
+  - Unlike contract errors (`*Error`, which are preventable caller violations gated out by `require`/`require_arg`), operational exceptions cannot be prevented by caller argument validation. Callers are legitimately permitted to invoke methods regardless of external environment state.
+  - Therefore, these exceptions are **virtually contracted**:
+    - An exception occurs if and only if an environmental condition is degraded or a collaborator is in an exceptional state (e.g. `not self.state.network_is_down` is false).
+    - Rather than having authors write manual `raise` statements or wrap calls in `with raises(...)`, Pretense introduces a unified declarative statement:
+      ```python
+      require_env(not self.state.network_is_down, NetworkException, "network is down")
+      ```
+    - **Dual-Sided Semantics**:
+      1. **In Interface Fake Mode (`Fake<Target>`)**: When `require_env` condition evaluates to `False`, the synthesized fake automatically instantiates and raises `NetworkException("network is down")` prior to executing `inner_<method>`.
+      2. **In Implementation SUT Mode (`<Target>ImplPseudoStateMachine`)**: When `require_env` condition evaluates to `False`, the framework wraps the `inner_<method>` call to the real SUT (`target.<method>`) inside an assertion expecting `NetworkException`. If the real SUT raises `NetworkException`, the transition succeeds; if the real SUT succeeds or raises an uncontracted exception, verification fails and blames `lib`.
+      3. **Strict Ban on `raise` in State Machines**: Explicit `raise` statements are strictly prohibited across all state machines via AST linting. All exceptions must be mediated through `require_env` or `require`/`require_arg`.
+- **Implementation State Machine Collaborator Binding (`self.bind`)**:
+  - The concrete SUT (`lib/*.py`) does not possess synthetic flags like `network_is_down`; it delegates I/O to imported collaborator components.
+  - In `TargetImplPseudoStateMachine`, the virtual state inherited from the interface state machine is dynamically bound to the state of imported collaborator fakes:
+    ```python
+    self.bind("network_is_down", lambda: sut_state(NetworkClientState).is_disconnected)
+    ```
+  - During implementation verification, the target's own seeding transitions (`seed_network_down`) are automatically suppressed/gated out, while seeding transitions on imported collaborator fakes (`FakeNetworkClient.seed_disconnect`) remain active. When the collaborator fake is seeded into an exceptional state, the bound expression evaluates to `True`, automatically driving expected SUT exception verification.
+- **Requirements**:
+  1. **Add `require_env` to Pretense Runtime**: Implement `require_env(condition: bool, exception_cls: type[BaseException], *args: Any, **kwargs: Any) -> None` in `pretense/parts/pretense/lib/pretense.py` and `.pyi`.
+  2. **Dual Onion Dispatch in Framework**:
+     - In fake synthesis (`Fake<Target>`), synthesize method wrappers that evaluate `require_env` antecedents; if false, construct and raise `exception_cls(*args, **kwargs)`.
+     - In `compile_hypothesis_test_case` and rule execution, when `require_env` condition is false, automatically wrap `inner_<method>` in `pytest.raises(exception_cls)`.
+  3. **Add `self.bind` Mechanism**: Support dynamic state attribute binding in `StateMachine` (`self.bind(attr_name, getter_callable)`), resolving virtual state dynamically during transition execution.
+  4. **AST Linter Ban on `raise` (`PRE_LINT_NO_RAISE`)**: Add AST lint rule in `pretense_lint.py` prohibiting `ast.Raise` within state machines in `*_pretense.py` and `*_impl_pretense.py`.
+  5. **Seed Transition Filtering**: Ensure implementation test harnesses (`FakeFuzzTest` for impl) disable seeding transitions declared on the target interface itself, while executing seeding transitions on synthesized collaborator fakes.
+  6. **Tolerate Expected Exceptions in Property Fuzzing**: Ensure property fuzzing treats transitions that evaluate to contracted `require_env` outcomes as passing invariant steps.
+
+### TODO 6 [DONE]: Strict Ban on `Domain.any()` and Mandatory Typed Parameter Domains
+- **Status**: **DONE** (Enforced in `autofab_py/support/lib/pretense_lint.py` via `PRE_LINT_NO_DOMAIN_ANY`).
+- **Implementation Summary**:
+  - Added AST linter check `check_no_domain_any` (`PRE_LINT_NO_DOMAIN_ANY`) in `pretense_lint.py` banning any calls to `Domain.any()` across state machines.
+  - Purged legacy usages and updated `autofab_py/guides/pretense.md` to mandate typed domain declarations.
+- **Context & Problem Statement**: Cleanroom strictly prohibits the use of `Any` types across low-level specifications (`low/*.pyi`). However, `Domain.any()` currently exists in Pretense and was recommended as a fallback in older guides. In practice, `Domain.any()` serves as a harmful, untyped escape hatch: during property fuzzing, Hypothesis draws arbitrary scalars (`0`, `""`, `None`) for parameters that have strict signatures (such as `action: Callable[[], Any]` or `dependencies: Optional[Collection[str]]`), causing immediate runtime crashes when the model or fake attempts to invoke non-callables or iterate non-collections. Because parameters are statically typed in `low/*.pyi`, `Domain.any()` is conceptually invalid and harmful to verification.
+- **Requirements**:
+  1. **AST Linter Ban**: Add a rule to `pretense_lint.py` (`PRE_LINT_NO_DOMAIN_ANY`) that strictly bans `Domain.any()` across all interface state machines (`*_pretense.py`).
+  2. **Mandatory Typed Domains**: Enforce that every parameter domain in `require_arg` explicitly matches the parameter's static type from `low/*.pyi` (e.g. `Domain.type(Callable[[], Any])`, `Domain.type(Optional[Collection[str]])`, `Domain.integers(...)`, `Domain.text(...)`, etc.).
+  3. **Guide Alignment**: Purge all references to `Domain.any()` from `autofab_py/guides/pretense.md`, replacing them with typed domain recipes.
+
+### TODO 7 [DONE]: Dynamic Argument-to-State Preconditions (`Domain.not_in`) and Generative Decoupling
+- **Status**: **DONE** (Implemented in `pretense/parts/pretense/lib/pretense.py` and guides).
+- **Implementation Summary**:
+  - Updated `Domain[T]` in `pretense.py` and `pretense.pyi` to use covariant type parameter `T_co = TypeVar("T_co", covariant=True)`.
+  - Added generic domain constructors `Domain.collection(...)` and `Domain.mapping(...)`.
+  - Documented dynamic argument-to-state gating (`Domain.not_in(self.state.nodes)`, `Domain.in_set(self.state.nodes)`) and decoupled `domain` from `preferred` in `autofab_py/guides/pretense.md`.
+- **Context & Problem Statement**:
+  - Subagents experienced significant friction attempting to express preconditions that correlate transition arguments with current model state (e.g., `add_node(node_id)` where `node_id` must not already exist in `self.state.nodes`).
+  - AST rule `PN009` correctly forbids `require(...)` from referencing transition arguments because `require` is reserved for state antecedents evaluated prior to transition selection. However, subagents were unaware that Pretense provides dynamic domain constructors ([`Domain.not_in(self.state.nodes)`](file:///Users/seanmcdirmid/projects/cleanroom/pretense/parts/pretense/lib/pretense.py#L821) and [`Domain.in_set(self.state.nodes)`](file:///Users/seanmcdirmid/projects/cleanroom/pretense/parts/pretense/lib/pretense.py#L813)), leading them to falsely conclude that dynamic argument gating was unsupported.
+  - Subagents also conflated `domain` (which validates the contractual boundary on checked adapters) with `preferred` (which supplies prioritized sampling candidates for fakes and fuzzing), fearing that setting `preferred` would restrict real callers.
+- **Requirements**:
+  1. **Document Dynamic State Gating**: Update `autofab_py/guides/pretense.md` with explicit, prominent examples of dynamic argument gating via `require_arg("node_id", Domain.not_in(self.state.nodes), error=DuplicateNodeError)`.
+  2. **Decouple Contract Domain from Preferred Candidates**: Clearly document in `pretense.md` that `preferred=[...]` provides sampling seeds for fuzz generation and synthesized fakes without restricting the broader `domain` contract enforced on checked adapters.
+  3. **Covariant Domain Generics**: Update `Domain[T]` in `pretense.pyi` to use covariant type variables (`T_co = TypeVar("T_co", covariant=True)`), and supply generic constructors (`Domain.collection(...)`, `Domain.mapping(...)`) so Pyright accepts standard subtypes without type errors.
+  4. **Strict Anti-Overspecification Rule**: Emphasize in `pretense.md` that state machines and test scenarios must verify strictly what is contracted in `low/*.pyi`, prohibiting speculative assertions on uncontracted edge cases.
+
+### TODO 8 [DONE]: Comparative Source-of-Truth Arbitration in Pretense QA (`pretense_qa.md`)
+- **Status**: **DONE** (Updated `autofab_py/guides/pretense_qa.md` and role prompt templates).
+- **Implementation Summary**:
+  - Formalized the comparative Source-of-Truth protocol in `pretense_qa.md`.
+  - Neither `lib` nor `pretense` is presumed guilty. Arbiters compare both implementations against `low/*.pyi` and blame `lib` if concrete behavior violates specs, or blame `pretense` if the state machine/test overspecifies or contradicts specs.
+- **Context & Problem Statement**:
+  - In Cleanroom, when two components or layers disagree (e.g. `lib` implementation vs. `pretense` state machine), **neither component is presumed guilty**. The auditor must never assume `lib` is always wrong or `pretense` is always right. The core responsibility of the arbiter is to arbitrate by comparing both implementations against the authoritative **Source of Truth** (`low/*.pyi` and upstream specification grounding).
+  - The `pretense_qa` subagent experienced confusion when a postcondition assertion in `pretense/<name>_pretense.py` failed during an implementation test. A traceback pointing to the interface state machine does not mean the state machine is automatically at fault, nor does it mean `lib` is automatically at fault.
+- **Requirements**:
+  1. **Source-of-Truth Arbitration Protocol**:
+     - **Case A (SUT Defect)**: If the concrete SUT behavior violates what is contracted in `low/*.pyi`, **blame `lib`**, regardless of where the asserting method was declared.
+     - **Case B (Overspecified or Contradictory State Machine)**: If the SUT behavior conforms to `low/*.pyi`, but the interface state machine or test scenario asserts an uncontracted expectation, contradicts `low/*.pyi`, or mandates an invalid sequence, **blame `pretense`** (either `pretense/<name>_pretense.py` for model flaws or `pretense/<name>_impl_pretense.py` for test scenario overspecification).
+  2. **Harmonize Prompt Templates**: Update `autofab_py/guides/pretense_qa.md` and role prompt templates to explicitly instruct arbiters to consult `low/*.pyi` before attributing blame.
+
+### TODO 9 [DONE]: Tooling Ergonomics, Feedback Deduplication, and Blame Facet Relaxation
+- **Status**: **DONE** (Implemented in `autofab_role_tool.py`, `workspace_cli`, and `check_impl.py`).
+- **Implementation Summary**:
+  - Canonicalized target paths and deduplicated feedback entries in `autofab/parts/workspace_cli/lib/pending_impl.py` and `dirtiness_impl.py`.
+  - Expanded `Facet` maximum character length from 60 to 120 in `autofab/support/lib/structured_blame.py`, `autofab_role_tool.py`, unit tests, and all role guides.
+  - Added distinct target labeling (`[interface]` vs `[implementation]`) in `autofab/parts/workspace_cli/lib/check_impl.py`.
+- **Context & Problem Statement**:
+  - Role workers reported multiple operational friction points in core workflow binaries:
+    1. `bin/get_work` duplicated feedback entries across both relative and absolute path variants (`parts/...` vs `/Users/.../parts/...`), adding context noise.
+    2. The 60-character length limit on the structured blame `Facet` forced workers to invent artificially terse noun phrases that failed to convey actionable scenario details to upstream authors.
+    3. `bin/check_files` displayed generic or duplicate target labels (e.g., displaying "2 targets" with identical filenames for interface vs. implementation pretense modules).
+- **Requirements**:
+  1. **Feedback Deduplication**: Update `get_work` in `autofab_role_tool.py` to canonicalize target paths and deduplicate feedback entries across equivalent relative and absolute representations.
+  2. **Facet Length Relaxation**: Expand the `Facet` length validation in `bin/blame` and `autofab_role_tool.py` from 60 characters to 120 characters, allowing descriptive, domain-precise scenario summaries without syntactic truncation.
+  3. **Distinct Target Labeling**: Ensure `bin/check_files` produces distinct, unambiguous target labels when verifying multi-target pretense runs (distinguishing between the interface state machine and the implementation pseudo-state machine).
+
+### TODO 10 [DONE]: Multi-Round Reachability Decision Model for Coverage Arbiters (`pretense_coverage.md`)
+- **Status**: **DONE** (Updated `autofab_py/guides/pretense_coverage.md` and role prompt templates).
+- **Implementation Summary**:
+  - Formalized the multi-round reachability arbitration protocol in `pretense_coverage.md`.
+  - Coverage arbiters perform a shallow static simulation; if ambiguous, blame `pretense` first. If unreached after one round, blame `lib` to mark `with unreachable:`. Fuzzing serves as the empirical safety net.
+- **Context & Problem Statement**:
+  - The `pretense_coverage` subagent reported significant friction attempting to statically guarantee whether uncovered branches in `lib/*.py` were genuinely reachable versus dead defensive code, especially given workspace isolation rules prohibiting runtime probing.
+  - In Cleanroom, coverage arbiters are not expected to be omniscient in a single turn. They perform a shallow simulation, make an informed decision, and rely on multi-round feedback loops to guarantee correctness.
+- **Requirements**:
+  1. **Multi-Round Coverage Arbitration Protocol**:
+     - **Step 1 (Shallow Simulation)**: Perform a shallow static trace of the uncovered branch in `lib/*.py`.
+     - **Step 2 (Blame Pretense First)**: If the branch represents a plausible domain edge case or error path, blame `pretense/<name>_impl_pretense.py` to author a scenario exercising it.
+     - **Step 3 (Fall Back to Lib)**: If the pretense author cannot reach the line after one round (or demonstrates that the condition is prevented by upstream invariants), blame `lib` to prune the code, wrap it with `with unreachable:`, or mark it with `unreachable()`.
+     - **Step 4 (Fuzzing as the Backstop)**: If `lib` mistakenly wraps reachable code in `unreachable`, property fuzzing will eventually encounter that execution path and fail dynamically, safely self-correcting the system.
+  2. **Guide Update**: Incorporate this multi-round decision protocol into `autofab_py/guides/pretense_coverage.md`.
+
+### TODO 11 [TODO]: Enforced Env State Declarations, Mandatory `self.bind`, and `_ext` Termination
+
+- **Status**: **TODO** (Punted until end-to-end `_ext` examples are added).
+- **Observation from `inter_interface` Benchmark**: `inter_interface` converged without using `self.bind(...)` because `TestAllocatorImplReal` exercised the `VaultInactiveException` path directly via `self.checked.violating(VaultInactiveException).allocate(10)` (bypassing `require_env` + `self.bind` wiring), and `require_env(...)` currently accepts any boolean expression without distinguishing **environmental state** from core interface state.
+- **Requirements**:
+  1. **Explicit Env State Syntax on `<Target>State`**:
+     - Introduce explicit syntax (e.g., an annotation such as `Env[T]` / `Annotated[T, EnvState]` or a dataclass field marker `env_field(...)`) to distinguish virtual/environmental state fields on `<Target>State` dataclasses from normal domain/interface state.
+     - Export the marker from `pretense` (`pretense/parts/pretense/low/pretense.pyi` and `lib/pretense.py`).
+  2. **Linter Enforcement on `require_env(...)` and `.violating(...)`**:
+     - **`require_env(...)` Must Depend on Env State**: Lint rule requiring the condition passed to `require_env(...)` to reference at least one declared env-state field on `self.state` (preventing `require_env` from gating on ordinary domain state or constants).
+     - **`.violating(...)` Restricted to `*Error`**: Lint rule (`PRE_LINT_VIOLATING_MUST_BE_ERROR`) banning `*Exception` arguments to `.violating(...)`, ensuring operational `*Exception` paths can only be exercised by genuinely driving the bound environmental/collaborator state rather than bypassing `self.bind` via `.violating(...)`.
+  3. **Mandatory `self.bind(...)` in Implementation Pseudo-State Machines**:
+     - In `*_impl_pretense.py`, every env-state field inherited from implemented interfaces must be bound via `self.bind(...)` in `__init__` to env state (or observable state) of imported collaborator components (`self.sut_state(...)` / `self.sut(...)`), rather than left as an ungrounded independent field.
+  4. **Termination at `_ext` Components (Deferred / Punted)**:
+     - Binding chains walk from implemented interfaces to imported collaborator interfaces until reaching **unimplemented external components** (`_ext` components, which have no `*_impl_pretense.py` and directly model external/hardware/OS boundaries).
+     - At `_ext` components, env state is legitimately rooted as un-bound external state. End-to-end `_ext` component workflows are not yet exercised in the current benchmarks, so full `_ext` termination enforcement is **punted for now** until end-to-end `_ext` examples exist.
+  5. **Guide & Linter Updates**:
+     - Update `autofab_py/guides/pretense.md` (preserving the strict 20,480-byte limit) to document the env-state annotation syntax, `require_env` env-state dependency rule, `.violating(*Error)` restriction, and mandatory `self.bind` wiring in `ImplPseudoStateMachine`.
+     - Implement corresponding AST checks in `autofab_py/support/lib/pretense_lint.py` and unit tests in `autofab_py/support/tests/pretense_lint_test.py`.
+
+### TODO 12 [DONE]: Combined Fixed + Fuzz Coverage Measurement on `lib/*.py`
+
+- **Status**: **DONE** (Updated `autofab_py/autofab_roles.toml`, `autofab/parts/benchmark/`, `autofab_py/guides/pretense_coverage.md`, `autofab_py/guides/pretense.md`, `autofab_py/templates/pretense_template.py`, and `design-docs/coverage.md`).
+- **Context & Problem Statement**:
+  - Previously, `pretense_coverage` and the Pretense verification gate ran `uv run pretense --no-fuzz --cov`, measuring statement coverage on `lib/*.py` exclusively from deterministic fixed scenario tests (`Test<Impl>Real`).
+  - Excluding Hypothesis fuzz tests from coverage measurement forces `pretense` authors to manually duplicate nominal happy-path and state-transition coverage in fixed tests even when stateful fuzzing already exercises those paths thoroughly.
+  - Conversely, while the stochastic nature of Hypothesis fuzzing may cause which borderline lines are covered to shift slightly between runs, **fixed scenario tests will eventually stabilize coverage**: any branch that is missed or fluctuates out of coverage is flagged by `pretense_coverage` and pinned down by a deterministic fixed test in `Test<Impl>Real`.
+- **Requirements**:
+  1. **Run Both Fixed and Fuzz Tests for `lib/*.py` Coverage**: Update the `pretense_coverage` role configuration (`autofab_py/autofab_roles.toml`), verification gate (`_VerificationGate`), and `pretense_coverage` guide (`autofab_py/guides/pretense_coverage.md`) to invoke `uv run pretense ... --cov` **without** `--no-fuzz`, so both fixed scenario tests and Hypothesis fuzz tests contribute to statement coverage on `lib/*.py`.
+  2. **Stabilization via Fixed Scenario Tests**: Retain fixed scenario tests (`Test<Impl>Real`) as the deterministic stabilizer for:
+     - **Contracted operational errors (`*Error`)** via `checked.violating(...)` (since fuzzing never explores contract violations by construction).
+     - **Deep/borderline nominal branches** whose coverage is missed or fluctuates due to fuzzing randomness.
+  3. **Design Doc Alignment**: Keep `design-docs/coverage.md` and `autofab_py/guides/pretense.md` aligned with the combined fixed + fuzz coverage policy.
+
+## 16. Post-Implementation Benchmark Hardening [DONE]
+
+Following empirical Pretense benchmark runs (`ring_buffer`, `multi_interface`, `inter_interface`, `task_queue`), the following tooling, runtime, and specification fixes were implemented and verified:
+
+1. **Scoped Package Root Resolution (`pretense_lint.py`, `build_lint_common.py`)**:
+   - `_resolve_lib_dir_and_pkg` and `_find_python_pkg_root` now prefer `pyproject.toml` over inner `parts/autofab.toml` markers so `<scope>.parts.<unit>.lib.<module>` imports resolve consistently in isolated role workspaces.
+   - `check_cross_part_imports` includes `"pretense"` in the top-level package allowlist so `lib/*.py` can use `from pretense import PretenseSpecificationError` directly as written in `low/*.pyi`.
+2. **Qualified `StateMachine` Base & `@property` Override Recognition (`pretense_lint.py`)**:
+   - `is_uninitialized_pretense_module` recognizes module-qualified `*StateMachine` bases (e.g., `ring_buffer_pretense.RingBufferStateMachine`).
+   - `check_impl_pseudo_state_machines` (`PN_IMPL_NO_OUTER_TRANSITION`) allows `@property` overrides (without `@transition`) for specializing open parameters.
+3. **Fake Property Dispatch & `singletons` Forwarding (`pretense/parts/pretense/lib/pretense.py`)**:
+   - `SynthesizedFake.__getattr__` resolves `@transition(name="<prop>")` transitions as Python `@property` evaluations by inspecting owning target protocols/classes from `sm.transitions`.
+   - `SynthesizedFake.__init__` forwards `**kwargs` (`singletons=...`) when `state` is also supplied (`machine_cls(state=state, **kwargs)`).
+4. **Stub Contract Documentation & Blame Ergonomics**:
+   - Documented `LifecycleTestCase.setUp` resolution in `autofab_py/support/lib/lifecycle.pyi`, and `StateMachine.sut`, `as_checked`, `require_env`, and `synthesize_fake` semantics in `pretense/parts/pretense/low/pretense.pyi`.
+   - Enabled `[slug:<unit>.harness.wiring]` in `structured_blame.py` for non-behavioral fixture/wiring defects, clarified `bin/blame` staging vs `bin/submit` custody transfer in `scaffold_impl.py`, and made runner zipapp deployment atomic via temporary files + `os.replace`.
+   - Aligned `benchmarks/parts/inter_interface/` (`high/inter_interface_impl.md` and `low/inter_interface_impl.pyi`) to match `inter_interface.pyi` on `AllocationLimitError`.
+
+5. **Post-`semver_solver_multi` / `dag_engine_lite` Ergonomics & Guardrails**:
+   - **No-op `bin/submit` guard**: `submit_target_file` in `autofab/parts/control/lib/submit_impl.py` rejects unmodified submissions when in-band `# FEEDBACK:` metadata is present (`"use bin/reject instead"`).
+   - **Unified `structured_blame.py` limits & auditor guides**: Aligned `autofab_py/support/lib/structured_blame.py` to `Facet <= 120` chars (matching `autofab/support/lib/structured_blame.py` and tests), updated all auditor guides (`qa.md`, `pretense_qa.md`, `pretense_coverage.md`, `spec_qa.md`, `coverage.md`) to `Facet <= 120` / `Witness <= 250` chars, documented `bin/blame` multi-call accumulation, and documented `raise AssertionError(...)` / `with unreachable:` coverage exclusions.
+   - **Neutral triage culprit listing**: `check_impl.py` prints `Candidate Culprit Files: <comma-separated feedback targets>` instead of singling out the checked `lib/` file as `Candidate Culprit:`.
+   - **Interface fuzz-first coverage & guide clarifications**: `PRE_LINT_INTERFACE_TRANSITION_COVERAGE` allows `Fake<Target>FuzzTest` (`compile_hypothesis_test_case`) + `--cov` to carry interface transition coverage while limiting `Test<Target>Fake` to uncovered branches; `autofab_py/guides/pretense.md` clarifies `LifecycleTestCase`, `sut(T)`, multi-adapter `as_checked`, `violating(E)` semantics, and avoiding closed module-level fixture tables in interface SMs.
+   - **Collaborator lifecycle & fuzz factory guardrails**: Added `PRE_LINT_UNBOUND_INITIAL_STATE_FACTORY` and `PRE_LINT_SETUP_SUPER_ORDER` in `pretense_lint.py`, collaborator auto-registration from `sut_factory.__globals__` into `get_default_registry()` in `compile_hypothesis_test_case` (`pretense_impl.py`), and `[COLLABORATOR LIFECYCLE ROUTING NOTE]` on `LifecycleResolutionError` in `check_impl.py` / `pretense_qa.md`.

@@ -19,7 +19,6 @@ class FileMetadata:
         feedback: Unacted diagnostic feedback items.
         audits: Role audit timestamps keyed by audit tag name.
         dirty: Optional explanation reason when node is marked dirty.
-        code_hash: Twelve-character SHA-256 digest of source code body.
     """
 
     last_cleaned: Optional[str]
@@ -28,7 +27,6 @@ class FileMetadata:
     feedback: List[str]
     audits: Dict[str, str] = field(default_factory=dict)
     dirty: Optional[str] = None
-    code_hash: Optional[str] = None
 
 
 @singleton_type("system")
@@ -105,13 +103,14 @@ class SourceMetadataCoordinator(Singleton[SystemTier], Protocol):
     def is_code_modified(
         self,
         file_path: Path | str,
+        workspace_root: Optional[Path | str] = None,
     ) -> bool:
-        """Evaluates whether file on disk has code modifications compared to in-band code hash.
+        """Evaluates whether file on disk has code modifications compared to the role workspace pull manifest baseline.
 
         POSTCONDITIONS:
-        - When file does not exist or has no recorded code hash, MUST return True.
-        - When on-disk code hash differs from recorded code hash, MUST return True.
-        - When on-disk code hash matches recorded code hash, MUST return False.
+        - When file does not exist or has no recorded baseline code hash in `.autofab/pull_manifest.json`, MUST return True.
+        - When on-disk code hash differs from recorded baseline code hash, MUST return True.
+        - When on-disk code hash matches recorded baseline code hash, MUST return False.
         """
         ...
 
@@ -141,8 +140,6 @@ class SourceMetadataCoordinator(Singleton[SystemTier], Protocol):
         clear_last_cleaned: bool = False,
         last_changed: Optional[str] = None,
         change_summary: Optional[str] = None,
-        code_hash: Optional[str] = None,
-        clear_code_hash: bool = False,
         clear_feedback: bool = False,
         append_feedback: Optional[str] = None,
         audits: Optional[Dict[str, str]] = None,
@@ -169,8 +166,6 @@ class SourceMetadataCoordinator(Singleton[SystemTier], Protocol):
         clear_last_cleaned: bool = False,
         last_changed: Optional[str] = None,
         change_summary: Optional[str] = None,
-        code_hash: Optional[str] = None,
-        clear_code_hash: bool = False,
         clear_feedback: bool = False,
         append_feedback: Optional[str] = None,
         audits: Optional[Dict[str, str]] = None,
@@ -231,13 +226,12 @@ class SourceMetadataCoordinator(Singleton[SystemTier], Protocol):
         self,
         file_path: Path | str,
         change_description: str,
-        code_hash: Optional[str] = None,
     ) -> None:
-        """Marks node changed with updated timestamps, change description, and code hash.
+        """Marks node changed with updated timestamps and change description.
 
         POSTCONDITIONS:
         - MUST update last cleaned and last changed timestamps to now.
-        - MUST record change description and stamp new code hash.
+        - MUST record change description.
         - MUST clear unacted feedback, audits, and dirty tags.
         """
         ...

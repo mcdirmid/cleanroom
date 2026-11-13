@@ -24,6 +24,7 @@ from autofab_py.support.lib.build_lint_common import (
     check_test_imports,
     check_type_ignore,
     check_no_pragma_no_cover,
+    check_no_broad_exception_pragma,
     format_syntax_error,
 )
 
@@ -220,18 +221,20 @@ def execute_node(definition):
 """
         self.assertEqual(self._check(source), [])
 
-    # --- Positive cases: pragma directives ---
+    # --- Negative cases: pragma directives do NOT excuse broad exception eating ---
 
-    def test_pragma_cleanroom_allow_broad_exception_on_except_passes(self) -> None:
+    def test_pragma_cleanroom_allow_broad_exception_on_except_fails(self) -> None:
         source = """
 try:
     foreign_callback()
 except Exception:  # cleanroom: allow-broad-exception
     pass
 """
-        self.assertEqual(self._check(source), [])
+        errors = self._check(source)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("broad exception eating detected", errors[0])
 
-    def test_pragma_intentional_catch_inside_body_passes(self) -> None:
+    def test_pragma_intentional_catch_inside_body_fails(self) -> None:
         source = """
 try:
     foreign_callback()
@@ -239,9 +242,11 @@ except Exception:
     # intentional-catch
     return default_value
 """
-        self.assertEqual(self._check(source), [])
+        errors = self._check(source)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("broad exception eating detected", errors[0])
 
-    def test_pragma_above_except_passes(self) -> None:
+    def test_pragma_above_except_fails(self) -> None:
         source = """
 try:
     foreign_callback()
@@ -249,16 +254,20 @@ try:
 except Exception:
     pass
 """
-        self.assertEqual(self._check(source), [])
+        errors = self._check(source)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("broad exception eating detected", errors[0])
 
-    def test_pragma_on_try_line_passes(self) -> None:
+    def test_pragma_on_try_line_fails(self) -> None:
         source = """
 try:  # cleanroom: allow-broad-exception
     foreign_callback()
 except Exception:
     pass
 """
-        self.assertEqual(self._check(source), [])
+        errors = self._check(source)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("broad exception eating detected", errors[0])
 
     # --- Positive cases: standard re-raise & narrow exceptions ---
 
@@ -1215,7 +1224,7 @@ class BuildLintCommonLifecycleScopeLeakTest(unittest.TestCase):
 
 
 class BuildLintCommonCheckTestImportsTest(unittest.TestCase):
-    def test_check_test_imports_allows_both_scoped_and_short_forms(self) -> None:
+    def test_check_test_imports_disallows_short_forms_under_scoped_pkg(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             part_dir = os.path.join(td, "my_part")
             lib_dir = os.path.join(part_dir, "lib")
@@ -1232,7 +1241,11 @@ class BuildLintCommonCheckTestImportsTest(unittest.TestCase):
 
             scoped_pkg = "my_scope.parts.my_part.lib"
             errs = check_test_imports(scoped_pkg, test_file)
-            self.assertEqual(errs, [], f"Short form should be allowed under scoped pkg, got {errs}")
+            self.assertTrue(len(errs) > 0, "Short form should be disallowed under scoped pkg")
+            self.assertIn(
+                "must be 'from my_scope.parts.my_part.lib.engine_impl import ...'",
+                errs[0],
+            )
 
             # Test scoped form: from my_scope.parts.my_part.lib.engine_impl import Engine
             with open(test_file, "w") as f:
@@ -1342,6 +1355,43 @@ class BuildLintCommonCheckNoSingletonMonkeypatchingTest(unittest.TestCase):
             self.assertEqual(errs, [])
         finally:
             os.remove(path)
+
+
+class BuildLintCommonBroadExceptionPragmaTest(unittest.TestCase):
+    def _check(self, source: str) -> list[str]:
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=".py", delete=False, encoding="utf-8"
+        ) as f:
+            f.write(source)
+            f.flush()
+            temp_path = f.name
+        try:
+            return check_no_broad_exception_pragma(temp_path)
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+
+    def test_cleanroom_allow_broad_exception_rejected(self) -> None:
+        source = "except Exception:  # cleanroom: allow-broad-exception\n    pass\n"
+        errors = self._check(source)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("is prohibited", errors[0])
+
+    def test_cleanroom_allow_exception_eating_rejected(self) -> None:
+        source = "# cleanroom: allow-exception-eating\n"
+        errors = self._check(source)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("is prohibited", errors[0])
+
+    def test_intentional_catch_rejected(self) -> None:
+        source = "# intentional-catch\n"
+        errors = self._check(source)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("is prohibited", errors[0])
+
+    def test_clean_file_passes(self) -> None:
+        source = "x = 1\n"
+        self.assertEqual(self._check(source), [])
 
 
 if __name__ == "__main__":

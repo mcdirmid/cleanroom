@@ -5,21 +5,22 @@
 Given: the workspace file `/ws/alpha_scope_a/parts/widget/widget_spec.md` holds a metadata comment
 block recording last cleaned `2026-01-02T03:04:05Z`, last changed `2026-01-01T09:00:00Z`, change
 summary `split the widget contract`, one unacted feedback item carrying the explanation
-`the widget field type is not accepted`, no role audit timestamp for any role, no dirty reason, and
-code hash `a1b2c3d4e5f6`; the code body of that file is `widget contract body`.
+`the widget field type is not accepted`, no role audit timestamp for any role, and no dirty
+reason; the workspace `.autofab/pull_manifest.json` records baseline `code_hash` `a1b2c3d4e5f6`
+for `parts/widget/widget_spec.md`; the code body of that file is `widget contract body`.
 
 1. The caller asks for the metadata of the file.
    Observed: a record reporting last cleaned `2026-01-02T03:04:05Z`, last changed
    `2026-01-01T09:00:00Z`, change summary `split the widget contract`, one unacted feedback item
-   carrying `the widget field type is not accepted`, code hash `a1b2c3d4e5f6`, no role audit
-   timestamp for any role, and no dirty reason.
+   carrying `the widget field type is not accepted`, no role audit timestamp for any role, and no
+   dirty reason.
 
 1. The caller asks for the code body of the file.
    Observed: `widget contract body`, with the metadata comment block absent from it.
 
 1. The caller asks whether the file has code modifications.
    Observed: no code modifications, because the code body on disk still hashes to `a1b2c3d4e5f6`,
-   the code hash recorded in the file's metadata.
+   the baseline code hash recorded in `.autofab/pull_manifest.json`.
 
 ## Scenario 2 — Marking a modified file dirty, documenting the change, and marking it clean
 
@@ -96,8 +97,8 @@ comment block, and the current UTC timestamp is `2026-01-07T08:09:10Z`.
 
 Given: the workspace files `/ws/alpha_scope_a/parts/widget/widget_spec.md` and
 `/ws/alpha_scope_a/parts/gadget/gadget_spec.md` have the identical code body
-`widget contract body` and differ only in their metadata comment blocks; the metadata of the widget
-file records code hash `a1b2c3d4e5f6`.
+`widget contract body` and differ only in their metadata comment blocks; `.autofab/pull_manifest.json`
+records baseline `code_hash` `a1b2c3d4e5f6` for `parts/widget/widget_spec.md`.
 
 1. The caller asks for the code hash of each file.
    Observed: one and the same code hash for both files, because their code bodies are identical.

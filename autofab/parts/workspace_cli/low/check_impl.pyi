@@ -43,7 +43,7 @@ class WorkspaceChecker(check.WorkspaceChecker):
         GROUNDING:
         - Evaluates dirty work using work.WorkspaceWorkManager.compute_role_work_queue against the canonical main workspace using canonical main_dir_scope (projecting discovered target paths to the role workspace leaf directory scope) when running in an isolated role workspace,
           relisting assigned pending targets when prior dirty work is already set,
-          verifies when gemini-argon is configured on the antigravity harness that the active subagent conversation is executing on gemini-argon,
+          verifies when gemini-argon or gemini-carbon is configured on the antigravity harness that the active subagent conversation is executing on the corresponding model,
           for auditor roles aggressively executes verification checks on each discovered ready dirty target,
           automatically submitting passing targets via submit.SubmissionCoordinator.submit_target_file and omitting them from presented work,
           while retaining failing targets in the ready queue without outputting failure diagnostics during get_work,
@@ -74,7 +74,7 @@ class WorkspaceChecker(check.WorkspaceChecker):
           assembles verification environment bounded strictly to the active role workspace and its constituent package directories, isolating verification from the canonical repository root in PYTHONPATH and sys.path and configuring UV_CACHE_DIR under temporary directories (e.g. /tmp/uv_cache) for sandbox containment,
           enforces an execution timeout on verification commands to prevent blocked sub-processes from stalling the workspace developer loop and reports verification failure with code-defect diagnostic messaging when execution expires,
           executes verification checks from role_registry.RoleDefinition,
-          sanitizes verification process output by stripping redundant embedded arbiter reminders before display,
+          sanitizes verification process output by stripping redundant embedded arbiter reminders and scrubbing absolute role workspace path prefixes to workspace-relative paths before display,
           formats clean diagnostic outcomes reporting for non-auditor roles that all local verification checks passed and that other checks to verify feedback or changes resolution will be performed after bin/submit is called,
           formats triage summaries extracting author change headers, primary failure diagnostics, and candidate culprits, along with prominent specification grounding reminders upon verification failure when executing in auditor roles directing blame feedback strictly in terms of how the blamed file is not compliant with the common source of truth specification, permitting line numbers only within the blamed file while strictly forbidding exposing details of other files or authoring debug scripts, and instructing the agent when an uncovered line persists across rounds or after test updates to examine the library implementation closely to determine whether the line is structurally or logically unreachable,
           records verification execution records and target file hashes in the workspace, and upon zero verification errors for authoring roles with writable targets,

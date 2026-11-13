@@ -498,23 +498,24 @@ x = 1
         )
         md_meta = extract_metadata_from_text(md_content, "spec.md")
         self.assertIsNotNone(md_meta)
-        assert md_meta is not None
-        self.assertEqual(md_meta.code_hash, "abcd1234efgh")
 
-        # File modification check with disk operations
+        # File modification check with disk operations and .autofab/pull_manifest.json
+        import json
+
         with tempfile.TemporaryDirectory() as tmp_dir:
             fpath = Path(tmp_dir) / "test_mod.py"
             fpath.write_text(py_content, encoding="utf-8")
 
-            # Initially no CODE_HASH in file -> is_code_modified returns True
+            # Initially no pull_manifest.json -> is_code_modified returns True
             self.assertTrue(is_code_modified(fpath))
 
-            # Mark clean stamps CODE_HASH
-            mark_clean(fpath)
-            meta = extract_metadata(fpath)
-            self.assertIsNotNone(meta)
-            assert meta is not None
-            self.assertEqual(meta.code_hash, hash1)
+            # Recording baseline code_hash in .autofab/pull_manifest.json -> is_code_modified returns False
+            manifest_dir = Path(tmp_dir) / ".autofab"
+            manifest_dir.mkdir(parents=True, exist_ok=True)
+            manifest_path = manifest_dir / "pull_manifest.json"
+            manifest_path.write_text(
+                json.dumps({"test_mod.py": {"code_hash": hash1}}), encoding="utf-8"
+            )
             self.assertFalse(is_code_modified(fpath))
 
             # Modify code body -> is_code_modified returns True
@@ -523,13 +524,14 @@ x = 1
             )
             self.assertTrue(is_code_modified(fpath))
 
-            # Record change updates CODE_HASH to match modified body
-            record_change(fpath, "Added extra line")
-            meta_after = extract_metadata(fpath)
-            self.assertIsNotNone(meta_after)
-            assert meta_after is not None
+            # Updating manifest with new code_hash -> is_code_modified returns False
+            new_hash = compute_file_code_hash(fpath)
+            self.assertIsNotNone(new_hash)
+            self.assertNotEqual(new_hash, hash1)
+            manifest_path.write_text(
+                json.dumps({"test_mod.py": {"code_hash": new_hash}}), encoding="utf-8"
+            )
             self.assertFalse(is_code_modified(fpath))
-            self.assertNotEqual(meta_after.code_hash, hash1)
 
     def test_preamble_and_docstring_hash_exclusion(self) -> None:
         """Verifies that files with docstrings or comments before the metadata block properly exclude metadata."""

@@ -21,7 +21,7 @@ The source metadata coordinator locates comment block boundaries by detecting HT
 
 The source metadata coordinator extracts the code body by concatenating the file lines preceding and following the metadata comment boundaries with whitespace stripped, and computes the deterministic code hash as the first twelve hexadecimal characters of the SHA-256 digest of that code body.
 
-The source metadata coordinator evaluates code modification status by establishing file existence on disk, extracting the in-band metadata, and comparing the current code hash against the recorded code hash.
+The source metadata coordinator evaluates code modification status by establishing file existence on disk, locating the enclosing role workspace pull manifest (`.autofab/pull_manifest.json`), and comparing the current code hash against the recorded baseline `code_hash` in the manifest.
 
 The source metadata coordinator rewrites metadata in a text string by removing any existing metadata comment block and appending the updated block at the bottom of the content string separated by a newline.
 

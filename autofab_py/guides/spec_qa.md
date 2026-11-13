@@ -76,10 +76,10 @@ Auditing follows a strict normative triage chain: if a behavior is absent from h
   `bin/blame <culprit_file> "[slug:<spec.slug>] [viol:<prefix>.<name>] Facet: <noun phrase> [Lines: <range>] [Witness: <key_value_pairs>]"`
   or via flags: `bin/blame <culprit_file> --slug <slug> --viol <viol> --facet "<noun phrase>" [--lines "<range>"] [--witness "<values>"]`
   - Specification slug: Must match a slug declared in `low/*.pyi`.
-  - Violation section: Either a generalized non-prescriptive noun phrase (`Violation: <noun phrase>`, max 8 words, max 60 chars, no action verbs) or a taxonomy tag (`[viol:<prefix>.<name>]`). Canonical violation phrases include `Violation: compound conjunction` and `Violation: uncontracted type`.
-  - Facet: Descriptive noun phrase of domain state/entity without verbs or commands (max 8 words, max 60 chars, e.g. `Facet: relational comparator and hyphen parsing conjunction`).
+  - Violation section: Either a generalized non-prescriptive noun phrase (`Violation: <noun phrase>`, max 8 words, max 120 chars, no action verbs) or a taxonomy tag (`[viol:<prefix>.<name>]`). Canonical violation phrases include `Violation: compound conjunction` and `Violation: uncontracted type`.
+  - Facet: Descriptive noun phrase of domain state/entity without verbs or commands (max 8 words, max 120 chars, e.g. `Facet: relational comparator and hyphen parsing conjunction`).
   - Lines (optional): Dedicated single line number or range strictly within the culprit file being blamed (e.g. `Lines: 42` or `Lines: 42-50`). Cannot reference foreign files or paths.
-  - Witness: Literal key-value pairs (max 200 chars, e.g. `Witness: clause='POSTCONDITIONS: MUST parse basic comparators...'`). Conversational prose sentences and prescriptive instructions are prohibited. Line numbers belong in `Lines:`, not Witness.
+  - Witness: Literal key-value pairs (max 250 chars, e.g. `Witness: clause='POSTCONDITIONS: MUST parse basic comparators...'`). Conversational prose sentences and prescriptive instructions are prohibited. Line numbers belong in `Lines:`, not Witness.
 
 <!-- else -->
 

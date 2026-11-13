@@ -11,7 +11,6 @@ The `src_metadata_ext` external component specifies the grammar, comment convent
   LAST_CLEANED: 2026-10-02T14:40:00Z
   LAST_CHANGED: 2026-10-02T14:35:10Z
   CHANGE: Change summary text.
-  CODE_HASH: 3f7eec2be07d
   -->
   ```
 - Python (`.py`, `.pyi`), Shell (`.sh`): Enclosed in line hash comments:
@@ -20,7 +19,6 @@ The `src_metadata_ext` external component specifies the grammar, comment convent
   # LAST_CLEANED: 2026-10-05T20:52:01Z
   # LAST_CHANGED: 2026-10-02T14:50:12Z
   # CHANGE: Change summary text.
-  # CODE_HASH: 3f7eec2be07d
   # --- END CLEANROOM METADATA ---
   ```
 
@@ -35,15 +33,14 @@ The `src_metadata_ext` external component specifies the grammar, comment convent
 - `LAST_CLEANED`: UTC ISO 8601 timestamp truncated to seconds (`YYYY-MM-DDTHH:MM:SSZ`).
 - `LAST_CHANGED`: UTC ISO 8601 timestamp truncated to seconds (`YYYY-MM-DDTHH:MM:SSZ`).
 - `CHANGE`: Single-line text description of changes made during the last clean.
-- `CODE_HASH`: 12-character SHA-256 hexadecimal hash of the file body excluding the metadata comment header.
 - `DIRTY`: Optional reason string present when a node is marked dirty manually or by dependency failure.
 - `FEEDBACK`: Optional list of unacted feedback items formatted as `- <explanation>`.
 - `<ROLE>_AUDIT`: Audit timestamp for an auditor role (e.g. `QA_AUDIT`, `COVERAGE_AUDIT`, `SPEC_QA_AUDIT`).
 
 **In-Place Rewriting Semantics**
 
-- Cleaning with changes: `LAST_CLEANED` = now, `LAST_CHANGED` = now, `CHANGE` = updated summary, `CODE_HASH` = new hash, `FEEDBACK` removed, `DIRTY` removed, audits removed.
-- No-op cleaning: `LAST_CLEANED` = now, `LAST_CHANGED` unchanged, `CHANGE` unchanged, `CODE_HASH` unchanged, `FEEDBACK` removed, `DIRTY` removed.
+- Cleaning with changes: `LAST_CLEANED` = now, `LAST_CHANGED` = now, `CHANGE` = updated summary, `FEEDBACK` removed, `DIRTY` removed, audits removed.
+- No-op cleaning: `LAST_CLEANED` = now, `LAST_CHANGED` unchanged, `CHANGE` unchanged, `FEEDBACK` removed, `DIRTY` removed.
 - Blaming upstream: Target file's `FEEDBACK` section created or appended with `- <explanation>`, and `LAST_CLEANED` advanced to now.
 - Marking dirty: `DIRTY` tag set with reason description, and `LAST_CLEANED` advanced to now.
 - Stamping audit: `<ROLE>_AUDIT` set to now, and `LAST_CLEANED` advanced to now.

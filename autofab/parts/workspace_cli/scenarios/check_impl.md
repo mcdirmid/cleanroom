@@ -5,7 +5,7 @@
 Given: an active role workspace with a pending dirty target recorded in the buffer.
 
 1. The caller runs `run_get_work`.
-   Observed: returns exit code 1 and relists the assigned pending target under ready for execution, formatting the companion guide, contracts to read, dirty reasons including unacted feedback, and actionable next steps as if it were the initial get_work call.
+   Observed: returns exit code 0 and relists the assigned pending target under ready for execution, formatting the companion guide, contracts to read, dirty reasons including unacted feedback, and actionable next steps as if it were the initial get_work call.
 
 ## Scenario 2 — File verification with starter template regeneration
 
@@ -49,19 +49,19 @@ Given: an active role workspace with an assigned role declaring a repository-rel
 1. The caller runs `run_get_work`.
    Observed: formats the actionable next steps displaying the workspace-relative companion guide path (`guides/pretense.md`) rather than the uncopied repository-relative path.
 
-## Scenario 8 — Gemini Argon active model verification in get_work
+## Scenario 8 — Gemini Argon / Carbon active model verification in get_work
 
-Given: an active role workspace configured with model `gemini-argon` on the `antigravity` harness where the active subagent conversation is running on a non-Argon model (e.g. `gemini-3.8-flash`).
+Given: an active role workspace configured with model `gemini-argon` or `gemini-carbon` on the `antigravity` harness where the active subagent conversation is running on a mismatched model (e.g. `gemini-3.8-flash`).
 
 1. The caller runs `run_get_work`.
-   Observed: aborts with exit code 1 and outputs an error telling the user to manually switch their model to "Gemini Argon" before requesting the run again.
+   Observed: aborts with exit code 1 and outputs an error telling the user to manually switch their model to "Gemini Argon" (for `gemini-argon`) or "Gemini Carbon" (for `gemini-carbon`) before requesting the run again.
 
 ## Scenario 9 — Auditor triage summary upon verification failure
 
 Given: an active auditor role workspace (such as QA or Coverage) where verification checks fail on a target file.
 
 1. The caller runs `run_check_files`.
-   Observed: upon verification failure, sanitizes subprocess output by stripping redundant embedded arbiter reminders, and outputs a structured triage summary extracting the author's latest # CHANGE: commit header, primary failure exception or assertion, candidate culprit file, blame routing instructions directing the agent to inspect the specification and candidate feedback targets (library, test, and pretense source code) to determine which file contains the defect, and a single prominent auditor reminder directing the agent to formulate blame feedback strictly in terms of how the blamed file is not compliant with the common source of truth specification (instructing the coverage auditor to examine the library implementation for unreachable code when an uncovered line persists), and to call bin/get_work to verify remaining units and conclude after delivering blame without authoring debug scripts.
+   Observed: upon verification failure, sanitizes subprocess output by stripping redundant embedded arbiter reminders and scrubbing absolute role workspace path prefixes to workspace-relative paths, and outputs a structured triage summary extracting the author's latest # CHANGE: commit header, primary failure exception or assertion, candidate culprit files, an explicit collaborator lifecycle routing note when LifecycleResolutionError appears in failure output, blame routing instructions directing the agent to inspect the specification and candidate feedback targets (library, test, and pretense source code) to determine which file contains the defect, and a single prominent auditor reminder directing the agent to formulate blame feedback strictly in terms of how the blamed file is not compliant with the common source of truth specification (instructing the coverage auditor to examine the library implementation for unreachable code when an uncovered line persists), and to call bin/get_work to verify remaining units and conclude after delivering blame without authoring debug scripts.
 
 ## Scenario 10 — Milestone git checkpoint commit on successful check_files
 

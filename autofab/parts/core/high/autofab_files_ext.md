@@ -28,7 +28,7 @@ Grounding gaps covered include:
 
 - Audit buffer schema: Defines `.autofab_audit_buffer.json`, buffering uncommitted audit records and verification timestamps for multi-workspace synchronization.
 
-- In-band metadata headers schema: Defines comment conventions and serialization format for in-band metadata blocks embedded directly into Python source files (`# --- AUTOFAB METADATA ---` through `# --- END AUTOFAB METADATA ---`) and Markdown specifications (`<!-- AUTOFAB METADATA` through `-->`), specifying lifecycle timestamps (`LAST_CLEANED`, `LAST_CHANGED`, audit timestamps), change descriptions (`CHANGE`), and content hashes (`CODE_HASH`).
+- In-band metadata headers schema: Defines comment conventions and serialization format for in-band metadata blocks embedded directly into Python source files (`# --- AUTOFAB METADATA ---` through `# --- END AUTOFAB METADATA ---`) and Markdown specifications (`<!-- AUTOFAB METADATA` through `-->`), specifying lifecycle timestamps (`LAST_CLEANED`, `LAST_CHANGED`, audit timestamps) and change descriptions (`CHANGE`).
 
 <!-- AUTOFAB METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z

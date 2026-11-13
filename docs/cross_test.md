@@ -1,4 +1,4 @@
-# Differential Cross-Testing & Benchmark Evaluation: `task_queue`, `inter_interface`, `semver_solver`, `semver_solver_multi` & `dag_engine_lite`
+# Differential Cross-Testing & Benchmark Evaluation: `task_queue`, `inter_interface`, `semver_solver`, `semver_solver_multi`, `dag_engine_lite`, `lru_cache`, `ring_buffer`, `multi_interface` & `dag_engine`
 
 This document details the differential cross-testing methodology and provides an empirical evaluation of the benchmark results located in:
 - [`benchmarks/results/task_queue`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/results/task_queue)
@@ -6,6 +6,10 @@ This document details the differential cross-testing methodology and provides an
 - [`benchmarks/results/semver_solver`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/results/semver_solver)
 - [`benchmarks/results/semver_solver_multi`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/results/semver_solver_multi)
 - [`benchmarks/results/dag_engine_lite`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/results/dag_engine_lite)
+- [`benchmarks/results/lru_cache`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/results/lru_cache)
+- [`benchmarks/results/ring_buffer`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/results/ring_buffer)
+- [`benchmarks/results/multi_interface`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/results/multi_interface)
+- [`benchmarks/results/dag_engine`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/results/dag_engine)
 
 ---
 
@@ -98,14 +102,17 @@ Both components operate as system singletons within the Cleanroom lifecycle regi
 
 ### 2.2 Evaluated Benchmark Runs
 
-Six independent synthesis runs were evaluated in [`benchmarks/results/task_queue`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/results/task_queue):
+Nine independent synthesis runs were evaluated in [`benchmarks/results/task_queue`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/results/task_queue):
 
 1. **`deepseek-flash`**: Standard Cleanroom/Autofab pipeline with multi-role adversarial review (`coverage`, `lib`, `qa`, `test`).
 2. **`deepseek-flash-baseline`**: Monolithic single-prompt baseline without adversarial verification gates.
-3. **`deepseek-flash-combined`**: Fused multi-role pipeline combining unit tests and formal Pretense state machine verification.
-4. **`deepseek-flash-pretense`**: Pure formal property-based specification pipeline with adversarial contract auditing (`pretense`, `pretense_qa`, `lib`).
-5. **`deepseek-flash-pretense-baseline`**: Monolithic single-prompt baseline generating Pretense state machine contracts and library code in a single turn without review.
-6. **`qwen-moe-pretense`**: Evaluates model-tier resilience using `qwen-moe` under the adversarial Cleanroom Pretense pipeline.
+3. **`deepseek-flash-structured_blame`**: Cleanroom Standard pipeline with structured blame grammar.
+4. **`deepseek-flash-combined`**: Fused multi-role pipeline combining unit tests and formal Pretense state machine verification.
+5. **`deepseek-flash-combined-structured_blame`**: Cleanroom Combined pipeline with structured blame grammar.
+6. **`deepseek-flash-pretense`**: Pure formal property-based specification pipeline with adversarial contract auditing (`pretense`, `pretense_qa`, `lib`).
+7. **`deepseek-flash-pretense-baseline`**: Monolithic single-prompt baseline generating Pretense state machine contracts and library code in a single turn without review.
+8. **`deepseek-flash-pretense-structured_blame`**: Cleanroom Pretense pipeline with structured blame grammar.
+9. **`qwen-moe-pretense`**: Evaluates model-tier resilience using `qwen-moe` under the adversarial Cleanroom Pretense pipeline.
 
 ---
 
@@ -115,9 +122,12 @@ Six independent synthesis runs were evaluated in [`benchmarks/results/task_queue
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | **`deepseek-flash`** | Cleanroom Standard | 13 | 439.11s | $0.0634 | 100,551 | 3,923,968 | 85,934 | 4,110,453 | 98.0% | 94.0% |
 | **`deepseek-flash-baseline`** | Standard Baseline | 1 | 227.02s | $0.0270 | 20,442 | 1,489,920 | 38,061 | 1,548,423 | 98.0% | 94.0% |
+| **`deepseek-flash-structured_blame`** | Standard + Structured Blame | 6 | 614.40s | $0.0771 | — | — | — | 4.9M | — | — |
 | **`deepseek-flash-combined`** | Cleanroom Combined | 19 | 1000.75s | $0.1873 | 203,770 | 14,845,952 | 192,267 | 15,241,989 | 98.0% | 94.0% |
+| **`deepseek-flash-combined-structured_blame`** | Combined + Structured Blame | 29 | 2180.40s | $0.4168 | — | — | — | 38.2M | — | — |
 | **`deepseek-flash-pretense`** | Cleanroom Pretense | 12 | 911.90s | $0.1472 | 165,164 | 10,248,192 | 157,698 | 10,571,054 | 98.0% | 94.0% |
 | **`deepseek-flash-pretense-baseline`** | Pretense Baseline | 1 | 185.73s | $0.0210 | 17,458 | 1,219,392 | 29,887 | 1,266,737 | 98.0% | 94.0% |
+| **`deepseek-flash-pretense-structured_blame`** | Pretense + Structured Blame | 10 | 826.20s | $0.1303 | 164,554 | 10,824,064 | 121,914 | 11.1M | 100.0% | 100.0% |
 | **`qwen-moe-pretense`** | Cleanroom Pretense (Qwen) | 27 | 4598.05s | $0.0000 | 1,234,420 | 14,248,192 | 487,219 | 15,969,831 | 95.0% | 90.0% |
 
 ---
@@ -132,33 +142,40 @@ uv run python bin/run_cross_tests.py --suite task_queue --mode auto --detailed
 
 #### 2.4.1 Cross-Implementation Soundness Evaluation ($L_{\text{impl}}$)
 
-| Target Implementation | Self Pass | True Defects (Lib Broken) | False Alarms (Test Broken) | Contractual Soundness Verdict | Failure Root Cause Breakdown |
-| :--- | :---: | :---: | :---: | :---: | :--- |
-| **`deepseek-flash`** (Standard) | 16/16 (100%) | **0** | **1** | 🟢 **100% SOUND** | **Zero specification defects.** Only failed 1 test against `DeepSeek Base Pretense`, which forged an invalid assertion expecting double execution (`assert count == 3`). Library correctly executed once. |
-| **`deepseek-flash-combined`** | 2/2 (100%) | **0** | **1** | 🟢 **100% SOUND** | **Zero specification defects.** Only failed the same forged `assert count == 3` test from `DeepSeek Base Pretense`. |
-| **`deepseek-flash-pretense`** | 2/2 (100%) | **0** | **1** | 🟢 **100% SOUND** | **Zero specification defects.** Only failed the same forged `assert count == 3` test from `DeepSeek Base Pretense`. |
-| **`deepseek-flash-baseline`** | 18/18 (100%) | **1** | **1** | 🔴 **DEFECTIVE (1 Defect)** | **Unchecked delegation.** `fetch_and_execute()` retrieved the task ID from `queue.dispatch()` but omitted calling `execute()`, leaving `processed_count == 0` (expected 1). Caught by Standard test double. |
-| **`qwen-moe-pretense`** | 2/2 (100%) | **1** | **1** | 🔴 **DEFECTIVE (1 Defect)** | **Unchecked delegation.** Replicated the exact same omission: fetched task from queue but failed to invoke worker execution. |
-| **`deepseek-flash-pretense-baseline`** | 2/2 (100%) | **1** | **0** | 🔴 **DEFECTIVE (1 Defect)** | **Double execution bug.** Double-executed workloads across state machine transitions, reporting `processed_count == 3` (expected 2). Caught by Combined and Qwen test suites (`assert 3 == 2`). |
+| Target Implementation | Self Pass | Foreign Pass | True Defects (Lib Broken) | False Alarms (Test Broken) | Contractual Soundness Verdict | Failure Root Cause Breakdown |
+| :--- | :---: | :---: | :---: | :---: | :---: | :--- |
+| **`deepseek-flash`** (Standard) | 16/16 (100%) | 74/75 (98.7%) | **0** | **1** | 🟢 **100% SOUND** | **Zero specification defects.** Only failed 1 test against `DeepSeek Base Pretense`, which forged an invalid assertion expecting double execution (`assert 2 == 3`). Library correctly executed once. |
+| **`deepseek-flash-combined`** | 2/2 (100%) | 88/89 (98.9%) | **0** | **1** | 🟢 **100% SOUND** | **Zero specification defects.** Only failed the same forged `assert 2 == 3` test from `DeepSeek Base Pretense`. |
+| **`deepseek-flash-pretense`** | 2/2 (100%) | 88/89 (98.9%) | **0** | **1** | 🟢 **100% SOUND** | **Zero specification defects.** Only failed the same forged `assert 2 == 3` test from `DeepSeek Base Pretense`. |
+| **`deepseek-flash-pretense-structured_blame`** | 13/13 (100%) | 75/78 (96.2%) | **0** | **3** | 🟢 **100% SOUND** | **Zero specification defects.** Relied on `queue.dispatch()` delegating to `worker.execute()`, so it failed only against `deepseek-flash` and `deepseek-flash-structured_blame` unit test doubles that stubbed `dispatch()` without calling `execute()` (2 false alarms), plus the forged `Pretense Base` `assert 2 == 3` assertion (1 false alarm). |
+| **`deepseek-flash-structured_blame`** | 23/23 (100%) | 65/68 (95.6%) | **1** | **0** | 🔴 **DEFECTIVE (1 Defect)** | **Double execution bug.** `fetch_and_execute()` explicitly called `self.execute()` after `queue.dispatch()` had already executed the task, yielding `processed_count == 2` (expected `1` in `Pretense-SB`, and `3 != 2` in `Combined` and `Qwen Pretense`). |
+| **`deepseek-flash-combined-structured_blame`** | 13/13 (100%) | 75/78 (96.2%) | **1** | **0** | 🔴 **DEFECTIVE (1 Defect)** | **Double execution bug.** Replicated the exact same double execution in `fetch_and_execute()`, failing `Pretense-SB` (`assert 2 == 1`), `Combined` (`3 != 2`), and `Qwen Pretense` (`3 != 2`). |
+| **`deepseek-flash-baseline`** | 18/18 (100%) | 70/73 (95.9%) | **1** | **1** | 🔴 **DEFECTIVE (1 Defect)** | **Unchecked delegation.** `fetch_and_execute()` retrieved the task ID from `queue.dispatch()` but omitted calling `execute()`, leaving `processed_count == 0` (expected 1). Caught by Standard and Standard-SB unit tests; also failed `Pret-Base` forged assertion. |
+| **`qwen-moe-pretense`** | 2/2 (100%) | 86/89 (96.6%) | **1** | **1** | 🔴 **DEFECTIVE (1 Defect)** | **Unchecked delegation.** Replicated the exact same omission: fetched task from queue without invoking worker execution (`1 != 0` / `0 != 1`). |
+| **`deepseek-flash-pretense-baseline`** | 2/2 (100%) | 86/89 (96.6%) | **1** | **0** | 🔴 **DEFECTIVE (1 Defect)** | **Double execution bug.** Double-executed workloads across state machine transitions, reporting `processed_count == 2` (expected `1` in `Pretense-SB`) and `3` (expected `2` in `Combined` and `Qwen Pretense`). |
 
 ---
 
 #### 2.4.2 Pairwise Defect Attribution Matrix ($T_{\text{suite}} \to L_{\text{impl}}$)
 
-Each cell shows `True Defects (Lib Broken) / False Alarms (Test Broken)`:
+Each cell shows `True Defects (Lib Broken) / False Alarms (Test Broken)` across all 9 runs:
 
-| Target Implementation | `DeepSeek Standard` | `DeepSeek Baseline` | `DeepSeek Combined` | `DeepSeek Pretense` | `DeepSeek Base Pretense` | `Qwen Pretense` | Total True Defects | Total False Alarms |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **`Standard` (`deepseek-flash`)** | — | **0 Lib** / 0 Test | **0 Lib** / 0 Test | **0 Lib** / 0 Test | **0 Lib** / 1 Test ⚠️ | **0 Lib** / 0 Test | **0** | **1** |
-| **`Combined` (`deepseek-flash-combined`)** | **0 Lib** / 0 Test | **0 Lib** / 0 Test | — | **0 Lib** / 0 Test | **0 Lib** / 1 Test ⚠️ | **0 Lib** / 0 Test | **0** | **1** |
-| **`Pretense` (`deepseek-flash-pretense`)** | **0 Lib** / 0 Test | **0 Lib** / 0 Test | **0 Lib** / 0 Test | — | **0 Lib** / 1 Test ⚠️ | **0 Lib** / 0 Test | **0** | **1** |
-| **`Baseline` (`deepseek-flash-baseline`)** | **1 Lib** / 0 Test ⚠️ | — | **0 Lib** / 0 Test | **0 Lib** / 0 Test | **0 Lib** / 1 Test ⚠️ | **0 Lib** / 0 Test | **1** | **1** |
-| **`Qwen Pretense` (`qwen-moe-pretense`)** | **1 Lib** / 0 Test ⚠️ | **0 Lib** / 0 Test | **0 Lib** / 0 Test | **0 Lib** / 0 Test | **0 Lib** / 1 Test ⚠️ | — | **1** | **1** |
-| **`Pret-Base` (`deepseek-flash-pretense-baseline`)** | **0 Lib** / 0 Test | **0 Lib** / 0 Test | **1 Lib** / 0 Test ⚠️ | **0 Lib** / 0 Test | — | **1 Lib** / 0 Test ⚠️ | **1** | **0** |
+| Target Implementation | `Std` | `Base` | `Std-SB` | `Comb` | `Comb-SB` | `Pret` | `Pret-Base` | `Pret-SB` | `Qwen Pret` | Total True Defects | Total False Alarms |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **`deepseek-flash` (`Std`)** | — | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | **0 Lib** / 1 Test ⚠️ | 0 / 0 | 0 / 0 | **0** | **1** |
+| **`deepseek-flash-combined` (`Comb`)** | 0 / 0 | 0 / 0 | 0 / 0 | — | 0 / 0 | 0 / 0 | **0 Lib** / 1 Test ⚠️ | 0 / 0 | 0 / 0 | **0** | **1** |
+| **`deepseek-flash-pretense` (`Pret`)** | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | — | **0 Lib** / 1 Test ⚠️ | 0 / 0 | 0 / 0 | **0** | **1** |
+| **`deepseek-flash-pretense-structured_blame` (`Pret-SB`)** | **0 Lib** / 1 Test ⚠️ | 0 / 0 | **0 Lib** / 1 Test ⚠️ | 0 / 0 | 0 / 0 | 0 / 0 | **0 Lib** / 1 Test ⚠️ | — | 0 / 0 | **0** | **3** |
+| **`deepseek-flash-structured_blame` (`Std-SB`)** | 0 / 0 | 0 / 0 | — | **1 Lib** / 0 Test ⚠️ | 0 / 0 | 0 / 0 | 0 / 0 | **1 Lib** / 0 Test ⚠️ | **1 Lib** / 0 Test ⚠️ | **1 (3 hits)** | **0** |
+| **`deepseek-flash-combined-structured_blame` (`Comb-SB`)** | 0 / 0 | 0 / 0 | 0 / 0 | **1 Lib** / 0 Test ⚠️ | — | 0 / 0 | 0 / 0 | **1 Lib** / 0 Test ⚠️ | **1 Lib** / 0 Test ⚠️ | **1 (3 hits)** | **0** |
+| **`deepseek-flash-baseline` (`Base`)** | **1 Lib** / 0 Test ⚠️ | — | **1 Lib** / 0 Test ⚠️ | 0 / 0 | 0 / 0 | 0 / 0 | **0 Lib** / 1 Test ⚠️ | 0 / 0 | 0 / 0 | **1 (2 hits)** | **1** |
+| **`qwen-moe-pretense` (`Qwen Pret`)** | **1 Lib** / 0 Test ⚠️ | 0 / 0 | **1 Lib** / 0 Test ⚠️ | 0 / 0 | 0 / 0 | 0 / 0 | **0 Lib** / 1 Test ⚠️ | 0 / 0 | — | **1 (2 hits)** | **1** |
+| **`deepseek-flash-pretense-baseline` (`Pret-Base`)** | 0 / 0 | 0 / 0 | 0 / 0 | **1 Lib** / 0 Test ⚠️ | 0 / 0 | 0 / 0 | — | **1 Lib** / 0 Test ⚠️ | **1 Lib** / 0 Test ⚠️ | **1 (3 hits)** | **0** |
 
 *Reading the Matrix:*
-- `0 Lib / 1 Test ⚠️`: 1 test failed because `DeepSeek Base Pretense` forged an invalid assertion (`assert processed_count == 3`). The target library had **0 defects**.
-- `1 Lib / 0 Test ⚠️`: 1 test failed because the target library had a **genuine defect** (missing execution or double execution).
+- `0 Lib / 1 Test ⚠️` (`Pret-Base` column): `DeepSeek Base Pretense` forged `assert processed_count == 3` to match its own double execution bug, falsely failing all sound single-execution libraries (while accidentally passing `Std-SB` and `Comb-SB` due to their matching double-execution bug).
+- `0 Lib / 1 Test ⚠️` (`Pret-SB` row against `Std`/`Std-SB`): Unit test doubles stubbed `queue.dispatch()` without calling `worker.execute()`.
+- `1 Lib / 0 Test ⚠️`: Target library either omitted `execute()` (`Base`, `Qwen Pret`) or double-executed (`Std-SB`, `Comb-SB`, `Pret-Base`).
 
 ---
 
@@ -166,12 +183,15 @@ Each cell shows `True Defects (Lib Broken) / False Alarms (Test Broken)`:
 
 | Test Suite | Self Pass | Foreign Tests Run | True Bugs Caught (Lib Broken) | False Alarms Caused (Test Broken) | Oracle Quality Verdict | Diagnostic Rigor Notes |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **`deepseek-flash`** (Unit) | 16/16 (100%) | 80 | **2** | **0** | 🟢 **HIGH RIGOR ORACLE** | Decoupled mock double cleanly caught missing execution in `baseline` and `qwen` with zero false alarms. |
-| **`deepseek-flash-combined`** (Pretense) | 2/2 (100%) | 10 | **1** | **0** | 🟢 **SOUND ORACLE** | Accurately caught double-execution defect in `pretense-baseline` (`assert 3 == 2`) with zero false alarms. |
-| **`deepseek-flash-pretense`** (Pretense) | 2/2 (100%) | 10 | **0** | **0** | 🟢 **SOUND CONFORMANT** | Verified contracted happy path across sound implementations with zero false alarms. |
-| **`qwen-moe-pretense`** (Pretense) | 2/2 (100%) | 10 | **1** | **0** | 🟢 **SOUND ORACLE** | Accurately caught double-execution defect in `pretense-baseline` (`3 != 2`) with zero false alarms. |
-| **`deepseek-flash-baseline`** (Unit) | 18/18 (100%) | 90 | **0** | **0** | ⚪ **PERMISSIVE ORACLE** | Omitted assertions on `processed_count` and completion lifecycle, allowing defective code to pass silently. |
-| **`deepseek-flash-pretense-baseline`** (Pretense) | 2/2 (100%) | 10 | **0** | **5** | 🔴 **FORGED ORACLE** | **0 true bugs caught; 5 false alarms caused.** Hardcoded `assert processed_count == 3` to match its own double execution bug, falsely failing all 5 sound implementations. |
+| **`deepseek-flash-combined`** (Pretense) | 2/2 (100%) | 16 | **3** | **0** | 🟢 **HIGH RIGOR ORACLE** | Caught double-execution defects in `Std-SB`, `Comb-SB`, and `Pret-Base` (`3 != 2`) with zero false alarms. |
+| **`deepseek-flash-pretense-structured_blame`** (Pretense) | 13/13 (100%) | 104 | **3** | **0** | 🟢 **HIGH RIGOR ORACLE** | Caught double-execution defects in `Std-SB`, `Comb-SB`, and `Pret-Base` (`assert 2 == 1`) with zero false alarms. |
+| **`qwen-moe-pretense`** (Pretense) | 2/2 (100%) | 16 | **3** | **0** | 🟢 **HIGH RIGOR ORACLE** | Caught double-execution defects in `Std-SB`, `Comb-SB`, and `Pret-Base` (`3 != 2`) with zero false alarms. |
+| **`deepseek-flash`** (Unit) | 16/16 (100%) | 128 | **2** | **1** | 🟡 **HIGH RIGOR (1 Mock Gap)** | Decoupled mock double caught missing execution in `baseline` and `qwen`, but stubbed `dispatch()` without calling `execute()` against `Pret-SB`. |
+| **`deepseek-flash-structured_blame`** (Unit) | 23/23 (100%) | 184 | **2** | **1** | 🟡 **HIGH RIGOR (1 Mock Gap)** | Caught missing execution in `baseline` and `qwen`, with the same mock `dispatch()` omission against `Pret-SB`. |
+| **`deepseek-flash-pretense`** (Pretense) | 2/2 (100%) | 16 | **0** | **0** | 🟢 **SOUND CONFORMANT** | Verified contracted happy path across foreign implementations with zero false alarms. |
+| **`deepseek-flash-combined-structured_blame`** (Unit + Pretense) | 13/13 (100%) | 104 | **0** | **0** | 🟢 **SOUND CONFORMANT** | Executed 104 foreign tests cleanly with zero false alarms. |
+| **`deepseek-flash-baseline`** (Unit) | 18/18 (100%) | 144 | **0** | **0** | ⚪ **PERMISSIVE ORACLE** | Omitted assertions on `processed_count` and completion lifecycle, allowing defective code to pass silently. |
+| **`deepseek-flash-pretense-baseline`** (Pretense) | 2/2 (100%) | 16 | **0** | **6** | 🔴 **FORGED ORACLE** | **0 true bugs caught; 6 false alarms caused.** Hardcoded `assert processed_count == 3` to match its own double execution bug, falsely failing all 6 sound single-execution implementations. |
 
 ---
 
@@ -194,13 +214,16 @@ Both components operate as system singletons registered within the Cleanroom lif
 
 ### 3.2 Evaluated Benchmark Runs
 
-Five independent synthesis runs were evaluated in [`benchmarks/results/inter_interface`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/results/inter_interface):
+Eight independent synthesis runs were evaluated in [`benchmarks/results/inter_interface`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/results/inter_interface):
 
 1. **`deepseek-flash`**: Standard Cleanroom/Autofab pipeline with multi-role adversarial review (`coverage`, `lib`, `qa`, `test`).
 2. **`deepseek-flash-baseline`**: Monolithic single-prompt baseline without adversarial verification gates.
-3. **`deepseek-flash-combined`**: Fused multi-role pipeline combining unit tests and formal Pretense state machine verification.
-4. **`deepseek-flash-pretense`**: Pure formal property-based specification pipeline with adversarial contract auditing.
-5. **`deepseek-flash-pretense-baseline`**: Monolithic single-prompt baseline generating Pretense state machines and library code without review.
+3. **`deepseek-flash-structured_blame`**: Cleanroom Standard pipeline with structured blame grammar.
+4. **`deepseek-flash-combined`**: Fused multi-role pipeline combining unit tests and formal Pretense state machine verification.
+5. **`deepseek-flash-combined-structured_blame`**: Cleanroom Combined pipeline with structured blame grammar.
+6. **`deepseek-flash-pretense`**: Pure formal property-based specification pipeline with adversarial contract auditing (ported to the `inner_<method>` Pretense format).
+7. **`deepseek-flash-pretense-baseline`**: Monolithic single-prompt baseline generating Pretense state machines and library code without review.
+8. **`deepseek-flash-pretense-structured_blame`**: Cleanroom Pretense pipeline with structured blame grammar.
 
 ---
 
@@ -210,9 +233,12 @@ Five independent synthesis runs were evaluated in [`benchmarks/results/inter_int
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | **`deepseek-flash`** | Cleanroom Standard | 11 | 373.08s | $0.0538 | 83,071 | 3,184,896 | 77,816 | 3,345,783 | 98.0% | 94.0% |
 | **`deepseek-flash-baseline`** | Standard Baseline | 1 | 185.34s | $0.0223 | 16,842 | 1,234,432 | 31,458 | 1,282,732 | 98.0% | 94.0% |
+| **`deepseek-flash-structured_blame`** | Standard + Structured Blame | 7 | 541.50s | $0.0819 | — | — | — | 4.4M | — | — |
 | **`deepseek-flash-combined`** | Cleanroom Combined | 15 | 742.61s | $0.1345 | 148,220 | 10,845,952 | 141,834 | 11,136,006 | 98.0% | 94.0% |
+| **`deepseek-flash-combined-structured_blame`** | Combined + Structured Blame | 28 | 2551.10s | $0.4476 | — | — | — | 41.0M | — | — |
 | **`deepseek-flash-pretense`** | Cleanroom Pretense | 10 | 682.40s | $0.1102 | 124,198 | 7,654,144 | 118,765 | 7,897,107 | 98.0% | 94.0% |
 | **`deepseek-flash-pretense-baseline`** | Pretense Baseline | 1 | 165.12s | $0.0189 | 15,234 | 1,048,576 | 26,458 | 1,090,268 | 98.0% | 94.0% |
+| **`deepseek-flash-pretense-structured_blame`** | Pretense + Structured Blame | 5 | 365.02s | $0.0553 | 75,650 | 1,940,480 | 63,617 | 2.1M | 100.0% | 100.0% |
 
 ---
 
@@ -226,41 +252,48 @@ uv run python bin/run_cross_tests.py --suite inter_interface --mode auto --detai
 
 #### 3.4.1 Cross-Implementation Soundness Evaluation ($L_{\text{impl}}$)
 
-| Target Implementation | Self Pass | True Defects (Lib Broken) | False Alarms (Test Broken) | Contractual Soundness Verdict | Failure Root Cause Breakdown |
-| :--- | :---: | :---: | :---: | :---: | :--- |
-| **`deepseek-flash`** (Standard) | 12/12 (100%) | **0** | **0** | 🟢 **100% SOUND** | Zero defects across all foreign test suites. |
-| **`deepseek-flash-baseline`** | 9/9 (100%) | **0** | **0** | 🟢 **100% SOUND** | Zero defects across all foreign test suites. |
-| **`deepseek-flash-combined`** | 2/2 (100%) | **0** | **0** | 🟢 **100% SOUND** | Zero defects across all foreign test suites. |
-| **`deepseek-flash-pretense`** | 2/2 (100%) | **0** | **0** | 🟢 **100% SOUND** | Zero defects across all foreign test suites. |
-| **`deepseek-flash-pretense-baseline`** | 2/2 (100%) | **0** | **0** | 🟢 **100% SOUND** | Zero defects across all foreign test suites. |
+| Target Implementation | Self Pass | Foreign Pass | True Defects (Lib Broken) | False Alarms (Test Broken / Spec Drift) | Contractual Soundness Verdict | Failure Root Cause Breakdown |
+| :--- | :---: | :---: | :---: | :---: | :---: | :--- |
+| **`deepseek-flash-structured_blame`** | 17/17 (100%) | 47/77 (61.0%) | **0** | **30** | 🟢 **100% SOUND** | **Zero specification defects.** Passed 100% of all modern and legacy suites (`12/12` `Std`, `9/9` `Base`, `2/2` `Comb`, `7/7` `Comb-SB`, `2/2` `Pret`, `14/14` `Pret-SB`). All 30 failures occurred on `deepseek-flash-pretense-baseline`'s broken `require_arg` domain validation (`Argument value 30 failed domain validation`). |
+| **`deepseek-flash-combined-structured_blame`** | 7/7 (100%) | 53/87 (60.9%) | **0** | **34** | 🟢 **100% SOUND** | **Zero specification defects.** Passed `14/14` `Pret-SB` and `17/17` `Std-SB`. Failed 30 tests on `Pret-Base`'s broken `require_arg` domain plus 4 tests on `deepseek-flash-baseline` where `baseline` unit tests passed uncontracted vault state (`AllocationLimitError: allocation exceeds available vault reserves`). |
+| **`deepseek-flash-pretense-structured_blame`** | 14/14 (100%) | 45/80 (56.2%) | **1 (Signature)** | **30** | 🟡 **NEAR SOUND (Exception `__init__`)** | Passed `100%` of `Comb`, `Comb-SB`, `Pret`, and `Base`. Suffered 5 `TypeError` failures against `Std` (2) and `Std-SB` (3) because `VaultInactiveException.__init__(self)` and `InsufficientFundsError.__init__(self)` omitted an optional message argument (`takes 1 positional argument but 2 were given`). Also hit 30 `Pret-Base` domain failures. |
+| **`deepseek-flash`** (Standard) | 12/12 (100%) | 50/82 (61.0%) | **0 (Legacy Spec)** | **32** | 🟢 **100% SOUND (Legacy Spec)** | Passed 100% of legacy peers. Failed 2 tests in newer `Pret-SB` / `Std-SB` suites due to spec evolution (`AllocationLimitError` vs legacy `InsufficientFundsError` propagation), plus 30 `Pret-Base` domain failures. |
+| **`deepseek-flash-baseline`** | 9/9 (100%) | 53/85 (62.4%) | **0 (Legacy Spec)** | **32** | 🟢 **100% SOUND (Legacy Spec)** | Same legacy `InsufficientFundsError` vs `AllocationLimitError` spec evolution (2 tests) plus 30 `Pret-Base` domain failures. |
+| **`deepseek-flash-combined`** | 2/2 (100%) | 60/92 (65.2%) | **0 (Legacy Spec)** | **32** | 🟢 **100% SOUND (Legacy Spec)** | Same legacy `InsufficientFundsError` vs `AllocationLimitError` spec evolution (2 tests) plus 30 `Pret-Base` domain failures. |
+| **`deepseek-flash-pretense`** | 2/2 (100%) | 60/92 (65.2%) | **0 (Legacy Spec)** | **32** | 🟢 **100% SOUND (Legacy Spec)** | Ported cleanly to `inner_<method>` format (`2/2` self-pass). Same legacy `InsufficientFundsError` vs `AllocationLimitError` spec evolution (2 tests) plus 30 `Pret-Base` domain failures. |
+| **`deepseek-flash-pretense-baseline`** | 1/31 (3.2%) | 61/63 (96.8%) | **0 (Legacy Spec)** | **2** | 🔴 **BROKEN SELF-ORACLE** | Its own `inter_interface_impl_pretense.py` suite failed `30/31` tests on itself and every foreign library due to an overly restrictive `require_arg` domain (`Argument value 30 failed domain validation`). Against foreign suites, it matched the other legacy runs. |
 
 ---
 
 #### 3.4.2 Pairwise Defect Attribution Matrix ($T_{\text{suite}} \to L_{\text{impl}}$)
 
-Each cell shows `True Defects (Lib Broken) / False Alarms (Test Broken)`:
+Each cell shows `True Defects / Spec-Drift or Test-Oracle Alarms` across all 8 runs:
 
-| Target Implementation | `DeepSeek Standard` | `DeepSeek Baseline` | `DeepSeek Combined` | `DeepSeek Pretense` | `DeepSeek Base Pretense` | Total True Defects | Total False Alarms |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **`Standard` (`deepseek-flash`)** | — | **0 Lib** / 0 Test | **0 Lib** / 0 Test | **0 Lib** / 0 Test | **0 Lib** / 0 Test | **0** | **0** |
-| **`Baseline` (`deepseek-flash-baseline`)** | **0 Lib** / 0 Test | — | **0 Lib** / 0 Test | **0 Lib** / 0 Test | **0 Lib** / 0 Test | **0** | **0** |
-| **`Combined` (`deepseek-flash-combined`)** | **0 Lib** / 0 Test | **0 Lib** / 0 Test | — | **0 Lib** / 0 Test | **0 Lib** / 0 Test | **0** | **0** |
-| **`Pretense` (`deepseek-flash-pretense`)** | **0 Lib** / 0 Test | **0 Lib** / 0 Test | **0 Lib** / 0 Test | — | **0 Lib** / 0 Test | **0** | **0** |
-| **`Pret-Base` (`deepseek-flash-pretense-baseline`)** | **0 Lib** / 0 Test | **0 Lib** / 0 Test | **0 Lib** / 0 Test | **0 Lib** / 0 Test | — | **0** | **0** |
-
-*All implementations achieved 100% mutual interoperability with zero defects.*
+| Target Implementation | `Std` | `Base` | `Std-SB` | `Comb` | `Comb-SB` | `Pret` | `Pret-Base` | `Pret-SB` | Total True Defects | Total False Alarms / Drift |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **`deepseek-flash-structured_blame` (`Std-SB`)** | 0 / 0 | 0 / 0 | — | 0 / 0 | 0 / 0 | 0 / 0 | **0 Lib** / 30 Test ⚠️ | 0 / 0 | **0** | **30** |
+| **`deepseek-flash-combined-structured_blame` (`Comb-SB`)** | 0 / 0 | **0 Lib** / 4 Test ⚠️ | 0 / 0 | 0 / 0 | — | 0 / 0 | **0 Lib** / 30 Test ⚠️ | 0 / 0 | **0** | **34** |
+| **`deepseek-flash-pretense-structured_blame` (`Pret-SB`)** | **2 Lib** / 0 Test ⚠️ | 0 / 0 | **3 Lib** / 0 Test ⚠️ | 0 / 0 | 0 / 0 | 0 / 0 | **0 Lib** / 30 Test ⚠️ | — | **1 (5 hits)** | **30** |
+| **`deepseek-flash` (`Std`)** | — | 0 / 0 | **0 Lib** / 1 Drift | 0 / 0 | 0 / 0 | 0 / 0 | **0 Lib** / 30 Test ⚠️ | **0 Lib** / 1 Drift | **0** | **32** |
+| **`deepseek-flash-baseline` (`Base`)** | 0 / 0 | — | **0 Lib** / 1 Drift | 0 / 0 | 0 / 0 | 0 / 0 | **0 Lib** / 30 Test ⚠️ | **0 Lib** / 1 Drift | **0** | **32** |
+| **`deepseek-flash-combined` (`Comb`)** | 0 / 0 | 0 / 0 | **0 Lib** / 1 Drift | — | 0 / 0 | 0 / 0 | **0 Lib** / 30 Test ⚠️ | **0 Lib** / 1 Drift | **0** | **32** |
+| **`deepseek-flash-pretense` (`Pret`)** | 0 / 0 | 0 / 0 | **0 Lib** / 1 Drift | 0 / 0 | 0 / 0 | — | **0 Lib** / 30 Test ⚠️ | **0 Lib** / 1 Drift | **0** | **32** |
+| **`deepseek-flash-pretense-baseline` (`Pret-Base`)** | 0 / 0 | 0 / 0 | **0 Lib** / 1 Drift | 0 / 0 | 0 / 0 | 0 / 0 | — | **0 Lib** / 1 Drift | **0** | **2** |
 
 ---
 
 #### 3.4.3 Test Suite Oracle Rigor Evaluation ($T_{\text{suite}}$)
 
-| Test Suite | Self Pass | Foreign Tests Run | True Bugs Caught (Lib Broken) | False Alarms Caused (Test Broken) | Oracle Quality Verdict | Diagnostic Rigor Notes |
+| Test Suite | Self Pass | Foreign Tests Run | True Bugs Caught (Lib Broken) | False Alarms Caused (Test Broken / Drift) | Oracle Quality Verdict | Diagnostic Rigor Notes |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **`deepseek-flash`** | 12/12 (100%) | 48 | **0** | **0** | 🟢 **SOUND CONFORMANT** | Verified foreign implementations across 48 tests with zero false alarms. |
-| **`deepseek-flash-baseline`** | 9/9 (100%) | 36 | **0** | **0** | 🟢 **SOUND CONFORMANT** | Verified foreign implementations across 36 tests with zero false alarms. |
-| **`deepseek-flash-combined`** | 2/2 (100%) | 8 | **0** | **0** | 🟢 **SOUND CONFORMANT** | Verified foreign implementations across 8 tests with zero false alarms. |
-| **`deepseek-flash-pretense`** | 2/2 (100%) | 8 | **0** | **0** | 🟢 **SOUND CONFORMANT** | Verified foreign implementations across 8 tests with zero false alarms. |
-| **`deepseek-flash-pretense-baseline`** | 2/2 (100%) | 8 | **0** | **0** | 🟢 **SOUND CONFORMANT** | Verified foreign implementations across 8 tests with zero false alarms. |
+| **`deepseek-flash-structured_blame`** (Unit) | 17/17 (100%) | 119 | **3** | **5** | 🟢 **HIGH RIGOR ORACLE** | Caught missing `message` arg in `Pret-SB`'s exception constructors (`3` hits) and flagged `InsufficientFundsError` vs `AllocationLimitError` spec evolution across 5 legacy runs. |
+| **`deepseek-flash-pretense-structured_blame`** (Pretense) | 14/14 (100%) | 98 | **0** | **5** | 🟢 **HIGH RIGOR (Spec-Aligned)** | Enforced `AllocationLimitError` alignment across all 5 legacy runs (`test_allocate_exceeding_reserves`) and passed `100%` on `Std-SB` and `Comb-SB`. |
+| **`deepseek-flash`** (Unit) | 12/12 (100%) | 84 | **2** | **0** | 🟢 **HIGH RIGOR ORACLE** | Caught `VaultInactiveException.__init__` signature mismatch in `Pret-SB` with zero false alarms. |
+| **`deepseek-flash-combined-structured_blame`** (Unit + Pretense) | 7/7 (100%) | 49 | **0** | **0** | 🟢 **SOUND CONFORMANT** | Verified 49 foreign tests cleanly with zero false alarms. |
+| **`deepseek-flash-combined`** (Pretense) | 2/2 (100%) | 14 | **0** | **0** | 🟢 **SOUND CONFORMANT** | Verified 14 foreign tests cleanly with zero false alarms. |
+| **`deepseek-flash-pretense`** (Pretense) | 2/2 (100%) | 14 | **0** | **0** | 🟢 **SOUND CONFORMANT** | Ported to `inner_<method>` format; verified 14 foreign tests cleanly with zero false alarms. |
+| **`deepseek-flash-baseline`** (Unit) | 9/9 (100%) | 63 | **0** | **4** | 🟡 **PERMISSIVE / FIXTURE DRIFT** | Passed all legacy runs cleanly, but triggered 4 `AllocationLimitError` failures on `Comb-SB`. |
+| **`deepseek-flash-pretense-baseline`** (Pretense) | 1/31 (3.2%) | 217 | **0** | **210** | 🔴 **RESTRICTIVE DOMAIN ORACLE** | Un-gated baseline `require_arg` domain rejected valid test value `30`, failing 30/31 tests on itself and all 7 foreign targets (210 false alarms). |
 
 ---
 
@@ -282,16 +315,20 @@ The [`semver_solver`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/p
 
 ### 4.2 Evaluated Benchmark Runs
 
-Eight independent synthesis runs were evaluated in [`benchmarks/results/semver_solver`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/results/semver_solver):
+Twelve independent synthesis runs were evaluated in [`benchmarks/results/semver_solver`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/results/semver_solver):
 
 1. **`deepseek-flash`**: Standard Cleanroom/Autofab pipeline with multi-role adversarial review (`coverage`, `lib`, `qa`, `test`).
 2. **`deepseek-flash-baseline`**: Monolithic single-prompt baseline without adversarial review.
-3. **`deepseek-flash-combined`**: Fused multi-role pipeline combining unit tests and formal Pretense state machine verification.
-4. **`deepseek-flash-combined-baseline`**: Monolithic single-prompt baseline generating implementations alongside both unit tests and Pretense state machine suites without review.
-5. **`deepseek-flash-pretense`**: Pure formal property-based specification pipeline with adversarial contract auditing.
-6. **`deepseek-flash-pretense-baseline`**: Monolithic single-prompt baseline generating Pretense state machine contracts and library code in a single pass without review.
-7. **`gemini-argon-combined`**: Fused multi-role Cleanroom Combined pipeline executed on `gemini-argon` (Tier 4) across all 7 roles (`coverage`, `lib`, `pretense`, `pretense_coverage`, `pretense_qa`, `qa`, `test`).
-8. **`gemini-argon-combined-baseline`**: Monolithic single-prompt Combined Baseline executed on `gemini-argon` (Tier 4) in a single un-audited round.
+3. **`deepseek-flash-structured_blame`**: Cleanroom Standard pipeline with structured blame grammar.
+4. **`deepseek-flash-combined`**: Fused multi-role pipeline combining unit tests and formal Pretense state machine verification.
+5. **`deepseek-flash-combined-baseline`**: Monolithic single-prompt baseline generating implementations alongside both unit tests and Pretense state machine suites without review.
+6. **`deepseek-flash-combined-structured_blame`**: Cleanroom Combined pipeline with structured blame grammar.
+7. **`deepseek-flash-pretense`**: Pure formal property-based specification pipeline with adversarial contract auditing.
+8. **`deepseek-flash-pretense-baseline`**: Monolithic single-prompt baseline generating Pretense state machine contracts and library code in a single pass without review.
+9. **`deepseek-flash-pretense-structured_blame`**: Cleanroom Pretense pipeline with structured blame grammar.
+10. **`gemini-argon-combined`**: Fused multi-role Cleanroom Combined pipeline executed on `gemini-argon` (Tier 4) across all 7 roles (`coverage`, `lib`, `pretense`, `pretense_coverage`, `pretense_qa`, `qa`, `test`).
+11. **`gemini-argon-combined-baseline`**: Monolithic single-prompt Combined Baseline executed on `gemini-argon` (Tier 4) in a single un-audited round.
+12. **`gemini-flash-pretense-structured_blame`**: Cleanroom Pretense pipeline with structured blame grammar executed on `gemini-flash` (Tier 2).
 
 ---
 
@@ -304,11 +341,13 @@ Eight independent synthesis runs were evaluated in [`benchmarks/results/semver_s
 | **`deepseek-flash-structured_blame`** | Standard + Structured Blame | 10 | 1864.70s | \$0.2746 | 227,124 | 22,258,560 | 289,660 | 22,775,344 | 98.0% | 95.0% |
 | **`deepseek-flash-combined`** | Cleanroom Combined | 23 | 1485.20s | \$0.3568 | 345,190 | 24,198,400 | 312,450 | 24,856,040 | 98.0% | 94.0% |
 | **`deepseek-flash-combined-baseline`** | Combined Baseline | 1 | 618.68s | \$0.0958 | 78,386 | 7,398,656 | 103,002 | 7,580,044 | 100.0% | 100.0% |
-| **`deepseek-flash-combined-structured_blame`** | Combined + Structured Blame | 34 | 2815.90s | \$0.5632 | 569,430 | 55,564,928 | 518,403 | 56,652,761 | 98.0% | 95.0% |
+| **`deepseek-flash-combined-structured_blame`** | Combined + Structured Blame | 30 | 1993.63s | \$0.4952 | 483,094 | 36,448,768 | 522,270 | 37,454,132 | 100.0% | 100.0% |
 | **`deepseek-flash-pretense`** | Cleanroom Pretense | 17 | 1582.40s | \$0.3751 | 362,110 | 25,489,152 | 329,812 | 26,181,074 | 99.0% | 99.0% |
 | **`deepseek-flash-pretense-baseline`** | Pretense Baseline | 1 | 341.15s | \$0.0487 | 39,812 | 2,345,600 | 65,120 | 2,450,532 | 99.0% | 99.0% |
+| **`deepseek-flash-pretense-structured_blame`** | Pretense + Structured Blame | 15 | 1224.23s | \$0.2305 | 233,957 | 19,799,808 | 226,710 | 20,260,475 | 100.0% | 100.0% |
 | **`gemini-argon-combined`** | Cleanroom Combined (Gemini Argon) | 27 | 3064.83s | \$12.2584 | 1,462,505 | 12,627,543 | 301,962 | 14,392,010 | 100.0% | 100.0% |
 | **`gemini-argon-combined-baseline`** | Combined Baseline (Gemini Argon) | 1 | 1416.77s | \$4.3439 | 279,964 | 5,215,337 | 117,631 | 5,612,932 | 97.6% | 95.8% |
+| **`gemini-flash-pretense-structured_blame`** | Pretense + Structured Blame (Gemini Flash) | 27 | 2570.83s | \$1.0365 | 1,475,993 | 30,778,269 | 298,715 | 32,552,977 | 100.0% | 100.0% |
 
 ---
 
@@ -323,16 +362,22 @@ uv run python bin/run_cross_tests.py --suite semver_solver --mode unit --detaile
 
 #### 4.4.1 Cross-Implementation Soundness Evaluation ($L_{\text{impl}}$)
 
-| Target Implementation | Self Pass (Auto / Unit) | True Defects (Lib Broken) | False Alarms (Test Broken) | Contractual Soundness Verdict | Failure Root Cause Breakdown |
-| :--- | :---: | :---: | :---: | :---: | :--- |
-| **`deepseek-flash-pretense`** | 10/10 (100%) | **0** | **2** | 🟢 **100% SOUND** | **Zero specification defects.** Mathematically modeled open intervals and relational wildcards ($>1.x \implies \ge 2.0.0$, $!=1.x \implies <1.0.0 \lor \ge 2.0.0$). Only failed 2 false alarms: `deepseek-flash` asserting `raw_range == ''` instead of `'   '` on whitespace-only input, and `gemini-argon-combined` forging negative assertions that `>1.*` and `^1.*` must raise `InvalidRangeError`. |
-| **`deepseek-flash-combined`** | 17/17 · 37/37 (100%) | **0** | **3** | 🟢 **100% SOUND** | **Zero specification defects.** Passed 100% of `deepseek-flash-pretense`, `deepseek-flash-combined-baseline`, `deepseek-flash-pretense-baseline`, and `gemini-argon-combined-baseline` Pretense suites. Only failed 3 false alarms: (1) `raw_range == ''` vs `'   '` in `deepseek-flash`, (2) non-SemVer leading-zero numeric comparison (`"01"` vs `"1"`) in `deepseek-flash-baseline`, and (3) `gemini-argon-combined`'s forged negative assertion on `>1.*`. |
-| **`deepseek-flash-combined-baseline`** | 15/15 · 17/17 (100%) | **2** | **2** | 🟡 **NEAR SOUND (2 Defects)** | Passed 100% of relational wildcard checks, but suffered 2 semantic defects: (1) `satisfies(Version("1.0.0-alpha.1"), VersionRange("*"), include_prerelease=False)` returned `True`, violating pre-release exclusion on bare wildcards (caught by `gemini-argon-combined-baseline`, `gemini-argon-combined`, and `deepseek-flash`), and (2) selected lower compatible release `1.2.0` instead of highest `2.0.0` during transitive dependency resolution (caught by `deepseek-flash-combined` unit tests). |
-| **`deepseek-flash`** (Standard) | 30/30 (100%) | **1 Defect Family** | **1** | 🔴 **DEFECTIVE (Unbounded Wildcard Prohibition)** | Supported partial relational wildcards (`>=1.x`, `!=1.x`, `^0.x`, `1.2.3 - 2.x`), but explicitly raised `InvalidRangeError` on bare unbounded wildcard comparators (`>=*`, `!=*`, `>*`, `<*`, `<=*`, `^x`, `1.2.3 - *`) claiming `"unbounded wildcard has no finite boundary"`. |
-| **`deepseek-flash-baseline`** | 18/18 (100%) | **1 Defect Family** | **1** | 🔴 **DEFECTIVE (Relational Wildcards)** | Raised `InvalidRangeError("Unsupported wildcard comparator")` on `!=1.x`, `!=*`, `^0.x`, `^x`, and rejected wildcard hyphen bounds (`1.2.3 - 2.x`, `1.x - 2.x`). |
-| **`deepseek-flash-pretense-baseline`** | 13/13 (100%) | **1 Defect Family** | **1** | 🔴 **DEFECTIVE (Wildcard Prohibition)** | Rejected all operator-prefixed wildcards (`==1.x`, `== *`, `>=1.x`, `!=1.x`, `^0.x`, `= *`, `^x`) and wildcard hyphen endpoints (`1.2.3 - 2.x`). |
-| **`gemini-argon-combined`** | 3/3 · 15/15 (100%) | **1 Defect Family** | **1** | 🔴 **DEFECTIVE (Wildcard Operator Prohibition)** | Passed 100% of standard SemVer 2.0, pre-release, and dependency backtracking tests (including `1.2.0 - 1.4.0 != 1.3.0`), plus `^x`/`^0.x` in Pretense/Unit suites where applicable, but explicitly rejected relational operators combined with wildcards (`>=1.x`, `!=1.x`, `>=*`, `!=*`) with `InvalidRangeError("Relational operator with wildcard ... is invalid")` and delegated hyphen endpoints directly to `parse_version`, rejecting `1.2.3 - 2.x`. |
-| **`gemini-argon-combined-baseline`** | 4/4 · 13/13 (100%) | **1 Defect Family** | **1** | 🔴 **DEFECTIVE (Wildcard Operator Prohibition)** | Exhibited the exact same family of rejections on operator-prefixed wildcards (`>=1.x`, `!=1.x`, `^0.x`, `>=*`, `!=*`, `^x`) and wildcard hyphen bounds (`1.2.3 - 2.x`, `1.x - 2.x`). |
+Evaluated across all 12 benchmark runs in [`benchmarks/results/semver_solver`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/results/semver_solver) (latest `--mode auto` run: 12×12 differential matrix):
+
+| Target Implementation | Self Pass | Foreign Pass | True Defects (Lib Broken) | False Alarms (Test Broken) | Contractual Soundness Verdict | Failure Root Cause Breakdown |
+| :--- | :---: | :---: | :---: | :---: | :---: | :--- |
+| **`gemini-flash-pretense-structured_blame`** | 42/42 (100%) | 260/261 (99.6%) | **0** | **1** | 🟢 **100% SOUND** | **Zero specification defects.** Passed 100% of all 10 DeepSeek suites and `GA Comb-Base` (`4/4`). Only failed `gemini-argon-combined`'s forged `>1.*` negative assertion (`2/3`). |
+| **`deepseek-flash-combined-structured_blame`** | 50/50 (100%) | 251/253 (99.2%) | **0** | **2** | 🟢 **100% SOUND** | **Zero specification defects.** Passed 100% of `Std`, `Std-SB`, `Comb`, `Comb-Base`, `Pret`, `Pret-Base`, `Pret-SB`, `Gemini Pret-SB`, and `GA Comb-Base`. Failed only `deepseek-flash-baseline`'s non-SemVer `"01"` test and `gemini-argon-combined`'s forged `>1.*` negative assertion. |
+| **`deepseek-flash-structured_blame`** | 37/37 (100%) | 264/266 (99.2%) | **0** | **2** | 🟢 **100% SOUND** | **Zero specification defects.** Passed 100% of `Std`, `Comb`, `Comb-Base`, `Comb-SB`, `Pret`, `Pret-Base`, `Pret-SB`, `Gemini Pret-SB`, and `GA Comb-Base`. Failed only the same 2 false alarms in `deepseek-flash-baseline` and `gemini-argon-combined`. |
+| **`deepseek-flash`** (Standard) | 55/55 (100%) | 246/248 (99.2%) | **0** | **2** | 🟢 **100% SOUND (Clarified Spec)** | Under the clarified specification, passed `100%` of `Comb`, `Comb-Base`, `Comb-SB`, `Pret`, `Pret-Base`, `Pret-SB`, `Std-SB`, `Gemini Pret-SB`, and `GA Comb-Base`, failing only `deepseek-flash-baseline` (`"01"`) and `gemini-argon-combined` (`>1.*`). |
+| **`deepseek-flash-pretense`** | 10/10 (100%) | 290/293 (99.0%) | **0** | **3** | 🟢 **100% SOUND** | **Zero specification defects.** Mathematically modeled open intervals and relational wildcards ($>1.x \implies \ge 2.0.0$, $!=1.x \implies <1.0.0 \lor \ge 2.0.0$). Passed `42/42` on `Gemini Pret-SB`; failed 1 `Comb-SB` check, 1 `deepseek-flash-baseline` `"01"` check, and 1 `gemini-argon-combined` forged `>1.*` negative assertion. |
+| **`deepseek-flash-combined`** | 21/21 (100%) | 279/282 (98.9%) | **0** | **3** | 🟢 **100% SOUND** | **Zero specification defects.** Passed 100% of `Comb-SB`, `Comb-Base`, `Pret`, `Pret-Base`, `Pret-SB`, `Std-SB`, `Gemini Pret-SB`, and `GA Comb-Base`. Only failed 3 false alarms: (1) `raw_range == ''` vs `'   '` in `deepseek-flash`, (2) non-SemVer `"01"` vs `"1"` in `deepseek-flash-baseline`, and (3) `gemini-argon-combined`'s forged negative assertion on `>1.*`. |
+| **`deepseek-flash-pretense-structured_blame`** | 33/33 (100%) | 262/270 (97.0%) | **2 (Minor)** | **6** | 🟡 **NEAR SOUND** | Passed 100% of `Std`, `Std-SB`, `Comb`, `Comb-Base`, and `GA Comb-Base`. Minor defects: `test_solver_resolve_mrv_lexical_tie_break` casing (`"assign ..."` vs `"Assign ..."` in `Baseline`), `test_caret_zero_major_expansion` (`^0.0.x` in `Gemini Pret-SB`), plus 6 false alarms (`Baseline` x2, `Comb-SB`, `Pret`, `Pret-Base`, `GA Comb`). |
+| **`deepseek-flash-baseline`** | 28/28 (100%) | 272/275 (98.9%) | **2** | **1** | 🟡 **NEAR SOUND (2 Defects)** | Passed `100%` of `Std`, `Std-SB`, `Comb`, `Comb-SB`, `Pret-Base`, `Pret-SB`, `Gemini Pret-SB`, and `GA Comb-Base`, but failed 1 test in `Comb-Base` (`test_compare_precedence_conformance`: `-8 != -1`), 1 test in `Pretense`, and 1 false alarm in `GA Comb`. |
+| **`deepseek-flash-pretense-baseline`** | 5/5 (100%) | 293/298 (98.3%) | **3** | **2** | 🟡 **NEAR SOUND** | Passed `100%` of `Std`, `Std-SB`, `Comb`, `Comb-Base`, `Pret`, and `Gemini Pret-SB`. Failed `test_parse_range_displaced_wildcard` (`Pret-SB`), `test_version_engine_checked_precondition_errors` (`GA Comb-Base`), 1 `Comb-SB` test, plus 2 false alarms (`Baseline`, `GA Comb`). |
+| **`deepseek-flash-combined-baseline`** | 15/15 (100%) | 276/288 (95.8%) | **10** | **2** | 🔴 **DEFECTIVE** | Failed `49/55` in `Std` (wildcard/dependency bugs), `20/21` in `Comb`, `35/37` in `Std-SB`, `41/42` in `Gemini Pret-SB` (`test_whitespace_delimited_multiple_comparators`), and `3/4` in `GA Comb-Base`, plus 1 false alarm in `GA Comb`. |
+| **`gemini-argon-combined`** | 3/3 (100%) | 239/333 (71.8%) | **1 Defect Family** | **1** | 🔴 **DEFICIENT (Wildcard Operator Prohibition)** | Passed 100% of `GA Comb-Base`, but rejected relational operators combined with wildcards (`>=1.x`, `!=1.x`, `>=*`, `!=*`) and delegated hyphen endpoints directly to `parse_version` (`1.2.3 - 2.x`, `1.2.3 - *`), failing across all 10 DeepSeek and Gemini Flash suites. |
+| **`gemini-argon-combined-baseline`** | 4/4 (100%) | 238/332 (71.7%) | **1 Defect Family** | **1** | 🔴 **DEFICIENT (Wildcard Operator Prohibition)** | Exhibited the exact same family of rejections on operator-prefixed wildcards and wildcard hyphen bounds (`238/332` foreign pass). |
 
 ---
 
@@ -357,6 +402,7 @@ Each cell shows `True Defects (Lib Broken) / False Alarms (Test Broken)` under `
 
 | Test Suite | Self Pass | Foreign Tests Run | True Bugs Caught (Lib Broken) | False Alarms Caused (Test Broken) | Oracle Quality Verdict | Diagnostic Rigor Notes |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
+| **`gemini-flash-pretense-structured_blame`** (Pretense) | 42/42 (100%) | 462 | **16** | **0** | 🟢 **HIGH RIGOR ORACLE (100% Precision)** | Caught whitespace-delimited comparator bug in `Comb-Base`, `^0.0.x` caret expansion bug in `Pret-SB`, and 14 wildcard-operator / hyphen-wildcard defects across `gemini-argon` runs with zero false alarms. |
 | **`deepseek-flash-combined`** (Pretense & Unit) | 17/17 · 37/37 (100%) | 119 / 186 | **19 / 18** | **0** | 🟢 **HIGH RIGOR ORACLE (100% Precision)** | Exercised relational wildcards (`!=1.x`, `>=*`), wildcard hyphen bounds (`1.x - 2.x`), and transitive highest-version selection with zero false alarms. |
 | **`deepseek-flash-combined-baseline`** (Pretense) | 15/15 (100%) | 229 | **124** | **0** | 🟢 **HIGH RIGOR ORACLE (100% Precision)** | Parameterized subtests thoroughly exercised every combination of relational operator and wildcard (`!=1.x`, `>=1.x`, `>1.x`, `<1.x`, `<=1.x`, `!=*`, `>=*`, `1.2.3 - 2.x`, `1.2.3 - *`) with zero false alarms. |
 | **`deepseek-flash-pretense`** (Pretense) | 10/10 (100%) | 70 | **10** | **0** | 🟢 **SOUND ORACLE (100% Precision)** | Verified `>=*`, `!=*`, `=*`, and `^x` algebra across all foreign implementations with zero false alarms. |
@@ -501,10 +547,10 @@ The table below compiles measurements from the telemetry logs and headers across
 | **`deepseek-flash-structured_blame`** | Standard + Structured Blame | 20 | 1811.96s | \$0.2670 | 293,359 | 23,321,472 | 254,988 | 23,869,819 | 95.0% | 90.0% |
 | **`deepseek-flash-combined`** | Cleanroom Combined | 41 | 2987.76s | \$0.7323 | 683,220 | 92,872,063 | 585,360 | 94,140,643 | 99.0% | 99.0% |
 | **`deepseek-flash-combined-baseline`** | Combined Baseline | 1 | 1208.37s | \$0.1960 | 129,171 | 23,849,344 | 175,146 | 24,153,661 | 99.0% | 99.0% |
-| **`deepseek-flash-combined-structured_blame`** | Combined + Structured Blame | 42 | 2454.66s | \$0.5814 | 658,504 | 65,424,896 | 477,246 | 66,560,646 | 100.0% | 100.0% |
+| **`deepseek-flash-combined-structured_blame`** | Combined + Structured Blame | 46 | 3339.28s | \$0.6632 | 764,958 | 56,009,216 | 633,976 | 57,408,150 | 100.0% | 100.0% |
 | **`deepseek-flash-pretense`** | Cleanroom Pretense | 18 | 1979.88s | \$0.3558 | 345,475 | 28,852,479 | 362,321 | 29,560,275 | 99.0% | 99.0% |
 | **`deepseek-flash-pretense-baseline`** | Pretense Baseline | 1 | 686.42s | \$0.1077 | 91,075 | 9,237,376 | 110,503 | 9,438,954 | 99.0% | 99.0% |
-| **`deepseek-flash-pretense-structured_blame`** | Pretense + Structured Blame | 22 | 2113.58s | \$0.4241 | 393,150 | 52,219,392 | 347,440 | 52,959,982 | 100.0% | 100.0% |
+| **`deepseek-flash-pretense-structured_blame`** | Pretense + Structured Blame | 23 | 1920.43s | \$0.4252 | 403,662 | 45,114,752 | 382,208 | 45,900,622 | 100.0% | 100.0% |
 | **`gemini-argon-combined`** | Cleanroom Combined (Gemini Argon) | 18 | 1798.01s | \$7.1417 | 875,649 | 6,774,214 | 200,331 | 7,850,194 | 100.0% | 100.0% |
 | **`gemini-argon-combined-baseline`** | Combined Baseline (Gemini Argon) | 1 | 1471.60s | \$10.9338 | 952,951 | 12,524,136 | 276,585 | 13,753,672 | 100.0% | 100.0% |
 
@@ -542,7 +588,7 @@ Per the semantic evaluation protocol, test outcomes are not evaluated by mislead
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
 | **`deepseek-flash-combined-structured_blame`** | 27/27 · 43/43 (100%) | **0** | **0** | **1** | 🟢 **100% SOUND (Fuzz-Immune)** | **Zero specification defects under exhaustive property fuzzing.** Conformance parity achieved under structured blame grammar across 42 rounds (\$0.5814). Passed **303/304 foreign tests (99.7%)**, achieving 100% pass across all 9 foreign DeepSeek suites with property fuzzing active. Its sole failure was on `gemini-argon-combined` due to Argon's uncontracted negative assertion. Full domain modeling (`_UnboundedTarget` algebra) resisted all adversarial fuzzing. |
 | **`deepseek-flash-combined`** | 32/32 · 43/43 (100%) | **0** | **0** | **15** | 🟢 **100% SOUND** | **Zero specification defects.** Passed 100% of Standard's tests (59/59), Pretense-Baseline's tests (18/18), `gemini-argon-combined` Unit (22/22), and `gemini-argon-combined-baseline` Pretense (3/3). All 15 foreign failures in `auto` mode were test bugs: 11 `Baseline` fixture crashes + 1 `Comb-Base` forged test + 1 `Pretense` check + 2 `gemini-argon-combined` Pretense false alarms. |
-| **`deepseek-flash-pretense-structured_blame`** | 50/50 · 6/6 (100%) | **0** | **0** | **8** | 🟢 **100% SOUND** | **Zero specification defects.** Synthesized in 22 rounds (\$0.4241) under structured blame grammar with 100% line and branch coverage. Passed 280/288 foreign tests (97.2%), passing 100% of `Standard`, `Baseline`, `Combined`, `Comb-Base`, `Comb-SB`, `Pretense`, `Pret-Base`, and `Argon Comb-Base`. The 8 failures were 7 standard unit test rejections of bare partial version syntax (`"1"`, `"<=1"`) where Pretense expands `"1"` to `"1.x"`, plus 1 Argon test bug. |
+| **`deepseek-flash-pretense-structured_blame`** | 33/33 (100%) | **0** | **0** | **6** | 🟢 **100% SOUND** | **Zero specification defects.** Synthesized in 23 rounds (\$0.4252) under structured blame grammar with 100% line and branch coverage. Passed 295/301 foreign tests in `--mode auto` (98.0%), passing 100% of `Standard`, `Comb-Base`, `Comb-SB`, `Pretense`, `Pret-Base`, and `Argon Comb-Base`, with false alarms in `Baseline` (2), `Std-SB` (2), `Combined` (1 collection error), and `Argon Comb` (1 forged negative assertion). |
 | **`deepseek-flash-structured_blame`** (Standard — No Fuzzing in Dev) | 51/51 (100%) | **0** | **4 (1 Family)** | **5** | 🟡 **NEAR SOUND (Overfitted to Unit Tests)** | **Exposed by Fuzz Cross-Testing.** While achieving 100% pass on hand-crafted unit tests, property fuzzing exposed a missing operator in its bare wildcard whitelist (`semver_range_impl.py:794`): the whitelist included `("", "=", "==", ">=", "^", "~")` but **omitted `"<="`**, causing candidate versions against `'<=*'` to fail with `False != True`. Failed `test_satisfies_wildcard_ranges` (`<=*`), `test_satisfies_wildcards_and_hyphen` (`<=*`), `test_satisfies_relational_bare_wildcard` (`<=*`), and `test_satisfies_unbounded_wildcards` (`<=*`). |
 | **`deepseek-flash`** (Standard — No Fuzzing in Dev) | 59/59 (100%) | **0** | **2 (1 Family)** | **13** | 🟡 **NEAR SOUND (Overfitted to Unit Tests)** | **Exposed by Fuzz Cross-Testing.** Suffered relational bare wildcard flaws (`<=*`, `!=*`) when evaluated against Pretense and Combined foreign property fuzzers, while achieving 100% pass on hand-crafted deterministic tests. |
 | **`deepseek-flash-pretense-baseline`** | 18/18 (100%) | **1** | **1** | **14** | 🟢 **99.4% SOUND** | **1 minor boundary flaw.** Passed 100% of Standard's tests (59/59), Pretense's tests (37/37), and `gemini-argon-combined-baseline` Pretense (3/3). Rejected hyphen wildcard range `1.x - 2.x`. All other 14 failures were `Baseline` fixture crashes (10), `Comb-Base` domain/forged test bugs (3), and `gemini-argon-combined` forged `>1.x` negative assertion (1). |
@@ -855,19 +901,16 @@ The table below compiles measurements from the telemetry logs and headers across
 | **`deepseek-flash-structured_blame`** | Standard + Structured Blame | 13 | 988.50s | $0.1562 | 213,834 | 10,056,704 | 156,542 | 10,427,080 | 98.0% | 95.0% |
 | **`deepseek-flash-combined`** | Cleanroom Combined (Nov 5) | 51 | 3428.50s | $0.7310 | 674,312 | 70,502,527 | 697,200 | 71,874,039 | 100.0% | 100.0% |
 | **`deepseek-flash-combined-baseline`** | Combined Baseline (Nov 5) | 1 | 789.98s | $0.1262 | 101,900 | 12,465,920 | 122,553 | 12,690,373 | 100.0% | 100.0% |
-| **`deepseek-flash-combined-structured_blame` (Run 1)** | Combined + Structured Blame | 28 | 2181.90s | $0.4146 | 474,516 | 37,069,824 | 387,015 | 37,931,355 | 100.0% | 100.0% |
-| **`deepseek-flash-combined-structured_blame` (Run 2)** | Combined + Structured Blame | 31 | 2042.20s | $0.4412 | 460,538 | 32,526,848 | 457,607 | 33,444,993 | 100.0% | 100.0% |
-| **`deepseek-flash-combined-structured_blame` (Run 3)** | Combined + Structured Blame | 30 | 2639.30s | $0.4380 | 546,460 | 29,393,280 | 446,451 | 30,386,191 | 100.0% | 100.0% |
+| **`deepseek-flash-combined-structured_blame`** | Combined + Structured Blame | 24 | 1425.46s | $0.4109 | 605,719 | 27,204,992 | 397,420 | 28,208,131 | 100.0% | 100.0% |
 | **`deepseek-flash-pretense`** | Cleanroom Pretense (Nov 5) | 33 | 3447.98s | $0.5457 | 376,407 | 53,805,183 | 546,428 | 54,728,018 | 100.0% | 100.0% |
 | **`deepseek-flash-pretense-baseline`** | Pretense Baseline (Nov 2) | 1 | 1058.30s | $0.1111 | 87,962 | 6,586,496 | 130,307 | 6,804,765 | 100.0% | 100.0% |
-| **`deepseek-flash-pretense-structured_blame`** | Pretense + Structured Blame | 21 | 2838.45s | $0.3898 | 359,283 | 32,645,120 | 396,672 | 33,401,075 | 100.0% | 100.0% |
-| **`gemini-flash-structured_blame`** | Standard + Structured Blame (Gemini) | 11 | 1347.80s | $0.6064 | 1,161,953 | 16,315,173 | 205,864 | 17,682,990 | 100.0% | 100.0% |
-| **`gemini-flash-combined-structured_blame` (Run 1)** | Combined + Structured Blame (Gemini) | 63 | 5264.12s | $3.4650 | 4,979,867 | 107,375,195 | 706,554 | 113,061,616 | 100.0% | 100.0% |
-| **`gemini-flash-combined-structured_blame` (Run 2)** | Combined + Structured Blame (Gemini) | 31 | 2108.50s | $1.1989 | 2,043,295 | 34,010,329 | 360,658 | 36,414,282 | 100.0% | 100.0% |
-| **`qwen-moe-combined-structured_blame` (Run 1)** | Combined + Structured Blame (Qwen) | 64 | 13172.70s | $0.0000 | 2,889,036 | 34,340,627 | 596,014 | 37,825,677 | 100.0% | 100.0% |
-| **`qwen-moe-combined-structured_blame` (Run 2)** | Combined + Structured Blame (Qwen) | 105+ | >14400s | $0.0000 | 3,124,500 | 47,514,202 | 596,014 | 51,234,716 | Terminated | Terminated (Coverage $\leftrightarrow$ QA Oscillation) |
+| **`deepseek-flash-pretense-structured_blame`** | Pretense + Structured Blame | 10 | 1294.59s | $0.2070 | 205,541 | 14,909,312 | 219,126 | 15,333,979 | 100.0% | 100.0% |
+| **`deepseek-flash-structured_blame`** | Standard + Structured Blame | 13 | 988.49s | $0.1562 | 213,834 | 10,056,704 | 156,542 | 10,427,080 | 95.0% | 90.0% |
+| **`gemini-flash-combined-structured_blame`** | Combined + Structured Blame (Gemini) | 35 | 2075.24s | $1.3552 | 2,158,172 | 39,531,299 | 377,648 | 42,067,119 | 100.0% | 100.0% |
+| **`gemini-flash-structured_blame`** | Standard + Structured Blame (Gemini) | 11 | 1347.80s | $0.6064 | 1,161,953 | 16,315,173 | 205,864 | 17,682,990 | 95.0% | 90.0% |
+| **`qwen-moe-combined-structured_blame`** | Combined + Structured Blame (Qwen) | 64 | 13172.70s | $0.0000 | 2,889,036 | 34,340,627 | 596,014 | 37,825,677 | 100.0% | 100.0% |
 | **`qwen-moe-pretense`** | Cleanroom Pretense (Qwen) | 51 | 5629.50s | $0.0000 | 1,298,007 | 18,920,867 | 264,463 | 20,483,337 | 99.0% | 99.0% |
-| **`qwen-moe-pretense-structured_blame`** | Pretense + Structured Blame (Qwen) | 25 | 3312.50s | $0.0000 | 936,651 | 13,202,418 | 187,561 | 14,326,630 | 100.0% | 100.0% |
+| **`qwen-moe-pretense-structured_blame`** | Pretense + Structured Blame (Qwen) | 83 | 11795.25s | $0.0000 | 3,116,434 | 43,026,824 | 607,377 | 46,750,635 | 100.0% | 100.0% |
 | **`tiel-coder-qwen-moe-pretense`** | Cleanroom Pretense (Tiel) | 35 | 9474.98s | $0.0000 | 1,042,105 | 18,522,401 | 477,264 | 20,041,770 | 100.0% | 100.0% |
 
 #### Telemetry Analysis:
@@ -892,18 +935,18 @@ uv run python bin/run_cross_tests.py --suite dag_engine_lite --mode auto --detai
 | Target Implementation | Self Pass | True Defects (Lib Broken) | False Alarms (Test Broken) | Contractual Soundness Verdict | Failure Root Cause Breakdown |
 | :--- | :---: | :---: | :---: | :---: | :--- |
 | **`deepseek-flash-combined`** | 23/23 (100%) | **0** | **78** | 🟢 **100% SOUND** | **Zero specification defects.** Passed 100% of conformant foreign suites (`Comb-Base`, `Tiel-Coder`). Failed 73 tests against Nov 2 legacy suites due to specification evolution signature mismatch (legacy tests calling `add_node(id, action)` with 2 args without default parameters, missing `dependencies`, `priority`, `retries`), plus 5 tests against `Pretense` and `Qwen Pretense` due to test oracle bugs (forging `CycleError` on missing nodes, asserting `is_finished() == True` on running node, or asserting `f2` remains `READY` after `FAIL_FAST`). |
-| **`deepseek-flash-combined-structured_blame`** | Run 1: 14/14 · 41/41 (100%)<br>Run 2: 14/14 · 50/50 (100%)<br>Run 3: 14/14 · 50/50 (100%) | **0** | **78** | 🟢 **100% SOUND** | **Zero specification defects across all three independent runs.** Conformance parity consistently achieved with ~40% lower cost ($0.41–$0.44 vs $0.7310) and ~40% fewer rounds (28–31 vs 51) under structured blame grammar. All runs passed 100% of modern conformant suites (`deepseek-flash-structured_blame`: 47/47, `gemini-flash-structured_blame`: 50/50, `gemini-flash-combined-structured_blame`: 12/12, `Comb-Base`: 18/18, `Pret-Base`: 17/17, `qwen-moe-pretense-structured_blame`: 16/16, `tiel-coder`: 15/15) with zero logic defects. Failed only the 73 legacy Nov 2 signature tests and 5 documented oracle bugs. |
-| **`gemini-flash-combined-structured_blame`** | Run 1: 12/12 · 43/43 (100%)<br>Run 2: 12/12 · 41/41 (100%) | **0** | **78** | 🟢 **100% SOUND** | **Zero specification defects across both independent runs.** Dual-oracle Cleanroom Combined pipeline with structured blame grammar on Tier-2 `gemini-flash`. Run 2 achieved a massive 65.4% cost reduction ($1.1989 vs $3.4650) and 50.8% round reduction (31 vs 63 rounds). Both runs passed 100% of modern conformant suites (`deepseek-flash-structured_blame`: 47/47, `gemini-flash-structured_blame`: 50/50, `deepseek-flash-combined-baseline`: 18/18, `deepseek-flash-pretense-baseline`: 17/17, `qwen-moe-pretense-structured_blame`: 16/16, `tiel-coder`: 15/15). Cured both defects found in Gemini Standard (eliminates the empty-wave infinite loop and dynamic synchronization gap). Failed only legacy Nov 2 signature tests and known Pretense oracle bugs. |
-| **`deepseek-flash-structured_blame`** | 47/47 (100%) | **0** | **78** | 🟢 **100% SOUND** | **Zero specification defects.** Synthesized under structured blame grammar in 13 rounds ($0.1562). Passed 100% of modern baseline suites (`Comb-Base`, `Pret-Base`, `Tiel-Coder`), 95.7% of `Combined`, and 89.7% of `Pretense`. As an oracle, its test suite passed 100% (47/47) across `Combined`, `Pretense`, and `Comb-Base`. Failed only the 73 legacy Nov 2 tests calling pre-evolution 2-argument `add_node()` and the 5 documented oracle bugs. |
-| **`deepseek-flash-pretense-structured_blame`** | 14/14 (100%) | **0** | **78** | 🟢 **100% SOUND** | **Zero specification defects.** Conformance parity achieved with 28.6% lower cost ($0.3898 vs $0.5457) and 36.4% fewer rounds (21 vs 33) under structured blame grammar. Passed 100% of modern baseline and multi-role suites (`Comb-Base`, `Combined`, `Comb-SB`, `Pret-SB`, `Tiel-Coder`). Passed 100% across all modern implementations with zero logic defects. Failed only the 73 legacy signature tests and 5 known oracle bugs. |
+| **`deepseek-flash-combined-structured_blame`** | 35/35 (100%) | **0** | **81** | 🟢 **100% SOUND** | **Zero specification defects** (Run 5, Nov 12). Passed `380/461` foreign tests, including `100%` of `Std-SB` (`47/47`), `Gemini Std-SB` (`50/50`), `Gemini Comb-SB` (`34/34`), `Comb-Base` (`18/18`), `Pret-Base` (`17/17`), `Qwen Comb-SB` (`35/35`), and `Tiel-Coder` (`15/15`). Failed only the 73 legacy Nov 2 signature tests (`44` `Std`, `29` `Base`) and 8 oracle drift/bug checks (`Comb`: `21/23`, `Pret`: `26/29`, `Pret-SB`: `31/32`, `Qwen Pret`: `20/21`, `Qwen Pret-SB`: `61/62` `test_violating_fail_fast`). |
+| **`gemini-flash-combined-structured_blame`** | 34/34 (100%) | **4** | **78** | 🔴 **DEFICIENT (4 Defects)** | Run 4 (Nov 12) passed `430/462` foreign tests (`100%` on `Std-SB` `47/47`, `Gemini Std-SB` `50/50`, `Qwen Comb-SB` `35/35`, `Comb-Base` `18/18`, `Tiel-Coder` `15/15`), but failed `test_runner_fail_fast`, `test_runner_continue_on_error`, `test_runner_skip_downstream` (`Comb-SB` `32/35`), `test_scheduler_late_registered_dependent` (`Pret-SB` `31/32`), and legacy `DAGRunner.run()` missing `failure_policy` default. |
+| **`deepseek-flash-structured_blame`** | 47/47 (100%) | **0** | **78** | 🟢 **100% SOUND** | **Zero specification defects.** Synthesized under structured blame grammar in 13 rounds ($0.1562). Passed 100% of modern baseline suites (`Comb-Base`, `Pret-Base`, `Tiel-Coder`, `Gemini Std-SB`, `Gemini Comb-SB`, `Pret-SB`, `Qwen Comb-SB`). Failed only the 73 legacy Nov 2 tests calling pre-evolution 2-argument `add_node()` and the documented oracle bugs. |
+| **`deepseek-flash-pretense-structured_blame`** | 32/32 (100%) | **1 (Missing Dep)** | **78** | 🟡 **NEAR SOUND (1 Defect)** | Run 3 (Nov 12–13) passed `382/464` foreign tests (`100%` on `Std-SB`: `47/47`, `Gemini Std-SB`: `50/50`, `Comb-Base`: `18/18`, `Qwen Comb-SB`: `35/35`, `Tiel-Coder`: `15/15`), failing 73 legacy Nov 2 signature tests (`44` `Std`, `29` `Base`), `NodeNotFoundError` missing-dependency checks in `Comb-SB` (`34/35`) and `Pret-Base` (`15/17`), plus oracle bugs (`Qwen Pret-SB` `61/62`, `Comb` `22/23`, `Pret` `28/29`, `Qwen Pret` `20/21`, `Gemini Comb-SB` `32/34`). |
 | **`gemini-flash-structured_blame`** | 50/50 (100%) | **2** | **24** | 🟡 **NEAR SOUND (2 Defects)** | Synthesized under Standard methodology with structured blame (11 rounds, $0.6064). Passed 100% of conformant modern unit and baseline suites (`deepseek-flash-structured_blame`: 47/47, `deepseek-flash-combined-baseline`: 18/18, `qwen-moe-pretense-structured_blame`: 16/16, `tiel-coder`: 15/15). Suffered 2 genuine implementation defects: (1) **Empty-Wave Infinite Loop**: In `DAGRunner.run()`, `while not self._scheduler.is_finished():` fails to break when `next_wave()` returns empty `[]` due to blocked/pending nodes, causing Pretense state machine suites (`deepseek-flash-combined`, `deepseek-flash-pretense`, `pretense-sb`) to time out after 60s; (2) **Dynamic Post-Success Synchronization Gap**: Failed to promote late nodes with succeeded upstreams to `READY` (`test_state_sync_promotes_late_nodes_with_succeeded_upstreams`). Failed legacy Nov 2 tests due to signature mismatch and `DuplicateNodeError` compliance. |
 | **`qwen-moe-combined-structured_blame`** | 54/54 (100%) | **4** | **78** | 🟡 **NEAR SOUND (4 Defects)** | Synthesized under Cleanroom Combined with structured blame on local `qwen-moe` via MLX ($0.0000 cost, 64 rounds). Passed 100% of conformant Pretense suites (`qwen-moe-pretense-structured_blame`: 16/16, `tiel-coder`: 15/15, `gemini-flash-combined-structured_blame`: 25/25) and 94% of Gemini tests (47/50). Failed 73 legacy signature tests and 5 documented oracle bugs. Suffered 4 genuine implementation defects: (1) **Empty-Wave Infinite Loop Trap**: In `DAGRunner.run()`, `while not self._scheduler.is_finished():` fails to break when `next_wave()` returns empty `[]` due to stalled/pending nodes, causing Pretense state machines (`deepseek-flash-combined`, `deepseek-flash-pretense`, `deepseek-flash-pretense-structured_blame`, `qwen-moe-pretense`) to time out after 60s (exact replica of Defect 5 from `gemini-flash-structured_blame`); (2) **`retries_attempted` Counter Off-by-One**: Populates `DAGRunReport.results[nid].retries_attempted` with `attempt + 1` (or `max_attempts`) instead of the contracted count of executed retries (`0` on first try, `1` on retry), failing `test_run_retry_exhausted_fail_fast`, `test_run_retry_failures_success`, and `test_run_sequential_waves_success` in Gemini Flash, and `test_runner_retries` in `Comb-Base`; (3) **Diamond Transitive Skip Incompleteness**: Under `CONTINUE_ON_ERROR` and `SKIP_DOWNSTREAM`, fails to recursively transition all transitive diamond reconvergent dependents of failed nodes to `SKIPPED`, leaving them in `PENDING` (`test_scheduler_diamond_skip`, `test_mark_failed_continue_on_error_reconvergent_dependent`); (4) **Deferred Downstream Edge Overwrite & Unregistered Dependency KeyError**: In `DAG.add_node()`, unconditionally executing `self._downstream[node_id] = set()` overwrites and destroys incident downstream edges recorded by earlier nodes that deferred dependencies on `node_id`, causing `topological_sort` to omit deferred dependents (`['up'] != ['up', 'down']`); and in `validate()`, raises unhandled `KeyError: 'ghost'` during DFS cycle checking when dependencies are unregistered instead of contracted `NodeNotFoundError`. |
 | **`deepseek-flash-pretense`** | 29/29 (100%) | **2** | **75** | 🟡 **NEAR SOUND (2 Defects)** | Passed 100% of conformant baseline suites. Failed 73 legacy signature tests + 2 oracle bugs. Suffered 2 subtle edge defects: (1) omitted prior-failed nodes from `DAGRunReport.failed_nodes` when nodes were failed in scheduler prior to `DAGRunner.run()`, and (2) missed retroactive `READY` promotion when a node was added to the DAG after its prerequisite had already succeeded. |
-| **`qwen-moe-pretense-structured_blame`** | 16/16 (100%) | **2** | **78** | 🟡 **NEAR SOUND (2 Defects)** | Structured blame fixed the `FAIL_FAST` cancellation bug (properly cancels unexecuted nodes). 100% pass on modern baseline suites (`Comb-Base`, `Pret-Base`, `Tiel-Coder`). Suffered 2 persistent tier-1 defects: (1) Unhandled `KeyError: 'ghost'` during DFS cycle checking when dependencies are unregistered (instead of contracted `NodeNotFoundError`), and (2) Leaked incident edge references in `_upstream`/`_downstream` when nodes are removed via `remove_node`. Failed legacy Nov 2 tests due to signature evolution. |
+| **`qwen-moe-pretense-structured_blame`** | 62/62 (100%) | **2** | **78** | 🟡 **NEAR SOUND (2 Defects)** | Run 2 (Nov 13) expanded self-tests to `62/62 (100%)` and passed `100%` of `Comb-Base` (`18/18`) and `Qwen Comb-SB` (`35/35`). Suffered 2 defects: (1) Empty-wave infinite loop in `DAGRunner.run()` causing 60s timeouts on foreign Pretense suites (`Comb`, `Comb-SB`, `Pret`, `Pret-SB`, `Qwen Pret`), and (2) `NodeNotFoundError` missing-dependency checks (`Pret-Base` `13/17`, `Std-SB` `46/47`, `Gemini Std-SB` `49/50`, `Gemini Comb-SB` `28/34`, `Tiel` `12/15`). Also failed 73 legacy Nov 2 signature tests. As a test suite, `test_violating_fail_fast` forged `<NodeState.CANCELLED> != <NodeState.READY>`, causing 1 false alarm across all 10 modern implementations. |
 | **`tiel-coder-qwen-moe-pretense`** | 15/15 (100%) | **1** | **78** | 🟡 **NEAR SOUND (1 Defect)** | Passed 100% of `Comb-Base`, 95.7% of `Combined`, 94.1% of `Pret-Base`. Failed 73 legacy signature tests + 5 oracle bugs. Suffered 1 defect: raised unhandled `KeyError: 'ghost'` instead of contracted `NodeNotFoundError` on unregistered dependency validation. |
 | **`deepseek-flash-pretense-baseline`** | 17/17 (100%) | **2** | **5** | 🟡 **NEAR SOUND (2 Defects)** | Implemented optional parameter defaults, so it executed against legacy tests. Suffered 2 defects: (1) raised `CycleError` instead of `NodeNotFoundError` on unregistered dependencies in `validate()`, and (2) re-registration failed to detach incident edges correctly. Failed 4 modern tests due to `ImportError` on `DuplicateNodeError`. |
 | **`deepseek-flash-combined-baseline`** | 18/18 (100%) | **3** | **77** | 🔴 **UNSOUND (3 Defects)** | Failed 73 legacy signature tests + 4 oracle bugs. Suffered 3 defects: (1) premature termination in `run_halts_without_ready_nodes`, (2) omitted prior-failed nodes from `DAGRunReport.failed_nodes`, and (3) raised `KeyError` on deferred dependency topological sorting. |
-| **`qwen-moe-pretense`** | 21/21 (100%) | **3** | **85** | 🔴 **UNSOUND (3 Defects)** | Failed 73 legacy signature tests. Suffered 3 defects: (1) failed to cancel remaining `READY` nodes under `FAIL_FAST` policy, (2) raised `KeyError` on deferred dependency topological sort, and (3) broke critical path calculation on edge cases. |
+| **`qwen-moe-pretense`** | 21/21 (100%) | **3** | **85** | 🔴 **UNSOUND (3 Defects, 324/429 Foreign)** | Ported to `inner_<method>` Pretense format (`21/21` self-pass; `324/429`, `75.5%` foreign pass). Failed 73 legacy signature tests (`44` `deepseek-flash`, `29` `deepseek-flash-baseline`) and passed `100%` of `qwen-moe-combined-structured_blame` (`35/35`) and `qwen-moe-pretense-structured_blame` (`16/16`). Suffered defects on `validate()` cycle/missing-dependency checks (`CycleError` / `NodeNotFoundError`), `FAIL_FAST` cancellation, deferred dependency topological sort (`KeyError`), and critical path edge cases. |
 | **`deepseek-flash-baseline`** | 30/30 (100%) | **4** | **4** | 🔴 **UNSOUND (4 Defects)** | Suffered 4 defects: (1) re-registering node replaced it instead of raising `DuplicateNodeError`, (2) detached edges incorrectly, (3) failed state sync for late nodes with succeeded upstreams, (4) premature `is_finished` reporting. |
 | **`deepseek-flash`** (Standard) | 48/48 (100%) | **1 Defect Family** | **4** | 🟡 **LEGACY SOUND / 🔴 CONTRACT GAP** | Generated prior to specification tightening; replaced nodes instead of raising `DuplicateNodeError` and provided uncontracted defaults on `add_node`. |
 
@@ -1184,24 +1227,30 @@ The [`lru_cache`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/parts
 
 ### 7.2 Evaluated Benchmark Runs
 
-Four independent synthesis runs under structured blame were evaluated in [`benchmarks/results/lru_cache`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/results/lru_cache):
+Seven independent synthesis runs were evaluated in [`benchmarks/results/lru_cache`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/results/lru_cache):
 1. **`deepseek-flash-structured_blame`**: Standard Cleanroom/Autofab pipeline with structured grammatical blame feedback.
 2. **`deepseek-flash-pretense-structured_blame`**: Pure formal property-based specification pipeline with structured blame.
-3. **`deepseek-flash-combined-structured_blame`**: Dual-oracle Cleanroom Combined pipeline uniting unit tests and Pretense state machines.
-4. **`qwen-moe-combined-structured_blame`**: Local offline MLX engine (`qwen-moe`) running Cleanroom Combined under structured blame.
+3. **`deepseek-flash-combined`**: Dual-oracle Cleanroom Combined pipeline uniting unit tests and Pretense state machines.
+4. **`deepseek-flash-combined-structured_blame`**: Dual-oracle Cleanroom Combined pipeline with structured blame.
+5. **`gemini-flash-combined-structured_blame`**: Tier-2 budget API (`gemini-flash`) running Cleanroom Combined under structured blame.
+6. **`gemini-flash-pretense-structured_blame`**: Tier-2 budget API (`gemini-flash`) running Cleanroom Pretense under structured blame.
+7. **`qwen-moe-combined-structured_blame`**: Local offline MLX engine (`qwen-moe`) running Cleanroom Combined under structured blame.
 
 ### 7.3 Quantitative Telemetry & Efficiency Comparison
 
-| Benchmark Run | Model & Engine | Methodology | Rounds | Duration (s) | Cost ($USD) | Total Tokens | Pyright Errors | Unit Tests Passed | Line Coverage | Branch Coverage |
+| Benchmark Run | Model & Engine | Methodology | Rounds | Duration (s) | Cost ($USD) | Total Tokens | Pyright Errors | Unit / Pretense Tests | Line Coverage | Branch Coverage |
 | :--- | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **`deepseek-flash-structured_blame`** | `deepseek-flash` (API) | Standard + SB | 6 | 309.0s | $0.0418 | 2.3M | 0 | 17 | 100.0% | 100.0% |
+| **`deepseek-flash-structured_blame`** | `deepseek-flash` (API) | Standard + SB | 6 | 309.0s | $0.0418 | 2.3M | 0 | 17 | 95.0% | 90.0% |
 | **`deepseek-flash-pretense-structured_blame`** | `deepseek-flash` (API) | Pretense + SB | 7 | 514.8s | $0.0731 | 3.6M | 0 | 6 | 100.0% | 100.0% |
-| **`deepseek-flash-combined-structured_blame`** | `deepseek-flash` (API) | Combined + SB | 10 | 684.0s | $0.1148 | 5.1M | 0 | 10 | 100.0% | 100.0% |
-| **`qwen-moe-combined-structured_blame`** | `qwen-moe` (Local MLX) | Combined + SB | 21 | 2219.5s | **$0.0000** | 7.5M | 0 | 23 | 100.0% | 100.0% |
+| **`deepseek-flash-combined`** | `deepseek-flash` (API) | Combined | 11 | 892.5s | $0.1390 | 6.6M | 0 | 9 | 100.0% | 100.0% |
+| **`deepseek-flash-combined-structured_blame`** | `deepseek-flash` (API) | Combined + SB | 7 | 402.1s | $0.0753 | 2.2M | 0 | 15 | 100.0% | 100.0% |
+| **`gemini-flash-combined-structured_blame`** | `gemini-flash` (API) | Combined + SB | 7 | 481.7s | $0.1952 | 4.6M | 0 | 9 | 100.0% | 100.0% |
+| **`gemini-flash-pretense-structured_blame`** | `gemini-flash` (API) | Pretense + SB | 4 | 602.1s | $0.1431 | 3.1M | 0 | 15 | 100.0% | 100.0% |
+| **`qwen-moe-combined-structured_blame`** | `qwen-moe` (Local MLX) | Combined + SB | 12 | 1553.5s | **$0.0000** | 4.9M | 0 | 15 | 100.0% | 100.0% |
 
 ### 7.4 Differential Cross-Testing Analysis
 
-Cross-testing across all four implementations was executed using [`bin/run_cross_tests.py`](file:///Users/seanmcdirmid/projects/cleanroom/bin/run_cross_tests.py):
+Cross-testing across all seven implementations was executed using [`bin/run_cross_tests.py`](file:///Users/seanmcdirmid/projects/cleanroom/bin/run_cross_tests.py):
 
 ```bash
 uv run python bin/run_cross_tests.py --suite lru_cache --mode auto
@@ -1209,23 +1258,115 @@ uv run python bin/run_cross_tests.py --suite lru_cache --mode auto
 
 #### Cross-Implementation Robustness Matrix ($T_{\text{suite}} \to L_{\text{impl}}$)
 
-| Target Implementation | Self Pass | `deepseek-flash-combined` | `deepseek-flash-pretense` | `deepseek-flash-standard` | `qwen-moe-combined` | Foreign Total | Cross Pass % | Soundness Status |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
-| **`deepseek-flash-combined-structured_blame`** | 10/10 (100%) | — | 6/6 (100%) | 17/17 (100%) | 1/1 (100%) | 24/24 | **100.0%** | 🟢 **SOUND (100%)** |
-| **`deepseek-flash-pretense-structured_blame`** | 6/6 (100%) | 10/10 (100%) | — | 17/17 (100%) | 1/1 (100%) | 28/28 | **100.0%** | 🟢 **SOUND (100%)** |
-| **`deepseek-flash-structured_blame`** | 17/17 (100%) | 10/10 (100%) | 6/6 (100%) | — | 1/1 (100%) | 17/17 | **100.0%** | 🟢 **SOUND (100%)** |
-| **`qwen-moe-combined-structured_blame`** | 1/1 (100%) | 10/10 (100%) | 6/6 (100%) | 17/17 (100%) | — | 33/33 | **100.0%** | 🟢 **SOUND (100%)** |
+| Target Implementation | Self Pass | `DS Comb` | `DS Comb-SB` | `DS Pret-SB` | `DS Std-SB` | `Gemini Comb-SB` | `Gemini Pret-SB` | `Qwen Comb-SB` | True Defects (Lib) | False Alarms (Test) | Soundness Status |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
+| **`deepseek-flash-combined`** | 9/9 | — | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | **0** | **0** | 🟢 **SOUND (0 Lib / 0 Test)** |
+| **`deepseek-flash-combined-structured_blame`** | 15/15 | 0 / 0 | — | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | **0** | **0** | 🟢 **SOUND (0 Lib / 0 Test)** |
+| **`deepseek-flash-pretense-structured_blame`** | 6/6 | 0 / 0 | 0 / 0 | — | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | **0** | **0** | 🟢 **SOUND (0 Lib / 0 Test)** |
+| **`deepseek-flash-structured_blame`** | 17/17 | 0 / 0 | 0 / 0 | 0 / 0 | — | 0 / 0 | 0 / 0 | 0 / 0 | **0** | **0** | 🟢 **SOUND (0 Lib / 0 Test)** |
+| **`gemini-flash-combined-structured_blame`** | 9/9 | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | — | 0 / 0 | 0 / 0 | **0** | **0** | 🟢 **SOUND (0 Lib / 0 Test)** |
+| **`gemini-flash-pretense-structured_blame`** | 15/15 | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | — | 0 / 0 | **0** | **0** | 🟢 **SOUND (0 Lib / 0 Test)** |
+| **`qwen-moe-combined-structured_blame`** | 15/15 | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | — | **0** | **0** | 🟢 **SOUND (0 Lib / 0 Test)** |
 
 #### Key Analytical Observations
-1. **Flawless 100% Cross-Soundness Across All Tiers**: Every implementation achieved 100% pass rates across all foreign test suites, establishing that bounded LRU eviction semantics converge with zero specification ambiguities under Cleanroom specifications.
-2. **Local Tier-1 Engine (`qwen-moe`) Parity**: Running completely offline on Apple Silicon via MLX at **$0.0000 cost**, `qwen-moe` passed all 33 foreign test suites without a single failure or assertion mismatch.
+1. **Flawless 100% Cross-Soundness Across All Tiers**: Every implementation across `deepseek-flash`, `gemini-flash`, and `qwen-moe` achieved 100% pass rates across all foreign test suites with zero defects (`516/516` foreign test executions passed), establishing that bounded LRU eviction semantics converge without specification ambiguity under Cleanroom specifications.
+2. **Local Tier-1 Engine (`qwen-moe`) Parity**: Running completely offline on Apple Silicon via MLX at **$0.0000 cost**, `qwen-moe` passed all 71 foreign tests without a single failure or assertion mismatch.
 3. **Elimination of Ping-Pong Rejections via Formal Violation Architecture**: In the initial flight of `qwen-moe`, the Pretense QA auditor repeatedly rejected fixed tests due to contract violation syntax ambiguity. Following the introduction of `checked.violating(...)` with disabled preconditions for terminal error testing and explicit state machine capacity defaults, `qwen-moe` achieved **first-pass audit acceptance** in Wave 1, dropping total flight rounds from 26 down to 17 waves and yielding 23 clean unit tests with 100% branch coverage.
 
 ---
 
-## 8. Cross-Suite Comparative Insights: Coupling Topologies & Methodology Tradeoffs
+## 8. Benchmark Suite 7: `ring_buffer`
 
-### 8.1 Coupling Topologies & Domain Complexity
+### 8.1 The `ring_buffer` Benchmark Architecture
+
+The [`ring_buffer`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/parts/ring_buffer/description.md) benchmark evaluates bounded circular FIFO buffer synthesis across a single component:
+- **Circular Capacity & Wraparound**: Enforces bounded capacity (`push`, `pop`, `peek`, `is_full`, `is_empty`) with FIFO ordering across wraparound boundaries.
+- **Contractual Preconditions**: Raises `BufferFullError` on `push()` when full, `BufferEmptyError` on `pop()`/`peek()` when empty, and `ValueError` on invalid capacity initialization.
+
+### 8.2 Evaluated Benchmark Runs & Telemetry
+
+Fifteen synthesis runs were evaluated in [`benchmarks/results/ring_buffer`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/results/ring_buffer):
+`deepseek-flash`, `deepseek-flash-baseline`, `deepseek-flash-combined`, `deepseek-flash-combined-structured_blame`, `deepseek-flash-pretense`, `deepseek-flash-pretense-baseline`, `deepseek-flash-pretense-structured_blame`, `deepseek-flash-structured_blame`, `gemini-flash-baseline`, `gemini-flash-combined-structured_blame`, `gemini-flash-lite`, `gemini-flash-lite-pretense`, `gemini-flash-structured_blame`, `qwen-moe-combined-structured_blame`, and `qwen-moe-structured_blame`.
+
+Selected structured-blame and tier-validation telemetry (see §11.2 for cross-suite comparison):
+
+| Benchmark Run | Methodology | Rounds | Duration (s) | Cost ($USD) | Total Tokens | Self Pass | True Defects (Lib) | False Alarms (Test) |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **`deepseek-flash-structured_blame`** | Standard + SB | 4 | 223.4s | $0.0500 | 1.6M | 10/10 | **0** | **1** |
+| **`deepseek-flash-pretense-structured_blame`** | Pretense + SB | 6 | 646.8s | $0.1016 | 5.3M | 5/5 | **0** | **1** |
+| **`deepseek-flash-combined-structured_blame`** | Combined + SB | 12 | 789.5s | $0.1104 | 5.7M | 2/2 | **0** | **1** |
+| **`gemini-flash-structured_blame`** | Standard + SB (Gemini) | 5 | 430.9s | $0.1106 | 2.5M | 13/13 | **0** | **1** |
+| **`gemini-flash-lite-pretense`** | Pretense (Gemini Lite) | 37 | 573.9s | $0.2456 | 8.7M | 3/3 | **0** | **1** |
+
+### 8.3 Differential Cross-Testing Analysis
+
+```bash
+uv run python bin/run_cross_tests.py --suite ring_buffer --mode auto --detailed
+```
+
+1. **13 of 15 Implementations Achieved 0 True Library Defects**: `deepseek-flash`, `deepseek-flash-baseline`, `deepseek-flash-combined`, `deepseek-flash-combined-structured_blame`, `deepseek-flash-pretense`, `deepseek-flash-pretense-baseline`, `deepseek-flash-pretense-structured_blame`, `deepseek-flash-structured_blame`, `gemini-flash-baseline`, `gemini-flash-combined-structured_blame`, `gemini-flash-lite`, `gemini-flash-lite-pretense`, and `gemini-flash-structured_blame` all passed 100% of every conformant foreign suite, failing only `deepseek-flash-pretense`'s broken `test_push_pop_preserves_fifo_order` assertion (1 false alarm each).
+2. **`qwen-moe` Exception `__str__` Defect (2 Runs)**: Both `qwen-moe-combined-structured_blame` (`94/97`, 96.9%) and `qwen-moe-structured_blame` (`83/86`, 96.5%) failed `test_pop_empty` (`gemini-flash-lite-pretense`) and `test_pop_empty_buffer_error` (`deepseek-flash-combined-structured_blame`) with `AttributeError: 'BufferEmptyError' object has no attribute 'message'` during exception formatting (`__str__`).
+3. **`deepseek-flash-pretense` Broken Self-Oracle**: `deepseek-flash-pretense` achieved `95/95 (100.0%)` across all 14 foreign test suites, but failed `test_push_pop_preserves_fifo_order` (`4/5` self-pass, 80.0%) on itself and all 14 foreign implementations (14 false alarms).
+
+---
+
+## 9. Benchmark Suite 8: `multi_interface`
+
+### 9.1 The `multi_interface` Benchmark Architecture
+
+The [`multi_interface`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/parts/multi_interface/description.md) benchmark evaluates a single stateful component exposing multiple interfaces/protocols (`Reader`, `Writer`, and unified `ReadWriteBuffer` coordination).
+
+### 9.2 Evaluated Benchmark Runs, Telemetry & Cross-Testing
+
+Three structured-blame runs were evaluated in [`benchmarks/results/multi_interface`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/results/multi_interface):
+
+```bash
+uv run python bin/run_cross_tests.py --suite multi_interface --mode auto --detailed
+```
+
+| Benchmark Run | Methodology | Rounds | Duration (s) | Cost ($USD) | Total Tokens | Self Pass | True Defects (Lib) | False Alarms (Test) |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **`deepseek-flash-combined-structured_blame`** | Combined + SB | 14 | 1126.1s | $0.1673 | 11.9M | 2/2 | **0** | **0** |
+| **`deepseek-flash-pretense-structured_blame`** | Pretense + SB | 4 | 430.9s | $0.0638 | 2.7M | 4/4 | **0** | **0** |
+| **`deepseek-flash-structured_blame`** | Standard + SB | 4 | 204.2s | $0.0251 | 1.3M | 9/9 | **0** | **0** |
+
+*All 3 implementations achieved 100.0% mutual interoperability (`0 Lib / 0 Test` across every pair) with zero cross-testing defects detected.*
+
+---
+
+## 10. Benchmark Suite 9: `dag_engine`
+
+### 10.1 The `dag_engine` Benchmark Architecture
+
+The [`dag_engine`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/parts/dag_engine/description.md) benchmark evaluates full DAG topology management, wave scheduling, failure policies, retries, timeouts, and execution reporting across `DAG`, `WaveScheduler`, and `DAGRunner`.
+
+### 10.2 Evaluated Benchmark Runs & Telemetry
+
+Three structured-blame runs were evaluated in [`benchmarks/results/dag_engine`](file:///Users/seanmcdirmid/projects/cleanroom/benchmarks/results/dag_engine):
+
+| Benchmark Run | Methodology | Rounds | Duration (s) | Cost ($USD) | Total Tokens | Self Pass | True Defects (Lib) | False Alarms (Test) |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **`deepseek-flash-combined-structured_blame`** | Combined + SB | 35 | 3169.1s | $0.5748 | 39.3M | 26/26 | **0** | **2** |
+| **`deepseek-flash-pretense-structured_blame`** | Pretense + SB | 27 | 3331.9s | $0.4743 | 52.9M | 26/26 | **1** | **1** |
+| **`deepseek-flash-structured_blame`** | Standard + SB | 11 | 1116.3s | $0.2039 | 14.8M | 45/45 | **3** | **0** |
+
+### 10.3 Differential Cross-Testing Analysis
+
+```bash
+uv run python bin/run_cross_tests.py --suite dag_engine --mode auto --detailed
+```
+
+| Target Implementation | `Comb-SB` | `Pret-SB` | `Std-SB` | Failure Root Cause Breakdown |
+| :--- | :---: | :---: | :---: | :--- |
+| **`deepseek-flash-combined-structured_blame`** | — | 25/26 (96.2%) | 44/45 (97.8%) | Failed `test_runner_blocked_dependent_termination` (`True is not false`, `Pret-SB`) and `test_run_records_node_timeout_as_failed_outcome` (`'slow' unexpectedly found in ('slow',)`, `Std-SB`). |
+| **`deepseek-flash-pretense-structured_blame`** | 25/26 (96.2%) | — | 44/45 (97.8%) | Failed `test_runner_continue_on_error_strands_dependent` (`assert 'child' in ()` for `skipped_nodes`, `Comb-SB`) and `test_run_records_node_timeout_as_failed_outcome` (`Std-SB`). |
+| **`deepseek-flash-structured_blame`** | 26/26 (100.0%) | 23/26 (88.5%) | — | Passed `100%` of `Comb-SB`, but failed 3 dynamic scheduling/state-machine checks in `Pret-SB`: `test_late_edge_readiness_demotion`, `test_removal_observation_sequence`, and `test_runner_blocked_dependent_termination`. |
+
+---
+
+## 11. Cross-Suite Comparative Insights: Coupling Topologies & Methodology Tradeoffs
+
+### 11.1 Coupling Topologies & Domain Complexity
 
 Comparing all nine benchmark suites illustrates how architectural topology and domain complexity interact across Cleanroom methodologies:
 
@@ -1284,7 +1425,7 @@ flowchart TD
 
 ---
 
-### 8.2 Observable Quality & Soundness Differences: Standard vs. Pretense vs. Combined
+### 11.2 Observable Quality & Soundness Differences: Standard vs. Pretense vs. Combined
 
 Across the benchmark suites—and particularly in mathematically dense domains like `semver_solver` / `semver_solver_multi` and dynamically stateful engines like `dag_engine_lite`—a clear empirical quality hierarchy emerges:
 
@@ -1324,30 +1465,30 @@ A common question is whether the additional roles and tokens in Combined justify
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
 | **`dag_engine`** | Standard + SB | 11 | 14.8M | 1116.3s | $0.2039 | 🔴 Deficient (91.8%) | 3 Defects (Dynamic Scheduling) |
 | **`dag_engine`** | Pretense + SB | 27 | 52.9M | 3331.9s | $0.4743 | 🟡 High (97.1%) | 1 Defect (Skip Reporting) |
-| **`dag_engine`** | **Combined + SB** | **21** | **36.1M** | **1941.9s** | **$0.4393** | 🟡 **High (95.8%)** | **0 Contract Defects** |
-| **`dag_engine_lite`** | Standard + SB | 9 | 10.4M | 856.7s | $0.0988 | 🟡 Near Sound (Contract Gaps) | 1 Defect Family |
-| **`dag_engine_lite`** | Pretense + SB | 13 | 14.2M | 1108.6s | $0.1192 | 🟢 100% Sound | 0 Defects |
-| **`dag_engine_lite`** | **Combined + SB** | **17** | **24.5M** | **1515.6s** | **$0.2471** | 🟢 **100% Sound (Dual-Oracle)** | **0 Defects** |
-| **`semver_solver`** | Standard + SB | 9 | 13.9M | 804.8s | $0.1251 | 🟡 High (98.8%) | Missing relational wildcards |
-| **`semver_solver`** | Pretense + SB | 19 | 23.7M | 1552.8s | $0.2729 | 🟢 100% Sound (98.9%) | 0 Specification Defects |
-| **`semver_solver`** | **Combined + SB** | **20** | **32.8M** | **1876.5s** | **$0.3804** | 🟢 **100% Sound (Fuzz-Immune)** | **0 Defects** |
-| **`semver_solver_multi`** | Standard + SB | 9 | 9.8M | 649.0s | $0.0768 | 🟡 Near Sound (Fuzz Gaps) | 4 Defects (`<=*` bare wildcard) |
-| **`semver_solver_multi`** | Pretense + SB | 11 | 14.8M | 866.5s | $0.1177 | 🟢 100% Sound (Minor Syntax) | 0 Defects |
-| **`semver_solver_multi`** | **Combined + SB** | **18** | **21.5M** | **1222.0s** | **$0.1585** | 🟢 **100% Sound (Fuzz-Immune)** | **0 Defects** |
-| **`task_queue`** | Standard + SB | 6 | 4.9M | 614.4s | $0.0771 | 🟡 High (95.6%) | Task dispatch ordering gaps |
-| **`task_queue`** | Pretense + SB | 22 | 40.7M | 2440.3s | $0.4036 | 🟡 High (96.2%) | 0 Specification Defects |
-| **`task_queue`** | **Combined + SB** | **29** | **38.2M** | **2180.4s** | **$0.4168** | 🟢 **100% Sound** | **0 Defects** |
-| **`ring_buffer`** | Standard + SB | 4 | 1.1M | 183.1s | $0.0246 | 🟢 100% Sound | 0 Defects (Zero-blame baseline) |
-| **`ring_buffer`** | Pretense + SB | 9 | 6.3M | 804.0s | $0.1009 | 🟢 100% Sound | 0 Defects |
+| **`dag_engine`** | **Combined + SB** | **35** | **39.3M** | **3169.1s** | **$0.5748** | 🟡 **High (97.2%)** | **0 Contract Defects** |
+| **`dag_engine_lite`** | Standard + SB | 13 | 10.4M | 988.5s | $0.1562 | 🟢 100% Sound | 0 Defects |
+| **`dag_engine_lite`** | Pretense + SB | 10 | 15.3M | 1294.6s | $0.2070 | 🟡 Near Sound | 1 Defect (Missing Dep) |
+| **`dag_engine_lite`** | **Combined + SB** | **24** | **28.2M** | **1425.5s** | **$0.4109** | 🟢 **100% Sound (Dual-Oracle)** | **0 Defects** |
+| **`semver_solver`** | Standard + SB | 10 | 22.8M | 1864.7s | $0.2746 | 🟢 100% Sound | 0 Defects |
+| **`semver_solver`** | Pretense + SB | 15 | 20.3M | 1224.2s | $0.2305 | 🟡 Near Sound | 2 Minor Defects |
+| **`semver_solver`** | **Combined + SB** | **30** | **37.5M** | **1993.6s** | **$0.4952** | 🟢 **100% Sound (Fuzz-Immune)** | **0 Defects** |
+| **`semver_solver_multi`** | Standard + SB | 20 | 23.9M | 1812.0s | $0.2670 | 🟡 Near Sound (Fuzz Gaps) | 4 Defects (`<=*` bare wildcard) |
+| **`semver_solver_multi`** | Pretense + SB | 23 | 45.9M | 1920.4s | $0.4252 | 🟢 100% Sound | 0 Defects |
+| **`semver_solver_multi`** | **Combined + SB** | **46** | **57.4M** | **3339.3s** | **$0.6632** | 🟢 **100% Sound (Fuzz-Immune)** | **0 Defects** |
+| **`task_queue`** | Standard + SB | 6 | 4.9M | 614.4s | $0.0771 | 🔴 Defective | 1 Defect (Double execution) |
+| **`task_queue`** | Pretense + SB | 10 | 11.1M | 826.2s | $0.1303 | 🟢 100% Sound | 0 Defects |
+| **`task_queue`** | **Combined + SB** | **29** | **38.2M** | **2180.4s** | **$0.4168** | 🔴 **Defective** | **1 Defect (Double execution)** |
+| **`ring_buffer`** | Standard + SB | 4 | 1.6M | 223.4s | $0.0500 | 🟢 100% Sound | 0 Defects |
+| **`ring_buffer`** | Pretense + SB | 6 | 5.3M | 646.8s | $0.1016 | 🟢 100% Sound | 0 Defects |
 | **`ring_buffer`** | **Combined + SB** | **12** | **5.7M** | **789.5s** | **$0.1104** | 🟢 **100% Sound** | **0 Defects** |
 | **`inter_interface`** | Standard + SB | 7 | 4.4M | 541.5s | $0.0819 | 🟢 100% Sound | 0 Defects |
-| **`inter_interface`** | Pretense + SB | 16 | 24.8M | 1456.2s | $0.2624 | 🟢 100% Sound | 0 Defects |
+| **`inter_interface`** | Pretense + SB | 5 | 2.1M | 365.0s | $0.0553 | 🟡 Near Sound (Signature) | 1 Defect (`__init__` signature) |
 | **`inter_interface`** | **Combined + SB** | **28** | **41.0M** | **2551.1s** | **$0.4476** | 🟢 **100% Sound** | **0 Defects** |
 | **`lru_cache`** | Standard + SB | 6 | 2.3M | 309.0s | $0.0418 | 🟢 100% Sound | 0 Defects |
 | **`lru_cache`** | Pretense + SB | 7 | 3.6M | 514.8s | $0.0731 | 🟢 100% Sound | 0 Defects |
-| **`lru_cache`** | **Combined + SB** | **10** | **5.1M** | **684.0s** | **$0.1148** | 🟢 **100% Sound** | **0 Defects** |
-| **`multi_interface`** | Standard + SB | 4 | 1.3M | 204.2s | $0.0251 | 🟢 100% Sound | 0 Defects (Zero-blame baseline) |
-| **`multi_interface`** | Pretense + SB | 11 | 9.8M | 945.0s | $0.1250 | 🟢 100% Sound | 0 Defects |
+| **`lru_cache`** | **Combined + SB** | **7** | **2.2M** | **402.1s** | **$0.0753** | 🟢 **100% Sound** | **0 Defects** |
+| **`multi_interface`** | Standard + SB | 4 | 1.3M | 204.2s | $0.0251 | 🟢 100% Sound | 0 Defects |
+| **`multi_interface`** | Pretense + SB | 4 | 2.7M | 430.9s | $0.0638 | 🟢 100% Sound | 0 Defects |
 | **`multi_interface`** | **Combined + SB** | **14** | **11.9M** | **1126.1s** | **$0.1673** | 🟢 **100% Sound** | **0 Defects** |
 
 #### Cross-Model Tier Validation (`gemini-flash`, `gemini-flash-lite`, & `qwen-moe` Under Structured Blame)
@@ -1356,15 +1497,16 @@ Evaluating the Cleanroom pipeline across different model capability tiers demons
 
 | Benchmark Task | Model & Harness | Methodology | Rounds | Duration (s) | Cost ($USD) | Cross-Test Soundness | True Library Defects |
 | :--- | :--- | :--- | :---: | :---: | :---: | :---: | :--- |
-| **`ring_buffer`** | **`gemini-flash`** (Antigravity) | Standard + SB | 6 | 287.6s | $0.1194 | 🟢 **100% Sound (56/56)** | **0 Defects** (Complete conformance across foreign suites) |
-| **`ring_buffer`** | **`gemini-flash-lite`** (Antigravity - Initial) | Pretense | 27 | 1176.3s | $0.4579 | 🟢 **100% Sound (100% Cov)** | **0 Defects** (100% line & branch coverage; sub-dollar convergence) |
-| **`ring_buffer`** | **`gemini-flash-lite`** (Antigravity - Refined Guides) | Pretense | 37 | **573.9s** | **$0.2456** | 🟢 **100% Sound (72/72)** | **0 Defects** (51% faster, 46% cheaper; first-pass 0 DSL errors) |
-| **`dag_engine_lite`** | **`gemini-flash`** (Antigravity) | Standard + SB | 11 | 1347.8s | $0.6064 | 🟡 **Near Sound (87.6%)** | **2 Defects** (Empty-wave infinite loop in `run()`; dynamic post-success node sync gap) |
-| **`dag_engine_lite`** | **`gemini-flash`** (Antigravity - Run 1) | **Combined + SB** | **63** | **5264.1s** | **$3.4650** | 🟢 **100% Sound (Dual-Oracle)** | **0 Defects** (Cured both Standard defects; highly discriminating test oracle) |
-| **`dag_engine_lite`** | **`gemini-flash`** (Antigravity - Run 2) | **Combined + SB** | **31** | **2108.5s** | **$1.1989** | 🟢 **100% Sound (Dual-Oracle)** | **0 Defects** (50.8% fewer rounds, 65.4% cheaper, 0 defects) |
-| **`dag_engine_lite`** | **`qwen-moe`** (Local MLX) | Pretense + SB | 25 | 3312.5s | $0.0000 | 🟡 **Near Sound (62.9% raw / 2 defects)** | **2 Defects** (Unhandled `KeyError` on cycle DFS; incident edge purge leakage in `remove_node`) |
-| **`dag_engine_lite`** | **`qwen-moe`** (Local MLX) | **Combined + SB** | **64** | **13172.7s** | **$0.0000** | 🟡 **Near Sound (4 defects)** | **4 Defects** (Empty-wave loop, retries_attempted off-by-one, diamond skip gap, deferred edge overwrite; **100% Sound Test Oracle**) |
-| **`lru_cache`** | **`qwen-moe`** (Local MLX) | **Combined + SB** | **21** | **2219.5s** | **$0.0000** | 🟢 **100% Sound (33/33)** | **0 Defects** (Passed all foreign unit & pretense suites with zero false alarms) |
+| **`ring_buffer`** | **`gemini-flash`** (Antigravity) | Standard + SB | 5 | 430.9s | $0.1106 | 🟢 **100% Sound** | **0 Defects** (Complete conformance across foreign suites) |
+| **`ring_buffer`** | **`gemini-flash-lite`** (Antigravity - Refined Guides) | Pretense | 37 | **573.9s** | **$0.2456** | 🟢 **100% Sound** | **0 Defects** (51% faster, 46% cheaper; first-pass 0 DSL errors) |
+| **`semver_solver`** | **`gemini-flash`** (Antigravity) | Pretense + SB | 27 | 2570.8s | $1.0365 | 🟢 **100% Sound** | **0 Defects** (0 false alarms caused across 462 foreign tests) |
+| **`dag_engine_lite`** | **`gemini-flash`** (Antigravity) | Standard + SB | 11 | 1347.8s | $0.6064 | 🟡 **Near Sound** | **2 Defects** (Empty-wave infinite loop in `run()`; dynamic post-success node sync gap) |
+| **`dag_engine_lite`** | **`gemini-flash`** (Antigravity) | **Combined + SB** | **35** | **2075.2s** | **$1.3552** | 🔴 **Deficient** | **4 Defects** (Run 4 `failure_policy` & late-dependent gaps) |
+| **`dag_engine_lite`** | **`qwen-moe`** (Local MLX) | Pretense + SB | 83 | 11795.3s | $0.0000 | 🟡 **Near Sound** | **2 Defects** (Empty-wave infinite loop in `run()`; `NodeNotFoundError` missing-dep gap) |
+| **`dag_engine_lite`** | **`qwen-moe`** (Local MLX) | **Combined + SB** | **64** | **13172.7s** | **$0.0000** | 🟡 **Near Sound** | **4 Defects** (Empty-wave loop, retries_attempted off-by-one, diamond skip gap, deferred edge overwrite; **100% Sound Test Oracle**) |
+| **`lru_cache`** | **`gemini-flash`** (Antigravity) | Pretense + SB | 4 | 602.1s | $0.1431 | 🟢 **100% Sound** | **0 Defects** (Passed all 71 foreign unit & pretense tests) |
+| **`lru_cache`** | **`gemini-flash`** (Antigravity) | **Combined + SB** | **7** | **481.7s** | **$0.1952** | 🟢 **100% Sound** | **0 Defects** (Passed all 77 foreign unit & pretense tests) |
+| **`lru_cache`** | **`qwen-moe`** (Local MLX) | **Combined + SB** | **12** | **1553.5s** | **$0.0000** | 🟢 **100% Sound** | **0 Defects** (Passed all 71 foreign unit & pretense tests with zero false alarms) |
 
 **Key Model-Tier Observations**:
 1. **Tier-2 Budget Frontier (`gemini-flash`) on Single Primitives**: On bounded primitives like `ring_buffer`, `gemini-flash` achieved 100% contractual soundness across all 56 foreign tests with zero defects in 6 rounds ($0.1194).
@@ -1380,7 +1522,7 @@ Evaluating the Cleanroom pipeline across different model capability tiers demons
 
 ---
 
-### 8.3 The Orthogonality & Invariance of Structured Blame
+### 11.3 The Orthogonality & Invariance of Structured Blame
 
 A critical finding from our experimental evaluation is that **Structured Blame did NOT alter the relative quality or soundness comparisons between methodologies**.
 
@@ -1401,7 +1543,7 @@ $$\text{Soundness}(M_{\text{method}}, \text{Harness}_{\text{blame}}) \propto \te
 
 ---
 
-## 9. Conclusions & Recommendations
+## 12. Conclusions & Recommendations
 
 1. **Self-Passing Tests Are Insufficient**: Across all five benchmark suites, every single run achieved a **100% self-pass rate**. Only differential cross-testing revealed critical defects like uncontracted wildcard rejections, forged double-execution assertions, dynamic node synchronization gaps, and broken collaborator test doubles.
 2. **Coupling Topologies Dictate Defect Surface**: Simple hierarchical delegation topologies (`inter_interface`) converge reliably with 100% cross-implementation soundness even in baseline generation, whereas bi-directional collaborative loops (`task_queue`) and dynamic multi-singleton orchestrators (`dag_engine_lite`) require adversarial Cleanroom QA auditing to prevent circular execution traps, dynamic synchronization omissions, and test assertion forgery.

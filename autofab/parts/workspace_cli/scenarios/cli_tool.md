@@ -97,7 +97,7 @@ Given: role alpha is active in scope_a.
 Given: role alpha is active in scope_a with two ready targets, and the pending work buffer is empty.
 
 1. The caller runs the work subcommand for scope_a with batch size one.
-   Observed: a console report presenting the first ready target, advising that one additional ready unit remains in the queue and should be acquired after submitting the active batch, only the first target recorded in pending work, and an exit code of one indicating work is ready.
+   Observed: a console report presenting the first ready target, advising that one additional ready unit remains in the queue and should be acquired after submitting the active batch, only the first target recorded in pending work, and an exit code of zero.
 
 ## Scenario 10 — Commissioning all roles for a directory scope
 

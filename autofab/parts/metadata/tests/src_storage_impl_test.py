@@ -67,8 +67,6 @@ class FakeSourceMetadataCoordinator:
                 lines.append(f"LAST_CHANGED: {meta.last_changed}")
             if meta.change_summary:
                 lines.append(f"CHANGE: {meta.change_summary}")
-            if meta.code_hash:
-                lines.append(f"CODE_HASH: {meta.code_hash}")
             if meta.dirty:
                 lines.append(f"DIRTY: {meta.dirty}")
             for k, v in sorted(meta.audits.items()):
@@ -86,8 +84,6 @@ class FakeSourceMetadataCoordinator:
                 lines.append(f"# LAST_CHANGED: {meta.last_changed}")
             if meta.change_summary:
                 lines.append(f"# CHANGE: {meta.change_summary}")
-            if meta.code_hash:
-                lines.append(f"# CODE_HASH: {meta.code_hash}")
             if meta.dirty:
                 lines.append(f"# DIRTY: {meta.dirty}")
             for k, v in sorted(meta.audits.items()):
@@ -143,7 +139,9 @@ class FakeSourceMetadataCoordinator:
     def compute_file_code_hash(self, file_path: Path | str) -> Optional[str]:
         return "fakehash1234"
 
-    def is_code_modified(self, file_path: Path | str) -> bool:
+    def is_code_modified(
+        self, file_path: Path | str, workspace_root: Optional[Path | str] = None
+    ) -> bool:
         return False
 
     def rewrite_metadata_in_text(
@@ -158,8 +156,6 @@ class FakeSourceMetadataCoordinator:
         clear_last_cleaned: bool = False,
         last_changed: Optional[str] = None,
         change_summary: Optional[str] = None,
-        code_hash: Optional[str] = None,
-        clear_code_hash: bool = False,
         clear_feedback: bool = False,
         append_feedback: Optional[str] = None,
         audits: Optional[Dict[str, str]] = None,
@@ -193,11 +189,6 @@ class FakeSourceMetadataCoordinator:
             tag = r_up if r_up.endswith("_AUDIT") else f"{r_up}_AUDIT"
             new_audits[tag] = self._now()
         new_dirty = None if clear_dirty else (dirty or (curr.dirty if curr else None))
-        new_hash = (
-            None
-            if clear_code_hash
-            else (code_hash or (curr.code_hash if curr else None))
-        )
         new_meta = src_metadata.FileMetadata(
             last_cleaned=new_cleaned,
             last_changed=new_changed,
@@ -205,7 +196,6 @@ class FakeSourceMetadataCoordinator:
             feedback=new_fb,
             audits=new_audits,
             dirty=new_dirty,
-            code_hash=new_hash,
         )
         self.metadata[p] = new_meta
         if os.path.exists(p):
@@ -230,7 +220,6 @@ class FakeSourceMetadataCoordinator:
         self,
         file_path: Path | str,
         change_description: str,
-        code_hash: Optional[str] = None,
     ) -> None:
         now = self._now()
         self.update_metadata(
@@ -238,7 +227,6 @@ class FakeSourceMetadataCoordinator:
             last_cleaned=now,
             last_changed=now,
             change_summary=change_description,
-            code_hash=code_hash or "fakehash1234",
             clear_feedback=True,
             clear_audits=True,
             clear_dirty=True,

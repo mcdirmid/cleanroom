@@ -65,7 +65,6 @@ def _parse_metadata_text(content: str) -> Optional[src_metadata.FileMetadata]:
         feedback=[values["FEEDBACK"]] if "FEEDBACK" in values else [],
         audits=audits,
         dirty=values.get("DIRTY"),
-        code_hash=values.get("CODE_HASH"),
     )
 
 
@@ -148,15 +147,47 @@ class FakeSourceMetadataCoordinator:
         except OSError:
             return None
 
-    def is_code_modified(self, file_path: Path | str) -> bool:
+    def is_code_modified(
+        self, file_path: Path | str, workspace_root: Optional[Path | str] = None
+    ) -> bool:
         p = Path(file_path)
         if not p.is_file():
             return True
-        meta = self.extract_metadata(p)
-        if meta is None or not meta.code_hash:
+        ws = Path(workspace_root).resolve() if workspace_root else None
+        manifest_path: Optional[Path] = None
+        if ws is not None:
+            cand = ws / ".autofab" / "pull_manifest.json"
+            if cand.is_file():
+                manifest_path = cand
+        else:
+            curr = p.resolve().parent
+            while True:
+                cand = curr / ".autofab" / "pull_manifest.json"
+                if cand.is_file():
+                    ws = curr
+                    manifest_path = cand
+                    break
+                if curr.parent == curr:
+                    break
+                curr = curr.parent
+        if manifest_path is None or ws is None:
             return True
-        current_hash = self.compute_file_code_hash(p)
-        return current_hash != meta.code_hash
+        try:
+            data = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return True
+        entries = data.get("files") if isinstance(data.get("files"), dict) else data
+        rel_from_ws = os.path.relpath(p.resolve(), ws).replace("\\", "/")
+        entry = entries.get(rel_from_ws)
+        if entry is None:
+            for k, v in entries.items():
+                if isinstance(k, str) and rel_from_ws.endswith("/" + k):
+                    entry = v
+                    break
+        baseline = entry.get("code_hash") if isinstance(entry, dict) else None
+        if not baseline:
+            return True
+        return self.compute_file_code_hash(p) != baseline
 
     def is_metadata_altered(
         self, original_content: str, new_content: str, filename_or_ext: str
@@ -182,8 +213,6 @@ class FakeSourceMetadataCoordinator:
         clear_last_cleaned: bool = False,
         last_changed: Optional[str] = None,
         change_summary: Optional[str] = None,
-        code_hash: Optional[str] = None,
-        clear_code_hash: bool = False,
         clear_feedback: bool = False,
         append_feedback: Optional[str] = None,
         audits: Optional[Dict[str, str]] = None,
@@ -224,13 +253,6 @@ class FakeSourceMetadataCoordinator:
             else existing_meta.change_summary
         )
 
-        if clear_code_hash:
-            new_code_hash: Optional[str] = None
-        elif code_hash is not None:
-            new_code_hash = code_hash
-        else:
-            new_code_hash = existing_meta.code_hash
-
         if clear_feedback:
             new_feedback: List[str] = []
         else:
@@ -265,7 +287,6 @@ class FakeSourceMetadataCoordinator:
             feedback=new_feedback,
             audits=new_audits,
             dirty=new_dirty,
-            code_hash=new_code_hash,
         )
 
         new_block_lines = src_metadata.format_metadata_block(new_meta, is_html)
@@ -301,8 +322,6 @@ class FakeSourceMetadataCoordinator:
         clear_last_cleaned: bool = False,
         last_changed: Optional[str] = None,
         change_summary: Optional[str] = None,
-        code_hash: Optional[str] = None,
-        clear_code_hash: bool = False,
         clear_feedback: bool = False,
         append_feedback: Optional[str] = None,
         audits: Optional[Dict[str, str]] = None,
@@ -319,8 +338,6 @@ class FakeSourceMetadataCoordinator:
                     "clear_last_cleaned": clear_last_cleaned,
                     "last_changed": last_changed,
                     "change_summary": change_summary,
-                    "code_hash": code_hash,
-                    "clear_code_hash": clear_code_hash,
                     "clear_feedback": clear_feedback,
                     "append_feedback": append_feedback,
                     "audits": audits,
@@ -343,8 +360,6 @@ class FakeSourceMetadataCoordinator:
             clear_last_cleaned=clear_last_cleaned,
             last_changed=last_changed,
             change_summary=change_summary,
-            code_hash=code_hash,
-            clear_code_hash=clear_code_hash,
             clear_feedback=clear_feedback,
             append_feedback=append_feedback,
             audits=audits,
@@ -377,13 +392,11 @@ class FakeSourceMetadataCoordinator:
             if (existing and existing.change_summary)
             else default_change
         )
-        code_hash = self.compute_file_code_hash(p)
         self.update_metadata(
             p,
             last_cleaned=now,
             last_changed=last_changed,
             change_summary=change_summary,
-            code_hash=code_hash,
             clear_feedback=True,
             clear_dirty=True,
         )
@@ -392,19 +405,13 @@ class FakeSourceMetadataCoordinator:
         self,
         file_path: Path | str,
         change_description: str,
-        code_hash: Optional[str] = None,
     ) -> None:
         now = src_metadata.current_utc_timestamp()
-        p = Path(file_path)
-        computed_hash = code_hash
-        if computed_hash is None and p.is_file():
-            computed_hash = self.compute_file_code_hash(p)
         self.update_metadata(
             file_path,
             last_cleaned=now,
             last_changed=now,
             change_summary=change_description,
-            code_hash=computed_hash,
             clear_feedback=True,
             clear_audits=True,
             clear_dirty=True,
@@ -814,7 +821,10 @@ class WorkspaceSyncImplTest(LifecycleTestCase):
                 os.path.exists(os.path.join(ws_dir, app_info.DEFAULT_ROLES_FILE))
             )
             self.assertTrue(
-                os.path.isfile(os.path.join(ws_dir, "support", "lib", "lifecycle.py"))
+                os.path.isfile(os.path.join(ws_dir, "support", "lib", "lifecycle.pyc"))
+            )
+            self.assertFalse(
+                os.path.exists(os.path.join(ws_dir, "support", "lib", "lifecycle.py"))
             )
             self.assertFalse(os.path.exists(os.path.join(ws_dir, "notes.txt")))
             self.assertFalse(os.path.exists(os.path.join(ws_dir, "pyrightconfig.json")))
@@ -893,7 +903,7 @@ class WorkspaceSyncImplTest(LifecycleTestCase):
             with open(ws_target, "r", encoding="utf-8") as f:
                 ws_content = f.read()
             self.assertIn("CHANGE: Initial unit", ws_content)
-            self.assertIn("CODE_HASH:", ws_content)
+            self.assertNotIn("CODE_HASH:", ws_content)
             self.assertNotIn("LAST_CLEANED:", ws_content)
             self.assertNotIn("LAST_CHANGED:", ws_content)
 
@@ -924,7 +934,7 @@ class WorkspaceSyncImplTest(LifecycleTestCase):
             with open(ws_target, "r", encoding="utf-8") as f:
                 ws_content = f.read()
             self.assertIn("Fix unit logic", ws_content)
-            self.assertIn("CODE_HASH:", ws_content)
+            self.assertNotIn("CODE_HASH:", ws_content)
             self.assertNotIn("LAST_CLEANED:", ws_content)
 
             st = os.stat(ws_target)
@@ -1053,9 +1063,14 @@ class WorkspaceSyncImplTest(LifecycleTestCase):
 
             with open(ws_target, "r", encoding="utf-8") as f:
                 ws_content = f.read()
-            self.assertIn("CODE_HASH:", ws_content)
+            self.assertNotIn("CODE_HASH:", ws_content)
             self.assertNotIn("LAST_CLEANED:", ws_content)
             self.assertNotIn("LAST_CHANGED:", ws_content)
+            manifest_path = os.path.join(ws_dir, ".autofab", "pull_manifest.json")
+            with open(manifest_path, "r", encoding="utf-8") as f:
+                manifest1 = json.load(f)
+            entries1 = manifest1.get("files", manifest1)
+            old_code_hash = entries1["parts/sample/lib/sample.py"]["code_hash"]
 
             with open(ws_target, "w", encoding="utf-8") as f:
                 f.write(ws_content.replace("x = 1", "x = 42"))
@@ -1078,9 +1093,14 @@ class WorkspaceSyncImplTest(LifecycleTestCase):
             with open(ws_target, "r", encoding="utf-8") as f:
                 wf_content = f.read()
             self.assertIn("x = 42", wf_content)
-            self.assertIn("CODE_HASH:", wf_content)
+            self.assertNotIn("CODE_HASH:", wf_content)
             self.assertNotIn("LAST_CLEANED:", wf_content)
             self.assertNotIn("LAST_CHANGED:", wf_content)
+            with open(manifest_path, "r", encoding="utf-8") as f:
+                manifest2 = json.load(f)
+            entries2 = manifest2.get("files", manifest2)
+            new_code_hash = entries2["parts/sample/lib/sample.py"]["code_hash"]
+            self.assertNotEqual(old_code_hash, new_code_hash)
 
     def test_pull_only_pulls_changed_files_and_preserves_subagent_edits(self) -> None:
         with (

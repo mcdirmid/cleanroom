@@ -72,11 +72,15 @@ class SubmissionCoordinator(submit.SubmissionCoordinator):
           file_alias.AliasManager.workspace_root and the resolved target path, while
           politely accepting auditor submissions without uncommitted staged blame without
           mutating canonical repository metadata.
+        - Inspects target modification status and in-band feedback metadata through
+          src_metadata.is_code_modified and src_metadata.extract_metadata, rejecting unmodified
+          producer submissions when feedback is present with an error instructing the caller to
+          use bin/reject instead.
         - Stamps in-band audit tags and updates canonical in-band change metadata through
           src_metadata.SourceMetadataCoordinator.stamp_audit and
-          src_metadata.SourceMetadataCoordinator.record_change while stripping ephemeral
-          code hashes, then reflects the rewritten headers back into the role workspace with a
-          refreshed ephemeral code hash.
+          src_metadata.SourceMetadataCoordinator.record_change, then reflects the rewritten headers
+          back into the role workspace and refreshes baseline `code_hash` in
+          `.autofab/pull_manifest.json`.
         """
         ...
 

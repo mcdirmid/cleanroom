@@ -30,8 +30,7 @@ from benchmark_1.parts.dag_engine_lite.lib.dag_engine_lite_impl import DAG, Wave
 class DagEngineLiteImplPseudoStateMachine(DagEngineLiteStateMachine):
     """Implementation pseudo-state machine for DagEngineLite."""
 
-    @transition(DAG.add_node)
-    def add_node(
+    def inner_add_node(
         self,
         node_id: str,
         action: Callable[[], Any],
@@ -40,182 +39,141 @@ class DagEngineLiteImplPseudoStateMachine(DagEngineLiteStateMachine):
         retries: int,
     ) -> Any:
         target: DAG = sut(DAG)
-        ret = call_target(target.add_node(node_id, action, dependencies, priority, retries))
-        return ret
+        return target.add_node(node_id, action, dependencies, priority, retries)
 
-    @transition(DAG.add_edge)
-    def add_edge(
+    def inner_add_edge(
         self,
         upstream_id: str,
         downstream_id: str,
     ) -> Any:
         target: DAG = sut(DAG)
-        ret = call_target(target.add_edge(upstream_id, downstream_id))
-        return ret
+        return target.add_edge(upstream_id, downstream_id)
 
-    @transition(DAG.remove_node)
-    def remove_node(
+    def inner_remove_node(
         self,
         node_id: str,
     ) -> Any:
         target: DAG = sut(DAG)
-        ret = call_target(target.remove_node(node_id))
-        return ret
+        return target.remove_node(node_id)
 
-    @transition(DAG.has_node)
-    def has_node(
+    def inner_has_node(
         self,
         node_id: str,
     ) -> Any:
         target: DAG = sut(DAG)
-        ret = call_target(target.has_node(node_id))
-        return ret
+        return target.has_node(node_id)
 
-    @transition(DAG.get_node)
-    def get_node(
+    def inner_get_node(
         self,
         node_id: str,
     ) -> Any:
         target: DAG = sut(DAG)
-        ret = call_target(target.get_node(node_id))
-        return ret
+        return target.get_node(node_id)
 
-    @transition(DAG.get_dependencies)
-    def get_dependencies(
+    def inner_get_dependencies(
         self,
         node_id: str,
     ) -> Any:
         target: DAG = sut(DAG)
-        ret = call_target(target.get_dependencies(node_id))
-        return ret
+        return target.get_dependencies(node_id)
 
-    @transition(DAG.get_dependents)
-    def get_dependents(
+    def inner_get_dependents(
         self,
         node_id: str,
     ) -> Any:
         target: DAG = sut(DAG)
-        ret = call_target(target.get_dependents(node_id))
-        return ret
+        return target.get_dependents(node_id)
 
-    @transition(DAG.all_nodes)
-    def all_nodes(
+    def inner_all_nodes(
         self,
     ) -> Any:
         target: DAG = sut(DAG)
-        ret = call_target(target.all_nodes())
-        return ret
+        return target.all_nodes()
 
-    @transition(DAG.validate)
-    def validate(
+    def inner_validate(
         self,
     ) -> Any:
         target: DAG = sut(DAG)
-        ret = call_target(target.validate())
-        return ret
+        return target.validate()
 
-    @transition(DAG.topological_sort)
-    def topological_sort(
+    def inner_topological_sort(
         self,
     ) -> Any:
         target: DAG = sut(DAG)
-        ret = call_target(target.topological_sort())
-        return ret
+        return target.topological_sort()
 
-    @transition(DAG.find_roots)
-    def find_roots(
+    def inner_find_roots(
         self,
     ) -> Any:
         target: DAG = sut(DAG)
-        ret = call_target(target.find_roots())
-        return ret
+        return target.find_roots()
 
-    @transition(DAG.find_leaves)
-    def find_leaves(
+    def inner_find_leaves(
         self,
     ) -> Any:
         target: DAG = sut(DAG)
-        ret = call_target(target.find_leaves())
-        return ret
+        return target.find_leaves()
 
-    @transition(DAG.compute_critical_path)
-    def compute_critical_path(
+    def inner_compute_critical_path(
         self,
         estimated_durations: Optional[Mapping[str, float]],
     ) -> Any:
         target: DAG = sut(DAG)
-        ret = call_target(target.compute_critical_path(estimated_durations))
-        return ret
+        return target.compute_critical_path(estimated_durations)
 
-    @transition(WaveScheduler.next_wave)
-    def next_wave(
+    def inner_next_wave(
         self,
     ) -> Any:
         target: WaveScheduler = sut(WaveScheduler)
-        ret = call_target(target.next_wave())
-        return ret
+        return target.next_wave()
 
-    @transition(WaveScheduler.mark_running)
-    def mark_running(
+    def inner_mark_running(
         self,
         node_id: str,
     ) -> Any:
         target: WaveScheduler = sut(WaveScheduler)
-        ret = call_target(target.mark_running(node_id))
-        return ret
+        return target.mark_running(node_id)
 
-    @transition(WaveScheduler.mark_succeeded)
-    def mark_succeeded(
+    def inner_mark_succeeded(
         self,
         node_id: str,
     ) -> Any:
         target: WaveScheduler = sut(WaveScheduler)
-        ret = call_target(target.mark_succeeded(node_id))
-        return ret
+        return target.mark_succeeded(node_id)
 
-    @transition(WaveScheduler.mark_failed)
-    def mark_failed(
+    def inner_mark_failed(
         self,
         node_id: str,
         failure_policy: FailurePolicy,
     ) -> Any:
         target: WaveScheduler = sut(WaveScheduler)
-        ret = call_target(target.mark_failed(node_id, failure_policy))
-        return ret
+        return target.mark_failed(node_id, failure_policy)
 
-    @transition(WaveScheduler.is_finished)
-    def is_finished(
+    def inner_is_finished(
         self,
     ) -> Any:
         target: WaveScheduler = sut(WaveScheduler)
-        ret = call_target(target.is_finished())
-        return ret
+        return target.is_finished()
 
-    @transition(WaveScheduler.get_state)
-    def get_state(
+    def inner_get_state(
         self,
         node_id: str,
     ) -> Any:
         target: WaveScheduler = sut(WaveScheduler)
-        ret = call_target(target.get_state(node_id))
-        return ret
+        return target.get_state(node_id)
 
-    @transition(WaveScheduler.get_all_states)
-    def get_all_states(
+    def inner_get_all_states(
         self,
     ) -> Any:
         target: WaveScheduler = sut(WaveScheduler)
-        ret = call_target(target.get_all_states())
-        return ret
+        return target.get_all_states()
 
-    @transition(DAGRunner.run)
-    def run(
+    def inner_run(
         self,
         failure_policy: FailurePolicy,
     ) -> Any:
         target: DAGRunner = sut(DAGRunner)
-        ret = call_target(target.run(failure_policy))
-        return ret
+        return target.run(failure_policy)
 
 
 proto = DagEngineLiteImplPseudoStateMachine()

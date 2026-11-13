@@ -155,13 +155,10 @@ def _resolve_active_methodology_pkg(
 
 
 def _project_for_role_workspace(content: str, filename: str, is_writable: bool) -> str:
-    """Projects in-band metadata for role workspace: only change, feedback, and ephemeral code hash."""
+    """Projects in-band metadata for role workspace: only change and feedback."""
     meta = src_metadata.extract_metadata_from_text(content, filename)
     if meta is None:
         return content
-    code_hash = None
-    if is_writable:
-        code_hash = src_metadata.compute_code_hash(content, filename)
     return src_metadata.rewrite_metadata_in_text(
         content,
         filename,
@@ -169,13 +166,11 @@ def _project_for_role_workspace(content: str, filename: str, is_writable: bool) 
         last_changed="",
         clear_audits=True,
         clear_dirty=True,
-        code_hash=code_hash,
-        clear_code_hash=not is_writable,
     )
 
 
 def _copy_projected_file(src: str, dst: str, is_writable: bool) -> None:
-    """Copies a file into a role workspace, projecting metadata headers with ephemeral code hashes on writable files."""
+    """Copies a file into a role workspace, projecting metadata headers."""
     try:
         with open(src, "r", encoding="utf-8") as f:
             content = f.read()
@@ -658,16 +653,24 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
                 if os.path.isfile(src_f) and os.path.isfile(dst_f):
                     s_h = _compute_file_sha256(src_f)
                     w_h = _compute_file_sha256(dst_f)
+                    c_h = src_metadata.compute_file_code_hash(dst_f)
                     if s_h and w_h:
-                        initial_manifest[rel] = {"main_hash": s_h, "ws_hash": w_h}
+                        entry = {"main_hash": s_h, "ws_hash": w_h}
+                        if c_h:
+                            entry["code_hash"] = c_h
+                        initial_manifest[rel] = entry
             for rel in readonly_rel:
                 src_f = os.path.join(scope_dir, rel)
                 dst_f = os.path.join(workspace_dir, ws_scope, rel)
                 if os.path.isfile(src_f) and os.path.isfile(dst_f):
                     s_h = _compute_file_sha256(src_f)
                     w_h = _compute_file_sha256(dst_f)
+                    c_h = src_metadata.compute_file_code_hash(dst_f)
                     if s_h and w_h:
-                        initial_manifest[rel] = {"main_hash": s_h, "ws_hash": w_h}
+                        entry = {"main_hash": s_h, "ws_hash": w_h}
+                        if c_h:
+                            entry["code_hash"] = c_h
+                        initial_manifest[rel] = entry
             if initial_manifest:
                 _save_pull_manifest(workspace_dir, initial_manifest)
 
@@ -823,13 +826,40 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
                     copy_file_with_perms(
                         lib_init, os.path.join(d_lib, "__init__.py"), readonly=True
                     )
+                import py_compile
+
                 for fname in os.listdir(s_lib):
                     sf = os.path.join(s_lib, fname)
                     if not os.path.isfile(sf):
                         continue
                     if _is_runtime_support_library(fname):
-                        df = os.path.join(d_lib, fname)
-                        copy_file_with_perms(sf, df, readonly=True)
+                        if fname.endswith(".py") and not fname.endswith("__init__.py"):
+                            base_name = fname[:-3]
+                            pyc_dest = os.path.join(d_lib, f"{base_name}.pyc")
+                            try:
+                                py_compile.compile(
+                                    sf, pyc_dest, optimize=2, doraise=True
+                                )
+                                os.chmod(pyc_dest, 0o444)
+                            except Exception:
+                                pass
+                            stub_src = os.path.join(s_lib, f"{base_name}.pyi")
+                            if os.path.isfile(stub_src):
+                                copy_file_with_perms(
+                                    stub_src,
+                                    os.path.join(d_lib, f"{base_name}.pyi"),
+                                    readonly=True,
+                                )
+                            stale_py = os.path.join(d_lib, fname)
+                            if os.path.isfile(stale_py):
+                                try:
+                                    os.chmod(stale_py, 0o644)
+                                    os.remove(stale_py)
+                                except OSError:
+                                    pass
+                        else:
+                            df = os.path.join(d_lib, fname)
+                            copy_file_with_perms(sf, df, readonly=True)
 
         scaffolder.deploy_runner_zipapps(bin_dir, role_def=role_def)
 

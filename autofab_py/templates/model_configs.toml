@@ -209,6 +209,19 @@ rate_out = 10.00
 subagent_batch_size = 5
 timeout_seconds = 180.0
 
+[models.gemini-carbon]
+model = "gemini-carbon"
+provider = "google"
+harness = "antigravity"
+tier = 4
+tier_label = "Frontier Ceiling"
+# Introductory pricing through Nov 30, 2026 ($4.00 / $0.20 / $20.00 standard starting Dec 1, 2026)
+rate_uncached_in = 2.00
+rate_cached_in = 0.10
+rate_out = 10.00
+subagent_batch_size = 5
+timeout_seconds = 180.0
+
 [models.claude-sonnet]
 model = "claude-sonnet"
 provider = "anthropic"

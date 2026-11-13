@@ -200,6 +200,24 @@ def extract_file_index(p: Path) -> int:
     return int(m.group(0)) if m else 0
 
 
+def _normalize_scope_imports(content: str, suite_name: str) -> str:
+    """Normalizes relative and scope-qualified imports for isolated sandbox execution."""
+    normalized = re.sub(
+        r"^from (?:lib|\.) import ([^\n]+)$",
+        r"try:\n    from . import \1\nexcept (ImportError, ValueError):\n    import \1",
+        content,
+        flags=re.MULTILINE,
+    )
+    normalized = re.sub(r"benchmark_\d+", "benchmark_1", normalized)
+    normalized = re.sub(r"benchmarks\.runs\.[a-zA-Z0-9_]+", "benchmark_1", normalized)
+    normalized = re.sub(
+        rf"\b{re.escape(suite_name)}_[a-zA-Z0-9_]+(?=\.parts\.)",
+        "benchmark_1",
+        normalized,
+    )
+    return normalized
+
+
 def run_cross_test(
     lib_dir: Path,
     test_dir: Path,
@@ -241,15 +259,8 @@ def run_cross_test(
 
     for fname, fcontent in lib_files.items():
         # Normalize relative imports to be resilient to package and top-level execution
-        normalized = re.sub(
-            rf"^from (?:lib|\.) import {suite_name}",
-            f"try:\n    from . import {suite_name}\nexcept (ImportError, ValueError):\n    import {suite_name}",
-            fcontent,
-            flags=re.MULTILINE,
-        )
-        normalized = re.sub(r"benchmark_\d+", "benchmark_1", normalized)
-        normalized = re.sub(r"benchmarks\.runs\.[a-zA-Z0-9_]+", "benchmark_1", normalized)
-        if fname == f"{suite_name}_impl.py" and "__initialize__" not in normalized:
+        normalized = _normalize_scope_imports(fcontent, suite_name)
+        if fname.endswith("_impl.py") and "__initialize__" not in normalized:
             normalized += """
 
 from support.lib.lifecycle import auto_initialize
@@ -348,15 +359,7 @@ _initialize_ = __initialize__
 
     target_test_paths: List[Path] = []
     for fname, fcontent in test_files.items():
-        test_normalized = re.sub(r"benchmark_\d+", "benchmark_1", fcontent)
-        test_normalized = re.sub(r"benchmarks\.runs\.[a-zA-Z0-9_]+", "benchmark_1", test_normalized)
-        # Normalize relative imports to be resilient
-        test_normalized = re.sub(
-            rf"^from (?:lib|\.) import {suite_name}",
-            f"try:\n    from . import {suite_name}\nexcept (ImportError, ValueError):\n    import {suite_name}",
-            test_normalized,
-            flags=re.MULTILINE,
-        )
+        test_normalized = _normalize_scope_imports(fcontent, suite_name)
         for alias_match in set(re.findall(r"benchmark_\d+", fcontent)):
             if alias_match != "benchmark_1":
                 alias_path = sandbox / alias_match
@@ -388,13 +391,19 @@ try:
     sys.modules["{suite_name}"] = _pkg
     _lib_pkg = importlib.import_module("benchmark_1.parts.{suite_name}.lib")
     sys.modules["{suite_name}.lib"] = _lib_pkg
+    try:
+        _pretense_pkg = importlib.import_module("benchmark_1.parts.{suite_name}.pretense")
+        sys.modules["{suite_name}.pretense"] = _pretense_pkg
+    except ImportError:
+        pass
 except ImportError:
     _pkg = None
 
 for _stem in {lib_mod_stems!r}:
     try:
         _mod = importlib.import_module(f"benchmark_1.parts.{suite_name}.lib.{{_stem}}")
-        sys.modules[_stem] = _mod
+        if _stem != "{suite_name}" or _pkg is None:
+            sys.modules[_stem] = _mod
         sys.modules[f"lib.{{_stem}}"] = _mod
         sys.modules[f"{suite_name}.{{_stem}}"] = _mod
         sys.modules[f"{suite_name}.lib.{{_stem}}"] = _mod

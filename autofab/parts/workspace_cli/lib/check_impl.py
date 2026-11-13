@@ -329,11 +329,12 @@ def _verify_and_revert_readonly_integrity(
         return None
 
     tampered_files: List[str] = []
-    scan_root = (
-        os.path.join(ws_root, dir_scope)
-        if dir_scope and os.path.isdir(os.path.join(ws_root, dir_scope))
-        else ws_root
-    )
+    ws_scope = dir_scope.strip("/").split("/")[-1] if dir_scope else ""
+    scan_root = ws_root
+    if dir_scope and os.path.isdir(os.path.join(ws_root, dir_scope)):
+        scan_root = os.path.join(ws_root, dir_scope)
+    elif ws_scope and os.path.isdir(os.path.join(ws_root, ws_scope)):
+        scan_root = os.path.join(ws_root, ws_scope)
 
     for root, dirs, files in os.walk(scan_root):
         dirs[:] = [
@@ -355,7 +356,16 @@ def _verify_and_revert_readonly_integrity(
         if "__init__.py" in files:
             init_ws = os.path.join(root, "__init__.py")
             rel_p = os.path.relpath(init_ws, ws_root)
-            main_init = os.path.join(main_root, rel_p)
+            rel_norm = rel_p.replace("\\", "/")
+            main_rel = rel_norm
+            if dir_scope and ws_scope and dir_scope != ws_scope:
+                if rel_norm.startswith(ws_scope + "/"):
+                    main_rel = dir_scope.strip("/") + "/" + rel_norm[len(ws_scope) + 1 :]
+            main_init = os.path.join(main_root, main_rel)
+            if not os.path.isfile(main_init) and dir_scope:
+                cand = os.path.join(main_root, dir_scope.strip("/"), rel_norm)
+                if os.path.isfile(cand):
+                    main_init = cand
             if os.path.isfile(main_init):
                 try:
                     with open(init_ws, "rb") as f_ws, open(main_init, "rb") as f_main:
@@ -598,8 +608,8 @@ def _extract_primary_failure(
     return non_empty[-1] if non_empty else "Verification failed."
 
 
-def _strip_arbiter_reminders(text: str) -> str:
-    """Strips redundant arbiter reminder banners from child process output."""
+def _strip_arbiter_reminders(text: str, ws_root: str = "") -> str:
+    """Strips redundant arbiter reminder banners and scrubs workspace-root prefixes."""
     if not text:
         return text
     patterns = [
@@ -609,7 +619,26 @@ def _strip_arbiter_reminders(text: str) -> str:
     cleaned = text
     for pat in patterns:
         cleaned = re.sub(pat, "", cleaned, flags=re.DOTALL)
+    if ws_root:
+        cleaned = _scrub_workspace_paths(cleaned, ws_root)
     return cleaned.strip()
+
+
+def _scrub_workspace_paths(text: str, ws_root: str) -> str:
+    """Rewrites absolute role-workspace path prefixes to workspace-relative paths."""
+    if not text or not ws_root:
+        return text
+    raw_root = ws_root.rstrip("/\\")
+    real_root = os.path.realpath(ws_root).rstrip("/\\")
+    candidates = {raw_root, real_root}
+    for r in (raw_root, real_root):
+        if r.startswith("/private/var/") or r.startswith("/private/tmp/"):
+            candidates.add(r[len("/private") :])
+    cleaned = text
+    for root in sorted((c for c in candidates if c), key=len, reverse=True):
+        cleaned = cleaned.replace(root + "/", "").replace(root + "\\", "")
+        cleaned = re.sub(rf"{re.escape(root)}(?![\w./\\-])", ".", cleaned)
+    return cleaned
 
 
 def _print_triage_summary(
@@ -625,11 +654,7 @@ def _print_triage_summary(
     main_root: Optional[str] = None,
 ) -> None:
     """Prints the structured triage summary and specification grounding reminders."""
-    target_rel = (
-        os.path.relpath(target_path, ws_root)
-        if ws_root and target_path.startswith(ws_root)
-        else target_path
-    )
+    target_rel = _scrub_workspace_paths(target_path, ws_root) if ws_root else target_path
     change_header = _extract_last_change_comment(target_path) or "(None recorded)"
     primary_failure = _extract_primary_failure(
         stdout, stderr, is_timeout=is_timeout, timeout_sec=timeout_sec
@@ -653,9 +678,8 @@ def _print_triage_summary(
     print(f"Target: {target_rel}")
     print(f'Author\'s Latest # CHANGE: "{change_header}"')
     print(f"Primary Failure: {primary_failure}")
-    print(
-        f"Candidate Culprit: {candidate_culprit} (or other candidate feedback target files)"
-    )
+    fb_list = ", ".join(fb_targets) if fb_targets else candidate_culprit
+    print(f"Candidate Culprit Files: {fb_list}")
     print("\nACTION REQUIRED:")
     print("• You are an AUDITOR, not an author. Do NOT write debug scripts.")
     print(f"• Audit the failure against the specification ({spec_desc}).")
@@ -718,7 +742,13 @@ def _print_triage_summary(
             "• DO NOT expose details (line numbers, code snippets, or internal symbols) of other files.\n"
             "• Frame test failures strictly as contract discrepancies against the specification.\n"
             "• Explain the expected postcondition outcome versus the observed behavior.\n"
-            "• Preconditions cannot be tested: *Error exceptions designate contract violations and must never be tested or expected with raises(). If an *Error occurs, blame the test module for violating preconditions, NEVER the library."
+            "• Checked preconditions raising contracted errors (*Error) MUST be tested via assertRaises to verify the error is raised. However, tests must never assert graceful returns on precondition violations, and cannot assert state after an error because system state after an exception is undefined. Preconditions without errors define undefined behavior and are untestable."
+        )
+    if "LifecycleResolutionError" in stdout or "LifecycleResolutionError" in stderr:
+        print(
+            "\n[COLLABORATOR LIFECYCLE ROUTING NOTE]\n"
+            "• Library modules (lib/*.py) MUST resolve collaborator protocols via get_singleton(Protocol) and MUST NEVER import sibling *_impl modules directly.\n"
+            "• LifecycleResolutionError for an external collaborator protocol belongs to pretense/*_impl_pretense.py (missing make_sut() / Test*Real / @fake registration) or tests/*_test.py, NOT lib/*.py."
         )
     print("=" * 80 + "\n")
 
@@ -979,15 +1009,27 @@ def _resolve_workspace_guide_path(
     return ws_guide
 
 
-def _verify_antigravity_argon_model(
+_INHERIT_ANTIGRAVITY_MODELS: Tuple[Tuple[str, str], ...] = (
+    ("argon", "Gemini Argon"),
+    ("carbon", "Gemini Carbon"),
+)
+
+
+def _verify_antigravity_inherit_model(
     ws_root: str, meta: Optional[Dict[str, Any]]
 ) -> Optional[str]:
-    """Verifies when gemini-argon is configured on antigravity that the active subagent is actually using gemini-argon."""
+    """Verifies when an inherit-only Gemini model (argon/carbon) is configured on antigravity that the active subagent is using it."""
     if not meta:
         return None
     cfg_model = str(meta.get("model") or "").strip().lower()
-    if "argon" not in cfg_model:
+    expected_match: Optional[Tuple[str, str]] = None
+    for token, display_name in _INHERIT_ANTIGRAVITY_MODELS:
+        if token in cfg_model:
+            expected_match = (token, display_name)
+            break
+    if expected_match is None:
         return None
+    expected_token, expected_display = expected_match
     harness = str(meta.get("harness") or "antigravity").strip().lower()
     if harness not in ("antigravity", ""):
         return None
@@ -1045,15 +1087,15 @@ def _verify_antigravity_argon_model(
             if not isinstance(blob, (bytes, bytearray)):
                 continue
             text = blob.decode("utf-8", errors="ignore").lower()
-            if "argon" in text:
+            if expected_token in text:
                 return None
             m = re.search(r"(gemini-[a-z0-9\.\-]+|claude-[a-z0-9\.\-]+)", text)
             if m:
                 actual_model = m.group(1)
                 return (
                     f"Error: Model '{meta.get('model')}' was specified (which requires 'inherit' in Antigravity), "
-                    f"but the active conversation is executing on '{actual_model}' instead of Gemini Argon.\n"
-                    f"Please manually switch your model in Antigravity to 'Gemini Argon' before requesting the run again."
+                    f"but the active conversation is executing on '{actual_model}' instead of {expected_display}.\n"
+                    f"Please manually switch your model in Antigravity to '{expected_display}' before requesting the run again."
                 )
     except Exception:
         return None
@@ -1076,10 +1118,10 @@ class WorkspaceChecker(check.WorkspaceChecker):
     ) -> int:
         ws_root = os.path.realpath(find_workspace_root())
         meta = get_current_role_metadata()
-        argon_err = _verify_antigravity_argon_model(ws_root, meta)
-        if argon_err:
-            print(f"\n[CRITICAL MODEL MISMATCH] {argon_err}", file=sys.stderr)
-            print(f"\n[CRITICAL MODEL MISMATCH] {argon_err}")
+        inherit_err = _verify_antigravity_inherit_model(ws_root, meta)
+        if inherit_err:
+            print(f"\n[CRITICAL MODEL MISMATCH] {inherit_err}", file=sys.stderr)
+            print(f"\n[CRITICAL MODEL MISMATCH] {inherit_err}")
             return 1
         role_name = (
             str((meta.get("role_name") or meta.get("role") or "") if meta else "")
@@ -1529,7 +1571,7 @@ class WorkspaceChecker(check.WorkspaceChecker):
                 )
             except Exception:
                 pass
-        return 1 if ready_items else 0
+        return 0
 
     # Contract: Executes role-specific verification checks, linters, and type checking for targets, regenerating if missing.
     def run_check_files(
@@ -1699,9 +1741,24 @@ class WorkspaceChecker(check.WorkspaceChecker):
             )
 
             active_unit = u_name or unit_name
+            target_basename = os.path.basename(target_path)
+            target_kind = (
+                "implementation"
+                if target_basename.endswith("_impl_pretense.py")
+                else (
+                    "interface"
+                    if target_basename.endswith("_pretense.py")
+                    else ""
+                )
+            )
+            target_label = (
+                f"{active_unit} [{target_kind}] ({target_basename})"
+                if target_kind
+                else active_unit
+            )
 
             print(
-                f"=== Checking {active_unit} (role: {role_name}, part: {part_dir}) ==="
+                f"=== Checking {target_label} (role: {role_name}, part: {part_dir}) ==="
             )
             unit_failed = False
 
@@ -1799,8 +1856,8 @@ class WorkspaceChecker(check.WorkspaceChecker):
                         timeout=cmd_timeout,
                     )
                     if res.returncode != 0:
-                        clean_out = _strip_arbiter_reminders(res.stdout)
-                        clean_err = _strip_arbiter_reminders(res.stderr)
+                        clean_out = _strip_arbiter_reminders(res.stdout, ws_root=ws_root)
+                        clean_err = _strip_arbiter_reminders(res.stderr, ws_root=ws_root)
                         combined_output = f"{clean_out}\n{clean_err}".strip()
                         if combined_output:
                             print(
@@ -1820,8 +1877,8 @@ class WorkspaceChecker(check.WorkspaceChecker):
                                 active_unit=active_unit,
                                 part_dir=part_dir,
                                 role_name=role_name,
-                                stdout=res.stdout,
-                                stderr=res.stderr,
+                                stdout=clean_out,
+                                stderr=clean_err,
                                 is_timeout=False,
                                 main_root=main_root,
                             )

@@ -210,12 +210,21 @@ class WorkspacePendingManager(pending.WorkspacePendingManager):
                 os.chmod(p, 0o644)
             except OSError:
                 pass
+        canon_targets = []
+        for t in targets:
+            c = (
+                os.path.relpath(t, workspace_dir)
+                if os.path.isabs(t) and t.startswith(workspace_dir)
+                else t
+            )
+            if c not in canon_targets:
+                canon_targets.append(c)
         try:
             with open(p, "w", encoding="utf-8") as f:
                 json.dump(
                     {
                         "assigned_at": src_metadata.current_utc_timestamp(),
-                        "targets": list(targets),
+                        "targets": canon_targets,
                     },
                     f,
                     indent=2,
@@ -437,17 +446,17 @@ class WorkspacePendingManager(pending.WorkspacePendingManager):
             else False
         )
         if not is_auditor:
+            canonical_target = (
+                os.path.relpath(full_ws, workspace_dir)
+                if full_ws.startswith(workspace_dir)
+                else target_path
+            )
             if not os.path.isfile(full_ws):
-                reasons.append(f"Source file {target_path} does not exist")
+                reasons.append(f"Source file {canonical_target} does not exist")
             else:
                 target_meta = None
                 if m_root != workspace_dir:
-                    rel_target = (
-                        os.path.relpath(full_ws, workspace_dir)
-                        if full_ws.startswith(workspace_dir)
-                        else target_path
-                    )
-                    full_main = os.path.join(m_root, rel_target)
+                    full_main = os.path.join(m_root, canonical_target)
                     if os.path.isfile(full_main):
                         target_meta = src_metadata.extract_metadata(full_main)
                 if target_meta is None:
@@ -461,13 +470,15 @@ class WorkspacePendingManager(pending.WorkspacePendingManager):
                     if m and m.feedback:
                         for fb in m.feedback:
                             clean_fb = re.sub(r"^\[.*?\]:\s*", "", fb.strip())
-                            msg = f"Unacted feedback in {target_path}: {clean_fb}"
-                            if msg not in reasons:
+                            msg = f"Unacted feedback in {canonical_target}: {clean_fb}"
+                            if not any(
+                                existing.startswith("Unacted feedback in ")
+                                and (existing.endswith(clean_fb) or clean_fb in existing)
+                                for existing in reasons
+                            ):
                                 reasons.append(msg)
-                if (meta_ws and not meta_ws.last_cleaned) or (
-                    target_meta and not target_meta.last_cleaned
-                ):
-                    msg = f"Target has not been cleaned ({target_path})"
+                if target_meta and not target_meta.last_cleaned:
+                    msg = f"Target has not been cleaned ({canonical_target})"
                     if msg not in reasons:
                         reasons.append(msg)
 
@@ -478,15 +489,29 @@ class WorkspacePendingManager(pending.WorkspacePendingManager):
                     workspace_dir, part_dir, unit_name, eval_role, m_root
                 )
                 for r in res.dirtiness_reasons:
-                    if r not in reasons:
-                        reasons.append(r)
+                    if r in reasons:
+                        continue
+                    if r.startswith("Unacted feedback in "):
+                        r_body = r.split(": ", 1)[-1] if ": " in r else r
+                        if any(
+                            existing.startswith("Unacted feedback in ")
+                            and (existing.endswith(r_body) or r_body in existing)
+                            for existing in reasons
+                        ):
+                            continue
+                    reasons.append(r)
             except (LifecycleResolutionError, LookupError):
                 pass
 
         if not reasons and self.is_pending_target_dirty(
             target_path, workspace_dir, main_root, role_name
         ):
-            reasons.append(f"Target is dirty ({target_path})")
+            rel_fallback = (
+                os.path.relpath(full_ws, workspace_dir)
+                if full_ws.startswith(workspace_dir)
+                else target_path
+            )
+            reasons.append(f"Target is dirty ({rel_fallback})")
 
         return tuple(reasons)
 

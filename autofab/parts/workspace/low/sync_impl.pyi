@@ -48,12 +48,12 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
         - Evaluates inbound changes against a pull manifest recorded in the role workspace state directory,
           pulling only files that have changed upstream since the last pull, never clobbering uncommitted edits on writable targets, and always overwriting read-only upstream files when their canonical versions change in the main repository.
         - Copies newer upstream files from main into the role workspace, projecting metadata
-          headers to retain only change and feedback fields, stamping ephemeral code hashes
-          on writable targets, setting 0o444 on read-only contracts, updating writable
+          headers to retain only change and feedback fields while recording baseline code hashes
+          in `.autofab/pull_manifest.json`, setting 0o444 on read-only contracts, updating writable
           targets that are not modified with 0o644, and deleting files absent from main,
           using provision.WorkspaceProvisioner.copy_file_with_permissions and
           provision.WorkspaceProvisioner.write_file_with_permissions.
-        - Determines writable target modification state against ephemeral code hashes through
+        - Determines writable target modification state against `.autofab/pull_manifest.json` through
           src_metadata.SourceMetadataCoordinator.is_code_modified and
           src_metadata.SourceMetadataCoordinator.compute_file_code_hash.
         - Delegates test stub synchronization to
@@ -104,11 +104,10 @@ class WorkspaceSynchronizer(sync.WorkspaceSynchronizer):
           extracting in-band metadata through
           src_metadata.SourceMetadataCoordinator.extract_metadata.
         - Detects concurrent edits by comparing main repository code hashes against recorded
-          workspace baseline hashes before committing.
-        - Commits validated target files into the canonical repository, stripping ephemeral
-          code hashes and replacing them atomically through temporary staging files and
-          refreshing in-band clean timestamps through
-          src_metadata.SourceMetadataCoordinator.update_metadata.
+          workspace baseline hashes in `.autofab/pull_manifest.json` before committing.
+        - Commits validated target files into the canonical repository, replacing them
+          atomically through temporary staging files and refreshing in-band clean timestamps
+          through src_metadata.SourceMetadataCoordinator.update_metadata.
         - Stamps auditor role attestations on audited targets through
           src_metadata.SourceMetadataCoordinator.stamp_audit.
         - Flushes buffered blame feedback by appending unacted entries through

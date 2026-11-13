@@ -5,12 +5,14 @@ from __future__ import annotations
 import ast
 import copy
 import inspect
+import sys
 import textwrap
 from contextlib import contextmanager
 
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from typing import (
+    Annotated,
     Any,
     Callable,
     Collection,
@@ -19,6 +21,7 @@ from typing import (
     Generator,
     Generic,
     List,
+    Mapping,
     Optional,
     Protocol,
     Sequence,
@@ -35,6 +38,7 @@ from typing_extensions import ParamSpec, TypeVar
 from support.lib.lifecycle import Singleton, SystemTier
 
 T = TypeVar("T", default=Any)
+T_co = TypeVar("T_co", covariant=True, default=Any)
 Target = TypeVar("Target", default=Any)
 P = ParamSpec("P", default=...)
 R = TypeVar("R", default=Any)
@@ -63,6 +67,13 @@ class NotBoundType:
 
 
 NotBound: NotBoundType = NotBoundType()
+
+
+class _EnvStateMarker:
+    """Marker metadata distinguishing environmental state fields on State dataclasses."""
+
+
+Env = Annotated[T, _EnvStateMarker]
 _last_ensured_ret: ContextVar[Any] = ContextVar("_last_ensured_ret", default=NotBound)
 _last_raised_exc: ContextVar[Optional[BaseException]] = ContextVar(
     "_last_raised_exc", default=None
@@ -284,18 +295,36 @@ def sut(singleton_type: Type[T]) -> T:
 
 def sut_state(state_cls: Type[StateT]) -> StateT:
     """Resolves active state model for a collaborator or target."""
-    active = _current_sut.get()
-    if hasattr(active, "state") and (
-        isinstance(active.state, state_cls)
-        or getattr(type(active.state), "__name__", "") == state_cls.__name__
-    ):
-        return cast(StateT, active.state)
-    for c in _ACTIVE_SUTS.get().values():
-        if hasattr(c, "state") and (
-            isinstance(c.state, state_cls)
-            or getattr(type(c.state), "__name__", "") == state_cls.__name__
+
+    def _match_state(obj: Any) -> Optional[StateT]:
+        if obj is None:
+            return None
+        for cand in (
+            getattr(obj, "state", None),
+            getattr(getattr(obj, "_state_machine", None), "state", None),
+            getattr(getattr(obj, "_sm", None), "state", None),
+            obj,
         ):
-            return cast(StateT, c.state)
+            if cand is not None and (
+                isinstance(cand, state_cls)
+                or getattr(type(cand), "__name__", "") == state_cls.__name__
+            ):
+                return cast(StateT, cand)
+        return None
+
+    matched = _match_state(_current_sut.get())
+    if matched is not None:
+        return matched
+    for c in _ACTIVE_SUTS.get().values():
+        matched = _match_state(c)
+        if matched is not None:
+            return matched
+    sm = _current_sm.get()
+    if sm is not None and hasattr(sm, "singletons") and isinstance(sm.singletons, dict):
+        for c in sm.singletons.values():
+            matched = _match_state(c)
+            if matched is not None:
+                return matched
     try:
         from support.lib.lifecycle import get_active_scope
 
@@ -303,11 +332,9 @@ def sut_state(state_cls: Type[StateT]) -> StateT:
         instances_by_desc = getattr(scope, "_instances_by_desc", None)
         if instances_by_desc is not None and isinstance(instances_by_desc, dict):
             for inst in instances_by_desc.values():
-                if hasattr(inst, "state") and (
-                    isinstance(inst.state, state_cls)
-                    or getattr(type(inst.state), "__name__", "") == state_cls.__name__
-                ):
-                    return cast(StateT, inst.state)
+                matched = _match_state(inst)
+                if matched is not None:
+                    return matched
     except Exception:
         pass
     raise PretenseError(
@@ -576,6 +603,34 @@ def require(
 requires = require
 
 
+def require_env(
+    condition: bool,
+    exception_cls: Union[Type[BaseException], BaseException],
+    *args: Any,
+    **kwargs: Any,
+) -> None:
+    """Virtual environmental requirement enforcing external operational conditions.
+
+    If condition is False:
+    - In fake mode (when _is_verification is False): immediately raises exception_cls(*args, **kwargs).
+    - In real SUT verification mode (when _is_verification is True): registers exception_cls as the expected
+      operational exception for the transition so the runner verifies that the real SUT raises it.
+    """
+    if _disable_preconditions.get():
+        return
+    if not condition:
+        exc_type = (
+            exception_cls
+            if isinstance(exception_cls, type)
+            else type(exception_cls)
+        )
+        _last_contracted_exception_type.set(exc_type)
+        if not _is_verification.get():
+            if isinstance(exception_cls, BaseException):
+                raise exception_cls
+            raise exception_cls(*args, **kwargs)
+
+
 @overload
 def require_arg(
     val: Sequence[E],
@@ -746,7 +801,7 @@ def _draw_from_domain(
     return _resolve_argument_value(strat, draw)
 
 
-class Domain(Generic[T]):
+class Domain(Generic[T_co]):
     """Specification of an argument domain uniting generative sampling and analytical validation."""
 
     def __init__(
@@ -969,6 +1024,9 @@ class Domain(Generic[T]):
         max_value: Optional[int] = None,
     ) -> Domain[int]:
         from hypothesis import strategies as st
+
+        if min_value is not None and max_value is not None and min_value > max_value:
+            return Domain[int](strategy=st.nothing(), validator=lambda _val: False)
 
         strat = st.integers(min_value=min_value, max_value=max_value)
 
@@ -1197,6 +1255,28 @@ class Domain(Generic[T]):
         return Domain[List[E]](strategy=strat, validator=_list_val)
 
     @classmethod
+    def collection(
+        cls,
+        elem_domain: Union[Domain[E], Type[E]],
+        min_size: int = 0,
+        max_size: int = 5,
+        unique: bool = False,
+    ) -> Domain[Collection[E]]:
+        elem = cls.of(elem_domain)
+        inner = cls.list_of(elem_domain, min_size=min_size, max_size=max_size, unique=unique)
+
+        def _col_val(val: Any) -> bool:
+            if not isinstance(val, Collection) or isinstance(val, (str, bytes, bytearray)):
+                return False
+            if len(val) < min_size or len(val) > max_size:
+                return False
+            if unique and len(set(val)) != len(val):
+                return False
+            return all(elem.validate(x) for x in val)
+
+        return Domain[Collection[E]](strategy=inner.strategy, validator=_col_val)
+
+    @classmethod
     def set_of(
         cls,
         elem_domain: Union[Domain[E], Type[E]],
@@ -1286,6 +1366,27 @@ class Domain(Generic[T]):
             return all(k_dom.validate(k) and v_dom.validate(v) for k, v in val.items())
 
         return Domain[Dict[K, V]](strategy=strat, validator=_map_val)
+
+    @classmethod
+    def mapping(
+        cls,
+        key_domain: Union[Domain[K], Type[K]],
+        val_domain: Union[Domain[V], Type[V]],
+        min_size: int = 0,
+        max_size: int = 5,
+    ) -> Domain[Mapping[K, V]]:
+        k_dom = cls.of(key_domain)
+        v_dom = cls.of(val_domain)
+        inner = cls.mapping_of(key_domain, val_domain, min_size=min_size, max_size=max_size)
+
+        def _mapping_val(val: Any) -> bool:
+            if not isinstance(val, Mapping):
+                return False
+            if len(val) < min_size or len(val) > max_size:
+                return False
+            return all(k_dom.validate(k) and v_dom.validate(v) for k, v in val.items())
+
+        return Domain[Mapping[K, V]](strategy=inner.strategy, validator=_mapping_val)
 
     @classmethod
     def optional(cls, inner_domain: Union[Domain[E], Type[E]]) -> Domain[Optional[E]]:
@@ -3243,7 +3344,7 @@ class StateMachine(Generic[StateT]):
         )
         self.singletons: Dict[Type[Any], Any] = dict(singletons or {})
         if state is not None:
-            self.state: Any = state
+            self.state = state
         elif hasattr(self, "make_initial_state") and callable(
             getattr(self, "make_initial_state")
         ):
@@ -3340,9 +3441,74 @@ class StateMachine(Generic[StateT]):
             real_instance=real_instance,
         )
 
-    def bind(self, target: Any) -> Any:
-        """Binds this state machine to a concrete target instance, returning a verification driver."""
-        return CheckedAdapter(type(target), self, target)
+    @property
+    def state(self) -> Any:
+        return getattr(self, "_raw_state", None)
+
+    @state.setter
+    def state(self, value: Any) -> None:
+        self._raw_state = value
+        self._apply_state_bindings()
+
+    def bind_state(self, attr_name: str, getter: Callable[[], Any]) -> None:
+        """Binds a virtual state attribute to a dynamic evaluator function."""
+        if not hasattr(self, "_state_bindings"):
+            self._state_bindings: Dict[str, Callable[[], Any]] = {}
+        self._state_bindings[attr_name] = getter
+        self._apply_state_bindings()
+
+    def _apply_state_bindings(self) -> None:
+        state_obj = getattr(self, "_raw_state", None)
+        if state_obj is None:
+            return
+        bindings = getattr(self, "_state_bindings", None)
+        if not bindings:
+            return
+        state_cls = type(state_obj)
+        if not getattr(state_cls, "_is_bound_state_subclass", False):
+            bound_cls = type(
+                f"_Bound_{state_cls.__name__}",
+                (state_cls,),
+                {"_is_bound_state_subclass": True},
+            )
+            state_obj.__class__ = bound_cls
+            state_cls = bound_cls
+
+        state_obj._instance_bindings = bindings
+        state_obj._owner_sm = self
+        for attr_name in bindings:
+            if not isinstance(getattr(state_cls, attr_name, None), property):
+                def _make_prop(a_name: str) -> property:
+                    def getter(s: Any) -> Any:
+                        b = getattr(s, "_instance_bindings", {})
+                        if a_name in b:
+                            owner = getattr(s, "_owner_sm", None)
+                            if owner is not None and _current_sm.get() is None:
+                                token_sm = _current_sm.set(owner)
+                                try:
+                                    return b[a_name]()
+                                finally:
+                                    _current_sm.reset(token_sm)
+                            return b[a_name]()
+                        return getattr(s, f"_unbound_{a_name}", None)
+
+                    def setter(s: Any, val: Any) -> None:
+                        setattr(s, f"_unbound_{a_name}", val)
+
+                    return property(getter, setter)
+
+                setattr(state_cls, attr_name, _make_prop(attr_name))
+
+    def bind(
+        self,
+        target_or_attr: Any,
+        getter: Optional[Callable[[], Any]] = None,
+    ) -> Any:
+        """Binds a virtual state attribute or binds this state machine to a concrete target instance."""
+        if isinstance(target_or_attr, str) and getter is not None:
+            self.bind_state(target_or_attr, getter)
+            return None
+        return CheckedAdapter(type(target_or_attr), self, target_or_attr)
 
     def make_state_machine(self, initial_state: Any) -> StateMachine:
         try:
@@ -3490,7 +3656,7 @@ class StateMachine(Generic[StateT]):
                     res = method(*resolved_args, **call_kwargs)
                 elif callable(t.target):
                     res = t.target(target_obj, *resolved_args, **call_kwargs)
-            except Exception as e:  # cleanroom: allow-broad-exception
+            except Exception as e:
                 raised_exc = e
 
             sut_outcome: Outcome[Any] = (
@@ -3575,7 +3741,7 @@ class StateMachine(Generic[StateT]):
                         self.check_invariants()
                         raise ret_val.exc
                     res = ret_val.unwrap() if isinstance(ret_val, Value) else ret_val
-                except Exception as e:  # cleanroom: allow-broad-exception
+                except Exception as e:
                     raised_exc = e
             if raised_exc is not None:
                 raise raised_exc
@@ -3759,14 +3925,36 @@ class CheckedAdapter(Generic[T]):
                 token_kw = _current_kwargs.set(kwargs)
                 token_sm = _current_sm.set(self._state_machine)
                 tok_ret = _last_ensured_ret.set(NotBound)
+                tok_exc = _last_contracted_exception_type.set(None)
+                suts_dict: Dict[Any, Any] = {}
+                if hasattr(self._state_machine, "singletons") and isinstance(
+                    self._state_machine.singletons, dict
+                ):
+                    suts_dict.update(self._state_machine.singletons)
+                token_suts = _ACTIVE_SUTS.set(suts_dict)
                 try:
                     target_base = getattr(base_method, "__target_fn__", base_method)
                     res = target_base(self._state_machine, *args, **kwargs)
+                    exp_type = _last_contracted_exception_type.get()
+                    if exp_type is not None:
+                        _last_contracted_exception_type.set(None)
+                        raise AssertionError(
+                            f"Contracted Operational Exception Missing: Transition '{name}' was expected to raise "
+                            f"'{exp_type.__name__}' because require_env condition was violated, but SUT returned "
+                            f"outcome {res!r} instead."
+                        )
                     last_ret = _last_ensured_ret.get()
                     if res is None and last_ret is not NotBound:
                         res = last_ret
                     return res
+                except BaseException as e:
+                    exp_type = _last_contracted_exception_type.get()
+                    if exp_type is not None and isinstance(e, exp_type):
+                        _last_contracted_exception_type.set(None)
+                    raise
                 finally:
+                    _last_contracted_exception_type.reset(tok_exc)
+                    _ACTIVE_SUTS.reset(token_suts)
                     _last_ensured_ret.reset(tok_ret)
                     _current_sm.reset(token_sm)
                     _current_kwargs.reset(token_kw)
@@ -3812,6 +4000,12 @@ class _ViolatingAdapter:
         if self._exc_type is None:
             raise exc
         if not isinstance(exc, self._exc_type):
+            if type(exc).__name__ == self._exc_type.__name__:
+                raise AssertionError(
+                    f"Expected contract violation {self._exc_type.__module__}.{self._exc_type.__name__}, "
+                    f"but a different class {type(exc).__module__}.{type(exc).__name__} was raised: {exc}. "
+                    "Import the error class from the target library module rather than redefining it locally."
+                ) from exc
             raise AssertionError(
                 f"Expected contract violation {self._exc_type.__name__}, but {type(exc).__name__} was raised: {exc}"
             ) from exc
@@ -4062,7 +4256,7 @@ def synthesize_fake(
                 except Exception:
                     state = None
             self._sm = (
-                machine_cls(state=state)
+                machine_cls(state=state, **kwargs)
                 if state is not None
                 else machine_cls(*args, **kwargs)
             )
@@ -4135,6 +4329,19 @@ def synthesize_fake(
                             ):
                                 is_prop = True
                                 break
+                    if not is_prop:
+                        for t in getattr(sm, "transitions", []):
+                            tgt = getattr(t, "target", None)
+                            qual = getattr(tgt, "__qualname__", "")
+                            mod_name = getattr(tgt, "__module__", "")
+                            if "." in qual and mod_name in sys.modules:
+                                cls_name = qual.rsplit(".", 1)[0]
+                                owner_cls = getattr(sys.modules[mod_name], cls_name, None)
+                                if owner_cls is not None and isinstance(
+                                    getattr(owner_cls, name, None), property
+                                ):
+                                    is_prop = True
+                                    break
                     if not is_prop and (
                         hasattr(self._state, name)
                         or name in ("size", "is_empty", "is_full")

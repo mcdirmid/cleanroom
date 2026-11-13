@@ -110,14 +110,14 @@ Given: the benchmark evaluator and CLI argument parser.
 Given: the benchmark evaluator and CLI argument parser.
 
 1. The caller runs `autofab benchmark` with `--method pretense` (or alias `--pretense`).
-   Observed: the flight executes synthesis and testing using Pretense state machines, fakes, and property fuzzing across pretense roles or baseline prompts, verification gates evaluate Pretense test execution (`uv run pretense --no-fuzz --cov`) and statement coverage, methodology is `pretense`, and passing artifacts are archived with `-pretense` destination suffix.
+   Observed: the flight executes synthesis and testing using Pretense state machines, fakes, and property fuzzing across pretense roles or baseline prompts, verification gates evaluate Pretense test execution (`uv run pretense --cov`) and statement coverage, methodology is `pretense`, and passing artifacts are archived with `-pretense` destination suffix.
 
 ## Scenario 14 — Pretense baseline benchmark flight execution and verification
 
 Given: the benchmark evaluator and CLI argument parser.
 
 1. The caller runs `autofab benchmark` with `--baseline` and `--method pretense` (or alias `--pretense`).
-   Observed: routes execution through the unified Autofab clean orchestrator targeting the fused role `pretense_baseline`, verification gates evaluate Pretense test execution (`uv run pretense --no-fuzz --cov`) and statement coverage, methodology is `pretense_baseline`, and passing artifacts are archived with `-pretense-baseline` destination suffix.
+   Observed: routes execution through the unified Autofab clean orchestrator targeting the fused role `pretense_baseline`, verification gates evaluate Pretense test execution (`uv run pretense --cov`) and statement coverage, methodology is `pretense_baseline`, and passing artifacts are archived with `-pretense-baseline` destination suffix.
 
 ## Scenario 15 — Headless coordination announcement and real-time output streaming
 
@@ -148,7 +148,7 @@ Given: the benchmark evaluator and CLI argument parser.
 Given: the benchmark evaluator and CLI argument parser.
 
 1. The caller runs `autofab benchmark` with `--method combined` (or alias `--combined`).
-   Observed: provisions the flight scope with `pipeline = "combined"`, executes dual-branch convergence covering both standard unit testing and Pretense fuzzing, verification gates validate static types across library, tests, and pretense, standard pytest execution, and Pretense test execution (`uv run pretense --no-fuzz --cov`), methodology is `combined`, and passing artifacts are archived with `-combined` destination suffix containing `lib_<N>.py`, `test_<N>.py`, and `pretense_<N>.py`.
+   Observed: provisions the flight scope with `pipeline = "combined"`, executes dual-branch convergence covering both standard unit testing and Pretense fuzzing, verification gates validate static types across library, tests, and pretense, standard pytest execution, and Pretense test execution (`uv run pretense --cov`), methodology is `combined`, and passing artifacts are archived with `-combined` destination suffix containing `lib_<N>.py`, `test_<N>.py`, and `pretense_<N>.py`.
 
 1. The caller runs `autofab benchmark` with `--baseline` and `--method combined` (or alias `--combined`).
    Observed: routes execution through the unified Autofab clean orchestrator targeting the fused role `combined_baseline`, evaluates composite verification gates, methodology is `combined_baseline`, and passing artifacts are archived with `-combined-baseline` destination suffix.

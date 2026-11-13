@@ -22,7 +22,7 @@ When configuring a role workspace:
 
 - The dsh workspace configurer ensures role agent documentation instructs DeepSeek Harness agents never to access or mutate files outside the provisioned workspace root.
 
-- The dsh workspace configurer embeds boundary constraints in role agent documentation permitting shell commands and native harness tools within the workspace root while confining execution to the workspace, prohibiting external git operations and metadata tampering, while for authoring roles with writable targets instructing local git rollback operations (`git restore`, `bin/revert`) and for auditor roles with zero writable targets omitting rollback guidance and strictly prohibiting file edits and git commands, and mandating round resolution through prescribed workspace binaries.
+- The dsh workspace configurer embeds boundary constraints in role agent documentation permitting shell commands and native harness tools within the workspace root while confining execution to the workspace, prohibiting external git operations and metadata tampering, while for authoring roles with writable targets instructing workspace rollback operations (`bin/revert`) and for auditor roles with zero writable targets omitting rollback guidance and strictly prohibiting file edits and git commands, and mandating round resolution through prescribed workspace binaries.
 
 - When the assigned model is a local or output-constrained engine, the dsh workspace configurer incorporates model-specific payload ceiling directives into role agent documentation instructing workers to write code incrementally in staged passes and avoid giant monolithic tool payloads that exceed output token limits, omitting these directives for unconstrained cloud models.
 

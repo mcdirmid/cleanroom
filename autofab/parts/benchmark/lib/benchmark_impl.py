@@ -213,6 +213,9 @@ def _load_model_catalog(
         elif key in ("gemini-argon", "gemini-4-argon") or "argon" in identifier.lower():
             catalog.setdefault("gemini-argon", spec)
             catalog.setdefault("gemini-4-argon", spec)
+        elif key in ("gemini-carbon", "gemini-4-carbon") or "carbon" in identifier.lower():
+            catalog.setdefault("gemini-carbon", spec)
+            catalog.setdefault("gemini-4-carbon", spec)
 
     return catalog
 
@@ -999,7 +1002,7 @@ class _VerificationGate:
                     else str(pretense_path)
                 )
                 proc = subprocess.run(
-                    ["uv", "run", "pretense", run_target, "--no-fuzz", "--cov"],
+                    ["uv", "run", "pretense", run_target, "--cov"],
                     cwd=repo_root,
                     env=env,
                     capture_output=True,
@@ -1066,7 +1069,7 @@ class _VerificationGate:
                     else str(pretense_path)
                 )
                 proc = subprocess.run(
-                    ["uv", "run", "pretense", run_target, "--no-fuzz", "--cov"],
+                    ["uv", "run", "pretense", run_target, "--cov"],
                     cwd=repo_root,
                     env=env,
                     capture_output=True,

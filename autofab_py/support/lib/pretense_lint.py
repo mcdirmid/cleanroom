@@ -107,7 +107,10 @@ def is_uninitialized_pretense_module(content: str) -> bool:
                             base_id = base.value.attr
                     if base_id in ("TestCase", "unittest.TestCase", "LifecycleTestCase"):
                         has_test = True
-                    elif base_id in ("StateMachine", "StateMachineProto"):
+                    elif (
+                        base_id in ("StateMachine", "StateMachineProto")
+                        or base_id.endswith("StateMachine")
+                    ):
                         has_sm = True
             elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 if node.name.startswith("make_") and ("fake" in node.name):
@@ -213,6 +216,7 @@ def check_pretense_structure(
                 )
         return errors
 
+
     # Implementation pretense module
     if (imported_sm or imported_state) and state_classes:
         errors.append(
@@ -238,6 +242,7 @@ def check_pretense_structure(
     return errors
 
 
+
 def check_pretense_imports(
     content: str,
     pyi_path: str | None = None,
@@ -249,6 +254,7 @@ def check_pretense_imports(
     if "pretense" not in content:
         errors.append("Missing pretense imports (must import from pretense).")
         return errors
+
 
     try:
         tree = ast.parse(content)
@@ -282,6 +288,7 @@ def check_pretense_imports(
     return errors
 
 
+
 def check_single_argument_assertions(tree: ast.AST, file_path: str = "") -> list[str]:
     """Enforces single-argument native assert statements (PRE_LINT_ASSERT_SINGLE_ARG)."""
     errors: list[str] = []
@@ -299,6 +306,7 @@ def check_single_argument_assertions(tree: ast.AST, file_path: str = "") -> list
                     "assert test cannot be a tuple 'assert (x, y)'. A non-empty tuple evaluates to True."
                 )
     return errors
+
 
 
 def check_transition_outcomes(tree: ast.AST, file_path: str = "") -> list[str]:
@@ -375,6 +383,7 @@ def check_transition_outcomes(tree: ast.AST, file_path: str = "") -> list[str]:
     return errors
 
 
+
 def _is_ctx_gated_if(test_expr: ast.AST) -> bool:
     """Returns True if an `if` condition references `ctx.updates` or `ctx.target`."""
     for sub in ast.walk(test_expr):
@@ -435,6 +444,7 @@ def check_pretense_next_transition(
 
     if not has_trans_dec:
         return errors
+
 
     if is_impl:
         errors.append(
@@ -512,7 +522,7 @@ def check_pretense_next_transition(
                 )
             elif func_id == "ensure_raises":
                 errors.append(
-                    f"{file_path}:{child.lineno}: error [PRE_LINT_NO_LEGACY_ENSURE_RAISES]: 'ensure_raises(...)' is obsolete in Pretense 1 Next. Use 'with raises(ExpectedException): self.inner_<name>(...)'."
+                    f"{file_path}:{child.lineno}: error [PRE_LINT_NO_LEGACY_ENSURE_RAISES]: 'ensure_raises(...)' is obsolete in Pretense 1 Next. Use 'Env[bool]' + 'require_env(healthy_cond, ExpectedException)'."
                 )
             elif func_id == "require_arg":
                 if is_impl:
@@ -524,15 +534,15 @@ def check_pretense_next_transition(
                     if isinstance(sub, ast.Call) and (
                         (
                             isinstance(sub.func, ast.Name)
-                            and sub.func.id in ("sut", "sut_state")
+                            and sub.func.id == "sut"
                         )
                         or (
                             isinstance(sub.func, ast.Attribute)
-                            and sub.func.attr in ("sut", "sut_state")
+                            and sub.func.attr == "sut"
                         )
                     ):
                         errors.append(
-                            f"{file_path}:{child.lineno}: error [PN009_REQUIRE_PURITY]: require() cannot reference SUT via sut(...). It must only inspect 'self.state'."
+                            f"{file_path}:{child.lineno}: error [PN009_REQUIRE_PURITY]: require() cannot reference SUT via sut(...). It must only inspect 'self.state' or collaborator 'sut_state(...)'."
                         )
                     elif isinstance(sub, ast.Name) and sub.id in input_args:
                         errors.append(
@@ -647,6 +657,7 @@ def check_pretense_next_transition(
     return errors
 
 
+
 def _check_inner_transition_body(
     node: ast.FunctionDef | ast.AsyncFunctionDef,
     file_path: str,
@@ -695,7 +706,7 @@ def _check_inner_transition_body(
                 )
             elif func_id == "ensure_raises":
                 errors.append(
-                    f"{file_path}:{child.lineno}: error [PRE_LINT_NO_LEGACY_ENSURE_RAISES]: 'ensure_raises(...)' is obsolete in Pretense 1 Next. Use 'with raises(ExpectedException): call_target(...)'."
+                    f"{file_path}:{child.lineno}: error [PRE_LINT_NO_LEGACY_ENSURE_RAISES]: 'ensure_raises(...)' is obsolete in Pretense 1 Next. Use 'Env[bool]' + 'require_env(healthy_cond, ExpectedException)'."
                 )
 
     mutating_methods = {
@@ -745,6 +756,7 @@ def _check_inner_transition_body(
                 )
 
     return errors
+
 
 
 def check_impl_pseudo_state_machines(
@@ -817,6 +829,10 @@ def check_impl_pseudo_state_machines(
                     for d in item.decorator_list
                 )
 
+                has_property = any(
+                    isinstance(d, ast.Name) and d.id == "property"
+                    for d in item.decorator_list
+                )
                 if fn_name.startswith("inner_") or fn_name.startswith("_inner_"):
                     if has_trans:
                         errors.append(
@@ -825,13 +841,18 @@ def check_impl_pseudo_state_machines(
                     errors.extend(
                         _check_inner_transition_body(item, file_path, cls_name)
                     )
-                elif fn_name in (
-                    "__init__",
-                    "__repr__",
-                    "__str__",
-                    "make_initial_state",
-                    "make_sut",
-                ) or fn_name.startswith("_"):
+                elif (
+                    fn_name
+                    in (
+                        "__init__",
+                        "__repr__",
+                        "__str__",
+                        "make_initial_state",
+                        "make_sut",
+                    )
+                    or fn_name.startswith("_")
+                    or (has_property and not has_trans)
+                ):
                     if has_trans:
                         errors.append(
                             f"{file_path}:{item.lineno}: error [PN_IMPL_NO_OUTER_TRANSITION]: Method '{fn_name}' in implementation pseudo-state machine '{cls_name}' must NOT be decorated with '@transition'."
@@ -842,6 +863,7 @@ def check_impl_pseudo_state_machines(
                     )
 
     return errors
+
 
 
 def check_lifted_expr_usage(
@@ -1078,6 +1100,7 @@ def check_no_residual_sentinels(tree: ast.AST, file_path: str = "") -> list[str]
     return errors
 
 
+
 def _extract_transition_target(dec: ast.expr) -> str | None:
     """Extracts target identifier from a @transition decorator."""
     if isinstance(dec, ast.Call):
@@ -1220,6 +1243,7 @@ def check_multi_transition_disambiguation(
     return errors
 
 
+
 def check_no_algorithmic_state_machines(
     tree: ast.AST, file_path: str = ""
 ) -> list[str]:
@@ -1312,6 +1336,7 @@ def check_no_algorithmic_state_machines(
                     )
 
     return errors
+
 
 
 def check_pretense_target_internals(
@@ -1421,6 +1446,7 @@ def check_pretense_target_internals(
     return errors
 
 
+
 def check_no_scaffold_placeholders(tree: ast.AST, file_path: str = "") -> list[str]:
     """Validates that transitions and tests do not contain residual scaffold crash placeholders."""
     errors: list[str] = []
@@ -1497,6 +1523,7 @@ def check_no_scaffold_placeholders(tree: ast.AST, file_path: str = "") -> list[s
                         f"Empty tests are strictly prohibited; tests must exercise transitions or assert concrete contracts."
                     )
     return errors
+
 
 
 def check_no_pre_seeding(tree: ast.AST, file_path: str = "") -> list[str]:
@@ -1630,6 +1657,7 @@ def check_no_pre_seeding(tree: ast.AST, file_path: str = "") -> list[str]:
     return errors
 
 
+
 def check_no_raises_in_test_cases(tree: ast.AST, file_path: str = "") -> list[str]:
     """Ensures test methods in TestCase classes do not use 'with raises(...)', requiring 'self.assertRaises(...)'.
 
@@ -1683,9 +1711,9 @@ def check_no_raises_in_test_cases(tree: ast.AST, file_path: str = "") -> list[st
                         if func_name == "raises":
                             errors.append(
                                 f"{file_path}:{child.lineno}: error: [PRE_LINT_NO_RAISES_IN_TEST_CASE] "
-                                f"'with raises(...)' is Pretense transition DSL for AST pivots. "
-                                "Inside test methods, verify contract violations (*Error) directly via 'self.checked.violating(ExpectedError).<method>(...)'. "
-                                "Calling 'self.assertRaises(...)' or using 'with ...violating(...):' is strictly prohibited (PN_NO_ASSERT_RAISES, PN_NO_WITH_VIOLATING)."
+                                f"'with raises(...)' is strictly prohibited in pretense files. "
+                                "Verify contract violations (*Error) via 'self.checked.violating(ExpectedError).<method>(...)', "
+                                "and operational exceptions (*Exception) via 'with self.assertRaises(ExpectedException):'."
                             )
                 elif isinstance(child, ast.Expr) and isinstance(child.value, ast.Call):
                     call = child.value
@@ -1697,22 +1725,29 @@ def check_no_raises_in_test_cases(tree: ast.AST, file_path: str = "") -> list[st
                     if func_name == "raises":
                         errors.append(
                             f"{file_path}:{child.lineno}: error: [PRE_LINT_NO_RAISES_IN_TEST_CASE] "
-                            f"'raises(...)' is Pretense transition DSL for AST pivots. "
-                            "Inside test methods, verify contract violations (*Error) directly via 'self.checked.violating(ExpectedError).<method>(...)'. "
-                            "Calling 'self.assertRaises(...)' or using 'with ...violating(...):' is strictly prohibited (PN_NO_ASSERT_RAISES, PN_NO_WITH_VIOLATING)."
+                            f"'raises(...)' is strictly prohibited in pretense files. "
+                            "Verify contract violations (*Error) via 'self.checked.violating(ExpectedError).<method>(...)', "
+                            "and operational exceptions (*Exception) via 'with self.assertRaises(ExpectedException):'."
                         )
     return errors
 
 
-def check_no_assert_raises(tree: ast.AST, file_path: str = "") -> list[str]:
-    """Ensures test methods in Pretense modules do not use 'assertRaises' or 'assertRaisesRegex' (PN_NO_ASSERT_RAISES).
 
-    Contract violations (*Error) must be verified on the SUT via 'self.checked.violating(ExpectedError).<method>(...)'
-    (which self-asserts the exception and marks the adapter terminal).
-    Operational postcondition exceptions (*Exception) are handled via transition pivots with 'with raises(ExpectedException):'.
-    Using 'self.assertRaises(...)', 'self.assertRaisesRegex(...)', or wrapping violating() in assertRaises is strictly prohibited.
+def check_no_assert_raises(tree: ast.AST, file_path: str = "") -> list[str]:
+    """Ensures test methods do not use 'assertRaises' for contract errors (*Error) or wrap 'violating(...)'.
+
+    Contract violations (*Error) must be verified on the SUT via 'self.checked.violating(ExpectedError).<method>(...)'.
+    Operational exceptions (*Exception) triggered via 'require_env(...)' may use 'with self.assertRaises(ExpectedException):'.
     """
     errors: list[str] = []
+
+    def _extract_exc_name(node: ast.AST) -> str:
+        if isinstance(node, ast.Name):
+            return node.id
+        if isinstance(node, ast.Attribute):
+            return node.attr
+        return ""
+
     for node in ast.walk(tree):
         if isinstance(node, ast.Call):
             func_name = ""
@@ -1721,23 +1756,26 @@ def check_no_assert_raises(tree: ast.AST, file_path: str = "") -> list[str]:
             elif isinstance(node.func, ast.Name):
                 func_name = node.func.id
             if func_name in ("assertRaises", "assertRaisesRegex"):
+                exc_name = _extract_exc_name(node.args[0]) if node.args else ""
+                if exc_name.endswith("Exception") and exc_name not in ("Exception", "BaseException"):
+                    continue
                 errors.append(
                     f"{file_path}:{node.lineno}: error [PN_NO_ASSERT_RAISES]: "
-                    f"Calling '{func_name}' is strictly prohibited in Pretense test modules. "
+                    f"Calling '{func_name}' for contract errors or non-*Exception types is prohibited in Pretense test modules. "
                     "Contract violations (*Error) must be verified via 'self.checked.violating(ExpectedError).<method>(...)'. "
-                    "Do NOT wrap 'violating(...)' inside 'assertRaises(...)'."
+                    "Operational exceptions (*Exception) may use 'with self.assertRaises(ExpectedException):'."
                 )
     return errors
 
 
-def check_no_raises_for_errors(tree: ast.AST, file_path: str = "") -> list[str]:
-    """Ensures 'raises(...)' or 'with raises(...)' is never used with contract violation errors (*Error).
 
-    Contract violations (*Error) designate precondition or domain failures (invalid inputs or state).
-    They must be gated via 'require(..., error=ExpectedError)' (for state preconditions) or
-    'require_arg(param, Domain.in_set(...), error=ExpectedError)' (for argument domains, where error is optional documentation).
-    'raises(...)' is reserved exclusively for operational exceptions (*Exception).
-    In test cases, contract violations must be tested via 'self.checked.violating(ExpectedError).method(...)'.
+def check_no_raises_for_errors(tree: ast.AST, file_path: str = "") -> list[str]:
+    """Prohibits 'raises(...)' / 'with raises(...)' in pretense files.
+
+    Contract violations (*Error) must be gated via 'require(..., error=ExpectedError)' or
+    'require_arg(param, Domain..., error=ExpectedError)' and tested via 'self.checked.violating(ExpectedError).method(...)'.
+    Operational exceptions (*Exception) must be modeled via 'Env[T]' + 'require_env(healthy_cond, ExpectedException)',
+    bound via 'self.bind(...)' in impl, and tested via 'with self.assertRaises(ExpectedException):'.
     """
     errors: list[str] = []
 
@@ -1780,16 +1818,505 @@ def check_no_raises_for_errors(tree: ast.AST, file_path: str = "") -> list[str]:
                 for kw in node.keywords:
                     if kw.arg in ("exc", "expected_exception", "error", "exc_type"):
                         err_names.extend(_extract_error_names(kw.value))
-                for err_name in err_names:
+                if err_names:
+                    for err_name in err_names:
+                        errors.append(
+                            f"{file_path}:{node.lineno}: error: [PRE_LINT_NO_RAISES_ERROR] 'raises({err_name})' is invalid for contract violation errors (*Error). "
+                            f"'raises(...)' is prohibited in pretense files. Contract errors designate invalid inputs or state preconditions; "
+                            f"gate them using 'require(..., error={err_name})' (or positional 'require(..., {err_name})') for state preconditions, or "
+                            f"'require_arg(<param>, Domain.in_set(self.state.<collection>), error={err_name})' (or positional 'require_arg(<param>, Domain.in_set(self.state.<collection>), {err_name})') for argument domains (error is optional documentation of the contracted violation). "
+                            f"To verify {err_name} in test cases, use 'self.checked.violating({err_name}).method(...)'. "
+                            f"DO NOT rename or redefine {err_name} to an *Exception; exception types are strictly dictated by the Low-Level Specification (low/*.pyi)."
+                        )
+                else:
                     errors.append(
-                        f"{file_path}:{node.lineno}: error: [PRE_LINT_NO_RAISES_ERROR] 'raises({err_name})' is invalid for contract violation errors (*Error). "
-                        f"'raises(...)' is reserved exclusively for operational exceptions (*Exception). Contract errors designate invalid inputs or state preconditions; "
-                        f"gate them using 'require(..., error={err_name})' (or positional 'require(..., {err_name})') for state preconditions, or "
-                        f"'require_arg(<param>, Domain.in_set(self.state.<collection>), error={err_name})' (or positional 'require_arg(<param>, Domain.in_set(self.state.<collection>), {err_name})') for argument domains (error is optional documentation of the contracted violation). "
-                        f"To verify {err_name} in test cases, use 'self.checked.violating({err_name}).method(...)'. "
-                        f"DO NOT rename or redefine {err_name} to an *Exception; exception types are strictly dictated by the Low-Level Specification (low/*.pyi)."
+                        f"{file_path}:{node.lineno}: error: [PRE_LINT_NO_RAISES] 'raises(...)' is prohibited in pretense files. "
+                        "Operational exceptions (*Exception) must use 'Env[bool]' + 'require_env(healthy_cond, ExpectedException)' "
+                        "in interface state machines, 'self.bind(...)' in impl __init__, and 'with self.assertRaises(ExpectedException):' in Test*ImplReal."
                     )
     return errors
+
+
+
+def check_require_sticks_to_error(tree: ast.AST, file_path: str = "") -> list[str]:
+    """Ensures 'require(...)' and 'require_arg(...)' only specify contract violation errors (*Error), never operational exceptions (*Exception)."""
+    errors: list[str] = []
+
+    def _extract_name(node: ast.AST) -> str:
+        if isinstance(node, ast.Name):
+            return node.id
+        elif isinstance(node, ast.Attribute):
+            return node.attr
+        elif isinstance(node, ast.Call):
+            return _extract_name(node.func)
+        return ""
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            func_name = ""
+            if isinstance(node.func, ast.Name):
+                func_name = node.func.id
+            elif isinstance(node.func, ast.Attribute):
+                func_name = node.func.attr
+
+            if func_name in ("require", "requires"):
+                # Positional error argument: require(cond, ErrorCls) or require(cond, "msg", ErrorCls)
+                for arg in node.args[1:]:
+                    name = _extract_name(arg)
+                    if name and (name.endswith("Exception") or name in ("Exception", "BaseException")):
+                        errors.append(
+                            f"{file_path}:{node.lineno}: error: [PRE_LINT_REQUIRE_MUST_BE_ERROR] 'require(...)' must only be used with contract violation errors (*Error). "
+                            f"Found operational exception '{name}'. Use 'require_env(...)' for operational exceptions (*Exception). Contract errors designate caller-preventable "
+                            f"precondition violations, whereas operational exceptions represent external environmental or collaborator states."
+                        )
+                # Keyword error argument: require(..., error=...) or require(..., exc_class=...)
+                for kw in node.keywords:
+                    if kw.arg in ("error", "exc_class"):
+                        name = _extract_name(kw.value)
+                        if name and (name.endswith("Exception") or name in ("Exception", "BaseException")):
+                            errors.append(
+                                f"{file_path}:{node.lineno}: error: [PRE_LINT_REQUIRE_MUST_BE_ERROR] 'require(..., {kw.arg}={name})' must only be used with contract violation errors (*Error). "
+                                f"Found operational exception '{name}'. Use 'require_env(...)' for operational exceptions (*Exception). Contract errors designate caller-preventable "
+                                f"precondition violations, whereas operational exceptions represent external environmental or collaborator states."
+                            )
+            elif func_name == "require_arg":
+                # Positional extra arguments (after val, domain):
+                for arg in node.args[2:]:
+                    name = _extract_name(arg)
+                    if name and (name.endswith("Exception") or name in ("Exception", "BaseException")):
+                        errors.append(
+                            f"{file_path}:{node.lineno}: error: [PRE_LINT_REQUIRE_MUST_BE_ERROR] 'require_arg(...)' must only be used with contract violation errors (*Error). "
+                            f"Found operational exception '{name}'. Use 'require_env(...)' for operational exceptions (*Exception)."
+                        )
+                for kw in node.keywords:
+                    if kw.arg == "error":
+                        name = _extract_name(kw.value)
+                        if name and (name.endswith("Exception") or name in ("Exception", "BaseException")):
+                            errors.append(
+                                f"{file_path}:{node.lineno}: error: [PRE_LINT_REQUIRE_MUST_BE_ERROR] 'require_arg(..., error={name})' must only be used with contract violation errors (*Error). "
+                                f"Found operational exception '{name}'. Use 'require_env(...)' for operational exceptions (*Exception)."
+                            )
+    return errors
+
+
+
+def check_require_env_sticks_to_exception(tree: ast.AST, file_path: str = "") -> list[str]:
+    """Ensures 'require_env(...)' only specifies operational exceptions (*Exception), never contract violation errors (*Error)."""
+    errors: list[str] = []
+
+    def _extract_name(node: ast.AST) -> str:
+        if isinstance(node, ast.Name):
+            return node.id
+        elif isinstance(node, ast.Attribute):
+            return node.attr
+        elif isinstance(node, ast.Call):
+            return _extract_name(node.func)
+        return ""
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            func_name = ""
+            if isinstance(node.func, ast.Name):
+                func_name = node.func.id
+            elif isinstance(node.func, ast.Attribute):
+                func_name = node.func.attr
+
+            if func_name == "require_env":
+                target_node = None
+                if len(node.args) >= 2:
+                    target_node = node.args[1]
+                else:
+                    for kw in node.keywords:
+                        if kw.arg in ("exception_cls", "error", "exc", "exc_type"):
+                            target_node = kw.value
+                            break
+                if target_node is not None:
+                    name = _extract_name(target_node)
+                    if name:
+                        if name.endswith("Error") or name in (
+                            "KeyError",
+                            "IndexError",
+                            "ValueError",
+                            "TypeError",
+                            "AssertionError",
+                        ):
+                            errors.append(
+                                f"{file_path}:{node.lineno}: error: [PRE_LINT_REQUIRE_ENV_MUST_BE_EXCEPTION] 'require_env(...)' is reserved exclusively for operational exceptions (*Exception). "
+                                f"Found contract violation error '{name}'. Contract errors designate caller-preventable precondition violations; "
+                                f"gate them using 'require(..., error={name})' or 'require_arg(..., error={name})'."
+                            )
+                        elif not name.endswith("Exception"):
+                            errors.append(
+                                f"{file_path}:{node.lineno}: error: [PRE_LINT_REQUIRE_ENV_MUST_BE_EXCEPTION] 'require_env(...)' operational exception '{name}' must end with 'Exception' "
+                                f"to clearly differentiate operational exceptions from contract violation errors (*Error)."
+                            )
+    return errors
+
+
+
+def _is_env_annotation(ann: ast.AST) -> bool:
+    """Returns True if an annotation AST node is Env[...] or Annotated[..., _EnvStateMarker]."""
+    if isinstance(ann, ast.Subscript):
+        val = ann.value
+        if (isinstance(val, ast.Name) and val.id == "Env") or (
+            isinstance(val, ast.Attribute) and val.attr == "Env"
+        ):
+            return True
+        if (isinstance(val, ast.Name) and val.id == "Annotated") or (
+            isinstance(val, ast.Attribute) and val.attr == "Annotated"
+        ):
+            for child in ast.walk(ann.slice):
+                if (isinstance(child, ast.Name) and child.id == "_EnvStateMarker") or (
+                    isinstance(child, ast.Attribute) and child.attr == "_EnvStateMarker"
+                ):
+                    return True
+    return False
+
+
+def _extract_env_state_fields(tree: ast.AST) -> set[str]:
+    """Collects field names annotated with Env[...] on State dataclasses in a module AST."""
+    env_fields: set[str] = set()
+    for node in getattr(tree, "body", []):
+        if not isinstance(node, ast.ClassDef):
+            continue
+        is_dataclass = any(
+            (isinstance(d, ast.Name) and d.id == "dataclass")
+            or (isinstance(d, ast.Attribute) and d.attr == "dataclass")
+            or (
+                isinstance(d, ast.Call)
+                and (
+                    (isinstance(d.func, ast.Name) and d.func.id == "dataclass")
+                    or (isinstance(d.func, ast.Attribute) and d.func.attr == "dataclass")
+                )
+            )
+            for d in node.decorator_list
+        )
+        if not (is_dataclass or node.name.endswith("State")):
+            continue
+        for stmt in node.body:
+            if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
+                if _is_env_annotation(stmt.annotation):
+                    env_fields.add(stmt.target.id)
+    return env_fields
+
+
+def check_require_env_depends_on_env_state(
+    tree: ast.AST, file_path: str = ""
+) -> list[str]:
+    """Ensures 'require_env(...)' conditions reference at least one declared Env[...] field."""
+    errors: list[str] = []
+    env_fields = _extract_env_state_fields(tree)
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func_name = ""
+        if isinstance(node.func, ast.Name):
+            func_name = node.func.id
+        elif isinstance(node.func, ast.Attribute):
+            func_name = node.func.attr
+        if func_name != "require_env":
+            continue
+
+        cond_node: ast.AST | None = None
+        if node.args:
+            cond_node = node.args[0]
+        else:
+            for kw in node.keywords:
+                if kw.arg in ("condition", "cond"):
+                    cond_node = kw.value
+                    break
+        if cond_node is None:
+            continue
+
+        refs_env = bool(env_fields) and any(
+            isinstance(child, ast.Attribute) and child.attr in env_fields
+            for child in ast.walk(cond_node)
+        )
+        if not refs_env:
+            errors.append(
+                f"{file_path}:{node.lineno}: error: [PRE_LINT_REQUIRE_ENV_NEEDS_ENV_STATE] "
+                "'require_env(...)' condition must reference at least one declared 'Env[...]' "
+                "state field on the State dataclass (e.g., 'self.state.<env_field>')."
+            )
+    return errors
+
+
+
+def check_violating_sticks_to_error(tree: ast.AST, file_path: str = "") -> list[str]:
+    """Ensures '.violating(...)' only specifies contract violation errors (*Error), never *Exception."""
+    errors: list[str] = []
+
+    def _extract_name(node: ast.AST) -> str:
+        if isinstance(node, ast.Name):
+            return node.id
+        if isinstance(node, ast.Attribute):
+            return node.attr
+        if isinstance(node, ast.Call):
+            return _extract_name(node.func)
+        return ""
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        is_violating = (
+            isinstance(node.func, ast.Attribute) and node.func.attr == "violating"
+        ) or (isinstance(node.func, ast.Name) and node.func.id == "violating")
+        if not is_violating:
+            continue
+
+        target_node: ast.AST | None = None
+        if node.args:
+            target_node = node.args[0]
+        else:
+            for kw in node.keywords:
+                if kw.arg in ("exc_type", "error", "exc"):
+                    target_node = kw.value
+                    break
+        if target_node is None:
+            continue
+
+        name = _extract_name(target_node)
+        if name and (name.endswith("Exception") or name in ("Exception", "BaseException")):
+            errors.append(
+                f"{file_path}:{node.lineno}: error: [PRE_LINT_VIOLATING_MUST_BE_ERROR] "
+                f"'.violating({name})' is restricted exclusively to contract violation errors (*Error). "
+                "Operational exceptions (*Exception) must be exercised by driving bound "
+                "environmental/collaborator state via 'self.bind(...)' and 'require_env(...)'."
+            )
+    return errors
+
+
+
+def check_impl_env_state_bindings(tree: ast.AST, file_path: str = "") -> list[str]:
+    """Ensures implementation pseudo-SMs bind every Env[...] field inherited from implemented interfaces."""
+    errors: list[str] = []
+    if not file_path or not file_path.endswith("_impl_pretense.py"):
+        return errors
+
+
+    pseudo_sm_cls: ast.ClassDef | None = None
+    for node in getattr(tree, "body", []):
+        if isinstance(node, ast.ClassDef) and (
+            "PseudoStateMachine" in node.name
+            or ("StateMachine" in node.name and node.name != "StateMachine")
+        ):
+            pseudo_sm_cls = node
+            break
+    if pseudo_sm_cls is None:
+        return errors
+
+
+    base_names: set[str] = set()
+    for b in pseudo_sm_cls.bases:
+        if isinstance(b, ast.Name):
+            base_names.add(b.id)
+        elif isinstance(b, ast.Attribute):
+            base_names.add(b.attr)
+        elif isinstance(b, ast.Subscript):
+            val = b.value
+            if isinstance(val, ast.Name):
+                base_names.add(val.id)
+            elif isinstance(val, ast.Attribute):
+                base_names.add(val.attr)
+
+    curr_path = Path(file_path).resolve()
+    pretense_dir = curr_path.parent
+    iface_paths: list[Path] = []
+
+    # 1. Discover implemented interfaces from high/<unit>.md 'implements:' header
+    if "parts" in curr_path.parts:
+        try:
+            parts_idx = curr_path.parts.index("parts")
+            unit_name = curr_path.name.replace("_pretense.py", "")
+            unit_dir = Path(*curr_path.parts[: parts_idx + 2])
+            high_cand = unit_dir / "high" / f"{unit_name}.md"
+            if high_cand.is_file():
+                for line in high_cand.read_text(encoding="utf-8").splitlines()[:20]:
+                    line_s = line.strip()
+                    if line_s.startswith("implements:"):
+                        raw = line_s[len("implements:") :].strip()
+                        for target in (t.strip() for t in raw.split(",") if t.strip()):
+                            cand = unit_dir / "pretense" / f"{target}_pretense.py"
+                            if cand.is_file() and cand not in iface_paths:
+                                iface_paths.append(cand)
+                        break
+        except Exception:
+            pass
+
+    # 2. Fallback when high/<unit>.md is absent: only inspect imported *_pretense modules
+    # whose StateMachine class is actually inherited by pseudo_sm_cls (skip collaborators).
+    if not iface_paths:
+        for stmt in getattr(tree, "body", []):
+            mod_names: list[str] = []
+            if isinstance(stmt, ast.Import):
+                mod_names = [alias.name.split(".")[-1] for alias in stmt.names]
+            elif isinstance(stmt, ast.ImportFrom) and stmt.module:
+                mod_names = [stmt.module.split(".")[-1]]
+            for mod_name in mod_names:
+                if mod_name.endswith("_pretense") and not mod_name.endswith("_impl_pretense"):
+                    cand = pretense_dir / f"{mod_name}.py"
+                    if cand.is_file() and cand not in iface_paths:
+                        try:
+                            cand_tree = ast.parse(cand.read_text(encoding="utf-8"))
+                            cand_classes = {
+                                n.name
+                                for n in getattr(cand_tree, "body", [])
+                                if isinstance(n, ast.ClassDef)
+                            }
+                            if cand_classes & base_names:
+                                iface_paths.append(cand)
+                        except (OSError, SyntaxError):
+                            pass
+
+    required_env_fields: set[str] = set()
+    for iface_path in iface_paths:
+        try:
+            iface_tree = ast.parse(iface_path.read_text(encoding="utf-8"))
+        except (OSError, SyntaxError):
+            continue
+        required_env_fields.update(_extract_env_state_fields(iface_tree))
+
+    if not required_env_fields:
+        return errors
+
+
+    bound_fields: set[str] = set()
+    for item in pseudo_sm_cls.body:
+        if isinstance(item, ast.FunctionDef) and item.name == "__init__":
+            for child in ast.walk(item):
+                if (
+                    isinstance(child, ast.Call)
+                    and isinstance(child.func, ast.Attribute)
+                    and child.func.attr == "bind"
+                    and isinstance(child.func.value, ast.Name)
+                    and child.func.value.id == "self"
+                ):
+                    attr_arg: ast.AST | None = child.args[0] if child.args else None
+                    if attr_arg is None:
+                        for kw in child.keywords:
+                            if kw.arg == "attr_name":
+                                attr_arg = kw.value
+                                break
+                    if isinstance(attr_arg, ast.Constant) and isinstance(
+                        attr_arg.value, str
+                    ):
+                        bound_fields.add(attr_arg.value)
+
+    for field_name in sorted(required_env_fields):
+        if field_name not in bound_fields:
+            errors.append(
+                f"{file_path}:{pseudo_sm_cls.lineno}: error: [PRE_LINT_UNBOUND_ENV_STATE] "
+                f"Implementation pseudo-state machine '{pseudo_sm_cls.name}' inherits environmental "
+                f"state field '{field_name}' from an implemented interface, but does not bind it "
+                f"via 'self.bind(\"{field_name}\", lambda: ...)' in '__init__'."
+            )
+    return errors
+
+
+
+def check_no_local_exception_class(tree: ast.AST, file_path: str = "") -> list[str]:
+    """Prohibits redefining exception/error classes locally inside pretense modules."""
+    errors: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef):
+            base_names = {
+                b.id if isinstance(b, ast.Name) else b.attr
+                for b in node.bases
+                if isinstance(b, (ast.Name, ast.Attribute))
+            }
+            if base_names & {"Exception", "BaseException"} or node.name.endswith(
+                ("Error", "Exception")
+            ):
+                errors.append(
+                    f"{file_path}:{node.lineno}: error [PRE_LINT_NO_LOCAL_EXCEPTION_CLASS]: "
+                    f"Do not define exception class '{node.name}' locally in a pretense module; "
+                    f"import contracted errors/exceptions from the target library interface module."
+                )
+    return errors
+
+
+def check_no_module_level_sut(tree: ast.AST, file_path: str = "") -> list[str]:
+    """Prohibits calling sut(...) at module or class-body level outside methods/functions."""
+    errors: list[str] = []
+
+    def _visit(node: ast.AST) -> None:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            return
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "sut"
+        ):
+            errors.append(
+                f"{file_path}:{node.lineno}: error [PRE_LINT_NO_MODULE_LEVEL_SUT]: "
+                "'sut(...)' must only be called inside methods (e.g. 'target: TargetClass = sut(TargetClass)' "
+                "inside 'inner_<name>'), never at module or class-body level where it raises KeyError at import time."
+            )
+            return
+        for child in ast.iter_child_nodes(node):
+            _visit(child)
+
+    _visit(tree)
+    return errors
+
+
+def check_no_violating_in_interface(
+    tree: ast.AST, file_path: str = "", is_interface: bool = True
+) -> list[str]:
+    """Prohibits .violating(...) in interface pretense modules (belongs in *_impl_pretense.py)."""
+    if not is_interface:
+        return []
+    errors: list[str] = []
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "violating"
+        ):
+            errors.append(
+                f"{file_path}:{node.lineno}: error [PRE_LINT_NO_VIOLATING_IN_INTERFACE]: "
+                "'.violating(...)' tests concrete SUT error-raising paths and belongs only in "
+                "implementation pretense modules (*_impl_pretense.py), never in interface fake tests "
+                "(Test<Target>Fake). On a fake, '.violating(...)' disables 'require(...)' preconditions "
+                "and calls 'inner_*' directly."
+            )
+    return errors
+
+
+def check_no_raise_in_state_machine(tree: ast.AST, file_path: str = "") -> list[str]:
+    """Ensures explicit 'raise' statements are never used within StateMachine definitions (PRE_LINT_NO_RAISE)."""
+    errors: list[str] = []
+
+    def _is_state_machine_class(c: ast.ClassDef) -> bool:
+        for base in c.bases:
+            base_id = ""
+            if isinstance(base, ast.Name):
+                base_id = base.id
+            elif isinstance(base, ast.Attribute):
+                base_id = base.attr
+            elif isinstance(base, ast.Subscript):
+                if isinstance(base.value, ast.Name):
+                    base_id = base.value.id
+                elif isinstance(base.value, ast.Attribute):
+                    base_id = base.value.attr
+            if base_id in ("StateMachine", "StateMachineProto") or base_id.endswith(
+                ("StateMachine", "PseudoStateMachine")
+            ):
+                return True
+        return False
+
+    for node in getattr(tree, "body", []):
+        if isinstance(node, ast.ClassDef) and _is_state_machine_class(node):
+            for inner in ast.walk(node):
+                if isinstance(inner, ast.Raise):
+                    errors.append(
+                        f"{file_path}:{inner.lineno}: error: [PRE_LINT_NO_RAISE] Explicit 'raise' statements are strictly prohibited in state machines. "
+                        f"Contract errors must be gated via 'require(...)' / 'require_arg(...)', and operational exceptions must be declared via 'require_env(...)'. "
+                        f"Fake return synthesis and SUT invocation must not raise ad-hoc exceptions."
+                    )
+    return errors
+
 
 
 def check_no_direct_real_access(tree: ast.AST, file_path: str = "") -> list[str]:
@@ -1844,6 +2371,7 @@ def check_no_direct_real_access(tree: ast.AST, file_path: str = "") -> list[str]
     return errors
 
 
+
 def check_no_direct_sm_access_in_real_tests(tree: ast.AST, file_path: str = "") -> list[str]:
     """Ensures test methods in Test*Real classes do not access 'self.sm' directly (PN_NO_DIRECT_SM_ACCESS_IN_REAL_TEST).
 
@@ -1892,6 +2420,7 @@ def check_no_direct_sm_access_in_real_tests(tree: ast.AST, file_path: str = "") 
     return errors
 
 
+
 def check_impl_allowed_classes_only(
     tree: ast.AST, file_path: str = "", is_impl: bool = False
 ) -> list[str]:
@@ -1904,6 +2433,7 @@ def check_impl_allowed_classes_only(
     errors: list[str] = []
     if not is_impl:
         return errors
+
 
     def _get_base_name(base: ast.AST) -> str:
         if isinstance(base, ast.Name):
@@ -1938,6 +2468,7 @@ def check_impl_allowed_classes_only(
                 "and TestCase classes."
             )
     return errors
+
 
 
 def check_terminal_violating(tree: ast.AST, file_path: str = "") -> list[str]:
@@ -2044,13 +2575,15 @@ def check_terminal_violating(tree: ast.AST, file_path: str = "") -> list[str]:
     return errors
 
 
+
 def check_no_call_target_in_interface(
     tree: ast.AST, file_path: str = "", is_interface: bool = False
 ) -> list[str]:
-    """Ensures interface state machines do not invoke call_target (call_target belongs in implementation pseudo-state machines)."""
+    """Ensures interface state machines do not invoke call_target, touch sut() in inner methods, or invoke SUT methods outside assert."""
     errors: list[str] = []
     if not is_interface:
         return errors
+
 
     tree_body: list[ast.stmt] = getattr(tree, "body", [])
     for node in tree_body:
@@ -2061,6 +2594,66 @@ def check_no_call_target_in_interface(
         ):
             for item in node.body:
                 if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    is_inner = item.name.startswith("inner_")
+                    if is_inner:
+                        for child in ast.walk(item):
+                            if isinstance(child, ast.Assert):
+                                errors.append(
+                                    f"{file_path}:{child.lineno}: error: [PRE_LINT_NO_ASSERT_IN_INNER] Interface inner transition '{item.name}' "
+                                    f"must not contain 'assert' statements. Inner transitions exist exclusively to compute fake return values "
+                                    f"or raise contracted exceptions. Assertions belong in the outer @transition method."
+                                )
+                            elif isinstance(child, (ast.Assign, ast.AnnAssign)):
+                                targets = getattr(child, "targets", [getattr(child, "target", None)])
+                                for tgt in targets:
+                                    if (
+                                        isinstance(tgt, ast.Attribute)
+                                        and isinstance(tgt.value, ast.Attribute)
+                                        and isinstance(tgt.value.value, ast.Name)
+                                        and tgt.value.value.id == "self"
+                                        and tgt.value.attr == "state"
+                                    ):
+                                        errors.append(
+                                            f"{file_path}:{child.lineno}: error: [PRE_LINT_NO_STATE_MUTATION_IN_INNER] Interface inner transition '{item.name}' "
+                                            f"must not mutate 'self.state'. State mutations belong exclusively in the outer @transition method."
+                                        )
+                            elif isinstance(child, ast.Raise):
+                                exc_name = ""
+                                if isinstance(child.exc, ast.Name):
+                                    exc_name = child.exc.id
+                                elif (
+                                    isinstance(child.exc, ast.Call)
+                                    and isinstance(child.exc.func, ast.Name)
+                                ):
+                                    exc_name = child.exc.func.id
+                                if exc_name.endswith("Error"):
+                                    errors.append(
+                                        f"{file_path}:{child.lineno} Interface inner transition '{item.name}' "
+                                        f"must never raise contract errors ('{exc_name}'); interface state machines rely strictly on "
+                                        f"require(...) and require_arg(...) to gate contract error preconditions."
+                                    )
+                    sut_vars: set[str] = set()
+
+                    for child in ast.walk(item):
+                        if isinstance(child, (ast.Assign, ast.AnnAssign)):
+                            val = getattr(child, "value", None)
+                            if (
+                                isinstance(val, ast.Call)
+                                and isinstance(val.func, ast.Name)
+                                and val.func.id == "sut"
+                            ):
+                                targets = getattr(child, "targets", [getattr(child, "target", None)])
+                                for t in targets:
+                                    if isinstance(t, ast.Name):
+                                        sut_vars.add(t.id)
+
+                    assert_calls: set[ast.Call] = set()
+                    for child in ast.walk(item):
+                        if isinstance(child, ast.Assert):
+                            for sub in ast.walk(child):
+                                if isinstance(sub, ast.Call):
+                                    assert_calls.add(sub)
+
                     for child in ast.walk(item):
                         if isinstance(child, ast.Call):
                             call_name = ""
@@ -2068,12 +2661,109 @@ def check_no_call_target_in_interface(
                                 call_name = child.func.id
                             elif isinstance(child.func, ast.Attribute):
                                 call_name = child.func.attr
+
                             if call_name == "call_target":
                                 errors.append(
                                     f"{file_path}:{child.lineno}: error: [PRE_LINT_NO_CALL_TARGET_IN_INTERFACE] 'call_target' is prohibited in interface state machines. "
                                     f"Interface state machines are abstract models over state dataclasses; 'call_target' belongs strictly in implementation pseudo-state machines."
                                 )
+
+                            if is_inner:
+                                is_sut = False
+                                if isinstance(child.func, ast.Name) and child.func.id == "sut":
+                                    is_sut = True
+                                elif isinstance(child.func, ast.Attribute) and isinstance(child.func.value, ast.Name) and child.func.value.id in sut_vars:
+                                    is_sut = True
+                                if is_sut:
+                                    errors.append(
+                                        f"{file_path}:{child.lineno}: error: [PRE_LINT_NO_CALL_TARGET_IN_INTERFACE] Calling 'sut(...)' inside inner transition '{item.name}' is strictly prohibited in interface state machines. "
+                                        f"In interface state machines, 'inner_<method>' exists purely to compute fake return values from 'self.state' (or return None). "
+                                        f"Calling the method under test on the SUT belongs exclusively to implementation pseudo-state machines."
+                                    )
+
+                            if not is_inner and child not in assert_calls and isinstance(child.func, ast.Attribute):
+                                is_sut_method = False
+                                if isinstance(child.func.value, ast.Name) and child.func.value.id in sut_vars:
+                                    is_sut_method = True
+                                elif (
+                                    isinstance(child.func.value, ast.Call)
+                                    and isinstance(child.func.value.func, ast.Name)
+                                    and child.func.value.func.id == "sut"
+                                ):
+                                    is_sut_method = True
+                                if is_sut_method:
+                                    errors.append(
+                                        f"{file_path}:{child.lineno}: error: [PRE_LINT_NO_CALL_TARGET_IN_INTERFACE] Calling SUT method '{child.func.attr}' outside 'assert' statements is prohibited in interface state machines. "
+                                        f"Interface state machines model abstract state transitions and fake computations; invoking methods on the SUT belongs strictly in implementation pseudo-state machines. "
+                                        f"In interface state machines, 'sut(...)' may only be referenced within 'assert' statements to check observable properties."
+                                    )
     return errors
+
+
+
+def check_no_super_in_impl_inner(
+    tree: ast.AST, file_path: str = "", is_impl: bool = False
+) -> list[str]:
+    """Ensures implementation pseudo-state machines do not invoke super() in inner transition methods (PRE_LINT_NO_SUPER_IN_IMPL_INNER)."""
+    errors: list[str] = []
+    if not is_impl:
+        return errors
+
+
+    tree_body: list[ast.stmt] = getattr(tree, "body", [])
+    for node in tree_body:
+        if (
+            isinstance(node, ast.ClassDef)
+            and ("PseudoStateMachine" in node.name or node.name.endswith("StateMachine"))
+        ):
+            for item in node.body:
+                if (
+                    isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
+                    and item.name.startswith("inner_")
+                ):
+                    for child in ast.walk(item):
+                        if isinstance(child, ast.Call):
+                            is_super = False
+                            if isinstance(child.func, ast.Name) and child.func.id == "super":
+                                is_super = True
+                            elif (
+                                isinstance(child.func, ast.Attribute)
+                                and isinstance(child.func.value, ast.Call)
+                                and isinstance(child.func.value.func, ast.Name)
+                                and child.func.value.func.id == "super"
+                            ):
+                                is_super = True
+                            if is_super:
+                                errors.append(
+                                    f"{file_path}:{child.lineno}: error: [PRE_LINT_NO_SUPER_IN_IMPL_INNER] "
+                                    f"Implementation inner transition '{item.name}' must not invoke 'super()'. "
+                                    f"Implementation inner transitions must delegate directly to the target via 'sut(TargetClass).{item.name[6:]}(...)'."
+                                )
+    return errors
+
+
+
+def check_no_domain_any(tree: ast.AST, file_path: str = "") -> list[str]:
+    """Ensures state machines do not use Domain.any() (PRE_LINT_NO_DOMAIN_ANY)."""
+    errors: list[str] = []
+    reported_lines: set[int] = set()
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Attribute)
+            and node.attr == "any"
+            and isinstance(node.value, ast.Name)
+            and node.value.id == "Domain"
+        ):
+            lineno = getattr(node, "lineno", 1)
+            if lineno not in reported_lines:
+                reported_lines.add(lineno)
+                errors.append(
+                    f"{file_path}:{lineno}: error: [PRE_LINT_NO_DOMAIN_ANY] 'Domain.any()' is strictly banned. "
+                    f"Cleanroom forbids untyped parameter domains; specify an explicit typed domain "
+                    f"(e.g., Domain.type(...), Domain.integers(...), Domain.text(...))."
+                )
+    return errors
+
 
 
 def check_multi_interface_inheritance(tree: ast.AST, file_path: str = "") -> list[str]:
@@ -2081,6 +2771,7 @@ def check_multi_interface_inheritance(tree: ast.AST, file_path: str = "") -> lis
     errors: list[str] = []
     if not file_path or not file_path.endswith("_impl_pretense.py"):
         return errors
+
 
     high_spec_path: Path | None = None
     curr_path = Path(file_path).resolve()
@@ -2098,10 +2789,12 @@ def check_multi_interface_inheritance(tree: ast.AST, file_path: str = "") -> lis
     if high_spec_path is None or not high_spec_path.is_file():
         return errors
 
+
     try:
         high_text = high_spec_path.read_text(encoding="utf-8")
     except OSError:
         return errors
+
 
     implements_targets: list[str] = []
     for line in high_text.splitlines()[:20]:
@@ -2113,6 +2806,7 @@ def check_multi_interface_inheritance(tree: ast.AST, file_path: str = "") -> lis
 
     if len(implements_targets) <= 1:
         return errors
+
 
     pseudo_sm_cls: ast.ClassDef | None = None
     tree_body: list[ast.stmt] = getattr(tree, "body", [])
@@ -2126,6 +2820,7 @@ def check_multi_interface_inheritance(tree: ast.AST, file_path: str = "") -> lis
 
     if pseudo_sm_cls is None:
         return errors
+
 
     inherited_bases: set[str] = set()
     for base in pseudo_sm_cls.bases:
@@ -2148,6 +2843,7 @@ def check_multi_interface_inheritance(tree: ast.AST, file_path: str = "") -> lis
     return errors
 
 
+
 def check_interface_transition_coverage(
     tree: ast.AST,
     file_path: str = "",
@@ -2158,6 +2854,7 @@ def check_interface_transition_coverage(
     errors: list[str] = []
     if not is_interface:
         return errors
+
 
     sm_cls: ast.ClassDef | None = None
     tree_body: list[ast.stmt] = getattr(tree, "body", [])
@@ -2173,6 +2870,7 @@ def check_interface_transition_coverage(
     if sm_cls is None:
         return errors
 
+
     declared_transitions: dict[str, ast.FunctionDef | ast.AsyncFunctionDef] = {}
     for item in sm_cls.body:
         if isinstance(
@@ -2180,23 +2878,30 @@ def check_interface_transition_coverage(
         ) and not item.name.startswith("_"):
             for dec in item.decorator_list:
                 is_t = False
+                alias_name: str | None = None
                 if isinstance(dec, ast.Name) and dec.id == "transition":
                     is_t = True
                 elif isinstance(dec, ast.Call):
-                    if isinstance(dec.func, ast.Name) and dec.func.id == "transition":
-                        is_t = True
-                    elif (
+                    if (isinstance(dec.func, ast.Name) and dec.func.id == "transition") or (
                         isinstance(dec.func, ast.Attribute)
                         and dec.func.attr == "transition"
                     ):
                         is_t = True
+                        for kw in dec.keywords:
+                            if (
+                                kw.arg == "name"
+                                and isinstance(kw.value, ast.Constant)
+                                and isinstance(kw.value.value, str)
+                            ):
+                                alias_name = kw.value.value
+                                break
                 elif isinstance(dec, ast.Attribute) and dec.attr in (
                     "transition",
                     "seeding",
                 ):
                     is_t = True
                 if is_t:
-                    declared_transitions[item.name] = item
+                    declared_transitions[alias_name or item.name] = item
                     break
 
     if not declared_transitions:
@@ -2210,6 +2915,18 @@ def check_interface_transition_coverage(
                     f"defines 0 transitions, but interface specification declares {total_methods} method(s). "
                     f"State machine must define 1:1 transitions for all public methods."
                 )
+        return errors
+
+    has_fuzz_suite = any(
+        isinstance(node, ast.Call)
+        and (
+            (isinstance(node.func, ast.Name) and node.func.id == "compile_hypothesis_test_case")
+            or (isinstance(node.func, ast.Attribute) and node.func.attr == "compile_hypothesis_test_case")
+        )
+        for stmt in tree_body
+        for node in ast.walk(stmt)
+    )
+    if has_fuzz_suite:
         return errors
 
     test_cases: list[ast.ClassDef] = []
@@ -2238,6 +2955,7 @@ def check_interface_transition_coverage(
         )
         return errors
 
+
     called_names: set[str] = set()
     accessed_names: set[str] = set()
     for tc in test_cases:
@@ -2265,6 +2983,90 @@ def check_interface_transition_coverage(
                 f"Advice: Ensure its required conditions can be properly reached by existing transitions, or add seeding transitions if coverage is difficult."
             )
 
+    return errors
+
+
+def check_unbound_initial_state_factory(tree: ast.AST, file_path: str) -> list[str]:
+    """Rejects unbound Class.make_initial_state passed to compile_hypothesis_test_case."""
+    errors: list[str] = []
+    class_names = {
+        node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef)
+    }
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        is_compile = (
+            isinstance(node.func, ast.Name)
+            and node.func.id == "compile_hypothesis_test_case"
+        ) or (
+            isinstance(node.func, ast.Attribute)
+            and node.func.attr == "compile_hypothesis_test_case"
+        )
+        if not is_compile:
+            continue
+        for kw in node.keywords:
+            if kw.arg != "initial_state_factory":
+                continue
+            val = kw.value
+            if (
+                isinstance(val, ast.Attribute)
+                and val.attr == "make_initial_state"
+                and isinstance(val.value, ast.Name)
+                and (
+                    val.value.id in class_names
+                    or val.value.id.endswith("StateMachine")
+                )
+            ):
+                errors.append(
+                    f"{file_path}:{node.lineno}: error: [PRE_LINT_UNBOUND_INITIAL_STATE_FACTORY] "
+                    f"initial_state_factory='{val.value.id}.make_initial_state' passes an unbound class method; "
+                    f"pass a bound instance method (e.g. 'proto.make_initial_state') instead."
+                )
+    return errors
+
+
+def check_setup_super_order(tree: ast.AST, file_path: str) -> list[str]:
+    """Ensures LifecycleTestCase.setUp calls super().setUp() before get_singleton()/sut()."""
+    errors: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ClassDef):
+            continue
+        is_lifecycle_tc = any(
+            (isinstance(b, ast.Name) and b.id == "LifecycleTestCase")
+            or (isinstance(b, ast.Attribute) and b.attr == "LifecycleTestCase")
+            for b in node.bases
+        )
+        if not is_lifecycle_tc:
+            continue
+        for item in node.body:
+            if not isinstance(item, ast.FunctionDef) or item.name != "setUp":
+                continue
+            seen_super = False
+            for stmt in item.body:
+                for sub in ast.walk(stmt):
+                    if (
+                        isinstance(sub, ast.Call)
+                        and isinstance(sub.func, ast.Attribute)
+                        and sub.func.attr == "setUp"
+                        and isinstance(sub.func.value, ast.Call)
+                        and isinstance(sub.func.value.func, ast.Name)
+                        and sub.func.value.func.id == "super"
+                    ):
+                        seen_super = True
+                        break
+                if seen_super:
+                    continue
+                for sub in ast.walk(stmt):
+                    if (
+                        isinstance(sub, ast.Call)
+                        and isinstance(sub.func, ast.Name)
+                        and sub.func.id in ("get_singleton", "sut")
+                    ):
+                        errors.append(
+                            f"{file_path}:{sub.lineno}: error: [PRE_LINT_SETUP_SUPER_ORDER] "
+                            f"'{sub.func.id}(...)' called before 'super().setUp()' in '{node.name}.setUp'; "
+                            f"call 'super().setUp()' first so LifecycleTestCase auto-registers imported *_impl singletons."
+                        )
     return errors
 
 
@@ -2369,6 +3171,7 @@ def check_transition_protocol_properties(
     if not pyi_elements or not pyi_elements.get("classes"):
         return errors
 
+
     protocol_props: dict[str, set[str]] = {}
     for c in pyi_elements["classes"]:
         if c.get("is_protocol") and c.get("properties"):
@@ -2376,6 +3179,7 @@ def check_transition_protocol_properties(
 
     if not protocol_props:
         return errors
+
 
     for node in ast.walk(tree):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -2402,6 +3206,7 @@ def check_transition_protocol_properties(
                                 f"Pyright disallows accessing protocol properties as class variables. Use '@transition(name=\"{prop_name}\")' instead."
                             )
     return errors
+
 
 
 def _default_domain_arg(arg_name: str, arg_type: str = "") -> str:
@@ -2681,7 +3486,7 @@ def generate_pretense_scaffold(
                 "# ==============================================================================",
                 "# NOTE: Transitions model target methods 1:1 (@transition(TargetClass.method)).",
                 "# Contract violations (*Error, e.g. NodeNotFoundError) are preconditions: use require_arg(arg, Domain.in_set(self.state.items)) or require(condition) (optional error=ExpectedError is documentation only). NEVER use with raises(...) for *Error!",
-                "# with raises(ExpectedException): self.inner_method(...) is reserved exclusively for operational exceptions (*Exception).",
+                "# Operational exceptions (*Exception) use Env[bool] + require_env(healthy_cond, ExpectedException) in interface SMs, bound via self.bind(...) in impl.",
                 "# require_arg defines the caller precondition contract (checked at runtime on real calls).",
                 "# Use Domain.type(T) or open domain; use preferred=[...] to cluster/bias fuzz inputs without restricting the contract.",
                 "#",
@@ -3382,7 +4187,7 @@ def generate_pretense_scaffold(
             "# ==============================================================================",
             "# NOTE: Transitions model target methods 1:1 (@transition(TargetClass.method)).",
             "# Contract violations (*Error, e.g. NodeNotFoundError) are preconditions: use require_arg(arg, Domain.in_set(self.state.items)) or require(condition) (optional error=ExpectedError is documentation only). NEVER use with raises(...) for *Error!",
-            "# with raises(ExpectedException): self.inner_method(...) is reserved exclusively for operational exceptions (*Exception).",
+            "# Operational exceptions (*Exception) use Env[bool] + require_env(healthy_cond, ExpectedException) in interface SMs, bound via self.bind(...) in impl.",
             "# require_arg defines the caller precondition contract (checked at runtime on real calls).",
             "# Use Domain.type(T) or open domain; use preferred=[...] to cluster/bias fuzz inputs without restricting the contract.",
             "",
@@ -3811,16 +4616,19 @@ def _resolve_lib_dir_and_pkg(
             from autofab_py.support.lib import app_info
         except Exception:
             import app_info  # type: ignore
-    markers = (
-        getattr(app_info, "get_config_filenames", lambda: ())()
-        + getattr(app_info, "get_roles_filenames", lambda: ())()
-        + ("pyproject.toml",)
-    )
+    config_markers = getattr(app_info, "get_config_filenames", lambda: ())() + getattr(
+        app_info, "get_roles_filenames", lambda: ()
+    )()
+    fallback_root = ""
     while curr and curr != os.path.dirname(curr):
-        if any(os.path.isfile(os.path.join(curr, marker)) for marker in markers):
+        if os.path.isfile(os.path.join(curr, "pyproject.toml")):
             repo_root = curr
             break
+        if any(os.path.isfile(os.path.join(curr, marker)) for marker in config_markers):
+            fallback_root = curr
         curr = os.path.dirname(curr)
+    if not repo_root:
+        repo_root = fallback_root
 
     default_lib_dir = os.path.join(part_dir, "lib")
     if user_lib_pkg:
@@ -4058,6 +4866,14 @@ def main() -> int:
     )
     all_errors.extend(call_target_iface_errs)
 
+    no_super_errs = check_no_super_in_impl_inner(
+        tree, args.module_path, is_impl=not is_interface
+    )
+    all_errors.extend(no_super_errs)
+
+    no_domain_any_errs = check_no_domain_any(tree, args.module_path)
+    all_errors.extend(no_domain_any_errs)
+
     no_raises_errs = check_no_raises_in_test_cases(tree, args.module_path)
     all_errors.extend(no_raises_errs)
 
@@ -4066,6 +4882,21 @@ def main() -> int:
 
     no_raises_error_errs = check_no_raises_for_errors(tree, args.module_path)
     all_errors.extend(no_raises_error_errs)
+
+    require_error_errs = check_require_sticks_to_error(tree, args.module_path)
+    all_errors.extend(require_error_errs)
+
+    require_env_errs = check_require_env_sticks_to_exception(tree, args.module_path)
+    all_errors.extend(require_env_errs)
+
+    require_env_state_errs = check_require_env_depends_on_env_state(tree, args.module_path)
+    all_errors.extend(require_env_state_errs)
+
+    impl_env_bind_errs = check_impl_env_state_bindings(tree, args.module_path)
+    all_errors.extend(impl_env_bind_errs)
+
+    no_raise_sm_errs = check_no_raise_in_state_machine(tree, args.module_path)
+    all_errors.extend(no_raise_sm_errs)
 
     direct_real_errs = check_no_direct_real_access(tree, args.module_path)
     all_errors.extend(direct_real_errs)
@@ -4080,6 +4911,9 @@ def main() -> int:
 
     terminal_violating_errs = check_terminal_violating(tree, args.module_path)
     all_errors.extend(terminal_violating_errs)
+
+    violating_error_errs = check_violating_sticks_to_error(tree, args.module_path)
+    all_errors.extend(violating_error_errs)
 
     multi_iface_errs = check_multi_interface_inheritance(tree, args.module_path)
     all_errors.extend(multi_iface_errs)
@@ -4112,6 +4946,23 @@ def main() -> int:
 
     pragma_errs = check_no_pragma_no_cover(args.module_path)
     all_errors.extend(pragma_errs)
+
+    local_exc_errs = check_no_local_exception_class(tree, args.module_path)
+    all_errors.extend(local_exc_errs)
+
+    module_sut_errs = check_no_module_level_sut(tree, args.module_path)
+    all_errors.extend(module_sut_errs)
+
+    violating_iface_errs = check_no_violating_in_interface(
+        tree, args.module_path, is_interface=is_interface
+    )
+    all_errors.extend(violating_iface_errs)
+
+    unbound_factory_errs = check_unbound_initial_state_factory(tree, args.module_path)
+    all_errors.extend(unbound_factory_errs)
+
+    setup_order_errs = check_setup_super_order(tree, args.module_path)
+    all_errors.extend(setup_order_errs)
 
     if all_errors:
         for err in all_errors:

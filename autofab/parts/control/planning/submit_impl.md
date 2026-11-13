@@ -20,8 +20,8 @@ The implementation evaluates verification results from the verification evaluato
 - The submission coordinator constructs an error message when change summary requirements are violated. [format_summary_error]
 - The submission coordinator invokes graph storage to update node status to clean with change description. [update_storage_clean]
 - The submission coordinator formats accepted submission outcome messages with user-facing file aliases. [format_submission_outcome_alias]
-- The submission coordinator validates file targets against auditor and producer file submission constraints, stamping in-band audit tags directly in the canonical repository when verification checks pass, and politely accepting submission without mutating repository files when verification checks fail without uncommitted staged blame. [validate_file_target_submission_constraints]
-- The submission coordinator updates in-band file metadata headers directly in the canonical repository, stripping ephemeral code hashes. [update_canonical_file_metadata]
+- The submission coordinator validates file targets against auditor and producer file submission constraints, rejecting unmodified producer targets when unacted in-band feedback metadata is present (instructing the caller to use `bin/reject` instead), stamping in-band audit tags directly in the canonical repository when verification checks pass, and politely accepting submission without mutating repository files when verification checks fail without uncommitted staged blame. [validate_file_target_submission_constraints]
+- The submission coordinator updates in-band file metadata headers directly in the canonical repository and refreshes `.autofab/pull_manifest.json` with the new baseline `code_hash`. [update_canonical_file_metadata]
 
 ### Woven Contracts
 
@@ -30,7 +30,7 @@ The implementation evaluates verification results from the verification evaluato
 - When session feedback is present and files were unmodified, the coordinator rejects the submission instructing file modifications or failure. [check_feedback_modifications, format_feedback_error, submit: [reject_unmodified_when_feedback_present]]
 - When change summary rules fail based on file modifications or auditor role status, the coordinator rejects the submission with a summary error. [check_auditor_role, inspect_file_modifications, format_summary_error, submit: [require_summary_when_modified, forbid_summary_when_unmodified, forbid_summary_for_auditors]]
 - When all checks succeed, the coordinator updates node status to clean in graph storage with the change description and constructs an outcome message formatting the target with its file alias. [update_storage_clean, format_submission_outcome_alias, submit: [mark_node_clean]]
-- When submitting a file target, the coordinator validates submission constraints, updates in-band headers, and constructs formatted outcome messages. [validate_file_target_submission_constraints, update_canonical_file_metadata, submit: [reject_test_submission_for_auditors, reject_invalid_producer_file_submission, validate_file_change_summary, execute_file_submission_mutation], src_metadata: [update_metadata_disk, record_change_status, stamp_audit_entry]]
+- When submitting a file target, the coordinator validates submission constraints, updates in-band headers, and constructs formatted outcome messages. [validate_file_target_submission_constraints, update_canonical_file_metadata, submit: [reject_test_submission_for_auditors, reject_invalid_producer_file_submission, reject_unmodified_file_with_feedback, validate_file_change_summary, execute_file_submission_mutation], src_metadata: [update_metadata_disk, record_change_status, stamp_audit_entry]]
 
 ## Grounding
 

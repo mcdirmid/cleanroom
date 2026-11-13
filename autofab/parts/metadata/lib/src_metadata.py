@@ -145,7 +145,6 @@ class FileMetadata:
     feedback: List[str]
     audits: Dict[str, str] = field(default_factory=dict)
     dirty: Optional[str] = None
-    code_hash: Optional[str] = None
 
 
 # Contract: SourceMetadataCoordinator protocol for parsing, hashing, and mutating in-band source metadata.
@@ -185,10 +184,11 @@ class SourceMetadataCoordinator(Singleton[SystemTier], Protocol):
         file_path: Path | str,
     ) -> Optional[str]: ...
 
-    # Contract: Evaluates whether file on disk has code modifications compared to in-band code hash.
+    # Contract: Evaluates whether file on disk has code modifications compared to the role workspace pull manifest baseline.
     def is_code_modified(
         self,
         file_path: Path | str,
+        workspace_root: Optional[Path | str] = None,
     ) -> bool: ...
 
     # Contract: Evaluates whether new content alters, corrupts, deletes, or injects in-band metadata.
@@ -208,8 +208,6 @@ class SourceMetadataCoordinator(Singleton[SystemTier], Protocol):
         clear_last_cleaned: bool = False,
         last_changed: Optional[str] = None,
         change_summary: Optional[str] = None,
-        code_hash: Optional[str] = None,
-        clear_code_hash: bool = False,
         clear_feedback: bool = False,
         append_feedback: Optional[str] = None,
         audits: Optional[Dict[str, str]] = None,
@@ -227,8 +225,6 @@ class SourceMetadataCoordinator(Singleton[SystemTier], Protocol):
         clear_last_cleaned: bool = False,
         last_changed: Optional[str] = None,
         change_summary: Optional[str] = None,
-        code_hash: Optional[str] = None,
-        clear_code_hash: bool = False,
         clear_feedback: bool = False,
         append_feedback: Optional[str] = None,
         audits: Optional[Dict[str, str]] = None,
@@ -251,19 +247,18 @@ class SourceMetadataCoordinator(Singleton[SystemTier], Protocol):
         reason: str = "manual dirty",
     ) -> None: ...
 
-    # Contract: Sets LAST_CLEANED to now, updates code hash, and clears feedback and dirty tags.
+    # Contract: Sets LAST_CLEANED to now and clears feedback and dirty tags.
     def mark_clean(
         self,
         file_path: Path | str,
         default_change: str = "new file",
     ) -> None: ...
 
-    # Contract: Marks node changed with updated timestamps, change description, and code hash.
+    # Contract: Marks node changed with updated timestamps and change description.
     def record_change(
         self,
         file_path: Path | str,
         change_description: str,
-        code_hash: Optional[str] = None,
     ) -> None: ...
 
     # Contract: Appends unacted feedback item with sender role attribution to file metadata block and advances LAST_CLEANED.
@@ -341,7 +336,6 @@ def parse_metadata_content(block_lines: List[str]) -> FileMetadata:
     feedback: List[str] = []
     audits: Dict[str, str] = {}
     dirty: Optional[str] = None
-    code_hash: Optional[str] = None
 
     in_feedback = False
     for line in block_lines:
@@ -372,8 +366,7 @@ def parse_metadata_content(block_lines: List[str]) -> FileMetadata:
             change_summary = raw.split(":", 1)[1].strip()
             in_feedback = False
         elif raw.startswith("CODE_HASH:"):
-            val = raw.split(":", 1)[1].strip()
-            code_hash = val if val else None
+            # Legacy in-band field ignored; baseline code hashes live in .autofab/pull_manifest.json
             in_feedback = False
         elif raw.startswith("DIRTY:"):
             val = raw.split(":", 1)[1].strip()
@@ -402,7 +395,6 @@ def parse_metadata_content(block_lines: List[str]) -> FileMetadata:
         feedback=feedback,
         audits=audits,
         dirty=dirty,
-        code_hash=code_hash,
     )
 
 
@@ -420,8 +412,6 @@ def format_metadata_block(meta: FileMetadata, is_html: bool) -> List[str]:
             lines.append(f"LAST_CHANGED: {meta.last_changed}")
         if ch:
             lines.append(f"CHANGE: {ch}")
-        if meta.code_hash:
-            lines.append(f"CODE_HASH: {meta.code_hash}")
         if meta.dirty:
             lines.append(f"DIRTY: {meta.dirty}")
         if meta.audits:
@@ -440,8 +430,6 @@ def format_metadata_block(meta: FileMetadata, is_html: bool) -> List[str]:
             lines.append(f"# LAST_CHANGED: {meta.last_changed}")
         if ch:
             lines.append(f"# CHANGE: {ch}")
-        if meta.code_hash:
-            lines.append(f"# CODE_HASH: {meta.code_hash}")
         if meta.dirty:
             lines.append(f"# DIRTY: {meta.dirty}")
         if meta.audits:
@@ -511,8 +499,11 @@ def compute_file_code_hash(file_path: Path | str) -> Optional[str]:
 
 
 # Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
-def is_code_modified(file_path: Path | str) -> bool:
-    return _get_coordinator().is_code_modified(file_path)
+def is_code_modified(
+    file_path: Path | str,
+    workspace_root: Optional[Path | str] = None,
+) -> bool:
+    return _get_coordinator().is_code_modified(file_path, workspace_root=workspace_root)
 
 
 # Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
@@ -536,8 +527,6 @@ def rewrite_metadata_in_text(
     clear_last_cleaned: bool = False,
     last_changed: Optional[str] = None,
     change_summary: Optional[str] = None,
-    code_hash: Optional[str] = None,
-    clear_code_hash: bool = False,
     clear_feedback: bool = False,
     append_feedback: Optional[str] = None,
     audits: Optional[Dict[str, str]] = None,
@@ -553,8 +542,6 @@ def rewrite_metadata_in_text(
         clear_last_cleaned=clear_last_cleaned,
         last_changed=last_changed,
         change_summary=change_summary,
-        code_hash=code_hash,
-        clear_code_hash=clear_code_hash,
         clear_feedback=clear_feedback,
         append_feedback=append_feedback,
         audits=audits,
@@ -572,8 +559,6 @@ def update_metadata(
     clear_last_cleaned: bool = False,
     last_changed: Optional[str] = None,
     change_summary: Optional[str] = None,
-    code_hash: Optional[str] = None,
-    clear_code_hash: bool = False,
     clear_feedback: bool = False,
     append_feedback: Optional[str] = None,
     audits: Optional[Dict[str, str]] = None,
@@ -588,8 +573,6 @@ def update_metadata(
         clear_last_cleaned=clear_last_cleaned,
         last_changed=last_changed,
         change_summary=change_summary,
-        code_hash=code_hash,
-        clear_code_hash=clear_code_hash,
         clear_feedback=clear_feedback,
         append_feedback=append_feedback,
         audits=audits,
@@ -619,9 +602,8 @@ def mark_clean(file_path: Path | str, default_change: str = "new file") -> None:
 def record_change(
     file_path: Path | str,
     change_description: str,
-    code_hash: Optional[str] = None,
 ) -> None:
-    _get_coordinator().record_change(file_path, change_description, code_hash=code_hash)
+    _get_coordinator().record_change(file_path, change_description)
 
 
 # Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.

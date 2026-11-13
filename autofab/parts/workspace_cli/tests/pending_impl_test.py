@@ -203,6 +203,35 @@ class WorkspacePendingImplTest(LifecycleTestCase):
         self.assertTrue(any("Broken logic" in r for r in reasons))
         self.assertTrue(any("Fix index out of range" in r for r in reasons))
 
+    def test_get_pending_target_reasons_uses_relative_path_not_abs(self) -> None:
+        """Verifies that get_pending_target_reasons emits workspace-relative paths even when given an absolute path."""
+        ws_dir = os.path.join(self.test_dir, "ws_rel")
+        os.makedirs(ws_dir, exist_ok=True)
+        abs_target = os.path.join(ws_dir, "pkg", "mod.py")
+        os.makedirs(os.path.dirname(abs_target), exist_ok=True)
+        with open(abs_target, "w", encoding="utf-8") as f:
+            f.write(
+                "# --- CLEANROOM METADATA ---\n"
+                "# CHANGE: Initial\n"
+                "# --- END CLEANROOM METADATA ---\n"
+                "x = 1\n"
+            )
+
+        reasons = self.pending_mgr.get_pending_target_reasons(
+            abs_target, ws_dir, main_root=ws_dir, role_name="lib"
+        )
+        self.assertIn("Target has not been cleaned (pkg/mod.py)", reasons)
+        self.assertFalse(any(ws_dir in r for r in reasons))
+
+        abs_bare = os.path.join(ws_dir, "pkg", "bare.py")
+        with open(abs_bare, "w", encoding="utf-8") as f:
+            f.write("x = 1\n")
+        bare_reasons = self.pending_mgr.get_pending_target_reasons(
+            abs_bare, ws_dir, main_root=ws_dir, role_name="lib"
+        )
+        self.assertIn("Target is dirty (pkg/bare.py)", bare_reasons)
+        self.assertFalse(any(ws_dir in r for r in bare_reasons))
+
 
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-10-15T17:42:47Z

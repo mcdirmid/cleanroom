@@ -64,10 +64,12 @@ class BenchmarkImplTest(LifecycleTestCase):
         self.assertIn("claude-3.7-sonnet", cat)
         self.assertIn("o3-mini", cat)
         self.assertIn("gemini-4-argon", cat)
+        self.assertIn("gemini-4-carbon", cat)
         self.assertEqual(cat["qwen-moe-q6"].tier, 1)
         self.assertEqual(cat["deepseek-v41-flash"].tier, 2)
         self.assertEqual(cat["o3-mini"].tier, 3)
         self.assertEqual(cat["gemini-4-argon"].tier, 4)
+        self.assertEqual(cat["gemini-4-carbon"].tier, 4)
 
         suite_cat = evaluator.get_suite_catalog()
         self.assertIn("dag_engine", suite_cat)

@@ -60,7 +60,6 @@ class DAG(dag_engine_lite.DAG):
         - Raises dag_engine_lite.NodeNotFoundError if absent.
         - Removes node_id from all incident upstream and downstream neighbor sets.
         - Deletes node_id from _nodes, _upstream, and _downstream.
-        - Purges removed node from active wave scheduler tracking.
         """
         ...
 
@@ -306,7 +305,6 @@ class DAGRunner(dag_engine_lite.DAGRunner):
         - Validates _dag using _dag.validate(), allowing cycle or missing dependency exceptions to raise immediately.
         - Initializes start wall-clock time and empty _results mapping.
         - Loops while _scheduler.is_finished() returns False and retrieves the next wave from _scheduler.next_wave().
-        - Halts wave loop when next wave is empty.
         - Dispatches each ready wave node sequentially, marking it RUNNING in _scheduler.
         - Executes node action with retry attempts up to definition.retries upon exception.
         - Records dag_engine_lite.NodeResult(SUCCEEDED) and marks SUCCEEDED in _scheduler on success.

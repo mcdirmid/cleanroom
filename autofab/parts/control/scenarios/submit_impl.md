@@ -24,7 +24,7 @@ modified after that target was last clean.
    and its change summary is `renamed the widget field`.
    Realized by: verification status through `verification`; role configuration lookups
    through `agent_node_config` for alpha's auditor status; the modification determination through
-   `src_metadata`'s comparison of the recorded in-band code hash with the recomputed one; the clean
+   `src_metadata`'s comparison of the baseline `code_hash` in `.autofab/pull_manifest.json` with the recomputed one; the clean
    status transition with the change summary through `dag_storage`; and the component's own
    accepted outcome construction.
 
@@ -180,24 +180,23 @@ it has not been modified since its target was last clean; the current UTC timest
 3. The agent modifies `/ws/alpha_scope_a/parts/widget/widget_spec.md` and submits it as the
    alpha-role file target with the change summary `renamed the widget field`.
    Observed: an accepted submission outcome; the canonical repository file
-   `/repo/parts/widget/widget_spec.md` records the change summary `renamed the widget field` and
-   has any ephemeral code hash stripped; and the local role workspace file
-   `/ws/alpha_scope_a/parts/widget/widget_spec.md` carries the same updated content with its
-   ephemeral code hash refreshed to reflect the new code baseline.
+   `/repo/parts/widget/widget_spec.md` records the change summary `renamed the widget field`;
+   and the local role workspace file `/ws/alpha_scope_a/parts/widget/widget_spec.md` carries the
+   same updated content while `.autofab/pull_manifest.json` refreshes `code_hash` to reflect the
+   new code baseline.
    Realized by: path resolution through `agent_file_alias`; the modification determination through
-   `src_metadata` comparing against the ephemeral code hash; `src_metadata` again, updating the in-band
-   change metadata in the canonical file while stripping the ephemeral code hash; and the component's
-   own synchronization of the updated canonical file back to the role workspace with a refreshed
-   ephemeral code hash.
+   `src_metadata` comparing against `.autofab/pull_manifest.json`; `src_metadata` again, updating
+   the in-band change metadata in the canonical file; and the component's own synchronization of
+   the updated canonical file back to the role workspace and `.autofab/pull_manifest.json`.
 
 4. The agent submits `/ws/alpha_scope_a/parts/gadget/gadget_spec.md` as the alpha-role file target
    with no change summary.
    Observed: an accepted submission outcome, and the canonical repository file
    `/repo/parts/gadget/gadget_spec.md` records last cleaned `2026-01-12T00:00:00Z` and no change
-   summary, with any ephemeral code hash stripped.
-   Realized by: `src_metadata` reporting no modification against the ephemeral code hash and, on the
-   clean transition, advancing the in-band last cleaned timestamp, withdrawing the change summary, and
-   stripping any ephemeral code hash.
+   summary.
+   Realized by: `src_metadata` reporting no modification against `.autofab/pull_manifest.json`
+   and, on the clean transition, advancing the in-band last cleaned timestamp and withdrawing the
+   change summary.
 
 ## Implementation-only
 
@@ -300,6 +299,18 @@ been modified since the target was last clean.
    be called, and the alpha-role target node for unit widget stays dirty.
    Realized by: session feedback check through `agent_node_config`, file modification check through
    `src_metadata`, and the component's own feedback submission gating rule.
+
+### Scenario 14 — Refusing unmodified producer file submission when in-band feedback is present
+
+Given: role alpha is not an auditor role; `/ws/alpha_scope_a/parts/widget/widget_spec.md` is a
+read-write file for alpha inside the active directory scope patterns, carries unacted in-band
+`FEEDBACK:` metadata, and its code body has not been modified against its baseline `code_hash` in `.autofab/pull_manifest.json`.
+
+1. The agent submits `/ws/alpha_scope_a/parts/widget/widget_spec.md` via `submit_target_file`.
+   Observed: the submission is refused with an explicit error instructing `"use bin/reject instead"`,
+   and neither the canonical repository file nor the workspace file's `FEEDBACK:` header is cleared.
+   Realized by: in-band metadata extraction through `src_metadata.extract_metadata`, file modification
+   check through `src_metadata.is_code_modified`, and the component's unmodified-feedback gating check.
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z

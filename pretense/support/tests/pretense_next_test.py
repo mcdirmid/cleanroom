@@ -57,7 +57,7 @@ class LRUStateMachine(StateMachine[LRUState]):
     @transition.seeding
     def seed(self, capacity: int, items: dict[str, Any]) -> None:
         require_arg(capacity, Domain.integers(min_value=1), preferred=[10])
-        require_arg(items, Domain.mapping_of(Domain.text(), Domain.any()))
+        require_arg(items, Domain.mapping_of(Domain.text(), Domain.type(object)))
         self.state.capacity = capacity
         self.state.items = OrderedDict(list(items.items())[:capacity])
 
@@ -87,7 +87,7 @@ class LRUStateMachine(StateMachine[LRUState]):
     @transition(LRUProtocol.get)
     def get(self, key: str, default: Optional[Any] = None) -> Any:
         require_arg(key, Domain.text())
-        require_arg(default, Domain.any(), preferred=[None])
+        require_arg(default, Domain.type(object), preferred=[None])
         assert sut(LRUProtocol).size == len(self.state.items)
         ret = self.inner_get(key, default)
         if key in self.state.items:
@@ -105,7 +105,7 @@ class LRUStateMachine(StateMachine[LRUState]):
     @transition(LRUProtocol.put)
     def put(self, key: str, value: Any) -> Optional[Tuple[str, Any]]:
         require_arg(key, Domain.text())
-        require_arg(value, Domain.any())
+        require_arg(value, Domain.type(object))
         evicted = self.inner_put(key, value)
         if evicted is not None:
             ev_k, _ = evicted

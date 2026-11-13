@@ -765,6 +765,7 @@ def check_cross_part_imports(modules_dir: str, file_path: str) -> list[str]:
         "framework",
         "support",
         "lifecycle",
+        "pretense",
         "typing_extensions",
         "pytest",
     }
@@ -1480,27 +1481,30 @@ def check_no_stubs(file_path: str) -> list[str]:
     return errors
 
 
-_PRAGMA_BROAD_EXCEPTION = re.compile(
+_BANNED_PRAGMA_BROAD_EXCEPTION = re.compile(
     r"#\s*(?:cleanroom:\s*(?:allow-broad-exception|allow-exception-eating)|intentional-catch|allow-broad-exception)\b",
     re.IGNORECASE,
 )
 
 
-def _get_broad_exception_pragma_lines(source: str) -> set[int]:
-    """Extract line numbers of comments containing broad exception pragma directives."""
-    lines: set[int] = set()
+def check_no_broad_exception_pragma(file_path: str) -> list[str]:
+    """Check that library modules do not use '# cleanroom: allow-broad-exception' or related pragmas.
+    Pragma escape hatches for broad exceptions are strictly prohibited in library code."""
+    errors: list[str] = []
+    if not os.path.exists(file_path):
+        return errors
     try:
-        tokens = tokenize.tokenize(io.BytesIO(source.encode("utf-8")).readline)
-        for tok in tokens:
-            if tok.type == tokenize.COMMENT and _PRAGMA_BROAD_EXCEPTION.search(
-                tok.string
-            ):
-                lines.add(tok.start[0])
+        with open(file_path, "rb") as f:
+            for tok in tokenize.tokenize(f.readline):
+                if tok.type == tokenize.COMMENT:
+                    if _BANNED_PRAGMA_BROAD_EXCEPTION.search(tok.string):
+                        errors.append(
+                            f"{file_path}:{tok.start[0]}: error: '{tok.string.strip()}' is prohibited; "
+                            f"broad exception pragmas are not allowed in library code"
+                        )
     except (tokenize.TokenError, OSError, SyntaxError):
-        for idx, line in enumerate(source.splitlines(), start=1):
-            if _PRAGMA_BROAD_EXCEPTION.search(line):
-                lines.add(idx)
-    return lines
+        pass
+    return errors
 
 
 def _is_handler_reified(
@@ -1593,15 +1597,17 @@ def _is_handler_reified(
                     if isinstance(t, (ast.Attribute, ast.Subscript)):
                         if stmt.value and _references_tracked(stmt.value):
                             return True
+            elif isinstance(stmt, ast.Raise):
+                if stmt.exc and _references_tracked(stmt.exc):
+                    return True
 
     return False
 
 
 def check_exception_eating(file_path: str) -> list[str]:
     """Check that library modules do not suppress unexpected failures by catching
-    broad exceptions (bare except, Exception, BaseException) without re-raising,
-    reifying into an error/result structure or failure handler, or supplying an
-    explicit pragma escape hatch."""
+    broad exceptions (bare except, Exception, BaseException) without re-raising or
+    reifying into an error/result structure or failure handler."""
     errors: list[str] = []
     if not os.path.exists(file_path):
         return errors
@@ -1611,8 +1617,6 @@ def check_exception_eating(file_path: str) -> list[str]:
             tree = ast.parse(source, filename=file_path)
     except (OSError, SyntaxError):
         return errors
-
-    pragma_lines = _get_broad_exception_pragma_lines(source)
 
     parent_map: dict[ast.AST, ast.AST] = {}
     for parent in ast.walk(tree):
@@ -1648,14 +1652,6 @@ def check_exception_eating(file_path: str) -> list[str]:
                 if is_broad:
                     has_raise = any(isinstance(stmt, ast.Raise) for stmt in ast.walk(h))
                     if has_raise:
-                        continue
-
-                    h_end = getattr(h, "end_lineno", h.lineno) or h.lineno
-                    check_lines = set(range(max(1, h.lineno - 1), h_end + 1)) | {
-                        node.lineno,
-                        max(1, node.lineno - 1),
-                    }
-                    if bool(check_lines & pragma_lines):
                         continue
 
                     if _is_handler_reified(h, enclosing_scope):
@@ -2856,6 +2852,28 @@ def check_no_top_level_probes(
     return errors
 
 
+def _find_python_pkg_root(start_dir: str) -> str:
+    """Finds the Python package root (preferring pyproject.toml over inner config markers)."""
+    curr = start_dir
+    fallback = ""
+    markers = (
+        "autofab.toml",
+        "autofab_roles.toml",
+        "cleanroom.toml",
+        "cleanroom_roles.toml",
+    )
+    while curr and curr != os.path.dirname(curr):
+        if os.path.isfile(os.path.join(curr, "pyproject.toml")):
+            return curr
+        if not fallback and (
+            any(os.path.isfile(os.path.join(curr, m)) for m in markers)
+            or os.path.isdir(os.path.join(curr, "parts"))
+        ):
+            fallback = curr
+        curr = os.path.dirname(curr)
+    return fallback
+
+
 def check_test_imports(lib_pkg: str, file_path: str) -> list[str]:
     """Check that imports in a test module from the lib package use standard package syntax."""
     errors: list[str] = []
@@ -2868,22 +2886,7 @@ def check_test_imports(lib_pkg: str, file_path: str) -> list[str]:
         return errors
     pkg_str = lib_pkg
     if os.path.isabs(pkg_str):
-        curr = pkg_str
-        cand_root = ""
-        while curr and curr != os.path.dirname(curr):
-            if any(
-                os.path.isfile(os.path.join(curr, m))
-                for m in (
-                    "autofab.toml",
-                    "autofab_roles.toml",
-                    "cleanroom.toml",
-                    "cleanroom_roles.toml",
-                    "pyproject.toml",
-                )
-            ) or os.path.isdir(os.path.join(curr, "parts")):
-                cand_root = curr
-                break
-            curr = os.path.dirname(curr)
+        cand_root = _find_python_pkg_root(pkg_str)
         if cand_root:
             pkg_str = os.path.relpath(pkg_str, cand_root)
         else:
@@ -2905,22 +2908,7 @@ def check_test_imports(lib_pkg: str, file_path: str) -> list[str]:
         abs_mod = os.path.abspath(file_path)
         cand_lib = os.path.join(os.path.dirname(os.path.dirname(abs_mod)), "lib")
         if os.path.isdir(cand_lib):
-            curr = cand_lib
-            cand_root = ""
-            while curr and curr != os.path.dirname(curr):
-                if any(
-                    os.path.isfile(os.path.join(curr, m))
-                    for m in (
-                        "autofab.toml",
-                        "autofab_roles.toml",
-                        "cleanroom.toml",
-                        "cleanroom_roles.toml",
-                        "pyproject.toml",
-                    )
-                ) or os.path.isdir(os.path.join(curr, "parts")):
-                    cand_root = curr
-                    break
-                curr = os.path.dirname(curr)
+            cand_root = _find_python_pkg_root(cand_lib)
             if cand_root:
                 rel = os.path.relpath(cand_lib, cand_root).replace("\\", "/")
                 derived = rel.replace("/", ".").strip(".")
@@ -2929,6 +2917,7 @@ def check_test_imports(lib_pkg: str, file_path: str) -> list[str]:
                     lib_dir = cand_lib
 
     is_scoped = expected_prefix != "lib"
+    unit_name = os.path.basename(os.path.dirname(lib_dir))
 
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
@@ -2942,15 +2931,23 @@ def check_test_imports(lib_pkg: str, file_path: str) -> list[str]:
                     errors.append(
                         f"{file_path}:{node.lineno}: error: import of lib module '{alias.name}' must be 'import {expected_prefix}.{name}' (bare 'lib' imports are disallowed)"
                     )
+                elif is_scoped and (
+                    alias.name == f"{unit_name}.lib"
+                    or alias.name.startswith(f"{unit_name}.lib.")
+                ):
+                    name = alias.name.split(".")[-1]
+                    errors.append(
+                        f"{file_path}:{node.lineno}: error: import of lib module '{alias.name}' must be 'import {expected_prefix}.{name}' (bare '{unit_name}.lib' imports are disallowed)"
+                    )
                 else:
                     name = alias.name.split(".")[-1]
                     if name and os.path.isfile(os.path.join(lib_dir, name + ".py")):
                         expected_import = f"{expected_prefix}.{name}"
-                        unit_name = os.path.basename(os.path.dirname(lib_dir))
                         allowed_imports = {
                             expected_import,
-                            f"{unit_name}.lib.{name}",
                         }
+                        if not is_scoped:
+                            allowed_imports.add(f"{unit_name}.lib.{name}")
                         if alias.name not in allowed_imports:
                             errors.append(
                                 f"{file_path}:{node.lineno}: error: import of lib module '{alias.name}' must be 'import {expected_import}'"
@@ -2972,15 +2969,28 @@ def check_test_imports(lib_pkg: str, file_path: str) -> list[str]:
                     errors.append(
                         f"{file_path}:{node.lineno}: error: import of lib module '{node.module}' must be 'from {expected_prefix}.{name} import ...' (bare 'lib' imports are disallowed)"
                     )
+                elif is_scoped and (
+                    node.module == f"{unit_name}.lib"
+                    or node.module.startswith(f"{unit_name}.lib.")
+                ):
+                    if node.module == f"{unit_name}.lib":
+                        for alias in node.names:
+                            errors.append(
+                                f"{file_path}:{node.lineno}: error: import of lib module '{alias.name}' must be 'from {expected_prefix}.{alias.name} import ...' or 'from {expected_prefix} import {alias.name}' (bare '{unit_name}.lib' imports are disallowed)"
+                            )
+                    else:
+                        errors.append(
+                            f"{file_path}:{node.lineno}: error: import of lib module '{node.module}' must be 'from {expected_prefix}.{name} import ...' (bare '{unit_name}.lib' imports are disallowed)"
+                        )
                 elif os.path.isfile(os.path.join(lib_dir, name + ".py")):
                     expected_mod = f"{expected_prefix}.{name}"
-                    unit_name = os.path.basename(os.path.dirname(lib_dir))
                     allowed_mods = {
                         expected_mod,
                         expected_prefix,
-                        f"{unit_name}.lib.{name}",
-                        f"{unit_name}.lib",
                     }
+                    if not is_scoped:
+                        allowed_mods.add(f"{unit_name}.lib.{name}")
+                        allowed_mods.add(f"{unit_name}.lib")
                     if node.module not in allowed_mods:
                         errors.append(
                             f"{file_path}:{node.lineno}: error: import of lib module '{node.module}' must be 'from {expected_mod} import ...'"

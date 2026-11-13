@@ -761,6 +761,76 @@ ctx.returns(lambda v, r: v.is_prerelease)
             self.assertIn("test_second_failure", output_str)
             self.assertIn("Second failure msg", output_str)
 
+    def test_interface_pretense_cov_targets_only_self_and_runs_fuzz(self) -> None:
+        """Verify --cov on interface pretense measures only the pretense file and keeps fuzzing enabled."""
+        import io
+        import tempfile
+        from contextlib import redirect_stdout
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            part_dir = Path(tmpdir) / "sample_part"
+            (part_dir / "lib").mkdir(parents=True)
+            (part_dir / "low").mkdir(parents=True)
+            (part_dir / "pretense").mkdir(parents=True)
+
+            # Stub interface lib that is never called and raises NotImplementedError
+            (part_dir / "lib" / "iface.py").write_text(
+                "def uncalled_stub() -> int:\n"
+                "    raise NotImplementedError('AUTOFAB TEST STUB')\n",
+                encoding="utf-8",
+            )
+            (part_dir / "low" / "iface_impl.pyi").write_text(
+                "class IfaceImpl: ...\n", encoding="utf-8"
+            )
+
+            iface_file = part_dir / "pretense" / "iface_pretense.py"
+            iface_file.write_text(
+                "import unittest\n"
+                "def helper(flag: bool) -> int:\n"
+                "    if flag:\n"
+                "        return 1\n"
+                "    return 0\n"
+                "class TestIfaceFake(unittest.TestCase):\n"
+                "    def test_both_branches(self) -> None:\n"
+                "        self.assertEqual(helper(True), 1)\n"
+                "        self.assertEqual(helper(False), 0)\n"
+                "class FakeIfaceFuzzTest(unittest.TestCase):\n"
+                "    settings = None\n"
+                "    def runTest(self) -> None:\n"
+                "        self.assertEqual(helper(True), 1)\n",
+                encoding="utf-8",
+            )
+
+            out = io.StringIO()
+            with redirect_stdout(out):
+                exit_code = run_pretense_cli(
+                    [str(iface_file), "--cov", "--threshold", "100.0"]
+                )
+            output_str = out.getvalue()
+            self.assertEqual(exit_code, 0, output_str)
+            self.assertIn("FakeIfaceFuzzTest", output_str)
+            self.assertIn("iface_pretense.py", output_str)
+            self.assertNotIn("lib/iface.py", output_str)
+
+            # Uncovered branch in iface_pretense.py itself must fail 100% coverage
+            iface_file.write_text(
+                "import unittest\n"
+                "def helper(flag: bool) -> int:\n"
+                "    if flag:\n"
+                "        return 1\n"
+                "    return 0\n"
+                "class TestIfaceFake(unittest.TestCase):\n"
+                "    def test_only_true(self) -> None:\n"
+                "        self.assertEqual(helper(True), 1)\n",
+                encoding="utf-8",
+            )
+            out_fail = io.StringIO()
+            with redirect_stdout(out_fail):
+                fail_code = run_pretense_cli(
+                    [str(iface_file), "--cov", "--threshold", "100.0"]
+                )
+            self.assertEqual(fail_code, 1, out_fail.getvalue())
+
     def test_strategy_as_value_argument_generation(self) -> None:
         """Verify Hypothesis SearchStrategy instances can be passed directly as values in arguments."""
 
@@ -1111,6 +1181,9 @@ ctx.returns(lambda v, r: v.is_prerelease)
             pretense.require_arg(-5, pretense.Domain.integers(min_value=0))
         with self.assertRaises(pretense.PretenseSpecificationError):
             pretense.require_arg("not_an_int", pretense.Domain.integers())  # type: ignore[arg-type]
+        empty_int_dom = pretense.Domain.integers(min_value=1, max_value=0)
+        self.assertFalse(empty_int_dom.validate(0))
+        self.assertFalse(empty_int_dom.validate(1))
 
         # Domain.list_of
         list_dom = pretense.Domain.list_of(pretense.Domain.integers())
@@ -1135,6 +1208,25 @@ ctx.returns(lambda v, r: v.is_prerelease)
         self.assertTrue(opt_dom.validate(None))
         self.assertTrue(opt_dom.validate("hello"))
         self.assertFalse(opt_dom.validate(42))
+
+        # Domain.collection (accepts tuple, set, list; rejects str/bytes)
+        col_dom = pretense.Domain.collection(pretense.Domain.text(min_size=1))
+        self.assertTrue(col_dom.validate(("alpha",)))
+        self.assertTrue(col_dom.validate(["alpha", "beta"]))
+        self.assertTrue(col_dom.validate({"alpha"}))
+        self.assertFalse(col_dom.validate("alpha"))
+        self.assertFalse(col_dom.validate(b"alpha"))
+        self.assertFalse(col_dom.validate(("",)))
+
+        # Domain.mapping (accepts MappingProxyType and dict)
+        from types import MappingProxyType
+
+        mapping_dom = pretense.Domain.mapping(
+            pretense.Domain.text(), pretense.Domain.integers()
+        )
+        self.assertTrue(mapping_dom.validate(MappingProxyType({"a": 1})))
+        self.assertTrue(mapping_dom.validate({"a": 1}))
+        self.assertFalse(mapping_dom.validate({"a": "bad"}))
 
         # Domain.none
         none_dom = pretense.Domain.none()
@@ -1777,6 +1869,290 @@ ctx.returns(lambda v, r: v.is_prerelease)
         pos_long = formatted.find("=== test_long ===")
         self.assertTrue(pos_short != -1 and pos_long != -1)
         self.assertLess(pos_short, pos_long)
+
+    def test_require_env_fake_synthesis_and_operation(self) -> None:
+        """Requirement: require_env raises operational exception when condition is False in fake mode."""
+        from pretense import StateMachine, require_env, synthesize_fake, transition
+
+        class NetworkException(Exception):
+            pass
+
+        @dataclass
+        class SyncState:
+            network_is_down: bool = False
+            synced: list[str] = field(default_factory=list)
+
+        class SyncStateMachine(StateMachine[SyncState]):
+            def __init__(self, state: Optional[SyncState] = None) -> None:
+                super().__init__(state=state or SyncState())
+
+            @transition.seeding
+            def seed_network_down(self) -> None:
+                self.state.network_is_down = True
+
+            @transition(name="sync")
+            def sync(self, payload: str) -> str:
+                require_env(not self.state.network_is_down, NetworkException, "network is down")
+                ret = self.inner_sync(payload)
+                self.state.synced.append(payload)
+                return ret
+
+            def inner_sync(self, payload: str) -> str:
+                return f"fake_synced_{payload}"
+
+        FakeSync = synthesize_fake(SyncStateMachine)
+        fake = FakeSync()
+
+        # Healthy operation succeeds
+        self.assertEqual(fake.sync("msg1"), "fake_synced_msg1")
+        self.assertEqual(fake.state.synced, ["msg1"])
+
+        # Seed network down -> operational exception raised
+        fake.seed_network_down()
+        with self.assertRaises(NetworkException) as cm:
+            fake.sync("msg2")
+        self.assertIn("network is down", str(cm.exception))
+        # State was not mutated after exception
+        self.assertEqual(fake.state.synced, ["msg1"])
+
+    def test_require_env_and_bind_with_checked_adapter(self) -> None:
+        """Requirement: bind connects virtual state to collaborator state, verifying SUT exception raising."""
+        from pretense import StateMachine, require_env, sut, sut_state, synthesize_fake, transition
+
+        class RemoteClientException(Exception):
+            pass
+
+        class SyncException(Exception):
+            pass
+
+        @dataclass
+        class ClientState:
+            is_disconnected: bool = False
+
+        class ClientStateMachine(StateMachine[ClientState]):
+            def __init__(self, state: Optional[ClientState] = None) -> None:
+                super().__init__(state=state or ClientState())
+
+            @transition.seeding
+            def seed_disconnect(self) -> None:
+                self.state.is_disconnected = True
+
+            @transition(name="send")
+            def send(self, data: str) -> str:
+                require_env(not self.state.is_disconnected, RemoteClientException, "client disconnected")
+                return self.inner_send(data)
+
+            def inner_send(self, data: str) -> str:
+                return f"sent_{data}"
+
+        @dataclass
+        class ManagerState:
+            network_is_down: bool = False
+            items: list[str] = field(default_factory=list)
+
+        class ManagerStateMachine(StateMachine[ManagerState]):
+            def __init__(self, state: Optional[ManagerState] = None, singletons: Any = None) -> None:
+                super().__init__(state=state or ManagerState(), singletons=singletons)
+
+            @transition(name="sync_item")
+            def sync_item(self, item: str) -> str:
+                require_env(not self.state.network_is_down, SyncException, "sync failed")
+                ret = self.inner_sync_item(item)
+                self.state.items.append(item)
+                return ret
+
+            def inner_sync_item(self, item: str) -> str:
+                return f"fake_mgr_{item}"
+
+        # Real Client implementation
+        class RealClient:
+            def __init__(self) -> None:
+                self.disconnected = False
+
+            def send(self, data: str) -> str:
+                if self.disconnected:
+                    raise RemoteClientException("client disconnected")
+                return f"real_sent_{data}"
+
+        # Real Manager delegating to client
+        class RealManager:
+            def __init__(self, client: RealClient) -> None:
+                self.client = client
+
+            def sync_item(self, item: str) -> str:
+                try:
+                    return self.client.send(item)
+                except RemoteClientException as e:
+                    raise SyncException("sync failed") from e
+
+        # Bad Manager swallowing exception
+        class BadManager:
+            def __init__(self, client: RealClient) -> None:
+                self.client = client
+
+            def sync_item(self, item: str) -> str:
+                try:
+                    return self.client.send(item)
+                except RemoteClientException:
+                    return "swallowed"
+
+        class ManagerImplPseudoStateMachine(ManagerStateMachine):
+            def __init__(self, state: Optional[ManagerState] = None, singletons: Any = None) -> None:
+                super().__init__(state=state or ManagerState(), singletons=singletons)
+                self.bind("network_is_down", lambda: sut_state(ClientState).is_disconnected)
+
+            def inner_sync_item(self, item: str) -> str:
+                return sut(RealManager).sync_item(item)
+
+        class BadManagerImplPseudoStateMachine(ManagerStateMachine):
+            def __init__(self, state: Optional[ManagerState] = None, singletons: Any = None) -> None:
+                super().__init__(state=state or ManagerState(), singletons=singletons)
+                self.bind("network_is_down", lambda: sut_state(ClientState).is_disconnected)
+
+            def inner_sync_item(self, item: str) -> str:
+                return sut(BadManager).sync_item(item)
+
+        # Case 1: Real Manager correctly propagating exception
+        real_client = RealClient()
+        real_mgr = RealManager(real_client)
+        client_fake = synthesize_fake(ClientStateMachine)()
+        singletons = {RealManager: real_mgr, RealClient: client_fake}
+
+        mgr_sm = ManagerImplPseudoStateMachine(singletons=singletons)
+        checked = mgr_sm.as_checked(RealManager, real_mgr)
+
+        # Healthy sync succeeds
+        self.assertEqual(checked.sync_item("alpha"), "real_sent_alpha")
+
+        # sut_state also resolves CheckedAdapter collaborators in direct checked dispatch
+        client_sm = ClientStateMachine()
+        checked_client = client_sm.as_checked(RealClient, real_client)
+        mgr_checked_collab = ManagerImplPseudoStateMachine(
+            singletons={RealManager: real_mgr, RealClient: checked_client}
+        )
+        checked_collab_mgr = mgr_checked_collab.as_checked(RealManager, real_mgr)
+        self.assertEqual(checked_collab_mgr.sync_item("delta"), "real_sent_delta")
+
+        # Disconnect client fake -> bound state network_is_down becomes True
+        client_fake.seed_disconnect()
+        real_client.disconnected = True
+        self.assertTrue(mgr_sm.state.network_is_down)
+
+        with self.assertRaises(SyncException):
+            checked.sync_item("beta")
+
+        # Case 2: Bad Manager swallowing exception -> AssertionError from CheckedAdapter
+        bad_mgr = BadManager(real_client)
+        singletons_bad = {BadManager: bad_mgr, RealClient: client_fake}
+        bad_sm = BadManagerImplPseudoStateMachine(singletons=singletons_bad)
+        checked_bad = bad_sm.as_checked(BadManager, bad_mgr)
+
+        with self.assertRaises(AssertionError) as cm:
+            checked_bad.sync_item("gamma")
+        self.assertIn("Contracted Operational Exception Missing", str(cm.exception))
+
+    def test_require_env_and_bind_hypothesis_fuzzing(self) -> None:
+        """Requirement: Hypothesis fuzzing executes collaborator seeding, suppresses target seeding, and tolerates contracted require_env exceptions."""
+        from pretense import StateMachine, compile_hypothesis_test_case, require_env, sut, sut_state, synthesize_fake, transition
+
+        class NetworkException(Exception):
+            pass
+
+        @dataclass
+        class RemoteState:
+            is_down: bool = False
+
+        class RemoteStateMachine(StateMachine[RemoteState]):
+            def __init__(self, state: Optional[RemoteState] = None) -> None:
+                super().__init__(state=state or RemoteState())
+
+            @transition.seeding
+            def seed_network_down(self) -> None:
+                self.state.is_down = True
+
+            @transition(name="ping")
+            def ping(self) -> bool:
+                require_env(not self.state.is_down, NetworkException, "network down")
+                return self.inner_ping()
+
+            def inner_ping(self) -> bool:
+                return True
+
+        @dataclass
+        class AppState:
+            network_is_down: bool = False
+            pings: int = 0
+
+        class AppStateMachine(StateMachine[AppState]):
+            def __init__(self, state: Optional[AppState] = None, singletons: Any = None) -> None:
+                super().__init__(state=state or AppState(), singletons=singletons)
+
+            @transition.seeding
+            def seed_target_down(self) -> None:
+                # Target's own seeding transition - MUST be suppressed in impl fuzzing
+                self.state.network_is_down = True
+
+            @transition(name="check_status")
+            def check_status(self) -> bool:
+                require_env(not self.state.network_is_down, NetworkException, "network down")
+                ret = self.inner_check_status()
+                self.state.pings += 1
+                return ret
+
+            def inner_check_status(self) -> bool:
+                return True
+
+        class RealRemote:
+            def __init__(self) -> None:
+                self.is_down = False
+
+            def ping(self) -> bool:
+                if self.is_down:
+                    raise NetworkException("network down")
+                return True
+
+        class RealApp:
+            def __init__(self, remote: Any) -> None:
+                self.remote = remote
+
+            def check_status(self) -> bool:
+                return self.remote.ping()
+
+        class AppImplPseudoStateMachine(AppStateMachine):
+            def __init__(self, state: Optional[AppState] = None, singletons: Any = None) -> None:
+                super().__init__(state=state or AppState(), singletons=singletons)
+                self.bind("network_is_down", lambda: sut_state(RemoteState).is_down)
+
+            def inner_check_status(self) -> bool:
+                return sut(RealApp).check_status()
+
+        fake_remote = synthesize_fake(RemoteStateMachine)()
+        real_app = RealApp(fake_remote)
+        singletons = {RealApp: real_app, RealRemote: fake_remote}
+
+        app_proto = AppImplPseudoStateMachine(singletons=singletons)
+        FuzzCase = compile_hypothesis_test_case(
+            proto=app_proto,
+            sut_factory=lambda: singletons,
+            initial_state_factory=AppState,
+            name="AppFuzzTest",
+            collaborators=[RemoteStateMachine],
+        )
+
+        runner = FuzzCase()
+        # Verify target's own seeding transition is suppressed during impl fuzzing
+        self.assertIsNone(runner.step_seed_target_down())
+
+        # Collaborator seeding transition is executed
+        runner.step_collab_RemoteStateMachine_seed_network_down()
+        self.assertTrue(fake_remote.state.is_down)
+        self.assertTrue(runner.sm.state.network_is_down)
+
+        # Transition when condition is False verifies SUT raises NetworkException and passes
+        runner.step_check_status()
+
+        # Full hypothesis run
+        FuzzCase.TestCase().runTest()
 
 
 if __name__ == "__main__":

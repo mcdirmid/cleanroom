@@ -62,8 +62,8 @@ def _format_agents_md(
         git_rule = "All files in this workspace are read-only contracts and fixtures. You are strictly forbidden from modifying files or executing git commands.\n\n"
         undo_rule = ""
     else:
-        git_rule = "External git operations and accessing files outside this workspace remain strictly prohibited, while local git rollback (bin/revert, git restore, git diff) is permitted.\n\n"
-        undo_rule = "6. WORKSPACE UNDO & ROLLBACK: If an edit introduces syntax errors, breaks tests, or truncates a file, use `bin/revert [target]` or `git restore <target>` to restore the last verified state. Never call `bin/fail` for broken edits that can be reverted.\n"
+        git_rule = "All git commands and accessing files outside this workspace are strictly prohibited.\n\n"
+        undo_rule = "6. WORKSPACE UNDO & ROLLBACK: If an edit introduces syntax errors, breaks tests, or truncates a file, use `bin/revert [target]` to restore the last verified state. Never call `bin/fail` for broken edits that can be reverted.\n"
 
     # Contract: Embeds isolation boundary rules and permitted in-workspace shell commands and native harness tools into AGENTS.md.
     confinement_header = (

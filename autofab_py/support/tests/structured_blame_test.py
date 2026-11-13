@@ -83,6 +83,26 @@ class StructuredBlameTest(unittest.TestCase):
         errs = structured_blame.validate_structured_blame(blame, "lib/foo.py")
         self.assertTrue(any("exceeds maximum word count" in e for e in errs))
 
+    def test_validate_facet_length_boundary(self) -> None:
+        # 100 characters, <= 8 words passes
+        long_facet_ok = "transitive constraint rollback upon nested backtracking algorithm step"
+        blame_ok = structured_blame.StructuredBlame(
+            slug="[slug:valid.slug]",
+            violation="[viol:post.wrong_return]",
+            facet=long_facet_ok,
+        )
+        self.assertEqual(structured_blame.validate_structured_blame(blame_ok, "lib/foo.py"), [])
+
+        # > 120 characters fails
+        overlong_facet = "a" * 121
+        blame_bad = structured_blame.StructuredBlame(
+            slug="[slug:valid.slug]",
+            violation="[viol:post.wrong_return]",
+            facet=overlong_facet,
+        )
+        errs = structured_blame.validate_structured_blame(blame_bad, "lib/foo.py")
+        self.assertTrue(any("exceeds maximum length of 120 characters" in e for e in errs))
+
     def test_validate_test_symbol_leak_rejection(self) -> None:
         blame = structured_blame.StructuredBlame(
             slug="[slug:valid.slug]",

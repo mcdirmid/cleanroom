@@ -41,8 +41,7 @@ from benchmark_5.parts.inter_interface.pretense.vault_pretense import (
 class InterInterfaceImplPseudoStateMachine(InterInterfaceStateMachine):
     """Implementation pseudo-state machine for Allocator."""
 
-    @transition(Allocator.allocate)
-    def allocate(
+    def inner_allocate(
         self,
         amount: int,
     ) -> Any:
@@ -52,13 +51,12 @@ class InterInterfaceImplPseudoStateMachine(InterInterfaceStateMachine):
         old_balance = vault_state.balance
         ret: Any = None
         if amount <= old_balance:
-            ret = call_target(target.allocate(amount))
+            ret = target.allocate(amount)
             assert target.allocated == old_allocated + amount
             assert vault_state.balance == old_balance - amount
         return ret
 
-    @transition(Allocator.release)
-    def release(
+    def inner_release(
         self,
         amount: int,
     ) -> Any:
@@ -68,16 +66,14 @@ class InterInterfaceImplPseudoStateMachine(InterInterfaceStateMachine):
         old_balance = vault_state.balance
         ret: Any = None
         if amount <= old_allocated:
-            ret = call_target(target.release(amount))
+            ret = target.release(amount)
             assert target.allocated == old_allocated - amount
             assert vault_state.balance == old_balance + amount
         return ret
 
-    @transition(name="allocated")
-    def allocated(self) -> int:
+    def inner_allocated(self) -> int:
         target: Allocator = sut(Allocator)
-        ret = call_target(target.allocated)
-        return ret
+        return target.allocated
 
 
 proto = InterInterfaceImplPseudoStateMachine()
@@ -260,6 +256,15 @@ class InterInterfaceStateMachine(StateMachine[InterInterfaceState]):
         assert ret == self.state.allocated
         return ret
 
+    def inner_allocate(self, amount: int) -> None:
+        return None
+
+    def inner_release(self, amount: int) -> None:
+        return None
+
+    def inner_allocated(self) -> int:
+        return self.state.allocated
+
     @transition.seeding
     def seed_initial(self) -> None:
         """Seed state machine state for fake initialization."""
@@ -355,49 +360,42 @@ from benchmark_5.parts.inter_interface.lib.vault_impl import Vault, __initialize
 class VaultImplPseudoStateMachine(VaultStateMachine):
     """Implementation pseudo-state machine for Vault."""
 
-    @transition(Vault.deposit)
-    def deposit(
+    def inner_deposit(
         self,
         amount: int,
     ) -> Any:
         target: Vault = sut(Vault)
         old_balance = target.balance
-        ret = call_target(target.deposit(amount))
+        ret = target.deposit(amount)
         assert target.balance == old_balance + amount
         return ret
 
-    @transition(Vault.withdraw)
-    def withdraw(
+    def inner_withdraw(
         self,
         amount: int,
     ) -> Any:
         target: Vault = sut(Vault)
         old_balance = target.balance
-        ret = call_target(target.withdraw(amount))
+        ret = target.withdraw(amount)
         assert target.balance == old_balance - amount
         return ret
 
-    @transition(Vault.set_active)
-    def set_active(
+    def inner_set_active(
         self,
         active: bool,
     ) -> Any:
         target: Vault = sut(Vault)
-        ret = call_target(target.set_active(active))
+        ret = target.set_active(active)
         assert target.is_active is active
         return ret
 
-    @transition(name="balance")
-    def balance(self) -> int:
+    def inner_balance(self) -> int:
         target: Vault = sut(Vault)
-        ret = call_target(target.balance)
-        return ret
+        return target.balance
 
-    @transition(name="is_active")
-    def is_active(self) -> bool:
+    def inner_is_active(self) -> bool:
         target: Vault = sut(Vault)
-        ret = call_target(target.is_active)
-        return ret
+        return target.is_active
 
 
 proto = VaultImplPseudoStateMachine()
@@ -576,6 +574,21 @@ class VaultStateMachine(StateMachine[VaultState]):
         ret = self.inner_is_active()
         assert ret == self.state.is_active
         return ret
+
+    def inner_deposit(self, amount: int) -> None:
+        return None
+
+    def inner_withdraw(self, amount: int) -> None:
+        return None
+
+    def inner_set_active(self, active: bool) -> None:
+        return None
+
+    def inner_balance(self) -> int:
+        return self.state.balance
+
+    def inner_is_active(self) -> bool:
+        return self.state.is_active
 
     @transition.seeding
     def seed_initial(self) -> None:

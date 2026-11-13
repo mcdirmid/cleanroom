@@ -42,6 +42,7 @@
    - [Task 4: Feedback Embargo Checker Sub-Agent & Anti-Pruning Verification Gate](#task-4-feedback-embargo-checker-sub-agent--anti-pruning-verification-gate)
    - [Task 5: 100% Statement & Branch Coverage Enforcement in Property Fuzzing](#task-5-100-statement--branch-coverage-enforcement-in-property-fuzzing)
    - [Task 6: DSH Web Visual Subagent Hierarchy & Custom Cordis Dashboard Plugin](#task-6-dsh-web-visual-subagent-hierarchy--custom-cordis-dashboard-plugin)
+   - [Task 7: Harmonize Differential Cross-Testing Runner (`bin/run_cross_tests.py`) with Strict Package Scoping](#task-7-harmonize-differential-cross-testing-runner-binrun_cross_testspy-with-strict-package-scoping)
 
 ---
 
@@ -723,7 +724,27 @@ The following prioritized roadmap outlines the active forward engineering tasks 
      - Integrated with `benchmarks/runs/<suite>_<model_slug>_<index>/` and `flight_status.json`.
      - In-place failure preservation (no `.failed` renaming) and automatic recycling of finished slots.
 
-
+### Task 7: Harmonize Differential Cross-Testing Runner (`bin/run_cross_tests.py`) with Strict Package Scoping
+- **Priority**: High
+- **Component**: `bin/run_cross_tests.py`, `autofab_py/support/lib/build_lint_common.py`, `design-docs/benchmark_design_doc.md`
+- **Objective**: Adapt `bin/run_cross_tests.py` to support strict package-qualified imports (`<scope>.parts.<unit>.lib...`) across heterogeneous benchmark runs and eliminate fragile `conftest.py` runtime `sys.modules` aliasing hacks.
+- **Problem Statement**:
+  - `check_test_imports` now strictly enforces fully qualified package scoping (`from <scope>.parts.<unit>.lib.<module> import ...`), prohibiting short-form `{unit_name}.lib` and bare `lib` imports in test and pretense modules.
+  - When `bin/run_cross_tests.py` cross-evaluates an independently generated test suite against a foreign library implementation across different runs (e.g. evaluating tests from `benchmark_2` against `lib` from `benchmark_1`), the test files contain hardcoded package prefixes referring to their original flight scope (e.g., `benchmark_2.parts.stream_buffer.lib` or `<suite>_<model>_<run>.parts...`).
+  - Previously, `bin/run_cross_tests.py` attempted to resolve this by:
+    1. Performing regex string replacements on test file contents (`benchmark_\d+` -> `benchmark_1`).
+    2. Symlinking aliases in a temporary sandbox directory.
+    3. Injecting a synthetic `conftest.py` that imperatively populated `sys.modules` with redundant aliases (`{suite_name}`, `{suite_name}.lib`, `parts.{suite_name}.lib`, etc.).
+  - This regex and `sys.modules` monkeypatching is brittle, breaks down when run directories use diverse model-named scopes (e.g., `multi_interface_deepseek_flash_1`), and risks dual-module execution when classes are imported under differing module paths.
+- **Implementation Steps**:
+  1. **Canonical Scope Normalization**:
+     - Standardize benchmark flight scopes to a consistent, canonical import layout or provide a clean package-aliasing loader in the cross-test sandbox.
+     - Replace regex-based string rewriting with AST-aware import rewrites (`rewrite_test_imports` / `build_module_resolution_map`) that cleanly redirect foreign flight scope prefixes to the active SUT package under evaluation.
+  2. **Elimination of `conftest.py` `sys.modules` Clutter**:
+     - Remove the multi-line `sys.modules` manual population loop in `bin/run_cross_tests.py` (lines 381–412).
+     - Instead, structure the evaluation sandbox so that the target library is mounted under the exact package path the test suite expects, or ensure AST-rewritten tests import the SUT via a single, canonical package name.
+  3. **Verification**:
+     - Run `bin/run_cross_tests.py` against both Pretense and standard unit test benchmarks across multiple model runs (e.g. `dag_engine_lite`, `multi_interface`) and verify clean test execution with zero dual-import class mismatches or `ImportError` regressions.
 
 ---
 

@@ -412,6 +412,7 @@ class WorkspaceCommandHandler(commands.WorkspaceCommandHandler):
                     )
                     committed_count += 1
             _clear_staged_blames(ws_root)
+            remaining_work: List[str] = []
             if meta:
                 pending_mgr = get_singleton(pending.WorkspacePendingManager)
                 pending_targets = list(pending_mgr.get_pending_work(ws_root))
@@ -421,11 +422,16 @@ class WorkspaceCommandHandler(commands.WorkspaceCommandHandler):
                     and list(pending_mgr.get_pending_work(ws_root)) == pending_targets
                 ):
                     pending_mgr.remove_pending_target(ws_root, pending_targets[0])
+                remaining_work = list(pending_mgr.get_pending_work(ws_root))
+            next_step_msg = (
+                "MANDATORY: Run 'bin/get_work' now to inspect remaining units."
+                if remaining_work
+                else "[ROUND CONCLUSION DIRECTIVE] All assigned targets are resolved. Conclude your round immediately with summary text and ZERO further tool calls (do NOT run 'bin/get_work' or 'bin/check_files')."
+            )
             print(
                 f"[BLAME DELIVERED] Committed {committed_count} blame item(s) for '{target}' and returned to upstream author(s).\n"
                 "Your work on this target is 100% COMPLETE.\n"
-                "MANDATORY: Run 'bin/get_work' now to inspect remaining units.\n"
-                "If all ready targets are resolved, conclude your round immediately with summary text and ZERO further tool calls.\n"
+                f"{next_step_msg}\n"
                 "DO NOT re-run 'bin/check_files' or attempt to debug the author's code."
             )
             return 0 if committed_count > 0 else 1
@@ -492,18 +498,24 @@ class WorkspaceCommandHandler(commands.WorkspaceCommandHandler):
                         append_log(target, outcome.message, repo_root=ws_root)
                     except OSError:
                         pass
+            remaining_work: List[str] = []
             if meta:
                 pending_mgr = get_singleton(pending.WorkspacePendingManager)
                 pending_mgr.remove_pending_target(ws_root, target)
+                remaining_work = list(pending_mgr.get_pending_work(ws_root))
             try:
                 prov = get_singleton(provision.WorkspaceProvisioner)
                 prov.unlock_workspace_directories(ws_root)
             except Exception:
                 pass
+            next_step_msg = (
+                "Run 'bin/get_work' now to inspect remaining units."
+                if remaining_work
+                else "[ROUND CONCLUSION DIRECTIVE] All assigned targets are resolved. Conclude your round immediately with summary text and ZERO further tool calls (do NOT run 'bin/get_work' or 'bin/check_files')."
+            )
             print(
                 f"[SUBMIT DELIVERED] Target '{target}' submitted successfully.\n"
-                "Run 'bin/get_work' now to inspect remaining units.\n"
-                "If all ready targets are resolved, conclude your round immediately with summary text and ZERO further tool calls."
+                f"{next_step_msg}"
             )
             return 0
         return 1

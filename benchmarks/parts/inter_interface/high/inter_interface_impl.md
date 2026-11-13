@@ -17,7 +17,7 @@ Implementing coordinated resource allocation requires constant-time limit checks
 
 A system's *concrete allocator* realizes the allocator protocol within the system lifecycle tier, maintaining an allocated funds counter initialized to zero and coordinating directly with the collaborator singleton.
 
-Allocating funds verifies positive amount, delegates withdrawal to the collaborator singleton, and increments allocated funds counter by amount, raising allocation limit error when amount is non-positive. Releasing funds verifies positive amount not exceeding allocated funds, delegates deposit to the collaborator singleton, and decrements allocated funds counter by amount, raising allocation limit error when amount is non-positive or exceeds allocated funds.
+Allocating funds verifies positive amount, delegates withdrawal to the collaborator singleton (translating collaborator insufficient-funds errors into allocation limit error), and increments allocated funds counter by amount, raising allocation limit error when amount is non-positive or exceeds available vault reserves. Releasing funds verifies positive amount not exceeding allocated funds, delegates deposit to the collaborator singleton, and decrements allocated funds counter by amount, raising allocation limit error when amount is non-positive or exceeds allocated funds.
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-11-03T23:55:00Z

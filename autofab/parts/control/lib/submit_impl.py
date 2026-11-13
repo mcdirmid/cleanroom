@@ -230,13 +230,10 @@ def _write_file_with_perms(
 
 
 def _project_for_role_workspace(content: str, filename: str, is_writable: bool) -> str:
-    """Projects in-band metadata for role workspace: only change, feedback, and ephemeral code hash."""
+    """Projects in-band metadata for role workspace: only change and feedback."""
     meta = src_metadata.extract_metadata_from_text(content, filename)
     if meta is None:
         return content
-    code_hash = None
-    if is_writable:
-        code_hash = src_metadata.compute_code_hash(content, filename)
     return src_metadata.rewrite_metadata_in_text(
         content,
         filename,
@@ -244,13 +241,11 @@ def _project_for_role_workspace(content: str, filename: str, is_writable: bool) 
         last_changed="",
         clear_audits=True,
         clear_dirty=True,
-        code_hash=code_hash,
-        clear_code_hash=not is_writable,
     )
 
 
 def _copy_projected_file(src: str, dst: str, is_writable: bool) -> None:
-    """Copies a file into a role workspace, projecting metadata headers with ephemeral code hashes on writable files."""
+    """Copies a file into a role workspace, projecting metadata headers."""
     try:
         with open(src, "r", encoding="utf-8") as f:
             content = f.read()
@@ -273,21 +268,40 @@ def _file_sha256(path: str) -> Optional[str]:
 
 
 def _update_pull_manifest(
-    workspace_dir: str, rel_path: str, main_file: str, ws_file: str
+    workspace_dir: str,
+    rel_path: str,
+    main_file: str,
+    ws_file: str,
+    ws_scope: str = "",
 ) -> None:
     try:
         state_dir = app_info.resolve_state_dir(workspace_dir)
         manifest_path = os.path.join(state_dir, "pull_manifest.json")
+        p_manifest: dict[str, Any] = {}
         if os.path.isfile(manifest_path):
             with open(manifest_path, "r", encoding="utf-8") as f:
-                p_manifest = json.load(f)
-            p_files = p_manifest.setdefault("files", {})
-            mh = _file_sha256(main_file)
-            wh = _file_sha256(ws_file)
-            if mh and wh:
-                p_files[rel_path] = {"main_hash": mh, "ws_hash": wh}
-                with open(manifest_path, "w", encoding="utf-8") as f:
-                    json.dump(p_manifest, f, indent=2)
+                loaded = json.load(f)
+                if isinstance(loaded, dict):
+                    p_manifest = loaded
+        manifest_key = rel_path
+        if ws_scope and manifest_key.startswith(ws_scope + "/"):
+            manifest_key = manifest_key[len(ws_scope) + 1 :]
+        target_dict = (
+            p_manifest["files"]
+            if isinstance(p_manifest.get("files"), dict)
+            else p_manifest
+        )
+        mh = _file_sha256(main_file)
+        wh = _file_sha256(ws_file)
+        ch = src_metadata.compute_file_code_hash(ws_file)
+        if mh and wh:
+            entry: dict[str, str] = {"main_hash": mh, "ws_hash": wh}
+            if ch:
+                entry["code_hash"] = ch
+            target_dict[manifest_key] = entry
+            os.makedirs(os.path.dirname(manifest_path), exist_ok=True)
+            with open(manifest_path, "w", encoding="utf-8") as f:
+                json.dump(p_manifest, f, indent=2, sort_keys=True)
     except Exception:
         pass
 
@@ -396,7 +410,13 @@ def _check_readonly_integrity(
                     pass
 
             # 2. Locate main_init across multiple potential layouts in main_root
-            main_init = os.path.join(main_root, rel_p)
+            ws_scope = dir_scope.strip("/").split("/")[-1] if dir_scope else ""
+            rel_norm = rel_p.replace("\\", "/")
+            main_rel = rel_norm
+            if dir_scope and ws_scope and dir_scope != ws_scope:
+                if rel_norm.startswith(ws_scope + "/"):
+                    main_rel = dir_scope.strip("/") + "/" + rel_norm[len(ws_scope) + 1 :]
+            main_init = os.path.join(main_root, main_rel)
             if not os.path.isfile(main_init):
                 for candidate_prefix in (
                     dir_scope,
@@ -866,14 +886,25 @@ class SubmissionCoordinator(submit.SubmissionCoordinator):
         summary_text = summary or f"Updated {os.path.basename(target_path)}"
 
         # 3. Symmetric change summary validation
-        is_modified = src_metadata.is_code_modified(target_path)
+        is_modified = src_metadata.is_code_modified(target_path, workspace_root=ws_root)
         summary_provided = bool(summary and summary.strip())
+
+        if not is_modified:
+            file_meta = src_metadata.extract_metadata(target_path)
+            if file_meta is not None and file_meta.feedback:
+                return submit.SubmissionOutcome(
+                    accepted=False,
+                    message=(
+                        f"Error: Target '{target}' was not modified (no code changes since dispatch/last submit) while feedback is present; "
+                        f"use bin/reject instead."
+                    ),
+                )
 
         if is_modified and not summary_provided:
             return submit.SubmissionOutcome(
                 accepted=False,
                 message=(
-                    f"Error: Target '{target}' has been modified (CODE_HASH differs), but no change summary was provided.\n"
+                    f"Error: Target '{target}' has been modified (code changed since dispatch/last submit), but no change summary was provided.\n"
                     f'Usage: bin/submit {target} "<concise change summary>"'
                 ),
             )
@@ -882,7 +913,7 @@ class SubmissionCoordinator(submit.SubmissionCoordinator):
             return submit.SubmissionOutcome(
                 accepted=False,
                 message=(
-                    f"Error: Target '{target}' was not modified (CODE_HASH matches).\n"
+                    f"Error: Target '{target}' was not modified (no code changes since dispatch/last submit).\n"
                     f"A change summary must not be provided for an unchanged file.\n"
                     f"Usage to submit without changes: bin/submit {target}"
                 ),
@@ -910,15 +941,15 @@ class SubmissionCoordinator(submit.SubmissionCoordinator):
             if ws_root != main_root and os.path.isfile(target_path):
                 _copy_file_with_perms(target_path, main_file, readonly=False)
             src_metadata.record_change(main_file, summary_text)
-            src_metadata.update_metadata(main_file, clear_code_hash=True)
             msg = f"[CHANGE] {rel_path}: {summary_text}"
         else:
             src_metadata.mark_clean(main_file)
-            src_metadata.update_metadata(main_file, clear_code_hash=True)
             msg = f"[CLEAN] {rel_path}"
         if ws_root != main_root and os.path.isfile(main_file):
             _copy_projected_file(main_file, target_path, is_writable=True)
-            _update_pull_manifest(ws_root, rel_path, main_file, target_path)
+            _update_pull_manifest(
+                ws_root, rel_path, main_file, target_path, ws_scope=ws_scope or ""
+            )
 
         # Synchronize any companion files declared in src_pats for this unit
         if src_pats and part_dir and active_unit:
@@ -937,18 +968,20 @@ class SubmissionCoordinator(submit.SubmissionCoordinator):
                 if os.path.abspath(ws_comp) == os.path.abspath(target_path):
                     continue
                 if os.path.isfile(ws_comp):
-                    comp_mod = src_metadata.is_code_modified(ws_comp)
+                    comp_mod = src_metadata.is_code_modified(
+                        ws_comp, workspace_root=ws_root
+                    )
                     if ws_root != main_root:
                         _copy_file_with_perms(ws_comp, main_comp, readonly=False)
                     if comp_mod:
                         src_metadata.record_change(main_comp, summary_text)
-                        src_metadata.update_metadata(main_comp, clear_code_hash=True)
                     else:
                         src_metadata.mark_clean(main_comp)
-                        src_metadata.update_metadata(main_comp, clear_code_hash=True)
                     if ws_root != main_root and os.path.isfile(main_comp):
                         _copy_projected_file(main_comp, ws_comp, is_writable=True)
-                        _update_pull_manifest(ws_root, comp_rel, main_comp, ws_comp)
+                        _update_pull_manifest(
+                            ws_root, comp_rel, main_comp, ws_comp, ws_scope=ws_scope or ""
+                        )
 
         return submit.SubmissionOutcome(accepted=True, message=msg)
 

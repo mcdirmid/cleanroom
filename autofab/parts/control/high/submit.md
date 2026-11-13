@@ -32,7 +32,7 @@ The submission coordinator:
 
 - Submits an auditor file target in a repository workspace by validating the target against test file submission prohibitions, discovering role context and directory scope from workspace manifest metadata when executed in an isolated workspace, updating in-band audit tags in the canonical repository when verification checks pass, and politely accepting submission without mutating the canonical repository when verification checks fail without uncommitted staged blame.
 
-- Submits a producer file target in a repository workspace by validating the target against read-only permissions and directory scope patterns, discovering role context and directory scope from workspace manifest metadata when executed in an isolated workspace, requiring a change summary exactly when source code was modified, updating in-band change metadata in the canonical repository, and stripping ephemeral code hashes when committing files to the main repository.
+- Submits a producer file target in a repository workspace by validating the target against read-only permissions and directory scope patterns, discovering role context and directory scope from workspace manifest metadata when executed in an isolated workspace, rejecting unmodified submissions when unacted in-band feedback metadata is present on the target file (instructing the caller to use `bin/reject` instead), requiring a change summary exactly when source code was modified against `.autofab/pull_manifest.json`, updating in-band change metadata in the canonical repository, and refreshing the baseline `code_hash` in `.autofab/pull_manifest.json`.
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z

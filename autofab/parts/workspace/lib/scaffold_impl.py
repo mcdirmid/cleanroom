@@ -733,7 +733,8 @@ except ImportError:
 if __name__ == "__main__":
     sys.exit(role_tool.main(["{cmd}"] + sys.argv[1:]))
 '''
-        with open(tool_path, "wb") as f:
+        tmp_tool_path = f"{tool_path}.tmp.{os.getpid()}"
+        with open(tmp_tool_path, "wb") as f:
             f.write(b"#!/usr/bin/env python3\n")
             with zipfile.ZipFile(f, "w", compression=zipfile.ZIP_DEFLATED) as z:
                 z.writestr("__main__.py", runner_code)
@@ -745,9 +746,10 @@ if __name__ == "__main__":
                 for arcname, pyc_bytes in pycs.items():
                     z.writestr(arcname, pyc_bytes)
         try:
-            os.chmod(tool_path, 0o755)
+            os.chmod(tmp_tool_path, 0o755)
         except OSError:
             pass
+        os.replace(tmp_tool_path, tool_path)
 
 
 # Contract: __orphan__ - writes role configuration metadata with 0o644 permissions
@@ -974,7 +976,7 @@ All {app_info.APP_TITLE} verification and resolution in this fused role workspac
   or via flags: `bin/blame <culprit_file> --slug <slug> --viol <viol> --facet "<noun phrase>" [--lines "<range>"] [--witness "<values>"]`
   where slug matches low/*.pyi, violation is a non-prescriptive noun phrase or [viol:<prefix>.<name>], facet is a noun phrase without action verbs, lines specifies a line or range within the culprit file, and witness contains literal key-value pairs (no line numbers or prose).
 <!-- endif -->
-- **Blame Concludes Target Custody**: Calling `bin/blame` immediately transfers custody of the target back to upstream authors. DO NOT run further diagnostic commands, scripts, or checks on blamed targets.
+- **Blame Concludes Target Custody**: Calling `bin/blame` stages blame critiques; committing them via `bin/submit` transfers custody of the target back to upstream authors. DO NOT run further diagnostic commands, scripts, or checks on blamed targets.
 - **Submission on Success**: When checks pass, you MUST execute `bin/submit <target_file>` immediately.
 - **Fail on Impasse**: If you reach an unresolvable impasse where neither submit nor blame applies, execute `bin/fail <target_file> "<reason>"` immediately.
 - **Never end a round while ready targets remain unresolved. When all ready targets are resolved or only blocked targets remain, conclude your round immediately without further tool calls.**"""
@@ -1025,7 +1027,7 @@ All {app_info.APP_TITLE} target resolution must proceed through the prescribed w
         workflow = f"""1. Run `bin/get_work` to inspect and pull pending work and review any unacted feedback.
 2. Follow companion guide `{guide}` (located at `{guide}` in your workspace root; do not prefix with scope) to author or update targets in scope, resolving any feedback.
 3. Run verification checks: `bin/check_files [target_file]`
-4. If checks pass and all feedback is resolved: Submit completed targets via `bin/submit <target_file> "<summary>"` (or `bin/submit <target_file>` if unmodified).
+4. If checks pass and all feedback is resolved: Submit completed targets via `bin/submit <target_file> "<summary>"` (or `bin/submit <target_file>` if unmodified, or contest incorrect feedback on unmodified files via `bin/reject <target_file> "<reason>"`).
 5. If success is impossible or an unresolvable impasse is reached: `bin/fail <target_file> "<reason>"`
 6. Call `bin/get_work` to inspect remaining units. If all ready targets are resolved or only blocked targets remain, STOP and conclude your round immediately without calling further tools.
 """
@@ -1042,21 +1044,22 @@ All {app_info.APP_TITLE} target resolution must proceed through the prescribed w
         resolution_rules = """- **Submission on Success**: When checks pass and all feedback is addressed, you MUST execute `bin/submit <target_file> "<summary>"` immediately.
 - **Fail on Impasse**: If you reach an unresolvable impasse where success is impossible, execute `bin/fail <target_file> "<reason>"` immediately.
 - **Never end a round while ready targets remain unresolved. When all ready targets are resolved or only blocked targets remain, conclude your round immediately without further tool calls.**"""
-        resolution_methods = "(`bin/submit` or `bin/fail`)"
+        resolution_methods = "(`bin/submit`, `bin/reject`, or `bin/fail`)"
         workflow_binaries_blame = ""
         round_res_line = "Never attempt to manually commit, push, or copy files across workspace boundaries; round resolution must always occur via `bin/submit` or `bin/fail`."
         runner_tools_list = (
-            "`get_work`, `check_files`, `submit`, `fail`, `revert`, `checkpoint`"
+            "`get_work`, `check_files`, `submit`, `reject`, `fail`, `revert`, `checkpoint`"
         )
-        fail_stop_tools = "`bin/get_work`, `bin/check_files`, `bin/submit`, `bin/fail`, `bin/revert`, `bin/checkpoint`"
-        metadata_tools = "(`bin/submit` or `bin/fail`)"
-        test_failure_action = "code edits or `bin/fail`"
+        fail_stop_tools = "`bin/get_work`, `bin/check_files`, `bin/submit`, `bin/reject`, `bin/fail`, `bin/revert`, `bin/checkpoint`"
+        metadata_tools = "(`bin/submit`, `bin/reject`, or `bin/fail`)"
+        test_failure_action = "code edits, `bin/reject`, or `bin/fail`"
         workflow_binaries_section = f"""## Mandatory {app_info.APP_TITLE} Workflow Binaries
 All {app_info.APP_TITLE} target resolution must proceed through the prescribed workspace binaries:
 - `bin/get_work` — Discover pending units and tasks.
 - `bin/check_files` — Run static verification, linting, and type checking on targets.
 - `bin/submit` — Submit verified targets to main.
-{workflow_binaries_blame}- `bin/revert` — Revert broken edits or file truncations to the last checkpoint (`bin/revert [target]`).
+{workflow_binaries_blame}- `bin/reject` — Reject active feedback on an unmodified target file asserting existing code is already compliant (`bin/reject <file> "<reason>"`).
+- `bin/revert` — Revert broken edits or file truncations to the last checkpoint (`bin/revert [target]`).
 - `bin/checkpoint` — Record a git commit snapshot of active workspace state (`bin/checkpoint [label]`).
 - `bin/fail` — Report an unresolvable impasse."""
         ground_truth_bullet = "- **Ground Truth First (Oracle Diagnostics Over Prose)**: Always run `bin/check_files <target>` to establish deterministic ground truth errors before writing or editing code. Do NOT speculate, guess, or infer defects from prose descriptions before checking oracle output."

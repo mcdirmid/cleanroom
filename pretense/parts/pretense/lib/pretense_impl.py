@@ -255,6 +255,10 @@ def compile_hypothesis_test_case(
         for c in proto_inst.collaborators:
             if c not in collab_list:
                 collab_list.append(c)
+    if hasattr(proto_inst, "collaborator_types") and proto_inst.collaborator_types:
+        for c in proto_inst.collaborator_types:
+            if c not in collab_list:
+                collab_list.append(c)
 
     class _DummyData:
         def draw(self, strategy: Any) -> Any:
@@ -315,15 +319,23 @@ def compile_hypothesis_test_case(
 
             if getattr(curr_t, "is_seeding", False):
                 is_fake = getattr(self.sut, "__is_pretense_fake__", False)
-                has_sut_attr = hasattr(self.sut, curr_t.name)
-                has_singleton_attr = any(
-                    hasattr(v, curr_t.name) for v in s_dict.values()
-                )
-                if not is_fake and not has_sut_attr and not has_singleton_attr:
-                    _current_sm.reset(token_sm)
-                    _current_sut.reset(token_sut)
-                    _ACTIVE_SUTS.reset(token_suts)
-                    return None
+                if not is_fake:
+                    # In implementation testing, the target's own seeding transitions are suppressed.
+                    # Only seeding transitions on collaborator fakes (in s_dict) are permitted.
+                    is_collab_seeding = False
+                    for inst in s_dict.values():
+                        if (
+                            inst is not self.sut
+                            and getattr(inst, "__is_pretense_fake__", False)
+                            and hasattr(inst, curr_t.name)
+                        ):
+                            is_collab_seeding = True
+                            break
+                    if not is_collab_seeding:
+                        _current_sm.reset(token_sm)
+                        _current_sut.reset(token_sut)
+                        _ACTIVE_SUTS.reset(token_suts)
+                        return None
 
             if not all(req(self.sm.state, self.sm) for req in curr_t.requirements):
                 _current_sm.reset(token_sm)
@@ -419,6 +431,14 @@ def compile_hypothesis_test_case(
                             curr_t.provider(self.sm.state, self.sm, *args, result=res)
                 elif getattr(curr_t, "_target_fn", None) is not None:
                     res = curr_t._target_fn(self.sm, *args)
+                    exp_type = _last_contracted_exception_type.get()
+                    if exp_type is not None:
+                        _last_contracted_exception_type.set(None)
+                        raise AssertionError(
+                            f"Contracted Operational Exception Missing: Transition '{curr_t.name}' was expected to raise "
+                            f"'{exp_type.__name__}' because require_env condition was violated, but SUT produced "
+                            f"outcome {res!r} instead."
+                        )
                 else:
                     sut_exc: Optional[Exception] = None
                     sut_res: Any = None
@@ -503,6 +523,7 @@ def compile_hypothesis_test_case(
             except BaseException as e:
                 exp_type = _last_contracted_exception_type.get()
                 if exp_type is not None and isinstance(e, exp_type):
+                    _last_contracted_exception_type.set(None)
                     current_step = TraceStep(
                         curr_t.name,
                         getattr(curr_t.target, "__name__", None),
@@ -716,6 +737,32 @@ def compile_hypothesis_test_case(
             if hasattr(self.sm, "singletons") and isinstance(self.sm.singletons, dict):
                 self.sm.singletons = dict(proto_inst.singletons)
 
+        if callable(sut_factory):
+            try:
+                from support.lib.lifecycle import get_default_registry
+                import types as _types
+
+                reg = get_default_registry()
+                g = getattr(sut_factory, "__globals__", None)
+                if isinstance(g, dict):
+                    seen_mods: Set[str] = set()
+                    for val in list(g.values()):
+                        mod = None
+                        if isinstance(val, _types.ModuleType):
+                            mod = val
+                        elif isinstance(val, type):
+                            mod_name = getattr(val, "__module__", "")
+                            if mod_name:
+                                mod = sys.modules.get(mod_name)
+                        if mod is not None:
+                            mname = getattr(mod, "__name__", "")
+                            leaf = mname.rsplit(".", 1)[-1]
+                            if (leaf.endswith("_impl") or leaf.endswith("_asm")) and mname not in seen_mods:
+                                seen_mods.add(mname)
+                                reg.register_module(mod)
+            except Exception:
+                pass
+
         if callable(sut_factory) and isinstance(sut_factory, type):
             if getattr(sut_factory, "__is_pretense_fake__", False):
                 self.sut = sut_factory(state=self.sm.state)
@@ -751,42 +798,50 @@ def compile_hypothesis_test_case(
         if hasattr(self.sm, "bind") and self.sut is not None:
             self.driver = self.sm.bind(self.sut)
 
-        if hasattr(self.sm, "singletons") and isinstance(self.sm.singletons, dict):
-            if isinstance(self.sut, dict):
-                for k, v in self.sut.items():
-                    if isinstance(k, type):
-                        self.sm.singletons[k] = v
-            elif self.sut is not None:
-                self.sm.singletons[type(self.sut)] = self.sut
-            if collab_list:
-                for c_spec in collab_list:
-                    c_cls = c_spec if isinstance(c_spec, type) else type(c_spec)
-                    has_collab = False
-                    for k, inst in self.sm.singletons.items():
-                        if isinstance(k, type) and (
-                            issubclass(k, c_cls) or issubclass(c_cls, k)
+        if not hasattr(self.sm, "singletons") or not isinstance(self.sm.singletons, dict):
+            self.sm.singletons = {}
+
+        if isinstance(self.sut, dict):
+            for k, v in self.sut.items():
+                if isinstance(k, type):
+                    self.sm.singletons[k] = v
+        elif self.sut is not None:
+            self.sm.singletons[type(self.sut)] = self.sut
+        if collab_list:
+            for c_spec in collab_list:
+                c_cls = c_spec if isinstance(c_spec, type) else type(c_spec)
+                has_collab = False
+                for k, inst in self.sm.singletons.items():
+                    if isinstance(k, type) and (
+                        issubclass(k, c_cls) or issubclass(c_cls, k)
+                    ):
+                        has_collab = True
+                        break
+                    if getattr(inst, "__is_pretense_fake__", False):
+                        sm_obj = getattr(inst, "_sm", None)
+                        if sm_obj is not None and (
+                            isinstance(sm_obj, c_cls)
+                            or type(sm_obj).__name__ == c_cls.__name__
                         ):
                             has_collab = True
                             break
-                        if getattr(inst, "__is_pretense_fake__", False):
-                            sm_obj = getattr(inst, "_sm", None)
-                            if sm_obj is not None and (
-                                isinstance(sm_obj, c_cls)
-                                or type(sm_obj).__name__ == c_cls.__name__
-                            ):
-                                has_collab = True
-                                break
-                    if not has_collab:
-                        try:
-                            fake_collab_cls = pretense.synthesize_fake(c_cls)
-                            fake_inst = fake_collab_cls()
-                            self.sm.singletons[c_cls] = fake_inst
-                            if hasattr(c_cls, "target_protocol"):
-                                self.sm.singletons[
-                                    getattr(c_cls, "target_protocol")
-                                ] = fake_inst
-                        except Exception:
-                            pass
+                if not has_collab:
+                    try:
+                        fake_collab_cls = pretense.synthesize_fake(c_cls)
+                        fake_inst = fake_collab_cls()
+                        self.sm.singletons[c_cls] = fake_inst
+                        if hasattr(c_cls, "target_protocol"):
+                            self.sm.singletons[
+                                getattr(c_cls, "target_protocol")
+                            ] = fake_inst
+                        if hasattr(fake_inst, "_sm") and hasattr(fake_inst._sm, "transitions"):
+                            for tr in fake_inst._sm.transitions:
+                                if hasattr(tr, "target") and tr.target is not None:
+                                    target_cls = getattr(tr.target, "__self__", None)
+                                    if isinstance(target_cls, type):
+                                        self.sm.singletons[target_cls] = fake_inst
+                    except Exception:
+                        pass
         self.trace = []
 
     def teardown(self: Any) -> None:
@@ -830,11 +885,22 @@ pretense.StateMachine.register_compiler(compile_hypothesis_test_case)
 # ============================================================================
 
 
-def _configure_sys_path() -> None:
-    """Configures sys.path by resolving cwd and pythonpath in pyproject.toml."""
+def _configure_sys_path(paths: Optional[List[Path]] = None) -> None:
+    """Configures sys.path by resolving cwd, target parts roots, and pythonpath in pyproject.toml."""
     cwd = Path.cwd().resolve()
     if str(cwd) not in sys.path:
         sys.path.insert(0, str(cwd))
+
+    if paths:
+        for p in paths:
+            curr = p.resolve()
+            for parent in [curr, *curr.parents]:
+                if parent.name == "parts":
+                    parent_str = str(parent)
+                    if parent_str not in sys.path:
+                        sys.path.insert(0, parent_str)
+                    _add_parts_lib_paths(parent.parent)
+                    break
 
     pyproject = cwd / "pyproject.toml"
     if pyproject.is_file():
@@ -895,7 +961,7 @@ def discover_targets(
     loading_errors: Optional[List[Tuple[Path, str]]] = None,
 ) -> List[_PretenseTestTarget]:
     """Discover state machine test targets across the specified paths."""
-    _configure_sys_path()
+    _configure_sys_path(paths)
     discovered_files: List[Path] = []
 
     for path in paths:
@@ -1196,7 +1262,29 @@ def run_pretense_cli(argv: Optional[List[str]] = None) -> int:
             res.add(str(f.resolve()))
         return res
 
+    def _is_interface_pretense_file(test_file: Path) -> bool:
+        if not (test_file.is_file() and test_file.parent.name == "pretense"):
+            return False
+        stem = test_file.stem
+        unit_name = stem[:-9] if stem.endswith("_pretense") else stem
+        if unit_name.endswith("_impl"):
+            return False
+        part_dir = test_file.parent.parent
+        if (
+            (part_dir / "lib" / f"{unit_name}_impl.py").is_file()
+            or (part_dir / "low" / f"{unit_name}_impl.pyi").is_file()
+            or (part_dir / "high" / f"{unit_name}_impl.md").is_file()
+        ):
+            return True
+        try:
+            src = test_file.read_text(encoding="utf-8")
+            return "LifecycleTestCase" not in src and "as_checked" not in src
+        except OSError:
+            return False
+
     def _resolve_target_lib_for_test_file(test_file: Path) -> Set[str]:
+        if _is_interface_pretense_file(test_file):
+            return {str(test_file.resolve())}
         res: Set[str] = set()
         if (
             test_file.is_file()
@@ -1216,11 +1304,15 @@ def run_pretense_cli(argv: Optional[List[str]] = None) -> int:
 
     target_paths = [Path(p) for p in args.paths]
     target_lib_files: Set[str] = set()
+    has_non_interface_target = False
     for p in target_paths:
         p_res = p.resolve()
         if p_res.is_file():
+            if not _is_interface_pretense_file(p_res):
+                has_non_interface_target = True
             target_lib_files.update(_resolve_target_lib_for_test_file(p_res))
         elif p_res.is_dir():
+            has_non_interface_target = True
             if p_res.name == "pretense" and (p_res.parent / "lib").is_dir():
                 for t_file in p_res.glob("*_pretense.py"):
                     target_lib_files.update(_resolve_target_lib_for_test_file(t_file))
@@ -1249,7 +1341,7 @@ def run_pretense_cli(argv: Optional[List[str]] = None) -> int:
         cov_engine = cov_mod.Coverage(branch=False)
         cov_engine.start()
 
-    effective_no_fuzz = args.no_fuzz or args.cov
+    effective_no_fuzz = args.no_fuzz or (args.cov and has_non_interface_target)
     loading_errors: List[Tuple[Path, str]] = []
     targets = discover_targets(
         target_paths,
@@ -1388,7 +1480,7 @@ def run_pretense_cli(argv: Optional[List[str]] = None) -> int:
             "• DO NOT expose details (line numbers, code snippets, or internal symbols) of other files.\n"
             "• Frame test failures strictly as contract discrepancies against the specification.\n"
             "• Explain the expected postcondition outcome versus the observed behavior.\n"
-            "• Preconditions cannot be tested: *Error exceptions designate contract violations and must never be tested or expected with raises(). If an *Error occurs, blame the pretense module for failing to gate inputs via require(...), NEVER the library.\n"
+            "• Checked preconditions raising contracted errors (*Error) MUST be tested in scenario tests via self.checked.violating(ExpectedError).<method>(...). However, tests must never assert graceful returns on precondition violations, and cannot execute transitions after violating(...) because system state after an error is undefined and violating(...) is strictly terminal. Preconditions without errors define undefined behavior and are untestable.\n"
             + "="
             * 80
         )

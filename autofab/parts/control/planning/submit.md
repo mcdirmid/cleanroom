@@ -25,15 +25,16 @@ Allowing untested code to enter the repository creates regressions. The submissi
 - A submission coordinator rejects submission of test files in auditor roles, stamps in-band audit tags in the canonical repository when verification checks pass, and politely accepts submission without mutating the canonical repository when verification checks fail without uncommitted staged blame. [reject_test_submission_for_auditors]
 - A submission coordinator rejects submission of read-only targets or targets outside directory scope. [reject_invalid_producer_file_submission]
 - A submission coordinator discovers role context and directory scope from workspace manifest metadata designated by autofab_files_ext when executed within an isolated role workspace. [discover_workspace_context]
+- A submission coordinator rejects unmodified file targets when unacted in-band feedback metadata is present on the target file, instructing the caller to use `bin/reject` instead. [reject_unmodified_file_with_feedback]
 - A submission coordinator validates file modification hash against change summary presence. [validate_file_change_summary]
-- A submission coordinator executes build submission targets or updates in-band source metadata directly, stripping ephemeral code hashes when committing files to the main repository. [execute_file_submission_mutation]
+- A submission coordinator executes build submission targets or updates in-band source metadata directly, refreshing the baseline `code_hash` in `.autofab/pull_manifest.json`. [execute_file_submission_mutation]
 
 ### Woven Contracts
 
 - When submitting a target node with passing verification, clean in-batch dependencies, and valid change summary, the coordinator marks the target clean with the change summary. [assert_verification_passed, assert_in_batch_dependencies_clean, mark_node_clean]
 - When submitting an auditor node, the coordinator rejects any submission containing a change summary. [forbid_summary_for_auditors]
 - When submitting a target with unresolved session feedback without workspace file modifications, the coordinator rejects the submission requiring file modifications. [reject_unmodified_when_feedback_present]
-- When submitting a file target, the coordinator validates role permissions, enforces change summary consistency, executes submission mutations, and stamps in-band metadata. [reject_test_submission_for_auditors, reject_invalid_producer_file_submission, validate_file_change_summary, execute_file_submission_mutation]
+- When submitting a file target, the coordinator validates role permissions, rejects unmodified targets with unacted in-band feedback, enforces change summary consistency, executes submission mutations, and stamps in-band metadata. [reject_test_submission_for_auditors, reject_invalid_producer_file_submission, reject_unmodified_file_with_feedback, validate_file_change_summary, execute_file_submission_mutation]
 
 ## Grounding
 

@@ -75,7 +75,7 @@ Given: role alpha is commissioned for scope_a at `/ws/alpha_scope_a` as an autho
 1. The provisioner commissions the alpha workspace.
    Observed: the workspace guide states that the agent acts only inside `/ws/alpha_scope_a`, that
    version control operations against external or upstream repositories are forbidden while in-workspace
-   git rollback and diff commands (`git restore <target>`, `git diff <target>`, or `bin/revert [target]`)
+   workspace rollback commands (`bin/revert [target]`)
    are explicitly permitted and instructed, that `/repo` is read-only and reachable only through
    the workspace runner tools, that in-workspace shell commands and native harness tools are permitted
    while round resolution mandates prescribed `bin/` tools, that reading a file outside the workspace

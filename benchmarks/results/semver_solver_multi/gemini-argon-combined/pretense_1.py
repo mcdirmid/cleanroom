@@ -69,39 +69,30 @@ class DependencySolverImplPseudoStateMachine(DependencySolverStateMachine):
     ) -> None:
         super().__init__(state=state or DependencySolverState(), singletons=singletons)
 
-    @transition(CorePackageRepository.register_package)
-    def register_package(self, release: PackageRelease) -> None:
+    def inner_register_package(self, release: PackageRelease) -> None:
         target: CorePackageRepository = sut(CorePackageRepository)
-        ret = call_target(target.register_package(release))
+        ret = target.register_package(release)
         assert target.has_package(release.name)
         return ret
 
-    @transition(CorePackageRepository.get_releases)
-    def get_releases(self, name: str) -> List[PackageRelease]:
+    def inner_get_releases(self, name: str) -> List[PackageRelease]:
         target: CorePackageRepository = sut(CorePackageRepository)
-        ret = call_target(target.get_releases(name))
-        return ret
+        return target.get_releases(name)
 
-    @transition(CorePackageRepository.has_package)
-    def has_package(self, name: str) -> bool:
+    def inner_has_package(self, name: str) -> bool:
         target: CorePackageRepository = sut(CorePackageRepository)
-        ret = call_target(target.has_package(name))
-        return ret
+        return target.has_package(name)
 
-    @transition(CorePackageRepository.all_packages)
-    def all_packages(self) -> Set[str]:
+    def inner_all_packages(self) -> Set[str]:
         target: CorePackageRepository = sut(CorePackageRepository)
-        ret = call_target(target.all_packages())
-        return ret
+        return target.all_packages()
 
-    @transition(CoreDependencySolver.resolve)
-    def resolve(
+    def inner_resolve(
         self,
         root_dependencies: Collection[PackageDependency],
     ) -> ResolutionOutcome:
         target: CoreDependencySolver = sut(CoreDependencySolver)
-        ret = call_target(target.resolve(root_dependencies))
-        return ret
+        return target.resolve(root_dependencies)
 
 
 proto = DependencySolverImplPseudoStateMachine()
@@ -655,6 +646,31 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         assert len(ret.derivation_steps) == len(expected_versions)
         return ret
 
+    def inner_register_package(self, release: PackageRelease) -> None:
+        return None
+
+    def inner_get_releases(self, name: str) -> List[PackageRelease]:
+        return list(self.state.packages.get(name, []))
+
+    def inner_has_package(self, name: str) -> bool:
+        return name in self.state.packages
+
+    def inner_all_packages(self) -> Set[str]:
+        return set(self.state.packages.keys())
+
+    def inner_resolve(
+        self,
+        root_dependencies: Collection[PackageDependency],
+    ) -> ResolutionOutcome:
+        solved = solve_resolution_helper(self.state.packages, root_dependencies)
+        if solved is None:
+            return ResolutionOutcome(selected_versions={}, derivation_steps=())
+        expected_versions, expected_steps = solved
+        return ResolutionOutcome(
+            selected_versions=expected_versions,
+            derivation_steps=expected_steps,
+        )
+
     @transition.seeding
     def seed_initial(self) -> None:
         """Seed initial state machine state for fake initialization."""
@@ -804,19 +820,16 @@ class VersionEngineImplPseudoStateMachine(VersionEngineStateMachine):
     ) -> None:
         super().__init__(state=state or VersionEngineState(), singletons=singletons)
 
-    @transition(CoreVersionEngine.parse_version)
-    def parse_version(self, text: str) -> Version:
+    def inner_parse_version(self, text: str) -> Version:
         target: CoreVersionEngine = sut(CoreVersionEngine)
-        ret = call_target(target.parse_version(text))
+        ret = target.parse_version(text)
         assert ret.format() == str(ret)
         assert ret.is_prerelease == (len(ret.prerelease) > 0)
         return ret
 
-    @transition(CoreVersionEngine.compare_precedence)
-    def compare_precedence(self, v1: Version, v2: Version) -> int:
+    def inner_compare_precedence(self, v1: Version, v2: Version) -> int:
         target: CoreVersionEngine = sut(CoreVersionEngine)
-        ret = call_target(target.compare_precedence(v1, v2))
-        return ret
+        return target.compare_precedence(v1, v2)
 
 
 proto = VersionEngineImplPseudoStateMachine()
@@ -1153,6 +1166,13 @@ class VersionEngineStateMachine(StateMachine[VersionEngineState]):
             assert ret == 0
         return ret
 
+    def inner_parse_version(self, text: str) -> Version:
+        parsed = _try_parse_semver(text)
+        return parsed if parsed is not None else Version(0, 0, 0)
+
+    def inner_compare_precedence(self, v1: Version, v2: Version) -> int:
+        return _compare_versions(v1, v2)
+
     @transition.seeding
     def seed_initial(self) -> None:
         """Seed initial state machine state for fake initialization."""
@@ -1274,25 +1294,20 @@ class RangeEngineImplPseudoStateMachine(RangeEngineStateMachine):
     ) -> None:
         super().__init__(state=state or RangeEngineState(), singletons=singletons)
 
-    @transition(CoreRangeEngine.parse_range)
-    def parse_range(self, text: str) -> VersionRange:
+    def inner_parse_range(self, text: str) -> VersionRange:
         target: CoreRangeEngine = sut(CoreRangeEngine)
-        ret = call_target(target.parse_range(text))
+        ret = target.parse_range(text)
         assert str(ret) == ret.raw_text
         return ret
 
-    @transition(CoreRangeEngine.satisfies)
-    def satisfies(
+    def inner_satisfies(
         self,
         version: Version,
         range_constraint: VersionRange,
         include_prerelease: bool,
     ) -> bool:
         target: CoreRangeEngine = sut(CoreRangeEngine)
-        ret = call_target(
-            target.satisfies(version, range_constraint, include_prerelease)
-        )
-        return ret
+        return target.satisfies(version, range_constraint, include_prerelease)
 
 
 proto = RangeEngineImplPseudoStateMachine()
@@ -1953,6 +1968,17 @@ class RangeEngineStateMachine(StateMachine[RangeEngineState]):
         ret = self.inner_satisfies(version, range_constraint, include_prerelease)
         assert ret == expected
         return ret
+
+    def inner_parse_range(self, text: str) -> VersionRange:
+        return VersionRange(text.strip())
+
+    def inner_satisfies(
+        self,
+        version: Version,
+        range_constraint: VersionRange,
+        include_prerelease: bool,
+    ) -> bool:
+        return satisfies_helper(version, range_constraint, include_prerelease)
 
     @transition.seeding
     def seed_initial(self) -> None:

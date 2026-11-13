@@ -525,7 +525,11 @@ def _eval_unit_dirty_internal(
                         }
                         for fb in ws_meta.feedback:
                             clean_fb = re.sub(r"^\[.*?\]:\s*", "", fb.strip())
-                            if clean_fb not in existing_fb:
+                            if clean_fb not in existing_fb and not any(
+                                existing.startswith("Unacted feedback in ")
+                                and (existing.endswith(clean_fb) or clean_fb in existing)
+                                for existing in reasons
+                            ):
                                 reasons.append(
                                     f"Unacted feedback in {target_rel}: {clean_fb}"
                                 )

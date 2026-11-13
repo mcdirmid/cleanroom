@@ -337,7 +337,7 @@ class WorkspaceCheckImplTest(LifecycleTestCase):
         with patch("sys.stdout", new_callable=io.StringIO) as mock_out:
             ret = self.checker.run_get_work(dir_scope="pkg")
             out = mock_out.getvalue()
-        self.assertEqual(ret, 1)
+        self.assertEqual(ret, 0)
         self.assertEqual(len(self.fake_pending.pending), 1)
         self.assertIn("Companion Guide to Follow:", out)
         self.assertIn("guides/lib.md", out)
@@ -350,7 +350,7 @@ class WorkspaceCheckImplTest(LifecycleTestCase):
         with patch("sys.stdout", new_callable=io.StringIO) as mock_out:
             ret = self.checker.run_get_work(dir_scope="pkg")
             out = mock_out.getvalue()
-        self.assertEqual(ret, 1)
+        self.assertEqual(ret, 0)
         self.assertIn("READY FOR EXECUTION (Prerequisites satisfied):", out)
         self.assertIn("pkg/parts/foo/lib/foo.py", out)
         self.assertIn("Dirty Reasons:", out)
@@ -828,6 +828,67 @@ class WorkspaceCheckImplTest(LifecycleTestCase):
 
         self.assertEqual(ret, 1)
         self.assertIn("Gemini Argon", out)
+
+    def test_run_get_work_fails_when_gemini_carbon_mismatched_in_antigravity(
+        self,
+    ) -> None:
+        with open(
+            os.path.join(self.test_dir, app_info.DEFAULT_ROLE_DESCRIPTOR),
+            "w",
+            encoding="utf-8",
+        ) as f:
+            json.dump(
+                {
+                    "role": "lib",
+                    "parts_dir": "pkg/parts",
+                    "dir_scope": "pkg",
+                    "model": "gemini-carbon",
+                    "harness": "antigravity",
+                },
+                f,
+            )
+        ag_root = os.path.join(self.test_dir, "fake_ag_carbon")
+        cid = "00000000-1111-2222-3333-555555555555"
+        logs_dir = os.path.join(ag_root, "brain", cid, ".system_generated", "logs")
+        conv_dir = os.path.join(ag_root, "conversations")
+        os.makedirs(logs_dir, exist_ok=True)
+        os.makedirs(conv_dir, exist_ok=True)
+        with open(
+            os.path.join(logs_dir, "transcript.jsonl"), "w", encoding="utf-8"
+        ) as f:
+            f.write(
+                json.dumps(
+                    {
+                        "content": f"assigned role workspace directory is '{self.test_dir}'"
+                    }
+                )
+                + "\n"
+            )
+
+        import sqlite3
+
+        db_path = os.path.join(conv_dir, f"{cid}.db")
+        conn = sqlite3.connect(db_path)
+        conn.execute("CREATE TABLE gen_metadata (idx INTEGER PRIMARY KEY, data BLOB)")
+        conn.execute(
+            "INSERT INTO gen_metadata (idx, data) VALUES (1, ?)",
+            (b"model: gemini-3.8-flash",),
+        )
+        conn.commit()
+        conn.close()
+
+        import io
+        from unittest.mock import patch
+
+        with (
+            patch.dict(os.environ, {"ANTIGRAVITY_BRAIN_DIR": ag_root}),
+            patch("sys.stdout", new_callable=io.StringIO) as mock_out,
+        ):
+            ret = self.checker.run_get_work(dir_scope="pkg")
+            out = mock_out.getvalue()
+
+        self.assertEqual(ret, 1)
+        self.assertIn("Gemini Carbon", out)
         self.assertIn("gemini-3.8-flash", out)
 
     def test_resolve_common_spec_files(self) -> None:
@@ -1225,6 +1286,39 @@ class WorkspaceCheckImplTest(LifecycleTestCase):
         )
         self.assertEqual(reminder_count, 1)
 
+    def test_check_files_scrubs_workspace_paths(self) -> None:
+        self.fake_reg.roles.append(
+            role_registry.RoleDefinition(
+                role_name="qa",
+                guide_path="guides/qa.md",
+                writable_file_patterns=[],
+                readonly_file_patterns=[],
+                feedback_role_deps=[],
+                verify_template=f"echo 'File \"{self.test_dir}/parts/test_pkg/lib/foo.py\", line 12' && exit 1",
+                audit_tag="QA_AUDIT",
+                src_pattern="",
+            )
+        )
+        meta_file = os.path.join(self.test_dir, ".autofab_role.json")
+        with open(meta_file, "w", encoding="utf-8") as f:
+            json.dump({"role": "qa", "parts_dir": "parts/test_pkg"}, f)
+
+        target_file = os.path.join(self.test_dir, "parts", "test_pkg", "lib", "foo.py")
+        os.makedirs(os.path.dirname(target_file), exist_ok=True)
+        with open(target_file, "w", encoding="utf-8") as f:
+            f.write("# impl\n")
+        self.fake_pending.pending = [target_file]
+
+        import io
+        from unittest.mock import patch
+
+        with patch("sys.stdout", new_callable=io.StringIO) as mock_out:
+            ret = self.checker.run_check_files(target=target_file)
+            out = mock_out.getvalue()
+        self.assertEqual(ret, 1)
+        self.assertIn('File "parts/test_pkg/lib/foo.py", line 12', out)
+        self.assertNotIn(self.test_dir, out)
+
     def test_check_files_pretense_qa_reminder_and_deduplication(self) -> None:
         self.fake_reg.roles.append(
             role_registry.RoleDefinition(
@@ -1262,7 +1356,7 @@ class WorkspaceCheckImplTest(LifecycleTestCase):
         )
         self.assertEqual(reminder_count, 1)
         self.assertIn("An unhandled *Error or test failure can indicate:", out)
-        self.assertIn("Candidate Culprit:", out)
+        self.assertIn("Candidate Culprit Files:", out)
         self.assertIn("Candidate Files That Can Receive Feedback:", out)
         self.assertIn(
             "BLAME ROUTING (DETERMINE CULPRIT FROM SPECIFICATION & FEEDBACK TARGET SOURCE CODE):",
@@ -1272,6 +1366,33 @@ class WorkspaceCheckImplTest(LifecycleTestCase):
             "Look at the specification contracts and the source code of the candidate feedback files above.",
             out,
         )
+
+    def test_print_triage_summary_lifecycle_resolution_error_routing_note(self) -> None:
+        import io
+        from unittest.mock import patch
+        from autofab.parts.workspace_cli.lib.check_impl import _print_triage_summary
+
+        with tempfile.TemporaryDirectory() as td:
+            target_file = os.path.join(td, "parts", "pkg", "lib", "pkg_impl.py")
+            os.makedirs(os.path.dirname(target_file), exist_ok=True)
+            with open(target_file, "w", encoding="utf-8") as f:
+                f.write("# CHANGE: Initial\n")
+
+            with patch("sys.stdout", new_callable=io.StringIO) as mock_out:
+                _print_triage_summary(
+                    target_path=target_file,
+                    ws_root=td,
+                    main_root=td,
+                    role_name="pretense_qa",
+                    part_dir="parts/pkg",
+                    active_unit="pkg_impl",
+                    stdout="LifecycleResolutionError: No singleton registered for RangeEngine",
+                    stderr="",
+                )
+                out = mock_out.getvalue()
+
+        self.assertIn("[COLLABORATOR LIFECYCLE ROUTING NOTE]", out)
+        self.assertIn("MUST NEVER import sibling *_impl modules directly", out)
 
     def test_run_get_work_auditor_auto_submits_passing_targets(self) -> None:
         self.fake_reg.roles.append(
@@ -1354,7 +1475,7 @@ class WorkspaceCheckImplTest(LifecycleTestCase):
         with patch("sys.stdout", new_callable=io.StringIO) as mock_out:
             ret = self.checker.run_get_work(dir_scope="test_pkg")
             out = mock_out.getvalue()
-        self.assertEqual(ret, 1)
+        self.assertEqual(ret, 0)
         self.assertEqual(len(self.fake_submit.submitted), 0)
         self.assertIn("READY FOR EXECUTION", out)
         self.assertIn(target_file, self.fake_pending.pending)

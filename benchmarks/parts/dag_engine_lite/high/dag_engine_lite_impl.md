@@ -21,7 +21,7 @@ A *concrete directed acyclic graph* realizes the directed acyclic graph protocol
 
 - Downstream dependent neighbor sets updated during node registration and edge addition.
 
-Node presence checks and removal operations update the node registry, clear incident connections across both adjacency sets, and purge removed node records from active wave scheduler tracking. Invariant validation detects cycles by executing depth-first traversal with active path recursion tracking, failing with cycle error upon discovering a back-edge.
+Node presence checks and removal operations update the node registry and clear incident connections across both adjacency sets. Invariant validation detects cycles by executing depth-first traversal with active path recursion tracking, failing with cycle error upon discovering a back-edge.
 
 Topological sorting evaluates graph structure using Kahn's algorithm, maintaining in-degree counts from the adjacency index and processing unblocked nodes in priority order, resolving ties between equal-priority nodes by lexicographically ascending node identifier. Critical path analysis resolves longest dependency bounds by applying dynamic programming over topological completion times, backtracking from the maximal completion leaf.
 

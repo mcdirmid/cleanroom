@@ -5,7 +5,7 @@
 Given: an active role workspace with ready tasks in repository scope.
 
 1. The caller executes `run_get_work`.
-   Observed: returns exit code 1 when tasks are ready, prints assigned ready targets, and formats actionable next steps.
+   Observed: returns exit code 0 when tasks are ready, prints assigned ready targets, and formats actionable next steps.
 
 ## Scenario 2 — Running verification checks on specified targets
 

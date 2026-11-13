@@ -515,9 +515,10 @@ class WorkspaceProvisionImplTest(LifecycleTestCase):
             self.assertTrue(os.path.isfile(ws_parts_cfg))
             self.assertEqual(stat.S_IMODE(os.stat(ws_parts_cfg).st_mode) & 0o444, 0o444)
 
-            # Support libraries: promoted to workspace root, runtime files copied, linters/runners excluded
+            # Support libraries: promoted to workspace root, compiled .pyc bytecode provisioned, raw .py and linters/runners excluded
             ws_support = os.path.join(ws_dir, "support", "lib")
-            self.assertTrue(os.path.isfile(os.path.join(ws_support, "lifecycle.py")))
+            self.assertTrue(os.path.isfile(os.path.join(ws_support, "lifecycle.pyc")))
+            self.assertFalse(os.path.exists(os.path.join(ws_support, "lifecycle.py")))
             self.assertFalse(
                 os.path.exists(os.path.join(ws_support, "build_lint_common.py"))
             )
@@ -747,7 +748,7 @@ class WorkspaceProvisionImplTest(LifecycleTestCase):
             with open(ws_writable, "r", encoding="utf-8") as f:
                 writable_content = f.read()
             self.assertIn("CHANGE: implement alpha", writable_content)
-            self.assertIn("CODE_HASH:", writable_content)
+            self.assertNotIn("CODE_HASH:", writable_content)
             self.assertIn("- please check type hints", writable_content)
             self.assertNotIn("LAST_CLEANED:", writable_content)
             self.assertNotIn("LAST_CHANGED:", writable_content)
@@ -761,6 +762,12 @@ class WorkspaceProvisionImplTest(LifecycleTestCase):
             self.assertNotIn("LAST_CLEANED:", readonly_content)
             self.assertNotIn("LAST_CHANGED:", readonly_content)
             self.assertNotIn("SPEC_QA_AUDIT:", readonly_content)
+
+            manifest_path = os.path.join(ws_dir, ".autofab", "pull_manifest.json")
+            self.assertTrue(os.path.isfile(manifest_path))
+            with open(manifest_path, "r", encoding="utf-8") as f:
+                manifest_data = json.load(f)
+            self.assertIn("code_hash", manifest_data.get("parts/alpha/lib/alpha.py", {}))
 
     def test_minimal_hermetic_workspace_provisioning_and_clutter_eradication(
         self,
@@ -860,9 +867,12 @@ class WorkspaceProvisionImplTest(LifecycleTestCase):
                 os.path.exists(os.path.join(ws_dir, "guides", "low_to_lib.md"))
             )
 
-            # 5. Minimal runtime support: lifecycle.py present, internal oracles excluded
+            # 5. Minimal runtime support: lifecycle.pyc present, raw .py and internal oracles excluded
             self.assertTrue(
-                os.path.isfile(os.path.join(ws_dir, "support", "lib", "lifecycle.py"))
+                os.path.isfile(os.path.join(ws_dir, "support", "lib", "lifecycle.pyc"))
+            )
+            self.assertFalse(
+                os.path.exists(os.path.join(ws_dir, "support", "lib", "lifecycle.py"))
             )
             self.assertFalse(
                 os.path.exists(

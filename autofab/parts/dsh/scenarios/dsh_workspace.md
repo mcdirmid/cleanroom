@@ -5,7 +5,7 @@
 Given: a provisioned role workspace directory for role_a as an author role with writable targets, and for role_b as an auditor role with zero writable targets.
 
 1. The configurer customizes role agent documentation for role_a.
-   Observed: `AGENTS.md` is updated to embed boundary constraints, permitted in-workspace shell commands and native harness tools, and workspace undo and rollback instructions (`bin/revert`, `git restore`).
+   Observed: `AGENTS.md` is updated to embed boundary constraints, permitted in-workspace shell commands and native harness tools, and workspace undo and rollback instructions (`bin/revert`).
 
 2. The configurer customizes role agent documentation for role_b.
    Observed: `AGENTS.md` omits rollback guidance and strictly prohibits file edits and git commands.
