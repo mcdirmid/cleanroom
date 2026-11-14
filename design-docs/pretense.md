@@ -101,6 +101,8 @@
     - [TODO 10 [DONE]: Multi-Round Reachability Decision Model for Coverage Arbiters (`pretense_coverage.md`)](#todo-10-done-multi-round-reachability-decision-model-for-coverage-arbiters-pretense_coveragemd)
     - [TODO 11 [TODO]: Enforced Env State Declarations, Mandatory `self.bind`, and `_ext` Termination](#todo-11-todo-enforced-env-state-declarations-mandatory-selfbind-and-_ext-termination)
     - [TODO 12 [DONE]: Combined Fixed + Fuzz Coverage Measurement on `lib/*.py`](#todo-12-done-combined-fixed--fuzz-coverage-measurement-on-libpy)
+    - [TODO 13 [TODO]: Revamping Argument Generation: Procedural Recognizers, Edge-Biased Generators, Custom Domains, and Mechanistic Edge Coverage](#todo-13-todo-revamping-argument-generation-procedural-recognizers-edge-biased-generators-custom-domains-and-mechanistic-edge-coverage)
+    - [TODO 14 [TODO]: Purge Legacy Exception-Based Transition Selection and Port Benchmark Results (`benchmarks/results/`)](#todo-14-todo-purge-legacy-exception-based-transition-selection-and-port-benchmark-results-benchmarksresults)
 
 ---
 
@@ -1639,6 +1641,309 @@ Upon DAG convergence, the benchmark verification gate (`_VerificationGate`) vali
      - **Contracted operational errors (`*Error`)** via `checked.violating(...)` (since fuzzing never explores contract violations by construction).
      - **Deep/borderline nominal branches** whose coverage is missed or fluctuates due to fuzzing randomness.
   3. **Design Doc Alignment**: Keep `design-docs/coverage.md` and `autofab_py/guides/pretense.md` aligned with the combined fixed + fuzz coverage policy.
+
+### TODO 13 [TODO]: Revamping Argument Generation: Procedural Recognizers, Edge-Biased Generators, Custom Domains, and Mechanistic Edge Coverage
+
+- **Status**: **TODO**
+- **Context & Empirical Motivation (The `semver_solver_multi` / `qwen-moe` Failure Analysis)**:
+  - In empirical flight `flight_20261114_013858_qwen-moe_semver_solver_multi_pretense`, the benchmark failed by exhausting the 100-wave limit (40.2M tokens across 11,517s).
+  - The root failure was an adversarial "whack-a-mole" loop: `parse_range` used `Domain.text(min_size=1)`, which generated arbitrary Hypothesis strings (`"item_0"`, `"item_1"`). Because the SUT expected valid SemVer range syntax, it correctly raised `InvalidRangeError`.
+  - When blamed for missing precondition gates, `qwen-moe` repeatedly attempted to blacklist individual witnesses via `Domain.not_in({",", "item_0", "item_1", ...})`. Near wave 100, the model escalated to a 180-character regex packed with negative lookaheads (`(?!...)`), which broke generative fuzzing and stalled the pipeline.
+  - Crucially, even frontier models (Gemini Argon, Gemini Carbon) avoided declaring the actual grammar by evading it: they fell back to a hardcoded tuple of 10 static strings (`SAMPLE_RANGE_STRINGS`) and used `fuzz_domain=Domain.sampled_from(...)`, turning generative property testing into a static smoke test.
+  - **The Core Dilemma**: Forcing models to declare complex grammars declaratively in a single `Domain(...)` annotation requires writing an "inverse compiler", which is notoriously difficult for LLMs. Conversely, allowing unconstrained sample lists without verification allows models to evade edge-case coverage entirely.
+
+- **Architectural Revamp: Decoupled Recognizers & Edge-Biased Generators**:
+  1. **Shift to Procedural Recognizers**:
+     - Replace pure declarative domain definitions with procedural recognizer methods/functions (e.g. `def is_valid_range(text: str) -> bool:`).
+     - LLMs excel at procedural validation (step-by-step token checks, string splits, operator inspections, and condition guards).
+  2. **Generators with Incomplete Sets & Edge-Case Bias (Best-Effort Proposers)**:
+     - Lighten the generative burden: The generator does **not** need to be an exhaustive compiler of the entire language.
+     - **Best-Effort Rejection Filtering**: Both `generate_valid` and `generate_invalid` are strictly best-effort candidate proposers. The runtime immediately passes every generated candidate through `validate(val)`:
+       - If generating for nominal paths and `validate(val)` returns `False`, the candidate is discarded.
+       - If generating for violation paths and `validate(val)` returns `True`, the candidate is discarded.
+       - The SUT is mathematically guaranteed to only receive certified inputs; the LLM is relieved from having to write 100% sound generators.
+     - The generator only needs to produce a representative subset of candidate values, explicitly biased toward **boundary and edge-case values** (minimal/maximal lengths, boundary numbers, extreme characters, fencepost versions, whitespace variations).
+  3. **Custom Domain Abstraction (`CustomDomain[T]`) & Cross-Interface Reusability**:
+     - Enable models to define their own custom domains by subclassing or instantiating a reusable domain abstraction that packages:
+       - An enriched procedural recognizer (`validate(val: T) -> ValidationResult[T]`).
+       - A best-effort valid generator (`generate_valid(draw) -> T`), biased for typical candidate instances.
+       - A best-effort invalid generator (`generate_invalid(draw) -> T`), biased for candidate violations.
+     - **Cross-Interface Reusability**: An interface state machine can import and reuse custom domains declared in the state machines of imported dependency interfaces (e.g., `semver_range_pretense.py` imports and reuses `SemVerDomain` from `semver_core_pretense.py`), eliminating redundant validator logic and standardizing fuzz generation across the monorepo.
+  4. **Dual Generators: Contract Violations & Invalid Values with Edge Bias**:
+     - When `require_arg(x, Domain, error=ContractError)` specifies an error for contract violations, the custom domain **must also provide an invalid value generator**.
+     - The invalid generator must exhibit a deliberate **near-miss edge bias**: producing inputs that are *just* false (off-by-one comparisons, boundary near-misses, missing a single required delimiter, or recently invalidated) rather than completely off-domain garbage (like passing `"item_0"` to a SemVer parser).
+     - Because `generate_invalid` is best-effort and filtered by `not validate(val).is_valid`, if the generator accidentally emits a valid input, it is safely dropped before invocation.
+  5. **Fuzzing Contract Violations, Boundary Agreement, and Defeating Coincident Error**:
+     - Expand stateful fuzzing to actively exercise contract violation paths using the domain's invalid value generator (bypassing the historical restriction where fuzzing was strictly valid-by-construction and errors were only tested in fixed scenarios).
+     - **The Necessity of Contract Violation Fuzzing for Acceptance Agreement**:
+       - Testing nominal paths alone creates a dangerous asymmetry: it only verifies whether `lib` accepts what `validate` accepts.
+       - **The Danger of Narrow Recognizers & Coincident Error**:
+         - If `pretense`'s `validate` is **narrower** than what `lib` accepts (e.g. `validate` rejects legitimate boundary representations or edge syntaxes), nominal-only fuzzing will *never detect this divergence*.
+         - Both `pretense` and `lib` will pass tests coincidentally because the test suite operates exclusively in the safe interior intersection ($Domain_{validate} \cap Domain_{lib}$), masking that `validate` falsely restricted the contracted language.
+       - **Restoring Statistical Independence via Boundary Agreement**:
+         - Cleanroom verification relies fundamentally on the **statistical independence** of the specification author (`pretense`) and the library author (`lib`). Coincident error occurs when both appear to agree on green tests simply because tests never probed the boundary surfaces where interpretations diverge.
+         - By actively fuzzing **contract violations**—specifically focusing on **edge-case invalid inputs** adjacent to the boundary where `validate(val).is_valid` flips from `True` to `False`—the harness forces `validate` and `lib` to establish mutual empirical agreement on what is accepted vs. rejected:
+           - If `validate` claims an edge input is invalid, but `lib` accepts it, a boundary disagreement is immediately surfaced: either `validate` was excessively narrow, or `lib` omitted a contract check.
+           - Testing both sides of the boundary forces both models to converge on the identical decision boundary, defeating coincident error and preserving the statistical independence of the cleanroom process.
+     - Fixed scenario tests in `Test<Impl>Real` must choose from the domain's generated values (valid values for nominal calls, invalid values when `.violating(Error)` is invoked), directly linking fixed scenario verification with the underlying fuzz test distribution.
+  6. **Mechanistic Measurement of Edge-Case Coverage (Value Domain)**:
+     - Rather than relying on subjective human judgment or blind fuzzing, the harness mechanistically measures edge-case coverage in the interface state machine:
+     - **Boundary Hit Auditing via `ValidationResult`**: The harness audits whether the edge values produced by `validate(val)` (`near_valid` and `near_invalid`) are actively exercised by the test suite. If an edge value emitted by `validate` is never passed to the SUT during a run, the verification gate flags a missing boundary edge test.
+     - Track string and collection cardinality fenceposts: `len == 0` (empty), `len == 1` (minimal non-empty), and declared maximum bounds.
+     - **Non-Feasibility of Temporal Edge Measurement**:
+       - Note: Measuring "temporal" edge cases mechanistically (e.g. tracking arbitrary "just added" or "just removed" state sequences) is intractable due to state-space explosion, the absence of a universal scalar metric like $\delta = 0$, and the semantic difficulty of tracking entity identity across mutating collaborators. Temporal sequences remain the responsibility of stateful fuzzing random walks, while mechanistic auditing is strictly scoped to the value domain.
+  7. **Temporal Locality & Stale Value Ring Buffer (Runtime-Automated Temporal Testing)**:
+     - While formal mechanistic measurement of temporal edges is intractable, the runtime can naturally stimulate temporal edge testing with zero burden on the model:
+     - **Recent-Argument Ring Buffer**: The `StateMachine` runtime maintains a fixed-capacity FIFO/LRU queue recording actual arguments passed to transition methods.
+     - **Natural Emergence of Temporal Edges**:
+       - *Read-After-Write / Immediate Re-Access*: An entity just passed to `register(...)` or `add(...)` is immediately available in the temporal buffer, allowing subsequent queries (`get(...)`, `has(...)`) to select it with high probability without requiring the model to write correlated multi-argument generators.
+       - *Stale / Recently-Made-False Access*: When an entity is deleted (e.g. `remove(x)`), it remains in the temporal buffer. When testing contract violation paths (`require_arg(x, Domain.in_set(self.state.keys), error=NotFoundError)`), the fuzzer filters the temporal buffer for values where `validate(val).is_valid is False` (i.e. `val not in state.keys`), effortlessly selecting the recently-deleted entity `x` to verify immediate post-removal failure without manual scenario scripts.
+  8. **Dynamic Context Interception & Transitive Code Object Isolation (`@domain`)**:
+     - **The Function-Level `@domain` Decorator (Option A)**:
+       - Rather than declaring heavy class hierarchies, any standalone function or bound method can be decorated as a domain:
+         ```python
+         @domain(
+             valid=lambda draw: Version(draw(st.integers(0, 10)), draw(st.integers(0, 10)), draw(st.integers(0, 10))),
+             invalid=lambda draw: Version(-1, 0, 0),
+         )
+         def is_valid_version(val: Version) -> bool:
+             if val.major < 0 or val.minor < 0 or val.patch < 0:
+                 return False
+             return True
+         ```
+       - The validation logic is 100% pure canonical Python returning `bool`.
+       - The seed candidate generators are attached as lightweight lambda metadata.
+       - **State-Dependent Domains**: Bound methods on the `StateMachine` (e.g. `self.is_valid_id`) have direct, native access to `self.state` via `self` with zero extra wiring.
+     - **Mandatory Domain Enforcement in `require_arg`**:
+       - `pretense_lint.py` inspects all `require_arg(param, fn, ...)` calls:
+         - The target `fn` must be decorated with `@domain` (or registered in the runtime domain registry).
+         - Passing a bare, un-annotated function is rejected statically:
+           > `[PRE_LINT_REQUIRE_ARG_NO_DOMAIN]: Target 'is_valid_foo' in require_arg must be decorated with @domain(valid=..., invalid=...).`
+     - **Dynamic Context Interception & Transitive Code Object Isolation**:
+       - When the runtime executes `validate(val)`, it operates in a two-phase lifecycle:
+         1. **Phase 1: Zero-Overhead Candidate Gating (Primary Code Object)**:
+            - When filtering/searching candidate values (`generate_valid`, `generate_invalid`, or rejection filtering), `is_valid_version(val)` calls the original `PyCodeObject` directly on raw objects.
+            - Runs at native CPython speed with zero allocation overhead, returning a pure `bool`.
+            - CPython's monomorphic inline caches (`LOAD_ATTR_INSTANCE_VALUE`, `COMPARE_OP_INT`) specialize to native types and stay permanently monomorphic.
+         2. **Phase 2: Just-in-Time Edge Harvesting via Cloned Code Object (`_harvest`)**:
+            - Only after a candidate is **selected and committed** to invoke the transition method, the runtime activates a dynamic harvesting context (`HarvestContext.active()`) and executes a dedicated clone (`types.FunctionType(fn.__code__.replace(), ...)`).
+            - The clone executes on its own distinct `PyCodeObject` with `InterceptProxy` enabled, recording evaluated relations and spraying recomposed edges into `spatial_buffer`.
+         3. **Call-Site Taxonomy & De-optimization Safety**:
+            - When running in harvest mode with proxy arguments, the runtime enforces three distinct call-site patterns to guarantee that raw CPython bytecode caches are never de-optimized:
+            - **Case 1: `CanBeProxied.method(...)` (Safe - Left-Hand Lookup Interception)**:
+              - When an un-decorated relation is invoked as a method on a proxied object (`proxy_val.check_boundary(...)`), the proxied object sits **on the left of the dot (`.`)**.
+              - `InterceptProxy.__getattr__` intercepts the method lookup dynamically.
+              - It dynamically clones the method's code object (`method.__func__.__code__.replace()`), binds the cloned code object to the proxy, and caches it in a harvest registry.
+              - Any proxied arguments passed in `...` stay completely within the cloned execution graph.
+              - Raw calls on the real object (`real_val.check_boundary(...)`) execute the raw code object with 100% monomorphic speed.
+            - **Case 2: `CanNeverBeProxied.method(... proxied ...)` (Dangerous - De-optimization Hazard)**:
+              - If an un-proxied object or C-extension object sits on the left (e.g. `raw_service.process(proxied)`), looking up `.method` returns the **raw code object** of that method.
+              - Passing `proxied` as an argument into that raw method causes its monomorphic inline cache to de-optimize.
+              - `pretense_lint.py` strictly prohibits this pattern via `[PRE_LINT_UNPROXIED_RECEIVER]`: in `@domain` recognizers, passing a validated parameter or its attributes into a method of an un-proxied receiver is rejected.
+            - **Case 3: `foo(... proxied ...)` (Safe - Scoped Globals Substitution)**:
+              - When calling a standalone function `foo(...)`, Python resolves `foo` via `LOAD_GLOBAL`.
+              - When the caller's harvest clone is compiled (`types.FunctionType(code, globals, ...)`), the runtime supplies a **scoped `harvest_globals` dictionary** (or `ChainMap` overlay):
+                ```python
+                harvest_globals = dict(caller.__globals__)
+                harvest_globals['foo'] = get_or_create_harvest_clone(foo)
+                ```
+              - Inside the caller's harvest clone, `foo` is resolved directly as `foo_harvest`!
+              - Standalone helper functions are safely executed on their own cloned code objects without de-optimizing the raw `foo` function.
+         4. **Linter Purity & Call-Graph Enforcement (`[PRE_LINT_DOMAIN_CALL_PURITY]`)**:
+            - `pretense_lint.py` verifies that all call targets inside `@domain` bodies conform to this taxonomy:
+              a) Standard Python builtins (`len`, `int`, `str`, `split`),
+              b) Explicitly decorated `@domain` functions or standalone helpers (resolved via `harvest_globals`), or
+              c) Method calls on validated arguments (`val.method(...)`, where `val` is on the left and intercepted by `InterceptProxy`).
+            - Calls to methods on foreign un-proxied objects (`receiver.method(val)`) are rejected, preserving pristine CPython bytecode caches across the entire codebase.
+         5. **Dynamic Harvest Re-Validation & Early Feedback in `bin/check_files`**:
+            - Whenever a harvest clone is synthesized dynamically, the runtime re-validates the call boundaries (verifying that dynamically resolved callees can be safely shadowed or intercepted).
+            - If a harvest function attempts an un-cloneable operation or encounters an illegal un-proxied receiver, the harvest pass fails with an explicit specification error.
+            - **Early Feedback Guarantee**:
+              - In Autofab, `bin/check_files` on interface state machines executes `Fake<Target>FuzzTest` via `uv run pretense`.
+              - Because stateful fuzzing against synthesized fakes runs directly during `bin/check_files`, all transitions, domains, and Phase 2 harvest clones are actively exercised **right in the `pretense` worker's workspace**.
+              - Any harvest failure or proxy de-optimization hazard surfaces immediately during local checks, providing deterministic diagnostics on the very first round before code is submitted downstream.
+         6. **Explicit Custom Harvest Functions for Low-Level Leaf Operators (`int <`, `str ==`, etc.)**:
+            - Primitive relational comparisons like `x < 100` or `x == "ready"` are leaf operations in the call graph.
+            - In CPython, primitive comparison operators (`int <`, `int <=`, `int >`, `int >=`, `float <`, `str ==`) are implemented directly as C-level type slots (`tp_richcompare`) rather than Python bytecodes, and cannot be disassembled or cloned as Python code objects.
+            - To handle leaf relations without de-optimizing C-level slots or leaking proxies into native C functions, the runtime defines **explicit custom harvest functions** for primitive leaf operators (e.g. `harvest_int_lt(a, b)`):
+              1. **Unproxy operands**: `raw_a = unproxy(a)`, `raw_b = unproxy(b)`.
+              2. **Populate spatial edges**: The comparison threshold `raw_b` defines adjacent boundary edges `[raw_b - 1, raw_b, raw_b + 1]`. The harvest function records these edges into `spatial_buffer[int]`.
+              3. **Execute native comparison**: Calls the real, native comparison operator on the raw unproxied values (`raw_a < raw_b`).
+              4. **Return boolean result**: Returns native `bool`.
+            - By explicitly undoing the proxy at the leaf and invoking the real native operator, the harvest pass guarantees 100% native execution speed, complete isolation of CPython's internal slots, and deterministic population of boundary edges.
+     - **Eliminating the "Hallucinated Empty Edges" Loop**:
+       - Without interception, asking an LLM to return `ValidationResult(edges=...)` causes it to write raw comparisons, lose threshold information, and hallucinate `edges=[]`.
+       - With dynamic interception, the model writes standard Python, and the framework guarantees deterministic, non-empty spatial edges.
+  9. **Partitioned Edge Buffers, Lifecycles, and Data Structures (Anti-Swamping Architecture)**:
+     - A single global buffer is vulnerable to **starvation and swamping**:
+       - *Cross-Type Swamping*: A burst of string-based transition calls quickly evicts all integer arguments, leaving integer parameters starved of recent values.
+       - *Spatial vs. Temporal Swamping*: A single transition emitting 15 structural boundary edges would instantly overwrite the entire temporal history, wiping out recently added entities. Conversely, long chains of simple queries would flush out all spatial fenceposts.
+     - **Two-Dimensional Buffer Partitioning**:
+       - The runtime partitions edge storage into isolated ring buffers across two orthogonal axes:
+         1. **By Type (`T`)**: `dict[type[T], ...]` ensures candidate pools for `Version`, `str`, `int`, and entity IDs never displace each other.
+         2. **By Category (Temporal vs. Spatial)**:
+            - **`temporal_buffer[T]` (Temporal / Lifecycle Edges)**: Stores actual arguments recently passed to methods (read-after-write, duplicate actions, and stale post-deletion access).
+            - **`spatial_buffer[T]` (Spatial / Value-Domain Edges)**: Stores adjacent boundary neighbors emitted by `validate(val).edges` (fenceposts, near-misses, and recomposed composite edges).
+     - **Buffer Lifecycles, Test Isolation, and Hypothesis Reproducibility**:
+       - **Strict Per-Test Scoping (Zero Cross-Test State Leakage)**:
+         - **Both** `temporal_buffer[T]` and `spatial_buffer[T]` must be strictly scoped **per fuzz test execution** (per `RuleBasedStateMachine` instance) and reset at the beginning of every run.
+         - *Why Spatial Buffers Must NOT Accumulate Across Tests*:
+           1. **Test Reproducibility**: Replaying a failed test via `--hypothesis-seed=<seed>` or `@seed(...)` must deterministically reproduce the exact sequence of choices and buffer states. If spatial buffers accumulated across tests, running `Test B` alone would behave differently from running `Test A` followed by `Test B`.
+           2. **Hypothesis Shrinking Integrity**: When Hypothesis finds a failing witness, it re-executes the state machine dozens of times with reduced choices to shrink the failure to a minimal reproducing trace. Any state accumulating across test iterations would poison shrinking, leading to non-deterministic trace reduction or flakiness.
+           3. **Deterministic Initial Seeding**: A `CustomDomain[T]` can optionally define an immutable static sequence of initial boundary seeds (e.g. `initial_edges = (0, 1, -1)` or `("",)`). At the start of each test run, `spatial_buffer[T]` is deterministically initialized with these static seeds, and dynamically accumulates newly emitted `validate(val).edges` strictly within that test's execution.
+     - **Asymmetric Buffer Sizing & Step Length Dynamics**:
+       - Resetting buffers between tests introduces a dynamic trade-off:
+         - To benefit from dynamically discovered spatial edges in the same run, the fuzz test needs sufficient runway (e.g. `stateful_step_count = 30..50` steps per test run).
+         - In a longer run, an oversized temporal buffer would severely degrade temporal locality: holding 30 historical items would dilute the probability of selecting the item that was *just* created or *just* deleted in the last 1–2 steps.
+       - **Asymmetric Sizing Strategy & Transition-Step Lookback**:
+         - **`temporal_buffer[T]` is Governed by Transition Lookback Horizon ($\Delta_{\text{transition}} \le K$)**:
+           - Instead of relying solely on a fixed item count (which is sensitive to argument arity—e.g. a transition taking 4 string arguments could instantly flush a `maxlen=3` buffer), temporal entries are stamped with their insertion transition step index: `(val, step_added)`.
+           - Entries are bounded by a **transition lookback horizon** ($K = 2..3$ transitions back): any entry where `current_transition_step - step_added > K` is expired.
+           - This cleanly decouples temporal locality from argument arity: whether transitions take 1 argument or 5, the temporal buffer strictly contains values touched within the immediate preceding 2–3 transitions (read-after-write, duplicate actions, immediate post-deletion checks).
+         - **`spatial_buffer[T]` is Moderate (`maxlen = 20..30`)**: Holds the cumulative, deduplicated pool of structural fenceposts discovered across the run plus initial domain seeds.
+         - **Static Seeding Eliminates Cold-Start Latency**: Pre-warming `spatial_buffer[T]` with domain `initial_edges` at step 0 ensures fencepost exploration begins immediately without having to wait several steps for dynamic warm-up.
+     - **Data Structure: Lists Backed by Sets**:
+       - Both buffers are structured as **FIFO/LRU lists backed by sets** (e.g. an ordered set structure):
+         - **Deduplication**: Backed by a set to guarantee that duplicate values (e.g., repeatedly passing `0` or `1`) can never swamp the buffer.
+         - **Fast $O(1)$ Membership & Eviction**: Constant-time deduplication and bounded FIFO pruning.
+         - **Efficient $O(1)$ Random Choice**: Direct indexing for Hypothesis `draw(sampled_from(...))` without array copying.
+     - **Stratified Mixture Sampling**:
+       - When generating an argument of type `T`, the runtime draws from a balanced, non-starving distribution:
+         - **40% Fresh Generation**: Sampled from `Domain.generate_valid()` / `generate_invalid()`.
+         - **30% Temporal Buffer (`temporal_buffer[T]`)**: Filtered by `validate(x).is_valid` for nominal vs. violation paths.
+         - **30% Spatial Boundary Buffer (`spatial_buffer[T]`)**: Filtered by `validate(x).is_valid` for nominal vs. violation paths.
+       - This guarantees that temporal re-access, spatial fencepost exploration, and broad random generation run in continuous equilibrium without swamping.
+  10. **Native Python Specification in `require_arg` (Elimination of User-Facing `Domain`)**:
+      - **Complete Elimination of `Domain` from User-Facing Code**:
+        - Test authors and LLMs **never import or write `Domain`**. Pretense eliminates all `Domain.*` factory methods (`Domain.integers`, `Domain.text`, `Domain.in_set`, `Domain.regex`, `CustomDomain`) from the user-facing API surface.
+        - Instead, argument constraints in `require_arg` are expressed using standard, idiomatic Python constructs across four flexible forms:
+          1. **Direct Collection or Set**:
+             ```python
+             require_arg(user_id, self.state.users, error=UserNotFoundError)
+             require_arg(status, ("ACTIVE", "PENDING", "INACTIVE"), error=InvalidStatusError)
+             ```
+             - The author passes the collection directly (e.g. `self.state.users` or a tuple of enum literals).
+             - The runtime recognizes collections, sampling active elements from `temporal_buffer` for nominal calls, and recently removed elements from `temporal_buffer` for violation calls.
+          2. **Unary Lambda from Arg Type to Boolean**:
+             ```python
+             require_arg(amount, lambda x: x > 0, error=InvalidAmountError)
+             require_arg(port, lambda x: 1 <= x <= 65535, error=InvalidPortError)
+             require_arg(user_id, lambda x: x in self.state.users, error=UserNotFoundError)
+             ```
+             - The author writes a standard Python lambda.
+             - **Chained Comparison AST Normalization**: Chained comparisons like `0 < x < 100` or `1 <= port <= 65535` are automatically normalized by AST processing into `x > 0 and x < 100` or `port >= 1 and port <= 65535`. This guarantees the target argument `x` is consistently positioned on the left, multi-comparator AST nodes are decomposed into conjunctions of normalized relational predicates, and candidate generation can evaluate single-variable bounds unambiguously.
+             - The runtime inspects the bytecode/AST: comparison operators (`COMPARE_OP`) harvest fenceposts for `spatial_buffer`, while membership tests (`CONTAINS_OP`) tap `temporal_buffer`.
+          3. **One-Argument Function or Method**:
+             ```python
+             require_arg(version_str, is_valid_version, error=InvalidVersionError)
+             require_arg(task_id, self.is_pending_task, error=TaskNotFoundError)
+             ```
+             - A standalone function decorated with `@domain(valid=..., invalid=...)` or a bound method on `self` that accesses `self.state`.
+             - Candidate values are supplied by the lambda generators; boundaries are harvested via the cloned code object.
+          4. **Standard Native Python Type**:
+             ```python
+             require_arg(payload, str)
+             require_arg(count, int)
+             ```
+             - A raw Python type, mapped directly to default primitive strategies.
+      - **How Built-in Relations Operate in `validate()` (Zero-DSL Recognition)**:
+        - Inside recognizers (`is_valid_version`), authors write standard Python relations: `if val.major < 0: return False`.
+        - The dynamic context proxy interceptor catches the comparison on the cloned code object, automatically mapping it to relation fenceposts without user intervention.
+      - **The Metric vs. Membership Duality**:
+        - *Metric / Ordered Relations* ($<, \le, >, \ge$): Possess natural spatial near edges ($\pm 1$), captured directly by `spatial_buffer` via comparison interception.
+        - *Unordered Membership Relations* (`x in set`, `x not in set`): Do not possess continuous or metric near edges in value space. In state machines, set membership expressions are **inherently lifecycle/temporal predicates** (an item is in the set because it was *just added*, or absent because it was *just removed*).
+        - Consequently, membership relations are **naturally and fully covered by the temporal edge buffer (`temporal_buffer`)**. Ordered relations drive spatial boundary edges, while membership relations drive temporal lifecycle edges—achieving complete, orthogonal edge coverage across both domains.
+      - **AST Lifting and Zero-Exception Transition Selection**:
+        - Pretense does **NOT** select transitions by speculatively calling transition methods and catching runtime exceptions or errors.
+        - Instead, during state machine class compilation, AST processing statically parses transition method bodies, identifies all `requires(...)` assertions and `require_arg(...)` declarations, and **lifts them out** into independent, compiled evaluation expressions (`<attr_name_require_...>`, `<attr_name_dom_...>`).
+        - During transition selection:
+          1. The state machine evaluator executes these lifted requirement expressions against the current state snapshot (`this.state`).
+          2. If a requirement evaluates to `False`, or if argument candidate generation produces no valid values, the transition is simply **not eligible** for execution in the current state.
+          3. The state machine filters out ineligible transitions cleanly without raising runtime exceptions into the test harness or failing the test.
+      - **Impossible Predictors & Early Feedback via Fuzz Test Transition Coverage**:
+        - If an author writes an impossible predictor (e.g. `lambda x: x > 100 and x < 50` or an unsatisfiable state guard), the lifted requirement is never satisfied in any reachable state.
+        - Consequently, that transition is **never selected** and never executes throughout the fuzz test run.
+        - Because `Fake<Target>FuzzTest` (`compile_hypothesis_test_case`) is executed directly as part of `bin/check_files` inside the `pretense` subagent, Pretense's state machine coverage checker audits transition coverage across the fake.
+        - An impossible predictor immediately surfaces as an **uncovered transition defect** during `bin/check_files`:
+          > `[PRE_LINT_TRANSITION_NOT_COVERED]: Transition 'process_data' was never exercised during interface state machine fuzz testing. Its antecedent requirements or argument predicates may be impossible to satisfy.`
+        - This provides deterministic, immediate feedback to the `pretense` subagent right in its own workspace before code is submitted or sent downstream to QA.
+  11. **Component Deconstruction, Edge Recomposition, and Targeted Perturbation for `==` / `!=`**:
+      - **Inherent Edges in Ordering vs. Targeted Perturbation**:
+        - Basic ordering relations ($<, \le, >, \ge$) have obvious, deterministic edges ($threshold$ and $threshold \pm 1$ for integers, or discrete step increments). No specialized perturbation or distance functions are needed to discover these boundary values.
+        - The *only* relational operators that genuinely require a custom perturbation function are equality (`==`) and inequality (`!=`) when comparing structured or non-scalar types, where defining a "near-match" requires domain-specific mutations (e.g. flipping a single flag, mutating a delimiter, or altering one attribute).
+      - **Automatic Component Deconstruction & Edge Recomposition**:
+        - When validating a composite or structured type $T$ (such as `Version(major, minor, patch)`, `VersionRange(op, version)`, or a complex payload), the domain's procedural `validate(val: T) -> bool` accesses constituent fields and compares them using built-in Python relations.
+        - Through dynamic context interception (`InterceptProxy`), every attribute access and relation evaluated on `val` (`val.major < 0`, `val.minor < 0`) is intercepted automatically.
+        - **Automated Recomposition**: The runtime collector puts the component edges back together into the parent type without requiring the LLM to write manual loops:
+          ```python
+          # What the LLM authors (pure canonical Python):
+          class VersionDomain(CustomDomain[Version]):
+              def validate(self, val: Version) -> bool:
+                  if val.major < 0 or val.minor < 0 or val.patch < 0:
+                      return False
+                  return True
+
+          # What the dynamic context collector does automatically at runtime:
+          # 1. Intercepts val.major < 0 -> field 'major', threshold 0 -> fenceposts [-1, 0, 1]
+          # 2. Intercepts val.minor < 0 -> field 'minor', threshold 0 -> fenceposts [-1, 0, 1]
+          # 3. Intercepts val.patch < 0 -> field 'patch', threshold 0 -> fenceposts [-1, 0, 1]
+          # 4. Automatically recomposes composite Version instances:
+          #    replace(val, major=-1), replace(val, major=0), replace(val, major=1)...
+          # 5. Returns ValidationResult(is_valid=True, edges=recomposed_edges)
+          ```
+        - **Eliminating Manual Recomposition Overhead**:
+          - The author never needs to write complex, whole-object perturbation generators, manual edge loops, or multi-dimensional distance metrics.
+          - The LLM writes canonical Python boolean checks, and the runtime handles interception, boundary mapping, and composite recomposition 100% deterministically.
+  12. **Domain API Pruning & Canonical Surface**:
+      - To eliminate known LLM failure traps and consolidate redundant abstractions, the Domain API is streamlined to a lean canonical core:
+      - **Deprecated & Removed Failure Traps**:
+        - `Domain.not_in(items, prefix="item_")`: **Removed**. The primary cause of infinite witness-blacklisting loops. Replaced by `validate(x)` checking non-membership against `temporal_buffer` and candidate ID domains.
+        - `Domain.regex(pattern)`: **Removed**. Cannot generate contract violations or adjacent boundary edges; lures models into writing complex, lookahead-heavy regexes that crash Hypothesis. Replaced by `CustomDomain[str]` procedural recognizers (which may internally use `re.fullmatch` if appropriate).
+        - `Domain.perturb(anchor, mutations, validator)`: **Removed**. Obsoleted by component deconstruction and `ValidationResult.edges`.
+        - `Domain.any()`: **Removed**. Type-unsafe escape hatch that generates arbitrary uncontracted Python types.
+      - **Deprecated & Removed Redundant Wrappers**:
+        - `Domain.object(...)`: **Removed**. Awkward declarative reflection wrapper; replaced by direct constructor calls in `CustomDomain[T]`.
+        - `Domain.newtype(...)`, `Domain.required(...)`, `Domain.of(...)`: **Removed**. Unnecessary AST-lifting relics.
+        - `Domain.set(...)`: **Removed** in favor of `Domain.in_set(...)`.
+      - **Lean Canonical Surface (Zero-`Domain` Architecture)**:
+        - All user-facing `Domain.*` synthetic classes and DSL builders are completely pruned.
+        - The canonical specification surface consists exclusively of native Python constructs:
+          - *Direct Collections / Sets*: `self.state.users`, `("ACTIVE", "PENDING", "INACTIVE")`.
+          - *Unary Lambdas*: `lambda x: x > 0`, `lambda x: x in self.state.users`. Chained forms (`0 < x < 100`) are normalized via AST rewriting (`x > 0 and x < 100`).
+          - *Native Types*: `int`, `str`, `float`, `bool`.
+          - *Decorated Recognizers*: Standalone functions or methods decorated with `@domain(valid=..., invalid=...)`.
+
+### TODO 14 [TODO]: Purge Legacy Exception-Based Transition Selection and Port Benchmark Results (`benchmarks/results/`)
+
+- **Status**: **TODO**
+- **Context & Motivation (The Legacy Fallback Trap)**:
+  - In earlier iterations of Pretense, internal argument generation in `pretense/parts/pretense/lib/pretense.py` (`args_fn`) introduced exception-based control flow (`UnsatisfiedAntecedentError`), raising exceptions when a strategy could not generate valid values and catching them in `pretense_impl.py` to abort the transition.
+  - Furthermore, legacy declarative builders (`Domain.integers`, `Domain.sampled_from`, `Domain.in_set`, `Domain.not_in`, `Domain.of`) lingered in the runtime as compatibility layers.
+  - **The Model Confusion Hazard**:
+    - Retaining backward-compatibility shims, legacy `Domain.*` classes, and exception-raising transition selection opens a huge ambiguity hole for LLMs and autonomous subagents.
+    - When language models inspect stubs or discover fallback execution paths, they conflate the paradigms: attempting to raise internal exceptions to reject transitions, writing redundant `Domain.*` wrappers instead of native Python expressions, and getting caught in witness-blacklisting loops.
+    - Cleanroom verification requires an absolute, unambiguous contract: transition selection is strictly deterministic, non-exceptional AST-lifted predicate evaluation.
+- **Architectural Policy: Zero Legacy Shims in Production Engine**:
+  - The active Pretense codebase (`pretense/parts/pretense/lib/pretense.py`, `pretense_impl.py`, `low/pretense.pyi`, `pretense/__init__.py`) will **completely purge** legacy exception-raising transition selection and legacy `Domain.*` compatibility shims:
+    1. **Delete `UnsatisfiedAntecedentError`**: Remove `UnsatisfiedAntecedentError` entirely from `pretense.py`, `pretense_impl.py`, `low/pretense.pyi`, and `pretense/__init__.py`. Transition selection never throws or catches exceptions.
+    2. **Pure AST-Lifted Evaluation**: If a lifted requirement evaluates to `False`, or if argument candidate generation produces no values, the transition selector marks the transition ineligible (`return None`) cleanly without exception handling.
+    3. **Eliminate Legacy `Domain.*` Builders**: Prune all legacy `Domain` factory methods and AST-lifting relics (`Domain.of`, `Domain.required`, `Domain.any`) from the production engine. Only native Python types, collections, lambdas, and `@domain` recognizers are supported.
+- **Purging Ephemeral Runs & Preserving Canonical Benchmark Results**:
+  - Ephemeral execution runs under `benchmarks/runs/` are deleted and must never be ported or relied upon.
+  - The authoritative historical benchmark code that must be preserved and cross-tested is strictly located in `benchmarks/results/`.
+- **Porting Canonical Benchmark Results (`benchmarks/results/`) for Continuous Cross-Testing**:
+  - What must be preserved is the historical benchmark evaluations in `benchmarks/results/` and the capability to cross-test new models against previous model runs.
+  - Instead of supporting legacy syntax in the core engine (which dilutes and confuses models), we will port the historical benchmark test suites in `benchmarks/results/` directly to modern zero-`Domain` Pretense:
+    1. **Argument Requirement Rewriting**:
+       - `require_arg(x, Domain.integers(...))` $\to$ `require_arg(x, int)` (or `require_arg(x, lambda x: ...)` with normalized bounds).
+       - `require_arg(x, Domain.sampled_from(seq))` $\to$ `require_arg(x, tuple(seq))`.
+       - `require_arg(x, Domain.in_set(coll))` $\to$ `require_arg(x, coll)`.
+       - `require_arg(x, Domain.text(...))` $\to$ `require_arg(x, str)`.
+    2. **Chained Comparison Normalization**:
+       - Normalize chained comparisons in ported benchmark state machines (e.g. `0 < x < 100` $\to$ `x > 0 and x < 100`).
+    3. **Exception Handler Cleanup**:
+       - Strip all imports and references to `UnsatisfiedAntecedentError` from benchmark suites.
+  - This guarantees that historical benchmark baselines continue to execute, verify, and cross-test cleanly against the modern zero-`Domain` engine without leaving legacy tech debt or confusing models in the active codebase.
 
 ## 16. Post-Implementation Benchmark Hardening [DONE]
 
