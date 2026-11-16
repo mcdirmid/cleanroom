@@ -19,7 +19,7 @@ from pretense.compiler import compile_hypothesis_test_case
 from support.lib.lifecycle import LifecycleRegistry, LifecycleTestCase, enter_phase, get_singleton, system
 
 # ==============================================================================
-# PART A: INTERFACE & FAKE MODULE (pretense_intf/<name>_pretense.py)
+# PART A: INTERFACE & FAKE MODULE (pretense/<name>_pretense.py)
 # ==============================================================================
 
 # 1. Stateless Interface State Machine (<Iface>StateMachine)
@@ -118,7 +118,7 @@ from support.lib.lifecycle import LifecycleRegistry, LifecycleTestCase, enter_ph
 
 
 # ==============================================================================
-# PART B: IMPLEMENTATION MODULE (pretense_impl/<name>_pretense.py)
+# PART B: IMPLEMENTATION MODULE (pretense/<name>_pretense.py)
 # ==============================================================================
 
 # 1. Stateless Implementation State Machine (<Impl>StateMachine(<Iface>StateMachine))

@@ -111,7 +111,7 @@
     - [TODO 20 [TODO]: Automated Auditing of Independent Pretense Interface State Machines (`pretense_intf2` / `pretense_intf_qa`)](#todo-20-todo-automated-auditing-of-independent-pretense-interface-state-machines-pretense_intf2--pretense_intf_qa)
 17. [Post-Split Hardening & Regression Prevention [DONE]](#17-post-split-hardening--regression-prevention-done)
 18. [Current Architecture & Legacy Purge Summary [DONE]](#18-current-architecture--legacy-purge-summary-done)
-    - [TODO 21 [TODO]: Re-Unify `pretense_intf` and `pretense_impl` into `pretense/` with Multi-Guide Provisioning & Per-Target Guide Selection](#todo-21-todo-re-unify-pretense_intf-and-pretense_impl-into-pretense-with-multi-guide-provisioning--per-target-guide-selection)
+    - [TODO 21 [DONE]: Re-Unify `pretense_intf` and `pretense_impl` into `pretense/` with Multi-Guide Provisioning & Per-Target Guide Selection](#todo-21-done-re-unify-pretense_intf-and-pretense_impl-into-pretense-with-multi-guide-provisioning--per-target-guide-selection)
     - [TODO 22 [TODO]: Two-Stage Requirement-Coverage Gate & Auditor (`pretense_req_coverage`)](#todo-22-todo-two-stage-requirement-coverage-gate--auditor-pretense_req_coverage)
 
 ---
@@ -132,10 +132,10 @@ To prevent conflation across specifications, state machines, implementations, an
 | Term | Exact Definition | Canonical Location |
 | :--- | :--- | :--- |
 | **The Specification** | The authoritative, declarative contract of record. Defines *what* contracts, types, protocols, postconditions, and invariants must hold, without mandating procedural algorithms. | `high/*.md`, `planning/*.md`, `low/*.pyi` |
-| **Pretense Interface State Machine** | A **stateless** executable contract model (`<Iface>StateMachine`) owning `require_arg`, `@domain`, `require`, `require_env`, and postcondition assertions over contracted queries/`@test_only` accessors, with pure-abstract `inner_<method>` stubs. | `parts/*/pretense_intf/*_pretense.py` |
-| **Pretense Fake State Machine** | A co-located **stateful** fake (`<Iface>FakeStateMachine(<Iface>StateMachine)`) owning `self.state`, `@transition.seeding()`, `inner_<method>` implementations, `make_<iface>_fake`, and `Fake<Iface>FuzzTest`. | `parts/*/pretense_intf/*_pretense.py` |
+| **Pretense Interface State Machine** | A **stateless** executable contract model (`<Iface>StateMachine`) owning `require_arg`, `@domain`, `require`, `require_env`, and postcondition assertions over contracted queries/`@test_only` accessors, with pure-abstract `inner_<method>` stubs. | `parts/*/pretense/*_pretense.py` |
+| **Pretense Fake State Machine** | A co-located **stateful** fake (`<Iface>FakeStateMachine(<Iface>StateMachine)`) owning `self.state`, `@transition.seeding()`, `inner_<method>` implementations, `make_<iface>_fake`, and `Fake<Iface>FuzzTest`. | `parts/*/pretense/*_pretense.py` |
 | **Pretense Fake Adapter** | A concrete runtime object conforming to an interface `Protocol`, synthesized from an interface/fake state machine (`synthesize_fake(FakeStateMachine)`) to be injected into consumers. | Synthesized runtime fake |
-| **Pretense Implementation State Machine** | A **stateless** implementation harness (`<Impl>StateMachine(<Iface>StateMachine)`) implementing `inner_<method>` against `sut(TargetClass)` and `@test_only` environmental guards against `sut(Collaborator)` / `sut(TargetClass)`, paired with `Test<Impl>Real` and `<Impl>FuzzTest`. | `parts/*/pretense_impl/*_pretense.py` |
+| **Pretense Implementation State Machine** | A **stateless** implementation harness (`<Impl>StateMachine(<Iface>StateMachine)`) implementing `inner_<method>` against `sut(TargetClass)` and `@test_only` environmental guards against `sut(Collaborator)` / `sut(TargetClass)`, paired with `Test<Impl>Real` and `<Impl>FuzzTest`. | `parts/*/pretense/*_pretense.py` |
 | **Test Driver** | An outward-calling harness instantiated from a state machine to drive concrete implementations (adversarial fuzzer in Hypothesis or static scenario runner in unit tests). | Harness runtime wrapper |
 | **Intra-Component Objects** | Concrete classes defined within the same component's `_impl` module. They are real and tested together in lockstep (zero internal faking). | `parts/<name>/lib/*_impl.py` |
 | **Inter-Component Collaborators**| External singletons imported from other components. Modeled via imported interface state machines and injected as fake adapters. | `parts/<other>/low/*.pyi` |
@@ -1631,9 +1631,9 @@ Upon DAG convergence, the benchmark verification gate (`_VerificationGate`) vali
      - **`require_env(...)` Must Depend on Env State**: Lint rule requiring the condition passed to `require_env(...)` to reference at least one declared env-state field on `self.state` (preventing `require_env` from gating on ordinary domain state or constants).
      - **`.violating(...)` Restricted to `*Error`**: Lint rule (`PRE_LINT_VIOLATING_MUST_BE_ERROR`) banning `*Exception` arguments to `.violating(...)`, ensuring operational `*Exception` paths can only be exercised by genuinely driving the bound environmental/collaborator state rather than bypassing `self.bind` via `.violating(...)`.
   3. **Mandatory `self.bind(...)` in Implementation Pseudo-State Machines**:
-     - In `*_impl_pretense.py`, every env-state field inherited from implemented interfaces must be bound via `self.bind(...)` in `__init__` to env state (or observable state) of imported collaborator components (`self.sut_state(...)` / `self.sut(...)`), rather than left as an ungrounded independent field.
+     - In implementation `pretense/*_pretense.py` modules, every env-state field inherited from implemented interfaces must be bound via `self.bind(...)` in `__init__` to env state (or observable state) of imported collaborator components (`self.sut_state(...)` / `self.sut(...)`), rather than left as an ungrounded independent field.
   4. **Termination at `_ext` Components (Deferred / Punted)**:
-     - Binding chains walk from implemented interfaces to imported collaborator interfaces until reaching **unimplemented external components** (`_ext` components, which have no `*_impl_pretense.py` and directly model external/hardware/OS boundaries).
+     - Binding chains walk from implemented interfaces to imported collaborator interfaces until reaching **unimplemented external components** (`_ext` components, which have no implementation `pretense/*_pretense.py` and directly model external/hardware/OS boundaries).
      - At `_ext` components, env state is legitimately rooted as un-bound external state. End-to-end `_ext` component workflows are not yet exercised in the current benchmarks, so full `_ext` termination enforcement is **punted for now** until end-to-end `_ext` examples exist.
   5. **Guide & Linter Updates**:
      - Update `autofab_py/guides/pretense.md` (preserving the strict 20,480-byte limit) to document the env-state annotation syntax, `require_env` env-state dependency rule, `.violating(*Error)` restriction, and mandatory `self.bind` wiring in `ImplPseudoStateMachine`.
@@ -2079,10 +2079,10 @@ Following empirical Pretense benchmark runs (`ring_buffer`, `multi_interface`, `
 
 ### TODO 20 [TODO]: Automated Auditing of Independent Pretense Interface State Machines (`pretense_intf2` / `pretense_intf_qa`)
 
-- **Status**: **TODO** *(Deferred from TODO 18)*
+- **Status**: **TODO** *(Deferred from TODO 18; updated for unified `pretense/` layout from TODO 21)*
 - **Requirements**:
-  1. Introduce a second independent interface authoring role (`pretense_intf2`, blind to `pretense_intf`) producing `(IfaceSM_B, FakeSM_B)` alongside `pretense_intf`'s `(IfaceSM_A, FakeSM_A)`.
-  2. Introduce an automated interface cross-test auditor (`pretense_intf_qa`) that swaps `IfaceSM_A` $\leftrightarrow$ `IfaceSM_B` as the base class of `FakeSM_A` and `FakeSM_B` (and integrates with `pretense_qa` for `<Impl>StateMachine` base-class swapping), routing blame to whichever interface state machine diverges from `low/*.pyi` (e.g., forged `require_arg`/`@domain` recognizers or missing preconditions).
+  1. Introduce a second independent interface authoring role (`pretense_intf2`, blind to `pretense` interface modules under `pretense/*_pretense.py`) producing `(IfaceSM_B, FakeSM_B)` alongside `pretense`'s `(IfaceSM_A, FakeSM_A)`.
+  2. Introduce an automated interface cross-test auditor (`pretense_intf_qa`) that swaps `IfaceSM_A` $\leftrightarrow$ `IfaceSM_B` as the base class of `FakeSM_A` and `FakeSM_B` (and integrates with `pretense_qa` for `<Impl>StateMachine` base-class swapping), routing blame to whichever `pretense/<iface>_pretense.py` module diverges from `low/*.pyi` (e.g., forged `require_arg`/`@domain` recognizers or missing preconditions).
 
 ---
 
@@ -2134,9 +2134,9 @@ Following `dag_engine_lite`, `semver_solver`, and `task_queue` retrospectives, a
 
 ---
 
-### TODO 21 [TODO]: Re-Unify `pretense_intf` and `pretense_impl` into `pretense/` with Multi-Guide Provisioning & Per-Target Guide Selection
+### TODO 21 [DONE]: Re-Unify `pretense_intf` and `pretense_impl` into `pretense/` with Multi-Guide Provisioning & Per-Target Guide Selection
 
-- **Status**: **TODO**
+- **Status**: **DONE** *(Implemented with strict no-backward-compatibility rejection of `pretense_intf/` and `pretense_impl/`; verified via `ring_buffer` `gemini-flash` `--pretense` benchmark passing in 4 rounds: `lib:1, pretense:1, pretense_qa:1, pretense_coverage:1`)*
 - **Motivation**: Keeping `pretense_intf` and `pretense_impl` as separate roles in `autofab_roles.toml` fragments directory paths (`pretense_intf/` vs. `pretense_impl/`), star-dependency wiring (`star_role_deps`), and downstream blame routing, even though the component classification (`"interface"` vs. `"implementation"` in `low/*.pyi`) already partitions the nodes cleanly. The goal is to re-unify `pretense_intf` and `pretense_impl` back into a single `pretense` role and `pretense/` directory (`{unit_dir}/pretense/{unit_name}_pretense.py`), while keeping `autofab_py/guides/pretense_intf.md` and `autofab_py/guides/pretense_impl.md` separate.
 - **Required Infrastructure & Design Changes**:
   1. **Multi-Guide Role Support & Workspace Provisioning (`roles.pyi`, `provision`, `manifest_loader`, `node_config`, `work_impl`)**:

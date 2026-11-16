@@ -994,7 +994,7 @@ from dag_engine_lite_deepseek_flash_1.parts.dag_engine_lite.lib.dag_engine_lite_
     DAGRunner as DAGRunnerImpl,
     WaveScheduler as WaveSchedulerImpl,
 )
-from dag_engine_lite_deepseek_flash_1.parts.dag_engine_lite.pretense_intf.dag_engine_lite_pretense import (
+from dag_engine_lite_deepseek_flash_1.parts.dag_engine_lite.pretense.dag_engine_lite_pretense import (
     DAGRunnerStateMachine,
     DAGStateMachine,
     WaveSchedulerStateMachine,

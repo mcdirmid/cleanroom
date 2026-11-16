@@ -119,16 +119,21 @@ def _resolve_active_methodology_pkg(
         if os.path.isdir(os.path.join(resolved_root, clean)):
             return clean
 
-    if role_def and role_def.guide_path:
-        for seg in role_def.guide_path.replace("\\", "/").split("/"):
-            if (
-                seg
-                and seg != "guides"
-                and os.path.isdir(os.path.join(resolved_root, seg))
-            ):
-                return seg
-            if seg == "guides":
-                break
+    if role_def:
+        candidate_guides = [role_def.guide_path] if role_def.guide_path else []
+        for ov in getattr(role_def, "component_overrides", {}).values():
+            if ov.guide_path and ov.guide_path not in candidate_guides:
+                candidate_guides.append(ov.guide_path)
+        for gp in candidate_guides:
+            for seg in gp.replace("\\", "/").split("/"):
+                if (
+                    seg
+                    and seg != "guides"
+                    and os.path.isdir(os.path.join(resolved_root, seg))
+                ):
+                    return seg
+                if seg == "guides":
+                    break
 
     if role_def and role_def.template:
         for seg in role_def.template.replace("\\", "/").split("/"):
@@ -763,7 +768,12 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
 
         active_pkg = _resolve_active_methodology_pkg(resolved_root, dir_scope, role_def)
 
-        guides_to_copy = [role_def.guide_path] if role_def.guide_path else []
+        guides_to_copy: List[str] = []
+        if role_def.guide_path:
+            guides_to_copy.append(role_def.guide_path)
+        for ov in getattr(role_def, "component_overrides", {}).values():
+            if ov.guide_path and ov.guide_path not in guides_to_copy:
+                guides_to_copy.append(ov.guide_path)
         if role_def.fused_roles:
             for c_role in role_def.fused_roles:
                 try:
@@ -772,6 +782,9 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
                     )
                     if c_def.guide_path and c_def.guide_path not in guides_to_copy:
                         guides_to_copy.append(c_def.guide_path)
+                    for ov in getattr(c_def, "component_overrides", {}).values():
+                        if ov.guide_path and ov.guide_path not in guides_to_copy:
+                            guides_to_copy.append(ov.guide_path)
                 except Exception:
                     pass
 

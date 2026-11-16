@@ -50,6 +50,13 @@ Given: a TOML configuration file declaring role `auditor_star` with `star_feedba
 2. The configuration file declares `star_feedback_role_deps = ['pretense']` and redundantly declares `star_role_deps = ['pretense']`.
    Observed: resolving the role fails explicitly with ValueError.
 
+## Scenario 6 — Parsing per-component-type overrides in TOML
+
+Given: a TOML configuration file declaring `[roles.pretense]` with `[roles.pretense.interface]` (`guide = 'guides/pretense_intf.md'`, `verify_template = 'lint --interface'`) and `[roles.pretense.implementation]` (`guide = 'guides/pretense_impl.md'`, `verify_template = 'lint --implementation'`, `silent_cross_role_deps = ['lib']`).
+
+1. The caller resolves `pretense`.
+   Observed: `pretense.component_overrides['interface']` has `guide_path = 'guides/pretense_intf.md'` and `verify_template = 'lint --interface'`, `pretense.component_overrides['implementation']` has `guide_path = 'guides/pretense_impl.md'`, `verify_template = 'lint --implementation'`, and `silent_cross_role_deps = ['lib']`, and `readonly_file_patterns` includes `'guides/*.md'`.
+
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-11-05T11:27:00Z

@@ -440,14 +440,21 @@ class UvManifestLoader(manifest_loader.UvManifestLoader):
             self._manifests[node] = manifest
             return manifest
 
-        src_pattern = role_cfg.get("src_pattern", "")
+        comp_override = role_cfg.get(comp_type)
+        effective_role_cfg = (
+            {**role_cfg, **comp_override}
+            if isinstance(comp_override, dict)
+            else role_cfg
+        )
+
+        src_pattern = effective_role_cfg.get("src_pattern", "")
         src_file = None
         if src_pattern:
             src_file = manifest_loader.file_alias.RelativePath(
                 src_pattern.format(unit_dir=pkg_dir, unit_name=unit_name)
             )
 
-        prompt_pattern = role_cfg.get("prompt_template", "")
+        prompt_pattern = effective_role_cfg.get("prompt_template", "")
         task_prompt = None
         if prompt_pattern:
             prompt_text = prompt_pattern.format(
@@ -457,7 +464,7 @@ class UvManifestLoader(manifest_loader.UvManifestLoader):
             )
             task_prompt = node_storage.TaskPrompt(prompt_text)
 
-        verify_template = role_cfg.get("verify_template", "")
+        verify_template = effective_role_cfg.get("verify_template", "")
         verification_check = None
         if verify_template:
             verification_check = manifest_loader.VerificationCommand(
@@ -465,7 +472,7 @@ class UvManifestLoader(manifest_loader.UvManifestLoader):
             )
 
         guide_target = None
-        guide_str = role_cfg.get("guide", "")
+        guide_str = effective_role_cfg.get("guide", "")
         if guide_str:
             guide_target = manifest_loader.TargetLabel(guide_str)
 
@@ -498,7 +505,7 @@ class UvManifestLoader(manifest_loader.UvManifestLoader):
                     star_deps.append(sfb)
                 if sfb not in feedback_deps:
                     feedback_deps.append(sfb)
-            for scr in role_cfg.get("silent_cross_role_deps", []):
+            for scr in effective_role_cfg.get("silent_cross_role_deps", []):
                 silent_deps.append(f"{u_norm}#{scr}")
 
         for sr in role_cfg.get("star_role_deps", []):
@@ -520,15 +527,15 @@ class UvManifestLoader(manifest_loader.UvManifestLoader):
 
         v_success_msg = None
         if (
-            "verification_success_message" in role_cfg
-            and role_cfg["verification_success_message"]
+            "verification_success_message" in effective_role_cfg
+            and effective_role_cfg["verification_success_message"]
         ):
             try:
-                v_success_msg = role_cfg["verification_success_message"].format(
-                    unit_name=unit_name, unit_dir=pkg_dir
-                )
+                v_success_msg = effective_role_cfg[
+                    "verification_success_message"
+                ].format(unit_name=unit_name, unit_dir=pkg_dir)
             except Exception:
-                v_success_msg = role_cfg["verification_success_message"]
+                v_success_msg = effective_role_cfg["verification_success_message"]
 
         manifest = manifest_loader.TargetManifest(
             label=manifest_loader.TargetLabel(f"//{pkg_dir}:{unit_name}#{role_name}"),

@@ -214,6 +214,43 @@ class WorkspaceRolesImplTest(LifecycleTestCase):
             self.assertIn("lib_a/*.py", r_audit.readonly_file_patterns)
             self.assertIn("tests_a/*.py", r_audit.readonly_file_patterns)
 
+    def test_component_overrides_parsing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            toml_path = os.path.join(tmp_dir, app_info.DEFAULT_ROLES_FILE)
+            with open(toml_path, "w", encoding="utf-8") as f:
+                f.write(
+                    '[roles.pretense]\n'
+                    'src_pattern = "{unit_dir}/pretense/{unit_name}_pretense.py"\n'
+                    'active_component_types = ["interface", "implementation"]\n\n'
+                    '[roles.pretense.interface]\n'
+                    'guide = "guides/pretense_intf.md"\n'
+                    'verify_template = "lint --interface"\n\n'
+                    '[roles.pretense.implementation]\n'
+                    'guide = "guides/pretense_impl.md"\n'
+                    'verify_template = "lint --implementation"\n'
+                    'silent_cross_role_deps = ["lib"]\n'
+                )
+            r_pretense = self.resolver.resolve_role_definition(
+                "pretense", repo_root=tmp_dir
+            )
+            self.assertIn("guides/*.md", r_pretense.readonly_file_patterns)
+            self.assertEqual(
+                r_pretense.component_overrides["interface"].guide_path,
+                "guides/pretense_intf.md",
+            )
+            self.assertEqual(
+                r_pretense.component_overrides["interface"].verify_template,
+                "lint --interface",
+            )
+            self.assertEqual(
+                r_pretense.component_overrides["implementation"].guide_path,
+                "guides/pretense_impl.md",
+            )
+            self.assertEqual(
+                r_pretense.component_overrides["implementation"].silent_cross_role_deps,
+                ("lib",),
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

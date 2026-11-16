@@ -20,6 +20,23 @@ from . import role_registry, roles
 # Contract: Caches parsed role definitions keyed by file path and modified timestamp.
 _ROLE_CACHE: Dict[str, Tuple[float, Dict[str, roles.RoleDefinition]]] = {}
 
+_COMPONENT_OVERRIDE_KEYS = ("interface", "implementation", "external", "assembly")
+
+
+def _resolve_guide_path(guide_label: str) -> str:
+    """Normalizes a guide label or path from role configuration."""
+    if guide_label.startswith("//"):
+        guide_clean = guide_label.lstrip("/")
+        if ":" in guide_clean:
+            pkg, tgt = guide_clean.split(":", 1)
+            return f"{pkg}/{tgt}.md"
+        return f"{guide_clean}.md"
+    if guide_label.endswith(".md"):
+        return guide_label
+    if guide_label:
+        return f"{guide_label.lstrip(':')}.md"
+    return ""
+
 
 def _discover_root(repo_root: Optional[str] = None) -> str:
     """Discovers repository root directory from argument, registry, or ambient environment."""
@@ -198,24 +215,33 @@ def _build_role_definitions(
                     p = f"{dd}/*{dsfx}{dext}"
                     if p not in readonly and p not in writable:
                         readonly.append(p)
-        if rkwargs.get("guide"):
-            readonly.append("guides/*.md")
-
         # Contract: Resolves guide path from configured guide label.
-        guide_label = str(rkwargs.get("guide") or "")
-        if guide_label.startswith("//"):
-            guide_clean = guide_label.lstrip("/")
-            if ":" in guide_clean:
-                pkg, tgt = guide_clean.split(":", 1)
-                guide_path = f"{pkg}/{tgt}.md"
-            else:
-                guide_path = f"{guide_clean}.md"
-        elif guide_label.endswith(".md"):
-            guide_path = guide_label
-        elif guide_label:
-            guide_path = f"{guide_label.lstrip(':')}.md"
-        else:
-            guide_path = ""
+        guide_path = _resolve_guide_path(str(rkwargs.get("guide") or ""))
+
+        component_overrides: Dict[str, roles.ComponentRoleOverrides] = {}
+        for ctype in _COMPONENT_OVERRIDE_KEYS:
+            c_cfg = rkwargs.get(ctype)
+            if isinstance(c_cfg, dict):
+                c_guide = _resolve_guide_path(str(c_cfg.get("guide") or ""))
+                component_overrides[ctype] = roles.ComponentRoleOverrides(
+                    guide_path=c_guide,
+                    verify_template=c_cfg.get("verify_template") or "",
+                    verification_success_message=c_cfg.get(
+                        "verification_success_message"
+                    )
+                    or "",
+                    task_prompt=c_cfg.get("prompt_template") or None,
+                    template_command=c_cfg.get("template_command") or "",
+                    silent_cross_role_deps=tuple(
+                        c_cfg.get("silent_cross_role_deps") or ()
+                    ),
+                )
+
+        if (
+            rkwargs.get("guide")
+            or any(ov.guide_path for ov in component_overrides.values())
+        ) and "guides/*.md" not in readonly:
+            readonly.append("guides/*.md")
 
         audit_tag = f"{rname.upper()}_AUDIT" if not pat else None
 
@@ -254,6 +280,7 @@ def _build_role_definitions(
             star_feedback_role_deps=[
                 d.split(":")[-1] for d in (rkwargs.get("star_feedback_role_deps") or [])
             ],
+            component_overrides=component_overrides,
         )
 
     # Process fused role definitions
@@ -290,17 +317,8 @@ def _build_role_definitions(
         readonly_filtered = [p for p in readonly_set if p not in writable_set]
 
         guide_label = str(fkwargs.get("guide") or "")
-        if guide_label.startswith("//"):
-            guide_clean = guide_label.lstrip("/")
-            if ":" in guide_clean:
-                pkg, tgt = guide_clean.split(":", 1)
-                fused_guide = f"{pkg}/{tgt}.md"
-            else:
-                fused_guide = f"{guide_clean}.md"
-        elif guide_label.endswith(".md"):
-            fused_guide = guide_label
-        elif guide_label:
-            fused_guide = f"{guide_label.lstrip(':')}.md"
+        if guide_label:
+            fused_guide = _resolve_guide_path(guide_label)
         else:
             first_c = constituents_clean[0] if constituents_clean else ""
             fused_guide = role_defs[first_c].guide_path if first_c in role_defs else ""

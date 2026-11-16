@@ -536,7 +536,7 @@ from lru_cache_deepseek_flash_1.parts.lru_cache.lib.lru_cache import (
 from lru_cache_deepseek_flash_1.parts.lru_cache.lib.lru_cache_impl import (
     LRUCache as LRUCacheImpl,
 )
-from lru_cache_deepseek_flash_1.parts.lru_cache.pretense_intf.lru_cache_pretense import (
+from lru_cache_deepseek_flash_1.parts.lru_cache.pretense.lru_cache_pretense import (
     LRUCacheStateMachine,
 )
 

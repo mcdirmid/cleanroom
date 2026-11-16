@@ -141,14 +141,20 @@ def check_pretense_structure(
 ) -> list[str]:
     """Validates that the pretense module defines model state/transitions (interface) or test cases (implementation)."""
     errors: list[str] = []
-    if not is_interface and file_path:
+    if file_path:
         norm_fp = file_path.replace("\\", "/")
+        if (
+            "/pretense_impl/" in norm_fp
+            or norm_fp.startswith("pretense_impl/")
+            or "/pretense_intf/" in norm_fp
+            or norm_fp.startswith("pretense_intf/")
+        ):
+            errors.append(
+                f"{file_path}: Legacy pretense_intf/ and pretense_impl/ directories are no longer supported; place module in pretense/<unit_name>_pretense.py."
+            )
+    if not is_interface and file_path:
         stem = os.path.basename(file_path)
-        if "/pretense_impl/" in norm_fp or norm_fp.startswith("pretense_impl/"):
-            is_interface = False
-        elif "/pretense_intf/" in norm_fp or norm_fp.startswith("pretense_intf/"):
-            is_interface = True
-        elif stem.endswith("_pretense.py") and not stem.endswith("_impl_pretense.py"):
+        if stem.endswith("_pretense.py") and not stem.endswith("_impl_pretense.py"):
             is_interface = True
 
     body = getattr(tree, "body", [])
@@ -2241,10 +2247,9 @@ def check_impl_env_state_bindings(tree: ast.AST, file_path: str = "") -> list[st
                     if line_s.startswith("implements:"):
                         raw = line_s[len("implements:") :].strip()
                         for target in (t.strip() for t in raw.split(",") if t.strip()):
-                            for sub_dir in ("pretense_intf", "pretense"):
-                                cand = unit_dir / sub_dir / f"{target}_pretense.py"
-                                if cand.is_file() and cand not in iface_paths:
-                                    iface_paths.append(cand)
+                            cand = unit_dir / "pretense" / f"{target}_pretense.py"
+                            if cand.is_file() and cand not in iface_paths:
+                                iface_paths.append(cand)
                         break
         except Exception:
             pass
@@ -4338,9 +4343,9 @@ def generate_pretense_scaffold(
             )
 
         pretense_pkg = (
-            lib_pkg.rsplit(".", 1)[0] + ".pretense_intf"
+            lib_pkg.rsplit(".", 1)[0] + ".pretense"
             if lib_pkg
-            else "pretense_intf"
+            else "pretense"
         )
         iface_symbols = [iface_sm_cls_name, state_cls_name, f"Fake{pascal_name}"]
         if len(service_classes) > 1:
@@ -5128,7 +5133,7 @@ def _resolve_lib_dir_and_pkg(
     abs_mod = os.path.abspath(module_path)
     parent_dir = os.path.dirname(abs_mod)
     # Check if pretense or tests directory
-    if os.path.basename(parent_dir) in ("pretense_intf", "pretense_impl", "pretense", "tests"):
+    if os.path.basename(parent_dir) in ("pretense", "tests"):
         part_dir = os.path.dirname(parent_dir)
     else:
         part_dir = parent_dir
@@ -5309,14 +5314,8 @@ def main() -> int:
         basename = os.path.basename(pyi_path)
         is_interface = not basename.endswith("_impl.pyi")
     elif args.module_path:
-        norm_mp = args.module_path.replace("\\", "/")
         stem = os.path.basename(args.module_path)
-        if "/pretense_impl/" in norm_mp or norm_mp.startswith("pretense_impl/"):
-            is_interface = False
-        elif "/pretense_intf/" in norm_mp or norm_mp.startswith("pretense_intf/"):
-            is_interface = True
-        else:
-            is_interface = not stem.endswith("_impl_pretense.py")
+        is_interface = not stem.endswith("_impl_pretense.py")
 
     struct_errs = check_pretense_structure(
         tree, args.module_path, is_interface=is_interface

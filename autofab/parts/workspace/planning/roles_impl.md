@@ -8,7 +8,7 @@ The roles_impl implementation component provides concrete algorithms to parse co
 
 ### Contracts
 
-- The role resolver parses role declarations from declarative TOML configuration files, in-memory cache, or bundled runner zipapps, extracting source patterns and common specification roles. [parse_role_toml_files]
+- The role resolver parses role declarations from declarative TOML configuration files, in-memory cache, or bundled runner zipapps, extracting source patterns, common specification roles, and per-component-type overrides. [parse_role_toml_files]
 - The role resolver parses fused role declarations combining constituent roles, unioning writable and readonly patterns, and associating constituent role names. [parse_fused_role_declarations]
 - The role resolver evaluates role declarations from repository build file AST structures when TOML files are absent. [evaluate_build_file_ast]
 - The role resolver enforces declaration rules rejecting redundant, conflicting, or non-silent auditor dependencies. [validate_dependency_declarations]

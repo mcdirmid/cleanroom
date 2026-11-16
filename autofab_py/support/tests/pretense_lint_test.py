@@ -2387,7 +2387,7 @@ class PretenseLintTest(unittest.TestCase):
             "        self.state.balance += amount\n"
         )
         errs = check_no_call_target_in_interface(
-            bad_split, "pretense_intf/vault_pretense.py", is_interface=True
+            bad_split, "pretense/vault_pretense.py", is_interface=True
         )
         self.assertTrue(any("PRE_LINT_INTF_NO_STATE" in e for e in errs))
         self.assertTrue(any("PRE_LINT_FAKE_NO_OUTER_TRANSITION" in e for e in errs))
@@ -2410,7 +2410,7 @@ class PretenseLintTest(unittest.TestCase):
         )
         self.assertEqual(
             check_no_call_target_in_interface(
-                good_split, "pretense_intf/vault_pretense.py", is_interface=True
+                good_split, "pretense/vault_pretense.py", is_interface=True
             ),
             [],
         )

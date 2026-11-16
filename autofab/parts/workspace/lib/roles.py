@@ -4,8 +4,21 @@ from __future__ import annotations
 from autofab.parts.agent.lib.session import AgentSessionTier
 from support.lib.lifecycle import Singleton
 
-from dataclasses import dataclass
-from typing import Optional, Protocol, Sequence
+from dataclasses import dataclass, field
+from typing import Mapping, Optional, Protocol, Sequence
+
+
+# Contract: ComponentRoleOverrides defines per-component-type configuration overrides for a role.
+@dataclass(frozen=True)
+class ComponentRoleOverrides:
+    """Per-component-type overrides for a role definition."""
+
+    guide_path: str = ""
+    verify_template: str = ""
+    verification_success_message: str = ""
+    task_prompt: Optional[str] = None
+    template_command: str = ""
+    silent_cross_role_deps: Sequence[str] = ()
 
 
 # Contract: RoleDefinition defines the immutable configuration schema for an autonomous development role.
@@ -69,6 +82,9 @@ class RoleDefinition:
     fused_roles: Sequence[str] = ()
     common_spec_roles: Sequence[str] = ()
     star_feedback_role_deps: Sequence[str] = ()
+    component_overrides: Mapping[str, ComponentRoleOverrides] = field(
+        default_factory=dict
+    )
 
 
 # Contract: RoleResolver protocol loads role configurations and validates declaration rules.

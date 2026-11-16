@@ -94,7 +94,7 @@ def _declared_units(repo_root: str, scope_dir: str) -> List[Tuple[str, str]]:
                 if (
                     not os.path.isdir(sub_dir)
                     or sub.startswith((".", "venv", "bazel-", "__pycache__"))
-                    or sub in ("tests", "pretense", "pretense_intf", "pretense_impl", "ext")
+                    or sub in ("tests", "pretense", "ext")
                 ):
                     continue
                 try:
@@ -829,17 +829,28 @@ Any library files under `lib/*.py` imported from role dependencies in this works
 - **DO NOT EDIT STUBS**: You are strictly prohibited from editing or attempting to implement `lib/*.py`.
 - **DO NOT ASSERT STUB ERRORS**: Never write tests expecting or asserting `NotImplementedError` or stub error outcomes. Author tests that verify the real behavioral contracts, postconditions, and invariants specified in `low/*.pyi`.
 """
-    guide = role_def.guide_path
-    if role_def.guide_path:
+    def _format_ws_guide(raw_gp: str) -> str:
+        if not raw_gp:
+            return ""
         promoted_guide = os.path.join(
-            workspace_dir, "guides", os.path.basename(role_def.guide_path)
+            workspace_dir, "guides", os.path.basename(raw_gp)
         )
         if os.path.isfile(promoted_guide):
-            guide = f"guides/{os.path.basename(role_def.guide_path)}"
-        elif os.path.isfile(os.path.join(workspace_dir, role_def.guide_path)):
-            guide = role_def.guide_path
-        else:
-            guide = f"guides/{os.path.basename(role_def.guide_path)}"
+            return f"guides/{os.path.basename(raw_gp)}"
+        if os.path.isfile(os.path.join(workspace_dir, raw_gp)):
+            return raw_gp
+        return f"guides/{os.path.basename(raw_gp)}"
+
+    guide = _format_ws_guide(role_def.guide_path)
+    component_guides = {
+        ctype: _format_ws_guide(ov.guide_path)
+        for ctype, ov in getattr(role_def, "component_overrides", {}).items()
+        if ov.guide_path
+    }
+    if not guide and component_guides:
+        guide = ", ".join(
+            f"{ctype}: {gp}" for ctype, gp in component_guides.items()
+        )
 
     meta_path = None
     for desc in app_info.get_role_descriptors():

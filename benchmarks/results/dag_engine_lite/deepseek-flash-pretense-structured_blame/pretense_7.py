@@ -1182,7 +1182,7 @@ from support.lib.lifecycle import (
 
 from dag_engine_lite_deepseek_flash_2.parts.dag_engine_lite.lib import dag_engine_lite
 from dag_engine_lite_deepseek_flash_2.parts.dag_engine_lite.lib import dag_engine_lite_impl
-from dag_engine_lite_deepseek_flash_2.parts.dag_engine_lite.pretense_intf.dag_engine_lite_pretense import (
+from dag_engine_lite_deepseek_flash_2.parts.dag_engine_lite.pretense.dag_engine_lite_pretense import (
     DAGRunnerStateMachine,
     DAGStateMachine,
     WaveSchedulerStateMachine,

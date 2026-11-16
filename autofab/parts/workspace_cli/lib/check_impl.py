@@ -1034,6 +1034,16 @@ def _resolve_effective_max_failures(
     return 5 if is_local else 100
 
 
+def _classify_unit_type(unit_name: str) -> str:
+    if unit_name.endswith("_ext"):
+        return "external"
+    if unit_name.endswith("_asm"):
+        return "assembly"
+    if unit_name.endswith("_impl"):
+        return "implementation"
+    return "interface"
+
+
 def _resolve_workspace_guide_path(
     ws_root: str, guide_path: Optional[str]
 ) -> Optional[str]:
@@ -1189,6 +1199,7 @@ class WorkspaceChecker(check.WorkspaceChecker):
 
         reg = get_singleton(role_registry.WorkspaceRegistry)
         role_guide_path: Optional[str] = None
+        r_def: Optional[role_registry.RoleDefinition] = None
         is_fused = bool(meta and meta.get("fused_roles"))
         if role_name:
             try:
@@ -1466,18 +1477,30 @@ class WorkspaceChecker(check.WorkspaceChecker):
             print("  READY FOR EXECUTION (Prerequisites satisfied):")
             for item in presented_items:
                 print(f"    • {item['target_file']} ({item['role']})")
-                item_guide = role_guide_path
+                item_r_def = r_def if role_name else None
                 if item.get("role") and item["role"] != role_name:
                     try:
-                        ir_def = reg.resolve_role_definition(
+                        item_r_def = reg.resolve_role_definition(
                             item["role"], repo_root=main_root
                         )
-                        if ir_def and ir_def.guide_path:
-                            item_guide = _resolve_workspace_guide_path(
-                                ws_root, ir_def.guide_path
-                            )
                     except Exception:
-                        pass
+                        item_r_def = None
+                item_guide = role_guide_path
+                if item_r_def:
+                    item_stem = os.path.splitext(os.path.basename(item["target_file"]))[0]
+                    for sfx in ("_pretense", "_test"):
+                        if item_stem.endswith(sfx):
+                            item_stem = item_stem[: -len(sfx)]
+                            break
+                    item_ctype = _classify_unit_type(item_stem) if item_stem else ""
+                    ov = getattr(item_r_def, "component_overrides", {}).get(item_ctype)
+                    raw_guide = (
+                        ov.guide_path
+                        if ov and ov.guide_path
+                        else item_r_def.guide_path
+                    )
+                    if raw_guide:
+                        item_guide = _resolve_workspace_guide_path(ws_root, raw_guide)
                 if item_guide:
                     print(f"      Companion Guide to Follow:")
                     print(f"        - {item_guide} (workspace root path; do not prefix with scope)")
@@ -1804,7 +1827,14 @@ class WorkspaceChecker(check.WorkspaceChecker):
                 regen_def = regen_reg.resolve_role_definition(
                     role_name, repo_root=main_root
                 )
-                if regen_def.template or regen_def.template_command:
+                if (
+                    regen_def.template
+                    or regen_def.template_command
+                    or any(
+                        ov.template_command
+                        for ov in getattr(regen_def, "component_overrides", {}).values()
+                    )
+                ):
                     regen_mgr = get_singleton(work.WorkspaceWorkManager)
                     regen_mgr.compute_role_work_queue(role_name, d_scope, ws_root)
                     target_path, unit_name = submit_coord.resolve_submit_target(
@@ -1823,14 +1853,9 @@ class WorkspaceChecker(check.WorkspaceChecker):
 
             active_unit = u_name or unit_name
             target_basename = os.path.basename(target_path)
+            active_ctype = _classify_unit_type(active_unit) if active_unit else ""
             target_kind = (
-                "implementation"
-                if target_basename.endswith("_impl_pretense.py")
-                else (
-                    "interface"
-                    if target_basename.endswith("_pretense.py")
-                    else ""
-                )
+                active_ctype if target_basename.endswith("_pretense.py") else ""
             )
             target_label = (
                 f"{active_unit} [{target_kind}] ({target_basename})"
@@ -1845,7 +1870,12 @@ class WorkspaceChecker(check.WorkspaceChecker):
 
             reg = get_singleton(role_registry.WorkspaceRegistry)
             r_def = reg.resolve_role_definition(role_name, repo_root=main_root)
-            cmd_tmpl = r_def.verify_template
+            ov = getattr(r_def, "component_overrides", {}).get(active_ctype)
+            cmd_tmpl = (
+                ov.verify_template
+                if ov and ov.verify_template
+                else r_def.verify_template
+            )
             if not cmd_tmpl or cmd_tmpl.strip().startswith("#"):
                 print(
                     f"[OK] No verification check required for {active_unit} in role {role_name}."

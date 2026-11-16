@@ -1082,7 +1082,7 @@ def _add_parts_lib_paths(root: Path) -> None:
         return
     for entry in sorted(parts_dir.iterdir()):
         if entry.is_dir():
-            for role in ("lib", "low", "pretense", "pretense_intf", "pretense_impl"):
+            for role in ("lib", "low", "pretense"):
                 role_dir = entry / role
                 if role_dir.is_dir():
                     rp = str(role_dir.resolve())
@@ -1122,7 +1122,7 @@ def discover_targets(
         elif path.is_dir():
             for root, _, files in os.walk(path):
                 root_path = Path(root)
-                if root_path.name in ("pretense", "pretense_intf", "pretense_impl") or any(
+                if root_path.name == "pretense" or any(
                     f.endswith("_pretense.py") for f in files
                 ):
                     for f in files:
@@ -1130,7 +1130,7 @@ def discover_targets(
                             f.endswith(".py")
                             and not f.startswith("__")
                             and (
-                                root_path.name in ("pretense", "pretense_intf", "pretense_impl")
+                                root_path.name == "pretense"
                                 or f.endswith("_pretense.py")
                             )
                         ):
@@ -1417,8 +1417,6 @@ def run_pretense_cli(argv: Optional[List[str]] = None) -> int:
     def _is_interface_pretense_file(test_file: Path) -> bool:
         if not test_file.is_file():
             return False
-        if test_file.parent.name == "pretense_intf":
-            return True
         if test_file.parent.name != "pretense":
             return False
         stem = test_file.stem
@@ -1444,7 +1442,7 @@ def run_pretense_cli(argv: Optional[List[str]] = None) -> int:
         res: Set[str] = set()
         if (
             test_file.is_file()
-            and test_file.parent.name in ("pretense", "pretense_impl")
+            and test_file.parent.name == "pretense"
             and (test_file.parent.parent / "lib").is_dir()
         ):
             lib_dir = test_file.parent.parent / "lib"
@@ -1469,22 +1467,22 @@ def run_pretense_cli(argv: Optional[List[str]] = None) -> int:
             target_lib_files.update(_resolve_target_lib_for_test_file(p_res))
         elif p_res.is_dir():
             has_non_interface_target = True
-            if p_res.name in ("pretense", "pretense_intf", "pretense_impl") and (p_res.parent / "lib").is_dir():
+            if p_res.name == "pretense" and (p_res.parent / "lib").is_dir():
                 for t_file in p_res.glob("*_pretense.py"):
                     target_lib_files.update(_resolve_target_lib_for_test_file(t_file))
-                if not target_lib_files and p_res.name != "pretense_intf":
+                if not target_lib_files:
                     target_lib_files.update(
                         _collect_lib_impls_from_dir(p_res.parent / "lib")
                     )
             for root, _, files in os.walk(p_res):
                 r_path = Path(root)
-                if r_path.name in ("pretense", "pretense_intf", "pretense_impl") and (r_path.parent / "lib").is_dir():
+                if r_path.name == "pretense" and (r_path.parent / "lib").is_dir():
                     for f in files:
                         if f.endswith("_pretense.py"):
                             target_lib_files.update(
                                 _resolve_target_lib_for_test_file(r_path / f)
                             )
-                    if not target_lib_files and r_path.name != "pretense_intf":
+                    if not target_lib_files:
                         target_lib_files.update(
                             _collect_lib_impls_from_dir(r_path.parent / "lib")
                         )
@@ -1684,7 +1682,7 @@ def run_pretense_cli(argv: Optional[List[str]] = None) -> int:
                 and not Path(f).name.startswith("__")
             ]
         total_cov = cov_engine.report(morfs=morfs if morfs else None, show_missing=True)
-        # Exempt factory functions (make_*_fake) and non-machine module helpers in pretense_intf modules
+        # Exempt factory functions (make_*_fake) and non-machine module helpers in interface pretense modules
         if morfs and all(_is_interface_pretense_file(Path(f)) for f in morfs):
             import ast
 

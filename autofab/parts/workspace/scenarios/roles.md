@@ -31,6 +31,13 @@ Given: a role configuration declares role `baseline_a` with source patterns `['{
 1. The caller resolves `baseline_a`.
    Observed: the resolved definition reports `src_patterns` containing both patterns, `src_pattern` matching the first pattern, and writable file patterns containing globs for both patterns.
 
+## Scenario 5 — Resolving roles with per-component-type overrides
+
+Given: a role configuration declares role `pretense` with `active_component_types = ['interface', 'implementation']`, `[roles.pretense.interface]` specifying `guide = 'guides/pretense_intf.md'` and `verify_template = 'lint --interface'`, and `[roles.pretense.implementation]` specifying `guide = 'guides/pretense_impl.md'` and `verify_template = 'lint --implementation'`.
+
+1. The caller resolves `pretense`.
+   Observed: the resolved definition's `component_overrides` maps `'interface'` and `'implementation'` to their respective `ComponentRoleOverrides` records.
+
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-31T20:47:00Z

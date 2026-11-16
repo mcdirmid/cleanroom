@@ -27,7 +27,7 @@ def _extract_contracted_errors(file_path: Path | str) -> Set[str]:
         return set()
 
     candidate_dirs: List[Path] = []
-    if p.parent.name in ("lib", "tests", "pretense", "pretense_intf", "pretense_impl", "high", "planning", "scenarios"):
+    if p.parent.name in ("lib", "tests", "pretense", "high", "planning", "scenarios"):
         low_dir = p.parent.parent / "low"
         if low_dir.is_dir():
             candidate_dirs.append(low_dir)

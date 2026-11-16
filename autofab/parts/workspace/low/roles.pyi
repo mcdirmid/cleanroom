@@ -1,10 +1,32 @@
 """Low-level interface specification for roles."""
 
-from dataclasses import dataclass
-from typing import Optional, Protocol, Sequence
+from dataclasses import dataclass, field
+from typing import Mapping, Optional, Protocol, Sequence
 from support.lib.framework import data_type, operation, singleton_type
 from support.lib.lifecycle import Singleton
 from session import AgentSessionTier
+
+
+@data_type
+@dataclass(frozen=True)
+class ComponentRoleOverrides:
+    """Per-component-type overrides for a role definition.
+
+    Args:
+        guide_path: Component-specific companion role guide path.
+        verify_template: Component-specific shell command template for verification.
+        verification_success_message: Component-specific success message.
+        task_prompt: Component-specific prompt template string.
+        template_command: Component-specific shell command template for scaffolding.
+        silent_cross_role_deps: Component-specific cross-unit silent role dependencies.
+    """
+
+    guide_path: str = ""
+    verify_template: str = ""
+    verification_success_message: str = ""
+    task_prompt: Optional[str] = None
+    template_command: str = ""
+    silent_cross_role_deps: Sequence[str] = ()
 
 
 @data_type
@@ -69,6 +91,9 @@ class RoleDefinition:
     fused_roles: Sequence[str] = ()
     common_spec_roles: Sequence[str] = ()
     star_feedback_role_deps: Sequence[str] = ()
+    component_overrides: Mapping[str, ComponentRoleOverrides] = field(
+        default_factory=dict
+    )
 
 
 @singleton_type("agent_session")

@@ -987,7 +987,7 @@ from semver_solver_deepseek_flash_1.parts.semver_solver.lib.semver_solver_impl i
     PackageRepository as PackageRepositoryImpl,
     VersionEngine as VersionEngineImpl,
 )
-from semver_solver_deepseek_flash_1.parts.semver_solver.pretense_intf.semver_solver_pretense import (
+from semver_solver_deepseek_flash_1.parts.semver_solver.pretense.semver_solver_pretense import (
     DependencySolverStateMachine,
     PackageRepositoryStateMachine,
     VersionEngineStateMachine,

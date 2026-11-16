@@ -576,7 +576,7 @@ def _discover_unit_slugs(
                 if any(
                     part in str(bench_p)
                     for part in norm_culprit.parts
-                    if part not in ("lib", "tests", "pretense", "pretense_intf", "pretense_impl")
+                    if part not in ("lib", "tests", "pretense")
                 ):
                     cand_low_dirs.append(bench_p.parent)
 
