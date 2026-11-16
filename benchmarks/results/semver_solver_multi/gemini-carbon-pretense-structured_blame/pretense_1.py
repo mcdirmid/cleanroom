@@ -269,7 +269,6 @@ from typing import Any, Collection, Dict, List, Optional, Sequence, Set, Tuple
 import unittest
 
 from pretense import (
-    Domain,
     Env,
     StateMachine,
     raises,
@@ -495,9 +494,8 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
     def register_package(self, release: PackageRelease) -> None:
         require_arg(
             release,
-            Domain.type(PackageRelease),
-            preferred=self.state.candidate_releases,
-            fuzz_domain=Domain.sampled_from(self.state.candidate_releases),
+            PackageRelease,
+            fuzz_domain=self.state.candidate_releases,
         )
         ret = self.inner_register_package(release)
         assert ret is None
@@ -517,7 +515,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         require(bool(self.state.packages), PackageNotFoundError)
         require_arg(
             name,
-            Domain.in_set(self.state.packages),
+            self.state.packages,
             error=PackageNotFoundError,
         )
         ret = self.inner_get_releases(name)
@@ -534,9 +532,8 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
     def has_package(self, name: str) -> bool:
         require_arg(
             name,
-            Domain.type(str),
-            preferred=self.state.candidate_names,
-            fuzz_domain=Domain.sampled_from(self.state.candidate_names),
+            str,
+            fuzz_domain=self.state.candidate_names,
         )
         ret = self.inner_has_package(name)
         assert ret == (name in self.state.packages)
@@ -563,9 +560,8 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
     ) -> ResolutionOutcome:
         require_arg(
             root_dependencies,
-            Domain.collection(Domain.type(PackageDependency)),
-            preferred=self.state.satisfiable_queries,
-            fuzz_domain=Domain.sampled_from(self.state.satisfiable_queries),
+            list,
+            fuzz_domain=self.state.satisfiable_queries,
         )
         ret = self.inner_resolve(root_dependencies)
         expected = solve_dependencies_reference(self.state.packages, root_dependencies)
@@ -812,12 +808,11 @@ from typing import Any, Optional, Tuple
 import unittest
 
 from pretense import (
-    Domain,
     Env,
     StateMachine,
     raises,
     require,
-    require_arg,
+    domain, require_arg,
     require_env,
     sut,
     sut_state,
@@ -948,10 +943,9 @@ class VersionEngineStateMachine(StateMachine[VersionEngineState]):
     def parse_version(self, text: str) -> Version:
         require_arg(
             text,
-            Domain.regex(_SEMVER_RE.pattern),
+            (self._dom_parse_version_text),
             error=InvalidVersionError,
-            preferred=self.state.candidate_texts,
-            fuzz_domain=Domain.sampled_from(self.state.candidate_texts),
+            fuzz_domain=self.state.candidate_texts,
         )
         ret = self.inner_parse_version(text)
         expected = parse_semver_reference(text)
@@ -973,15 +967,13 @@ class VersionEngineStateMachine(StateMachine[VersionEngineState]):
     def compare_precedence(self, v1: Version, v2: Version) -> int:
         require_arg(
             v1,
-            Domain.type(Version),
-            preferred=self.state.candidate_versions,
-            fuzz_domain=Domain.sampled_from(self.state.candidate_versions),
+            Version,
+            fuzz_domain=self.state.candidate_versions,
         )
         require_arg(
             v2,
-            Domain.type(Version),
-            preferred=self.state.candidate_versions,
-            fuzz_domain=Domain.sampled_from(self.state.candidate_versions),
+            Version,
+            fuzz_domain=self.state.candidate_versions,
         )
         ret = self.inner_compare_precedence(v1, v2)
         expected = compare_versions_reference(v1, v2)
@@ -1004,6 +996,10 @@ class VersionEngineStateMachine(StateMachine[VersionEngineState]):
         if extra not in self.state.candidate_texts:
             self.state.candidate_texts.append(extra)
             self.state.candidate_versions.append(parse_semver_reference(extra))
+
+    @domain()
+    def _dom_parse_version_text(self, s: Any) -> bool:
+        return bool(bool(re.fullmatch(_SEMVER_RE.pattern, s)))
 
 
 proto = VersionEngineStateMachine()
@@ -1307,12 +1303,11 @@ from typing import Any, List, Optional, Tuple
 import unittest
 
 from pretense import (
-    Domain,
     Env,
     StateMachine,
     raises,
     require,
-    require_arg,
+    domain, require_arg,
     require_env,
     sut,
     sut_state,
@@ -1634,10 +1629,9 @@ class RangeEngineStateMachine(StateMachine[RangeEngineState]):
     def parse_range(self, text: str) -> VersionRange:
         require_arg(
             text,
-            Domain.regex(_VALID_RANGE_PAT),
+            (self._dom_parse_range_text),
             error=InvalidRangeError,
-            preferred=self.state.candidate_range_texts,
-            fuzz_domain=Domain.sampled_from(self.state.candidate_range_texts),
+            fuzz_domain=self.state.candidate_range_texts,
         )
         ret = self.inner_parse_range(text)
         assert ret.raw_text == text.strip()
@@ -1659,20 +1653,17 @@ class RangeEngineStateMachine(StateMachine[RangeEngineState]):
     ) -> bool:
         require_arg(
             version,
-            Domain.type(Version),
-            preferred=self.state.candidate_versions,
-            fuzz_domain=Domain.sampled_from(self.state.candidate_versions),
+            Version,
+            fuzz_domain=self.state.candidate_versions,
         )
         require_arg(
             range_constraint,
-            Domain.type(VersionRange),
-            preferred=self.state.candidate_ranges,
-            fuzz_domain=Domain.sampled_from(self.state.candidate_ranges),
+            VersionRange,
+            fuzz_domain=self.state.candidate_ranges,
         )
         require_arg(
             include_prerelease,
-            Domain.type(bool),
-            preferred=[False, True],
+            bool,
         )
         ret = self.inner_satisfies(version, range_constraint, include_prerelease)
         expected = satisfies_reference(version, range_constraint, include_prerelease)
@@ -1695,6 +1686,10 @@ class RangeEngineStateMachine(StateMachine[RangeEngineState]):
         if extra not in self.state.candidate_range_texts:
             self.state.candidate_range_texts.append(extra)
             self.state.candidate_ranges.append(VersionRange(raw_text=extra))
+
+    @domain()
+    def _dom_parse_range_text(self, s: Any) -> bool:
+        return bool(bool(re.fullmatch(_VALID_RANGE_PAT, s)))
 
 
 proto = RangeEngineStateMachine()

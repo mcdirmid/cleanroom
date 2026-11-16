@@ -154,11 +154,10 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
-    require_arg,
+    domain, require_arg,
     sut,
     sut_state,
     synthesize_fake,
@@ -249,7 +248,7 @@ class LRUCacheStateMachine(StateMachine[LRUCacheState]):
 
     @transition(LRUCache.configure)
     def configure(self, capacity: int) -> None:
-        require_arg(capacity, Domain.integers(1, 100), preferred=[1, 5, 10, 50, 100])
+        require_arg(capacity, (self._dom_configure_capacity))
         self.inner_configure(capacity)
         self.state.capacity = capacity
         if len(self.state.items) > self.state.capacity:
@@ -264,8 +263,8 @@ class LRUCacheStateMachine(StateMachine[LRUCacheState]):
 
     @transition(LRUCache.get)
     def get(self, key: str, default: Optional[Any]) -> Any:
-        require_arg(key, Domain.sampled_from(["k1", "k2", "k3", "k4", "k5", "seed_k"]), preferred=["k1", "seed_k"])
-        require_arg(default, Domain.any(), preferred=[None, "default_val"])
+        require_arg(key, self._dom_get_key)
+        require_arg(default, object)
         ret = self.inner_get(key, default)
         if key in self.state.items:
             val = self.state.items.pop(key)
@@ -282,8 +281,8 @@ class LRUCacheStateMachine(StateMachine[LRUCacheState]):
 
     @transition(LRUCache.put)
     def put(self, key: str, value: Any) -> Optional[Tuple[str, Any]]:
-        require_arg(key, Domain.sampled_from(["k1", "k2", "k3", "k4", "k5", "seed_k"]), preferred=["k1", "k2"])
-        require_arg(value, Domain.any(), preferred=["v1", "v2", 42])
+        require_arg(key, self._dom_put_key)
+        require_arg(value, object)
         ret = self.inner_put(key, value)
         if key in self.state.items:
             del self.state.items[key]
@@ -311,8 +310,8 @@ class LRUCacheStateMachine(StateMachine[LRUCacheState]):
 
     @transition(LRUCache.peek)
     def peek(self, key: str, default: Optional[Any]) -> Any:
-        require_arg(key, Domain.sampled_from(["k1", "k2", "k3", "k4", "k5", "seed_k"]), preferred=["k1", "seed_k"])
-        require_arg(default, Domain.any(), preferred=[None, "default_val"])
+        require_arg(key, self._dom_peek_key)
+        require_arg(default, object)
         ret = self.inner_peek(key, default)
         expected = self.state.items.get(key, default)
         assert ret == expected
@@ -324,7 +323,7 @@ class LRUCacheStateMachine(StateMachine[LRUCacheState]):
     @transition(LRUCache.remove)
     def remove(self, key: str) -> Any:
         require(bool(self.state.items))
-        require_arg(key, Domain.in_set(self.state.keys))
+        require_arg(key, self.state.keys)
         ret = self.inner_remove(key)
         val = self.state.items.pop(key)
         assert ret == val
@@ -369,6 +368,22 @@ class LRUCacheStateMachine(StateMachine[LRUCacheState]):
 
     def inner_keys_in_lru_order(self) -> List[str]:
         return list(self.state.items.keys())
+
+    @domain()
+    def _dom_configure_capacity(self, x: Any) -> bool:
+        return bool(x >= 1 and x <= 100)
+
+    @domain(valid=lambda self: list(["k1", "k2", "k3", "k4", "k5", "seed_k"]))
+    def _dom_get_key(self, val: Any) -> bool:
+        return val in ["k1", "k2", "k3", "k4", "k5", "seed_k"]
+
+    @domain(valid=lambda self: list(["k1", "k2", "k3", "k4", "k5", "seed_k"]))
+    def _dom_put_key(self, val: Any) -> bool:
+        return val in ["k1", "k2", "k3", "k4", "k5", "seed_k"]
+
+    @domain(valid=lambda self: list(["k1", "k2", "k3", "k4", "k5", "seed_k"]))
+    def _dom_peek_key(self, val: Any) -> bool:
+        return val in ["k1", "k2", "k3", "k4", "k5", "seed_k"]
 
 
 proto = LRUCacheStateMachine()

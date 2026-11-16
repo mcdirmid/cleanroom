@@ -10,7 +10,8 @@ Decentralized dirty tracking and feedback distribution require uniform metadata 
 
 ### Typing
 
-- A file metadata record encapsulates a last cleaned timestamp when clean, a last changed timestamp when modified, a change summary, unacted feedback items, role audit timestamps, and a dirty reason when dirtiness is attributed.
+- A file metadata record encapsulates a last cleaned timestamp when clean, a last changed timestamp when modified, a change summary, a chronological list of change entry records, unacted feedback items, role audit timestamps, and a dirty reason when dirtiness is attributed.
+- A change entry record encapsulates a UTC submission timestamp, a change kind (`new`, `contract`, `behavior`, `fix`, `refactor`, or `legacy`), deterministic changed lines spans, an optional change scope, a delta description, and an optional rationale.
 - A source metadata coordinator operates within the system lifecycle tier.
 - In-band metadata blocks format Python metadata as line comments delimited by `# --- CLEANROOM METADATA ---` and `# --- END CLEANROOM METADATA ---` positioned at the bottom of files, and Markdown metadata as HTML comments delimited by `<!-- CLEANROOM METADATA` and `-->` positioned at the bottom of documents.
 - Module-level procedural facade functions delegate operations directly to the active source metadata coordinator singleton.
@@ -27,7 +28,10 @@ Decentralized dirty tracking and feedback distribution require uniform metadata 
 - A source metadata coordinator applies in-place comment block modifications to files on disk. [update_metadata_disk]
 - A source metadata coordinator marks files clean by updating last cleaned timestamp while clearing feedback. [mark_clean_status]
 - A source metadata coordinator marks files dirty by setting dirty reason while updating last cleaned timestamp. [mark_dirty_status]
-- A source metadata coordinator records change descriptions while updating change summary. [record_change_status]
+- A source metadata coordinator records structured change entries with line-span rebasing and bounded retention. [record_change_status]
+- A source metadata coordinator computes changed line spans between prior and updated code bodies. [compute_changed_lines_spans]
+- A source metadata coordinator filters change entries strictly newer than a reference timestamp. [filter_changes_by_timestamp]
+- A source metadata coordinator projects workspace metadata by clearing lifecycle timestamps and either removing or filtering change entries. [project_workspace_metadata_text]
 - A source metadata coordinator appends unacted feedback entries with sender role attribution while advancing last cleaned timestamp. [append_feedback_entry]
 - A source metadata coordinator stamps role audits with current UTC timestamp while advancing last cleaned timestamp. [stamp_audit_entry]
 - A source metadata coordinator clears all role audit entries from file metadata. [clear_audits_entries]

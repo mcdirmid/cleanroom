@@ -509,12 +509,11 @@ import unittest
 
 from hypothesis import given, settings, strategies as st
 from pretense import (
-    Domain,
     Env,
     StateMachine,
     raises,
     require,
-    require_arg,
+    domain, require_arg,
     require_env,
     sut,
     sut_state,
@@ -1049,39 +1048,30 @@ class DAGEngineLiteStateMachine(StateMachine[DAGEngineLiteState]):
     ) -> None:
         require_arg(
             node_id,
-            Domain.not_in(self.state.nodes),
+            (self._dom_add_node_node_id),
             error=DuplicateNodeError,
-            fuzz_domain=Domain.sampled_from(
-                [cid for cid in self.state.candidate_ids if cid not in self.state.nodes]
-                or ["n_extra"]
-            ),
-            preferred=["n1", "n2", "n3"],
+            fuzz_domain=[cid for cid in self.state.candidate_ids if cid not in self.state.nodes]
+                or ["n_extra"],
         )
         require(len(self.state.nodes) < len(self.state.candidate_ids))
         require_arg(
             action,
-            Domain.type(object),
-            fuzz_domain=Domain.sampled_from([ACTION_OK, ACTION_FAIL]),
-            preferred=[ACTION_OK],
+            object,
+            fuzz_domain=[ACTION_OK, ACTION_FAIL],
         )
         existing_ids = sorted(self.state.nodes.keys())
         require_arg(
             dependencies,
-            Domain.optional(Domain.collection(Domain.text(min_size=1))),
-            fuzz_domain=Domain.sampled_from(
-                [None, []] + ([[existing_ids[0]]] if existing_ids else [])
-            ),
-            preferred=[None],
+            Optional[list],
+            fuzz_domain=[None, []] + ([[existing_ids[0]]] if existing_ids else []),
         )
         require_arg(
             priority,
-            Domain.integers(min_value=-5, max_value=20),
-            preferred=[0, 5, 10],
+            (self._dom_add_node_priority),
         )
         require_arg(
             retries,
-            Domain.integers(min_value=0, max_value=2),
-            preferred=[0, 1],
+            (self._dom_add_node_retries),
         )
 
         ret = self.inner_add_node(node_id, action, dependencies, priority, retries)
@@ -1122,12 +1112,12 @@ class DAGEngineLiteStateMachine(StateMachine[DAGEngineLiteState]):
         require(len(self.state.nodes) >= 2)
         require_arg(
             upstream_id,
-            Domain.in_set(self.state.nodes),
+            self.state.nodes,
             error=NodeNotFoundError,
         )
         require_arg(
             downstream_id,
-            Domain.in_set(self.state.nodes),
+            self.state.nodes,
             error=NodeNotFoundError,
         )
 
@@ -1147,7 +1137,7 @@ class DAGEngineLiteStateMachine(StateMachine[DAGEngineLiteState]):
         require(bool(self.state.nodes))
         require_arg(
             node_id,
-            Domain.in_set(self.state.nodes),
+            self.state.nodes,
             error=NodeNotFoundError,
         )
 
@@ -1178,9 +1168,8 @@ class DAGEngineLiteStateMachine(StateMachine[DAGEngineLiteState]):
     def has_node(self, node_id: str) -> bool:
         require_arg(
             node_id,
-            Domain.text(min_size=1),
-            fuzz_domain=Domain.sampled_from(self.state.candidate_ids + ["missing_node"]),
-            preferred=["n1", "missing_node"],
+            str,
+            fuzz_domain=self.state.candidate_ids + ["missing_node"],
         )
 
         ret = self.inner_has_node(node_id)
@@ -1197,7 +1186,7 @@ class DAGEngineLiteStateMachine(StateMachine[DAGEngineLiteState]):
         require(bool(self.state.nodes))
         require_arg(
             node_id,
-            Domain.in_set(self.state.nodes),
+            self.state.nodes,
             error=NodeNotFoundError,
         )
 
@@ -1218,7 +1207,7 @@ class DAGEngineLiteStateMachine(StateMachine[DAGEngineLiteState]):
         require(bool(self.state.nodes))
         require_arg(
             node_id,
-            Domain.in_set(self.state.nodes),
+            self.state.nodes,
             error=NodeNotFoundError,
         )
 
@@ -1236,7 +1225,7 @@ class DAGEngineLiteStateMachine(StateMachine[DAGEngineLiteState]):
         require(bool(self.state.nodes))
         require_arg(
             node_id,
-            Domain.in_set(self.state.nodes),
+            self.state.nodes,
             error=NodeNotFoundError,
         )
 
@@ -1361,16 +1350,8 @@ class DAGEngineLiteStateMachine(StateMachine[DAGEngineLiteState]):
         )
         require_arg(
             estimated_durations,
-            Domain.optional(
-                Domain.mapping(
-                    Domain.text(min_size=1),
-                    Domain.type(float),
-                )
-            ),
-            fuzz_domain=Domain.sampled_from(
-                [None, {"n1": 2.5, "n2": 3.0}, {"n1": 1.0, "n3": 4.0}]
-            ),
-            preferred=[None, {"n1": 2.5, "n2": 3.0}],
+            Optional[dict],
+            fuzz_domain=[None, {"n1": 2.5, "n2": 3.0}, {"n1": 1.0, "n3": 4.0}],
         )
 
         ret = self.inner_compute_critical_path(estimated_durations)
@@ -1423,7 +1404,7 @@ class DAGEngineLiteStateMachine(StateMachine[DAGEngineLiteState]):
         require(bool(self.state.nodes))
         require_arg(
             node_id,
-            Domain.in_set(self.state.nodes),
+            self.state.nodes,
             error=NodeNotFoundError,
         )
 
@@ -1442,7 +1423,7 @@ class DAGEngineLiteStateMachine(StateMachine[DAGEngineLiteState]):
         require(bool(self.state.nodes))
         require_arg(
             node_id,
-            Domain.in_set(self.state.nodes),
+            self.state.nodes,
             error=NodeNotFoundError,
         )
 
@@ -1464,23 +1445,12 @@ class DAGEngineLiteStateMachine(StateMachine[DAGEngineLiteState]):
         require(bool(self.state.nodes))
         require_arg(
             node_id,
-            Domain.in_set(self.state.nodes),
+            self.state.nodes,
             error=NodeNotFoundError,
         )
         require_arg(
             failure_policy,
-            Domain.sampled_from(
-                [
-                    FailurePolicy.FAIL_FAST,
-                    FailurePolicy.CONTINUE_ON_ERROR,
-                    FailurePolicy.SKIP_DOWNSTREAM,
-                ]
-            ),
-            preferred=[
-                FailurePolicy.FAIL_FAST,
-                FailurePolicy.SKIP_DOWNSTREAM,
-                FailurePolicy.CONTINUE_ON_ERROR,
-            ],
+            self._dom_mark_failed_failure_policy,
         )
 
         ret = self.inner_mark_failed(node_id, failure_policy)
@@ -1518,7 +1488,7 @@ class DAGEngineLiteStateMachine(StateMachine[DAGEngineLiteState]):
         require(bool(self.state.nodes))
         require_arg(
             node_id,
-            Domain.in_set(self.state.nodes),
+            self.state.nodes,
             error=NodeNotFoundError,
         )
 
@@ -1587,18 +1557,7 @@ class DAGEngineLiteStateMachine(StateMachine[DAGEngineLiteState]):
         )
         require_arg(
             failure_policy,
-            Domain.sampled_from(
-                [
-                    FailurePolicy.FAIL_FAST,
-                    FailurePolicy.CONTINUE_ON_ERROR,
-                    FailurePolicy.SKIP_DOWNSTREAM,
-                ]
-            ),
-            preferred=[
-                FailurePolicy.FAIL_FAST,
-                FailurePolicy.SKIP_DOWNSTREAM,
-                FailurePolicy.CONTINUE_ON_ERROR,
-            ],
+            self._dom_run_failure_policy,
         )
 
         ret = self.inner_run(failure_policy)
@@ -1631,6 +1590,42 @@ class DAGEngineLiteStateMachine(StateMachine[DAGEngineLiteState]):
         failure_policy: FailurePolicy,
     ) -> DAGRunReport:
         return simulate_fake_run(self.state, failure_policy)
+
+    @domain()
+    def _dom_add_node_node_id(self, x: Any) -> bool:
+        return bool(x not in self.state.nodes)
+
+    @domain()
+    def _dom_add_node_priority(self, x: Any) -> bool:
+        return bool(x >= -5 and x <= 20)
+
+    @domain()
+    def _dom_add_node_retries(self, x: Any) -> bool:
+        return bool(x >= 0 and x <= 2)
+
+    @domain(valid=lambda self: list([
+                    FailurePolicy.FAIL_FAST,
+                    FailurePolicy.CONTINUE_ON_ERROR,
+                    FailurePolicy.SKIP_DOWNSTREAM,
+                ]))
+    def _dom_mark_failed_failure_policy(self, val: Any) -> bool:
+        return val in [
+                    FailurePolicy.FAIL_FAST,
+                    FailurePolicy.CONTINUE_ON_ERROR,
+                    FailurePolicy.SKIP_DOWNSTREAM,
+                ]
+
+    @domain(valid=lambda self: list([
+                    FailurePolicy.FAIL_FAST,
+                    FailurePolicy.CONTINUE_ON_ERROR,
+                    FailurePolicy.SKIP_DOWNSTREAM,
+                ]))
+    def _dom_run_failure_policy(self, val: Any) -> bool:
+        return val in [
+                    FailurePolicy.FAIL_FAST,
+                    FailurePolicy.CONTINUE_ON_ERROR,
+                    FailurePolicy.SKIP_DOWNSTREAM,
+                ]
 
 
 proto = DAGEngineLiteStateMachine()

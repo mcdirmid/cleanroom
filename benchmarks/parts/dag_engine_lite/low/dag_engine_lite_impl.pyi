@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from typing import Any, Callable, Collection, Dict, FrozenSet, List, Mapping, Optional, Sequence, Set, Tuple
-from support.lib.framework import operation, override, singleton_type
+from support.lib.framework import operation, override, singleton_type, test_only
 from support.lib.lifecycle import Singleton, SystemTier, get_singleton
 import dag_engine_lite
 import kahn_topology_ext
@@ -113,6 +113,28 @@ class DAG(dag_engine_lite.DAG):
 
         GROUNDING:
         - Returns a copy of set(_nodes.keys()).
+        """
+        ...
+
+    @test_only
+    @operation
+    @override
+    def all_dependencies_exist(self) -> bool:
+        """Test-only observability query returning whether all referenced dependencies across registered nodes exist in the graph.
+
+        GROUNDING:
+        - Returns True if every dependency identifier in every registered NodeSpec in _nodes is present in _nodes, else False.
+        """
+        ...
+
+    @test_only
+    @operation
+    @override
+    def is_acyclic(self) -> bool:
+        """Test-only observability query returning whether the graph contains no directed cycles.
+
+        GROUNDING:
+        - Executes depth-first search cycle detection across _nodes; returns False if any directed cycle is found, else True.
         """
         ...
 

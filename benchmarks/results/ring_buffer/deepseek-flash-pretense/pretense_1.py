@@ -252,7 +252,6 @@ from dataclasses import dataclass, field
 from typing import Any, List, Optional
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -293,8 +292,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
         require(self.state.capacity >= 1)
         require_arg(
             item,
-            Domain.type(str),
-            preferred=["alpha", "beta", "gamma"],
+            str,
         )
         was_full: bool = len(self.state.items) >= self.state.capacity
         oldest: Optional[Any] = self.state.items[0] if self.state.items else None

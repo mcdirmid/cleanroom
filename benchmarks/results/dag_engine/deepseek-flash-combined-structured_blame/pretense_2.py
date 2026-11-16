@@ -573,11 +573,10 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
-    require_arg,
+    domain, require_arg,
     sut,
     sut_state,
     synthesize_fake,
@@ -850,12 +849,12 @@ class DagEngineStateMachine(StateMachine[DagEngineState]):
         retries: int,
     ) -> None:
         require(self.state.initialized)
-        require_arg(node_id, Domain.type(str), preferred=["alpha", "beta"])
-        require_arg(action, Domain.any())
-        require_arg(dependencies, Domain.optional(Domain.type(Collection[str])))
-        require_arg(priority, Domain.type(int), preferred=[0, 1, 2])
-        require_arg(timeout_seconds, Domain.optional(Domain.type(float)))
-        require_arg(retries, Domain.type(int), preferred=[0, 1])
+        require_arg(node_id, str)
+        require_arg(action, object)
+        require_arg(dependencies, Optional[Collection[str]])
+        require_arg(priority, int)
+        require_arg(timeout_seconds, Optional[float])
+        require_arg(retries, int)
         ret = self.inner_add_node(node_id, action, dependencies, priority, timeout_seconds, retries)
         definition = NodeDefinition(
             node_id=node_id,
@@ -881,8 +880,8 @@ class DagEngineStateMachine(StateMachine[DagEngineState]):
     @transition(DAG.add_edge)
     def add_edge(self, upstream_id: str, downstream_id: str) -> None:
         require(self.state.initialized)
-        require_arg(upstream_id, Domain.in_set(self.state.nodes))
-        require_arg(downstream_id, Domain.in_set(self.state.nodes))
+        require_arg(upstream_id, self.state.nodes)
+        require_arg(downstream_id, self.state.nodes)
         ret = self.inner_add_edge(upstream_id, downstream_id)
         self.state.upstream[downstream_id].add(upstream_id)
         self.state.downstream[upstream_id].add(downstream_id)
@@ -896,7 +895,7 @@ class DagEngineStateMachine(StateMachine[DagEngineState]):
     @transition(DAG.remove_node)
     def remove_node(self, node_id: str) -> None:
         require(self.state.initialized)
-        require_arg(node_id, Domain.in_set(self.state.nodes))
+        require_arg(node_id, self.state.nodes)
         ret = self.inner_remove_node(node_id)
         for dependent in sorted(self.state.downstream.get(node_id, set())):
             self.state.upstream[dependent].discard(node_id)
@@ -916,7 +915,7 @@ class DagEngineStateMachine(StateMachine[DagEngineState]):
     @transition(DAG.has_node)
     def has_node(self, node_id: str) -> bool:
         require(self.state.initialized)
-        require_arg(node_id, Domain.type(str), preferred=["alpha", "beta"])
+        require_arg(node_id, str)
         ret = self.inner_has_node(node_id)
         assert ret == (node_id in self.state.nodes)
         return ret
@@ -924,7 +923,7 @@ class DagEngineStateMachine(StateMachine[DagEngineState]):
     @transition(DAG.get_node)
     def get_node(self, node_id: str) -> NodeDefinition[Any]:
         require(self.state.initialized)
-        require_arg(node_id, Domain.in_set(self.state.nodes))
+        require_arg(node_id, self.state.nodes)
         ret = self.inner_get_node(node_id)
         assert ret == self.state.definitions[node_id]
         return ret
@@ -932,7 +931,7 @@ class DagEngineStateMachine(StateMachine[DagEngineState]):
     @transition(DAG.get_dependencies)
     def get_dependencies(self, node_id: str) -> Set[str]:
         require(self.state.initialized)
-        require_arg(node_id, Domain.in_set(self.state.nodes))
+        require_arg(node_id, self.state.nodes)
         ret = self.inner_get_dependencies(node_id)
         assert ret == self.state.upstream[node_id]
         return ret
@@ -940,7 +939,7 @@ class DagEngineStateMachine(StateMachine[DagEngineState]):
     @transition(DAG.get_dependents)
     def get_dependents(self, node_id: str) -> Set[str]:
         require(self.state.initialized)
-        require_arg(node_id, Domain.in_set(self.state.nodes))
+        require_arg(node_id, self.state.nodes)
         ret = self.inner_get_dependents(node_id)
         assert ret == self.state.downstream[node_id]
         return ret
@@ -1013,7 +1012,7 @@ class DagEngineStateMachine(StateMachine[DagEngineState]):
                 for dependency in dependencies
             )
         )
-        require_arg(estimated_durations, Domain.optional(Domain.type(Mapping[str, float])))
+        require_arg(estimated_durations, Optional[Mapping[str, float]])
         ret = self.inner_compute_critical_path(estimated_durations)
         assert isinstance(ret, tuple)
         assert len(ret) == 2
@@ -1038,7 +1037,7 @@ class DagEngineStateMachine(StateMachine[DagEngineState]):
     @transition(WaveScheduler.mark_running)
     def mark_running(self, node_id: str) -> None:
         require(self.state.initialized)
-        require_arg(node_id, Domain.in_set(self.state.nodes))
+        require_arg(node_id, self.state.nodes)
         self.sync_scheduler_states()
         ret = self.inner_mark_running(node_id)
         self.state.states[node_id] = NodeState.RUNNING
@@ -1049,7 +1048,7 @@ class DagEngineStateMachine(StateMachine[DagEngineState]):
     @transition(WaveScheduler.mark_succeeded)
     def mark_succeeded(self, node_id: str) -> None:
         require(self.state.initialized)
-        require_arg(node_id, Domain.in_set(self.state.nodes))
+        require_arg(node_id, self.state.nodes)
         self.sync_scheduler_states()
         ret = self.inner_mark_succeeded(node_id)
         self.state.states[node_id] = NodeState.SUCCEEDED
@@ -1071,8 +1070,8 @@ class DagEngineStateMachine(StateMachine[DagEngineState]):
     @transition(WaveScheduler.mark_failed)
     def mark_failed(self, node_id: str, failure_policy: FailurePolicy) -> None:
         require(self.state.initialized)
-        require_arg(node_id, Domain.in_set(self.state.nodes))
-        require_arg(failure_policy, Domain.sampled_from(list(FailurePolicy)))
+        require_arg(node_id, self.state.nodes)
+        require_arg(failure_policy, self._dom_mark_failed_failure_policy)
         self.sync_scheduler_states()
         ret = self.inner_mark_failed(node_id, failure_policy)
         self.state.states[node_id] = NodeState.FAILED
@@ -1109,7 +1108,7 @@ class DagEngineStateMachine(StateMachine[DagEngineState]):
     @transition(WaveScheduler.get_state)
     def get_state(self, node_id: str) -> NodeState:
         require(self.state.initialized)
-        require_arg(node_id, Domain.in_set(self.state.nodes))
+        require_arg(node_id, self.state.nodes)
         self.sync_scheduler_states()
         ret = self.inner_get_state(node_id)
         assert ret == self.state.states.get(node_id, NodeState.PENDING)
@@ -1145,9 +1144,9 @@ class DagEngineStateMachine(StateMachine[DagEngineState]):
                 for dependency in dependencies
             )
         )
-        require_arg(timeout_seconds, Domain.sampled_from([None]), preferred=[None])
-        require_arg(failure_policy, Domain.sampled_from(list(FailurePolicy)))
-        require_arg(max_concurrency, Domain.range(1, 8), preferred=[1, 2])
+        require_arg(timeout_seconds, self._dom_run_timeout_seconds)
+        require_arg(failure_policy, self._dom_run_failure_policy)
+        require_arg(max_concurrency, (self._dom_run_max_concurrency))
         self.sync_scheduler_states()
         ret = self.inner_run(timeout_seconds, failure_policy, max_concurrency)
         for node_id in ret.succeeded_nodes:
@@ -1206,6 +1205,22 @@ class DagEngineStateMachine(StateMachine[DagEngineState]):
     def seed_initial(self) -> None:
         """Seeds the model as a fully initialized engine."""
         self.state.initialized = True
+
+    @domain(valid=lambda self: list([None]))
+    def _dom_run_timeout_seconds(self, val: Any) -> bool:
+        return val in [None]
+
+    @domain()
+    def _dom_run_max_concurrency(self, x: Any) -> bool:
+        return bool(x >= 1 and x <= 8)
+
+    @domain(valid=lambda self: list(list(FailurePolicy)))
+    def _dom_mark_failed_failure_policy(self, val: Any) -> bool:
+        return val in list(FailurePolicy)
+
+    @domain(valid=lambda self: list(list(FailurePolicy)))
+    def _dom_run_failure_policy(self, val: Any) -> bool:
+        return val in list(FailurePolicy)
 
 
 proto = DagEngineStateMachine()

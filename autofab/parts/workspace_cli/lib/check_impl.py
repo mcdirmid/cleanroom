@@ -39,7 +39,7 @@ def _normalize_unit_stem(name: str) -> str:
     changed = True
     while changed:
         changed = False
-        for suffix in ("_pretense", "_test", "_impl"):
+        for suffix in ("_pretense", "_test"):
             if stem.endswith(suffix):
                 stem = stem[: -len(suffix)]
                 changed = True
@@ -534,6 +534,25 @@ def _extract_unacted_feedback(file_path: str) -> List[str]:
     return feedback_items
 
 
+def _extract_scoped_changes(file_path: str) -> List[str]:
+    """Extracts formatted CHANGES: entries from a workspace-projected file's metadata."""
+    if not file_path or not os.path.isfile(file_path):
+        return []
+    try:
+        try:
+            from autofab.parts.metadata.lib import src_metadata  # type: ignore
+        except ImportError:
+            import src_metadata  # type: ignore
+        meta = src_metadata.extract_metadata(file_path)
+        if meta and meta.changes:
+            return [src_metadata.format_change_entry_line(ce) for ce in meta.changes]
+        if meta and meta.change_summary:
+            return [meta.change_summary]
+    except Exception:
+        pass
+    return []
+
+
 def _extract_last_change_comment(file_path: str) -> Optional[str]:
     """Extracts the latest # CHANGE: comment from the file metadata header or file comments."""
     if not file_path or not os.path.isfile(file_path):
@@ -596,10 +615,24 @@ def _extract_primary_failure(
     if e_lines:
         return e_lines[0]
 
+    explicit_fail_lines = [
+        line.strip()
+        for line in combined.splitlines()
+        if line.strip().startswith(("[FAIL]", "FAIL:", "Error:"))
+    ]
+    if explicit_fail_lines:
+        return explicit_fail_lines[0]
+
     err_lines = [
         line.strip()
         for line in combined.splitlines()
-        if "error:" in line.lower() or "fail" in line.lower()
+        if (
+            "error:" in line.lower()
+            or (
+                "fail" in line.lower()
+                and not re.search(r"\b0\s+failed\b", line.lower())
+            )
+        )
     ]
     if err_lines:
         return err_lines[0]
@@ -655,6 +688,7 @@ def _print_triage_summary(
 ) -> None:
     """Prints the structured triage summary and specification grounding reminders."""
     target_rel = _scrub_workspace_paths(target_path, ws_root) if ws_root else target_path
+    scoped_changes = _extract_scoped_changes(target_path)
     change_header = _extract_last_change_comment(target_path) or "(None recorded)"
     primary_failure = _extract_primary_failure(
         stdout, stderr, is_timeout=is_timeout, timeout_sec=timeout_sec
@@ -676,7 +710,12 @@ def _print_triage_summary(
         f"======================= {app_info.get_app_title()} Triage Summary ======================="
     )
     print(f"Target: {target_rel}")
-    print(f'Author\'s Latest # CHANGE: "{change_header}"')
+    if scoped_changes:
+        print("Author's Changes Since Last Audit:")
+        for ch_line in scoped_changes:
+            print(f"  - {ch_line}")
+    else:
+        print(f'Author\'s Latest # CHANGE: "{change_header}"')
     print(f"Primary Failure: {primary_failure}")
     fb_list = ", ".join(fb_targets) if fb_targets else candidate_culprit
     print(f"Candidate Culprit Files: {fb_list}")
@@ -1463,6 +1502,27 @@ class WorkspaceChecker(check.WorkspaceChecker):
                     print("      Dependencies:")
                     for dep in item["dependencies"]:
                         print(f"        - {dep}")
+                if is_auditor:
+                    t_abs = os.path.join(ws_root, item["target_file"])
+                    t_changes = _extract_scoped_changes(t_abs)
+                    if t_changes:
+                        print("      Changes Since Last Audit:")
+                        for ch_line in t_changes:
+                            print(f"        - {ch_line}")
+                else:
+                    seen_deps: set[str] = set()
+                    for dep in list(item.get("contract_files") or ()) + list(
+                        item.get("dependencies") or ()
+                    ):
+                        if dep in seen_deps or dep == item["target_file"]:
+                            continue
+                        seen_deps.add(dep)
+                        dep_abs = os.path.join(ws_root, dep)
+                        dep_changes = _extract_scoped_changes(dep_abs)
+                        if dep_changes:
+                            print(f"      Upstream Changes ({dep}):")
+                            for ch_line in dep_changes:
+                                print(f"        - {ch_line}")
 
         if remaining_count > 0:
             print(
@@ -1485,6 +1545,27 @@ class WorkspaceChecker(check.WorkspaceChecker):
                     print("      Dependencies:")
                     for dep in item["dependencies"]:
                         print(f"        - {dep}")
+                if is_auditor:
+                    t_abs = os.path.join(ws_root, item["target_file"])
+                    t_changes = _extract_scoped_changes(t_abs)
+                    if t_changes:
+                        print("      Changes Since Last Audit:")
+                        for ch_line in t_changes:
+                            print(f"        - {ch_line}")
+                else:
+                    seen_deps: set[str] = set()
+                    for dep in list(item.get("contract_files") or ()) + list(
+                        item.get("dependencies") or ()
+                    ):
+                        if dep in seen_deps or dep == item["target_file"]:
+                            continue
+                        seen_deps.add(dep)
+                        dep_abs = os.path.join(ws_root, dep)
+                        dep_changes = _extract_scoped_changes(dep_abs)
+                        if dep_changes:
+                            print(f"      Upstream Changes ({dep}):")
+                            for ch_line in dep_changes:
+                                print(f"        - {ch_line}")
 
         has_feedback = False
         if role_name:

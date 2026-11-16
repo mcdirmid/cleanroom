@@ -32,6 +32,12 @@ class TaskWorker(Protocol):
 
     @operation
     @test_only
-    def set_failing_task(self, task_id: str, failing: bool = True) -> None:
+    def set_failing_task(self, task_id: str, failing: bool) -> None:
         """Test-only hook to configure designated tasks to fail on execution."""
+        ...
+
+    @operation
+    @test_only
+    def is_failing_task(self, task_id: str) -> bool:
+        """Test-only query returning whether a task identifier is configured to fail."""
         ...

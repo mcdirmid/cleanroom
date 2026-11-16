@@ -173,7 +173,7 @@ AllocatorFuzzTest = compile_hypothesis_test_case(
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-13T00:04:11Z
 # LAST_CHANGED: 2026-11-13T00:03:36Z
-# CHANGE: Updated for the reserve-model change: the real test's AllocatorImplPseudoStateMachine is constructed with state=AllocatorState(reserves=1000) so the inherited allocate gate (Domain.integers(1, self.state.reserves)) is usable during fixed scenarios, while the real vault enforces the true reserve contract. Verified static checks.
+# CHANGE: Updated for the reserve-model change: the real test's AllocatorImplPseudoStateMachine is constructed with state=AllocatorState(reserves=1000) so the inherited allocate gate ((lambda x: x >= 1 and x <= self.state.reserves)) is usable during fixed scenarios, while the real vault enforces the true reserve contract. Verified static checks.
 # PRETENSE_COVERAGE_AUDIT: 2026-11-13T00:04:11Z
 # PRETENSE_QA_AUDIT: 2026-11-13T00:03:47Z
 # --- END AUTOFAB METADATA ---
@@ -187,11 +187,10 @@ from typing import Any, Optional
 import unittest
 
 from pretense import (
-    Domain,
     Env,
     StateMachine,
     require,
-    require_arg,
+    domain, require_arg,
     require_env,
     sut,
     sut_state,
@@ -263,8 +262,7 @@ class AllocatorStateMachine(StateMachine[AllocatorState]):
         """Reserves a positive amount not exceeding the visible vault reserves."""
         require_arg(
             amount,
-            Domain.integers(min_value=1, max_value=self.state.reserves),
-            preferred=[1],
+            (self._dom_allocate_amount),
             error=AllocationLimitError,
         )
         require_env(self.state.vault_active, VaultInactiveException, amount)
@@ -282,8 +280,7 @@ class AllocatorStateMachine(StateMachine[AllocatorState]):
         """Releases a positive amount not exceeding the allocated funds."""
         require_arg(
             amount,
-            Domain.in_set(range(1, self.state.allocated + 1)),
-            preferred=[1],
+            range(1, self.state.allocated + 1),
             error=AllocationLimitError,
         )
         require_env(self.state.vault_active, VaultInactiveException, amount)
@@ -295,6 +292,10 @@ class AllocatorStateMachine(StateMachine[AllocatorState]):
     def inner_release(self, amount: int) -> None:
         """Computes the fake release outcome strictly from model state."""
         return None
+
+    @domain()
+    def _dom_allocate_amount(self, x: Any) -> bool:
+        return bool(x >= 1 and x <= self.state.reserves)
 
 
 proto = AllocatorStateMachine()
@@ -353,7 +354,7 @@ class TestAllocatorFake(unittest.TestCase):
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-13T00:03:29Z
 # LAST_CHANGED: 2026-11-13T00:03:29Z
-# CHANGE: Resolved [from:pretense_qa] collaborator model dependency outside dispatch context (PretenseError from sut_state(VaultState) in the allocate domain): removed sut_state from the domain and modeled visible vault reserves on AllocatorState.reserves instead. allocate now gates with Domain.integers(min_value=1, max_value=self.state.reserves) and decrements reserves; release restores reserves. seed_initial and the fake factory seed positive reserves (100) so the lazy interval is never degenerate during fuzzing. Verified static checks and fake fuzzing.
+# CHANGE: Resolved [from:pretense_qa] collaborator model dependency outside dispatch context (PretenseError from sut_state(VaultState) in the allocate domain): removed sut_state from the domain and modeled visible vault reserves on AllocatorState.reserves instead. allocate now gates with (lambda x: x >= 1 and x <= self.state.reserves) and decrements reserves; release restores reserves. seed_initial and the fake factory seed positive reserves (100) so the lazy interval is never degenerate during fuzzing. Verified static checks and fake fuzzing.
 # --- END AUTOFAB METADATA ---
 
 
@@ -526,11 +527,10 @@ from typing import Any, Optional
 import unittest
 
 from pretense import (
-    Domain,
     Env,
     StateMachine,
     require,
-    require_arg,
+    domain, require_arg,
     require_env,
     sut,
     synthesize_fake,
@@ -603,8 +603,7 @@ class VaultStateMachine(StateMachine[VaultState]):
         """Deposits a positive amount into the active vault."""
         require_arg(
             amount,
-            Domain.integers(min_value=1),
-            preferred=[1, 10],
+            (self._dom_deposit_amount),
             error=InsufficientFundsError,
         )
         require_env(self.state.is_active, VaultInactiveException, amount)
@@ -621,8 +620,7 @@ class VaultStateMachine(StateMachine[VaultState]):
         """Withdraws a positive amount not exceeding the current balance."""
         require_arg(
             amount,
-            Domain.integers(min_value=1, max_value=self.state.balance),
-            preferred=[1],
+            (self._dom_withdraw_amount),
             error=InsufficientFundsError,
         )
         require_env(self.state.is_active, VaultInactiveException, amount)
@@ -637,7 +635,7 @@ class VaultStateMachine(StateMachine[VaultState]):
     @transition(Vault.set_active)
     def set_active(self, active: bool) -> None:
         """Toggles vault availability through the test-only hook."""
-        require_arg(active, Domain.sampled_from([True, False]), preferred=[True])
+        require_arg(active, self._dom_set_active_active)
         self.inner_set_active(active)
         self.state.is_active = active
         assert sut(Vault).is_active == active
@@ -645,6 +643,18 @@ class VaultStateMachine(StateMachine[VaultState]):
     def inner_set_active(self, active: bool) -> None:
         """Computes the fake availability update strictly from model state."""
         return None
+
+    @domain()
+    def _dom_deposit_amount(self, x: Any) -> bool:
+        return bool(x >= 1)
+
+    @domain()
+    def _dom_withdraw_amount(self, x: Any) -> bool:
+        return bool(x >= 1 and x <= self.state.balance)
+
+    @domain(valid=lambda self: list([True, False]))
+    def _dom_set_active_active(self, val: Any) -> bool:
+        return val in [True, False]
 
 
 proto = VaultStateMachine()
@@ -698,5 +708,5 @@ class TestVaultFake(unittest.TestCase):
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-13T00:00:42Z
 # LAST_CHANGED: 2026-11-13T00:00:42Z
-# CHANGE: Resolved [from:pretense_qa] unbounded balance range materialization (in_set(range(1,balance+1)) timed out): replaced the materialized set with a lazy Domain.integers(min_value=1, max_value=self.state.balance) interval, which enforces the exact 1..balance contract without enumerating, and still raises InsufficientFundsError for non-positive or over-balance amounts (including the empty domain at zero balance on concrete calls). Also seeded seed_initial with positive reserves so fuzz generation never constructs an empty withdraw domain. Verified static checks and fake fuzzing.
+# CHANGE: Resolved [from:pretense_qa] unbounded balance range materialization (in_set(range(1,balance+1)) timed out): replaced the materialized set with a lazy (lambda x: x >= 1 and x <= self.state.balance) interval, which enforces the exact 1..balance contract without enumerating, and still raises InsufficientFundsError for non-positive or over-balance amounts (including the empty domain at zero balance on concrete calls). Also seeded seed_initial with positive reserves so fuzz generation never constructs an empty withdraw domain. Verified static checks and fake fuzzing.
 # --- END AUTOFAB METADATA ---

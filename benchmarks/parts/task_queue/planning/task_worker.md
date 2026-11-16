@@ -25,6 +25,7 @@ By establishing strict execution contracts, deterministic payload transformation
 - If collaborator dispatch or completion raises queue unavailable exception, fetching and executing raises worker execution exception. [handle_queue_unavailable_on_fetch]
 - Fetching and executing returns the dispatched task identifier. [return_dispatched_id_on_fetch]
 - Seeding task failures configures state machines and fakes to raise worker execution exception on designated tasks. [seed_task_failure_in_fakes]
+- A test-only query reports whether a task identifier is configured to fail on execution. [query_failing_task]
 
 ### Woven Contracts
 

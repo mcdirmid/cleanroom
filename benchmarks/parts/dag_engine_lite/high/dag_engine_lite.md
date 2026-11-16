@@ -26,7 +26,7 @@ A *node definition* represents an immutable task node within a graph, carrying a
 
 A *node result* records the execution outcome of a task node, carrying a node identifier, a terminal node state, an optional *returned value*, an optional *caught error*, an *elapsed duration*, and an *attempted retry count*.
 
-A *DAG run report* summarizes an entire graph execution run, carrying a *total node count*, *succeeded node identifiers*, *failed node identifiers*, *skipped node identifiers*, *cancelled node identifiers*, a *wall clock duration*, a *critical path sequence* of node identifiers, and an execution *results mapping* from node identifiers to node results.
+A *DAG run report* summarizes an entire graph execution run, carrying a *total node count*, *succeeded node identifiers*, *failed node identifiers*, *skipped node identifiers*, *cancelled node identifiers*, a *wall clock duration*, a *critical path sequence* of node identifiers, and an execution *results mapping* from terminal node identifiers (executed, skipped, and cancelled nodes; pre-terminal nodes are omitted) to node results.
 
 A *directed acyclic graph* maintains task nodes and directed dependency edges between prerequisites and dependents. Graph modification operations provide:
 
@@ -36,7 +36,7 @@ A *directed acyclic graph* maintains task nodes and directed dependency edges be
 
 - Removing nodes and incident edges, raising node not found error when the node is missing, purging removed nodes from wave scheduler state tracking.
 
-Graph inspection supports testing node presence, retrieving node definitions, retrieving dependencies, retrieving dependents, and listing all nodes. Graph invariant validation verifies that all referenced dependencies exist and raises cycle error upon detecting directed cycles.
+Graph inspection supports testing node presence, retrieving node definitions, retrieving dependencies, retrieving dependents, listing all nodes, and test-only observability queries for checking whether all referenced dependencies exist and whether the graph is acyclic. Graph invariant validation verifies that all referenced dependencies exist and raises cycle error upon detecting directed cycles.
 
 Graph ordering and structural analysis provide:
 

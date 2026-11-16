@@ -579,7 +579,6 @@ from typing import Any, Collection, List, Optional, Set, Tuple
 import unittest
 
 from pretense import (
-    Domain,
     Env,
     StateMachine,
     raises,
@@ -642,9 +641,8 @@ class SemVerSolverStateMachine(StateMachine[SemVerSolverState]):
     def parse_version(self, text: str) -> Version:
         require_arg(
             text,
-            Domain.type(str),
-            preferred=["1.0.0", "1.2.3", "2.0.0-alpha.1"],
-            fuzz_domain=Domain.sampled_from(["1.0.0", "1.2.3", "2.0.0-alpha.1", "0.1.0", "3.0.0"]),
+            str,
+            fuzz_domain=["1.0.0", "1.2.3", "2.0.0-alpha.1", "0.1.0", "3.0.0"],
         )
         ret = self.inner_parse_version(text)
         self.state.parsed_versions[text] = ret
@@ -671,25 +669,23 @@ class SemVerSolverStateMachine(StateMachine[SemVerSolverState]):
     def compare_precedence(self, v1: Version, v2: Version) -> int:
         require_arg(
             v1,
-            Domain.type(Version),
-            preferred=[Version(1, 0, 0), Version(2, 0, 0)],
-            fuzz_domain=Domain.sampled_from([
+            Version,
+            fuzz_domain=[
                 Version(1, 0, 0),
                 Version(1, 2, 3),
                 Version(2, 0, 0),
                 Version(2, 0, 0, ("alpha",)),
-            ]),
+            ],
         )
         require_arg(
             v2,
-            Domain.type(Version),
-            preferred=[Version(1, 0, 0), Version(2, 0, 0)],
-            fuzz_domain=Domain.sampled_from([
+            Version,
+            fuzz_domain=[
                 Version(1, 0, 0),
                 Version(1, 2, 3),
                 Version(2, 0, 0),
                 Version(2, 0, 0, ("alpha",)),
-            ]),
+            ],
         )
         ret = self.inner_compare_precedence(v1, v2)
         assert isinstance(ret, int)
@@ -716,16 +712,15 @@ class SemVerSolverStateMachine(StateMachine[SemVerSolverState]):
     def parse_range(self, text: str) -> VersionRange:
         require_arg(
             text,
-            Domain.type(str),
-            preferred=[">=1.0.0", "^1.0.0", "~1.2.0", "1.0.0 - 2.0.0"],
-            fuzz_domain=Domain.sampled_from([
+            str,
+            fuzz_domain=[
                 ">=1.0.0",
                 "^1.0.0",
                 "~1.2.0",
                 "1.0.0 - 2.0.0",
                 ">=1.0.0 <2.0.0",
                 "1.x || 2.x",
-            ]),
+            ],
         )
         ret = self.inner_parse_range(text)
         self.state.parsed_ranges[text.strip()] = ret
@@ -744,30 +739,27 @@ class SemVerSolverStateMachine(StateMachine[SemVerSolverState]):
     ) -> bool:
         require_arg(
             version,
-            Domain.type(Version),
-            preferred=[Version(1, 0, 0), Version(2, 0, 0)],
-            fuzz_domain=Domain.sampled_from([
+            Version,
+            fuzz_domain=[
                 Version(1, 0, 0),
                 Version(1, 2, 3),
                 Version(2, 0, 0),
                 Version(2, 0, 0, ("alpha",)),
-            ]),
+            ],
         )
         require_arg(
             range_constraint,
-            Domain.type(VersionRange),
-            preferred=[VersionRange(">=1.0.0"), VersionRange("^1.0.0")],
-            fuzz_domain=Domain.sampled_from([
+            VersionRange,
+            fuzz_domain=[
                 VersionRange(">=1.0.0"),
                 VersionRange("^1.0.0"),
                 VersionRange("1.0.0 - 2.0.0"),
-            ]),
+            ],
         )
         require_arg(
             include_prerelease,
-            Domain.type(bool),
-            preferred=[False, True],
-            fuzz_domain=Domain.sampled_from([False, True]),
+            bool,
+            fuzz_domain=[False, True],
         )
         ret = self.inner_satisfies(version, range_constraint, include_prerelease)
         assert isinstance(ret, bool)
@@ -791,13 +783,12 @@ class SemVerSolverStateMachine(StateMachine[SemVerSolverState]):
     def register_package(self, release: PackageRelease) -> None:
         require_arg(
             release,
-            Domain.type(PackageRelease),
-            preferred=[PackageRelease("pkg_a", Version(1, 0, 0))],
-            fuzz_domain=Domain.sampled_from([
+            PackageRelease,
+            fuzz_domain=[
                 PackageRelease("pkg_a", Version(1, 0, 0)),
                 PackageRelease("pkg_a", Version(2, 0, 0)),
                 PackageRelease("pkg_b", Version(1, 0, 0)),
-            ]),
+            ],
         )
         ret = self.inner_register_package(release)
         releases = list(self.state.packages.get(release.name, []))
@@ -815,8 +806,7 @@ class SemVerSolverStateMachine(StateMachine[SemVerSolverState]):
         require(bool(self.state.packages))
         require_arg(
             name,
-            Domain.in_set(self.state.packages),
-            preferred=["pkg_a", "pkg_b"],
+            self.state.packages,
         )
         ret = self.inner_get_releases(name)
         assert isinstance(ret, list)
@@ -829,9 +819,8 @@ class SemVerSolverStateMachine(StateMachine[SemVerSolverState]):
     def has_package(self, name: str) -> bool:
         require_arg(
             name,
-            Domain.type(str),
-            preferred=["pkg_a", "pkg_b", "missing"],
-            fuzz_domain=Domain.sampled_from(["pkg_a", "pkg_b", "missing"]),
+            str,
+            fuzz_domain=["pkg_a", "pkg_b", "missing"],
         )
         ret = self.inner_has_package(name)
         assert isinstance(ret, bool)
@@ -861,14 +850,11 @@ class SemVerSolverStateMachine(StateMachine[SemVerSolverState]):
         require(bool(self.state.packages))
         require_arg(
             root_dependencies,
-            Domain.collection(Domain.type(PackageDependency)),
-            preferred=[
-                (PackageDependency("pkg_a", VersionRange(">=1.0.0")),),
-            ],
-            fuzz_domain=Domain.sampled_from([
+            list,
+            fuzz_domain=[
                 (PackageDependency("pkg_a", VersionRange(">=1.0.0")),),
                 (PackageDependency("pkg_b", VersionRange(">=1.0.0")),),
-            ]),
+            ],
         )
         ret = self.inner_resolve(root_dependencies)
         assert isinstance(ret, ResolutionOutcome)

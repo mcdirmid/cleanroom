@@ -7,10 +7,12 @@ import copy
 import inspect
 import sys
 import textwrap
+import types
 from contextlib import contextmanager
 
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
+import typing
 from typing import (
     Annotated,
     Any,
@@ -20,6 +22,7 @@ from typing import (
     Dict,
     Generator,
     Generic,
+    Iterable,
     List,
     Mapping,
     Optional,
@@ -45,6 +48,8 @@ R = TypeVar("R", default=Any)
 StateT = TypeVar("StateT", covariant=True, default=Any)
 SelfT = TypeVar("SelfT", default=Any)
 E = TypeVar("E", default=Any)
+S_Dom = TypeVar("S_Dom")
+T_Dom = TypeVar("T_Dom")
 K = TypeVar("K", default=Any)
 V = TypeVar("V", default=Any)
 
@@ -128,10 +133,6 @@ class Raised(Outcome[Any]):
 
 class PretenseError(Exception):
     """Base exception for all Pretense errors."""
-
-
-class UnsatisfiedAntecedentError(PretenseError):
-    """Raised when an argument domain cannot generate values in the current state."""
 
 
 class NoMatchingTransitionError(PretenseError):
@@ -293,55 +294,6 @@ def sut(singleton_type: Type[T]) -> T:
     )
 
 
-def sut_state(state_cls: Type[StateT]) -> StateT:
-    """Resolves active state model for a collaborator or target."""
-
-    def _match_state(obj: Any) -> Optional[StateT]:
-        if obj is None:
-            return None
-        for cand in (
-            getattr(obj, "state", None),
-            getattr(getattr(obj, "_state_machine", None), "state", None),
-            getattr(getattr(obj, "_sm", None), "state", None),
-            obj,
-        ):
-            if cand is not None and (
-                isinstance(cand, state_cls)
-                or getattr(type(cand), "__name__", "") == state_cls.__name__
-            ):
-                return cast(StateT, cand)
-        return None
-
-    matched = _match_state(_current_sut.get())
-    if matched is not None:
-        return matched
-    for c in _ACTIVE_SUTS.get().values():
-        matched = _match_state(c)
-        if matched is not None:
-            return matched
-    sm = _current_sm.get()
-    if sm is not None and hasattr(sm, "singletons") and isinstance(sm.singletons, dict):
-        for c in sm.singletons.values():
-            matched = _match_state(c)
-            if matched is not None:
-                return matched
-    try:
-        from support.lib.lifecycle import get_active_scope
-
-        scope = get_active_scope()
-        instances_by_desc = getattr(scope, "_instances_by_desc", None)
-        if instances_by_desc is not None and isinstance(instances_by_desc, dict):
-            for inst in instances_by_desc.values():
-                matched = _match_state(inst)
-                if matched is not None:
-                    return matched
-    except Exception:
-        pass
-    raise PretenseError(
-        f"No active state model of type {state_cls.__name__} found in context"
-    )
-
-
 def test_only(fn: T) -> T:
     """Decorator marking an interface query method or property as test-only observability query."""
     setattr(fn, "__test_only__", True)
@@ -486,28 +438,33 @@ def _safe_instantiate_exception(exc_cls: Type[Exception], match: str = "") -> Ex
                 if param.annotation is not inspect.Parameter.empty
                 else ""
             )
+            val: Any
             if param.annotation is int or ann_str == "int":
-                args.append(0)
+                val = 0
             elif param.annotation is float or ann_str == "float":
-                args.append(0.0)
+                val = 0.0
             elif param.annotation is bool or ann_str == "bool":
-                args.append(False)
+                val = False
             elif (
                 param.annotation is list
                 or param.annotation is Sequence
                 or ann_str.startswith(("list", "List", "Sequence"))
             ):
-                args.append([])
+                val = []
             elif param.annotation is tuple or ann_str.startswith(("tuple", "Tuple")):
-                args.append(())
+                val = ()
             elif param.annotation is dict or ann_str.startswith(
                 ("dict", "Dict", "Mapping")
             ):
-                args.append({})
+                val = {}
             elif i == 0 or "message" in name.lower() or "msg" in name.lower():
-                args.append(msg)
+                val = msg
             else:
-                args.append(f"<mock_{name}>")
+                val = f"<mock_{name}>"
+            if param.kind == inspect.Parameter.KEYWORD_ONLY:
+                kwargs[name] = val
+            else:
+                args.append(val)
         return exc_cls(*args, **kwargs)
     except Exception:
         pass
@@ -595,6 +552,8 @@ def require(
                 msg = (
                     f"Requirement failed: {reason}" if reason else "Requirement failed"
                 )
+                if issubclass(target_exc, Exception):
+                    raise _safe_instantiate_exception(target_exc, msg)
                 raise target_exc(msg)
         msg = f"Requirement failed: {reason}" if reason else "Requirement failed"
         raise PretenseSpecificationError(msg)
@@ -631,80 +590,892 @@ def require_env(
             raise exception_cls(*args, **kwargs)
 
 
-@overload
-def require_arg(
-    val: Sequence[E],
-    domain: Union[Domain[Sequence[E]], Domain[List[E]], Domain[Tuple[E, ...]]],
-    preferred: Optional[Sequence[Sequence[E]]] = None,
-    error: Optional[Union[Type[BaseException], BaseException]] = None,
-    *,
-    fuzz_domain: Optional[Domain[Any]] = None,
-) -> None: ...
-@overload
-def require_arg(
-    val: Optional[Sequence[E]],
-    domain: Union[
-        Domain[Optional[Sequence[E]]],
-        Domain[Optional[List[E]]],
-        Domain[Optional[Tuple[E, ...]]],
-    ],
-    preferred: Optional[Sequence[Optional[Sequence[E]]]] = None,
-    error: Optional[Union[Type[BaseException], BaseException]] = None,
-    *,
-    fuzz_domain: Optional[Domain[Any]] = None,
-) -> None: ...
-@overload
-def require_arg(
-    val: T,
-    domain: Domain[T],
-    preferred: Optional[Sequence[T]] = None,
-    error: Optional[Union[Type[BaseException], BaseException]] = None,
-    *,
-    fuzz_domain: Optional[Domain[Any]] = None,
-) -> None: ...
-@overload
-def require_arg(
-    val: T,
-    domain: Domain[T],
-    preferred: Union[Type[BaseException], BaseException],
-    *,
-    fuzz_domain: Optional[Domain[Any]] = None,
-) -> None: ...
+class TemporalBuffer:
+    """Temporal / lifecycle buffer tracking recent arguments within a transition lookback horizon."""
+    def __init__(self, lookback_horizon: int = 3) -> None:
+        self.lookback_horizon = lookback_horizon
+        self._entries: List[Tuple[Any, int]] = []
+        self._seen: Set[Any] = set()
+
+    def record(self, val: Any, step_idx: int) -> None:
+        try:
+            if val in self._seen:
+                self._entries = [(v, s if v != val else step_idx) for v, s in self._entries]
+                return
+            self._seen.add(val)
+            self._entries.append((val, step_idx))
+        except TypeError:
+            self._entries.append((val, step_idx))
+
+    def get_candidates(self, current_step: int) -> List[Any]:
+        active: List[Tuple[Any, int]] = []
+        for val, step_idx in self._entries:
+            if current_step - step_idx <= self.lookback_horizon:
+                active.append((val, step_idx))
+            else:
+                try:
+                    self._seen.discard(val)
+                except TypeError:
+                    pass
+        self._entries = active
+        return [val for val, _ in self._entries]
+
+
+class SpatialBuffer:
+    """Spatial boundary buffer tracking comparison fenceposts and near-miss values."""
+    def __init__(self, maxlen: int = 30) -> None:
+        self.maxlen = maxlen
+        self._values: List[Any] = []
+        self._seen: Set[Any] = set()
+        self.is_frozen: bool = False
+
+    def add(self, val: Any) -> None:
+        if self.is_frozen:
+            return
+        try:
+            if val in self._seen:
+                return
+            self._seen.add(val)
+        except TypeError:
+            pass
+        self._values.append(val)
+        if len(self._values) > self.maxlen:
+            evicted = self._values.pop(0)
+            try:
+                self._seen.discard(evicted)
+            except TypeError:
+                pass
+
+    def add_many(self, values: Iterable[Any]) -> None:
+        for v in values:
+            self.add(v)
+
+    def get_candidates(self) -> List[Any]:
+        return list(self._values)
+
+
+def unproxy(val: Any) -> Any:
+    if isinstance(val, InterceptProxy):
+        return object.__getattribute__(val, "_raw_val")
+    return val
+
+
+class EdgeHitAuditor:
+    """Tracks seeded/harvested spatial edges and records which ones are exercised during fuzzing."""
+
+    def __init__(self) -> None:
+        self._seeded: Dict[Any, List[Any]] = {}
+        self._hits: Dict[Any, Set[Any]] = {}
+
+    def record_seeded(self, key_type: Any, val: Any) -> None:
+        bucket = self._seeded.setdefault(key_type, [])
+        try:
+            if val not in bucket:
+                bucket.append(val)
+        except Exception:
+            bucket.append(val)
+
+    def record_hit(self, key_type: Any, val: Any) -> None:
+        hits = self._hits.setdefault(key_type, set())
+        try:
+            hits.add(val)
+        except TypeError:
+            pass
+
+    def get_report(self) -> Dict[Any, Dict[str, Any]]:
+        report: Dict[Any, Dict[str, Any]] = {}
+        for k, seeded in self._seeded.items():
+            hits = self._hits.get(k, set())
+            unhit: List[Any] = []
+            hit_count = 0
+            for v in seeded:
+                try:
+                    if v in hits:
+                        hit_count += 1
+                    else:
+                        unhit.append(v)
+                except TypeError:
+                    unhit.append(v)
+            report[k] = {
+                "seeded": len(seeded),
+                "hit": hit_count,
+                "unhit": unhit,
+            }
+        return report
+
+
+_ACTIVE_HARVEST_SESSION: ContextVar[Optional["HarvestSession"]] = ContextVar(
+    "_ACTIVE_HARVEST_SESSION", default=None
+)
+_REGEX_EDGE_CACHE: Dict[str, List[str]] = {}
+_CALLABLE_HARVEST_CACHE: Dict[int, Callable[..., Any]] = {}
+
+
+class HarvestSession:
+    """Per-step harvesting coordinator supporting field provenance, cross-type edges, and bool composition."""
+
+    def __init__(
+        self,
+        get_spatial_buf: Callable[[Any], SpatialBuffer],
+        auditor: Optional[EdgeHitAuditor] = None,
+    ) -> None:
+        self.get_spatial_buf = get_spatial_buf
+        self.auditor = auditor
+        self._field_edges: Dict[Tuple[int, str], List[Any]] = {}
+        self._roots: Dict[int, Any] = {}
+
+    def _add_to_buf(self, key_type: Any, edge: Any) -> None:
+        self.get_spatial_buf(key_type).add(edge)
+        if self.auditor is not None:
+            self.auditor.record_seeded(key_type, edge)
+
+    def record_edge(
+        self,
+        val_type: Any,
+        edge: Any,
+        provenance: Optional[Tuple[Any, Optional[str], Any]] = None,
+    ) -> None:
+        self._add_to_buf(val_type, edge)
+        if provenance is None:
+            return
+        root_val, field_name, transform_kind = provenance
+        if field_name is not None:
+            import dataclasses as _dc
+
+            if _dc.is_dataclass(root_val) and not isinstance(root_val, type):
+                field_names = {f.name for f in _dc.fields(root_val)}
+                if field_name in field_names:
+                    rid = id(root_val)
+                    self._roots[rid] = root_val
+                    bucket = self._field_edges.setdefault((rid, field_name), [])
+                    if edge not in bucket:
+                        bucket.append(edge)
+                    try:
+                        perturbed = _dc.replace(root_val, **{field_name: edge})
+                        self._add_to_buf(type(root_val), perturbed)
+                    except Exception:
+                        pass
+
+        # Cross-type int -> str edge propagation
+        if isinstance(edge, int) and not isinstance(edge, bool):
+            if transform_kind in ("str_to_int", "str_len"):
+                self._add_to_buf(str, str(edge))
+            elif isinstance(transform_kind, tuple) and transform_kind[0] == "str_split":
+                sep = transform_kind[1]
+                self._add_to_buf(str, str(edge))
+                if 0 <= edge <= 6:
+                    self._add_to_buf(str, sep.join(["1"] * edge))
+
+    def compose_bool_edges(self) -> None:
+        """Synthesizes multi-field boundary corners across boolean clauses for each composite root."""
+        import dataclasses as _dc
+        import itertools as _it
+
+        for rid, root_val in list(self._roots.items()):
+            if not _dc.is_dataclass(root_val) or isinstance(root_val, type):
+                continue
+            fields_for_root = [
+                (fname, vals[:3])
+                for (r, fname), vals in self._field_edges.items()
+                if r == rid and vals
+            ]
+            if len(fields_for_root) < 2:
+                continue
+            names = [fname for fname, _ in fields_for_root[:3]]
+            value_lists = [vals for _, vals in fields_for_root[:3]]
+            for count, combo in enumerate(_it.product(*value_lists)):
+                if count >= 16:
+                    break
+                try:
+                    composed = _dc.replace(root_val, **dict(zip(names, combo)))
+                    self._add_to_buf(type(root_val), composed)
+                except Exception:
+                    continue
+
+
+def _record_harvested_value(
+    target_proxy: Any,
+    edges: Iterable[Any],
+    spatial_buf: Optional[SpatialBuffer] = None,
+) -> None:
+    session = (
+        object.__getattribute__(target_proxy, "_session")
+        if isinstance(target_proxy, InterceptProxy)
+        else _ACTIVE_HARVEST_SESSION.get()
+    )
+    provenance = (
+        object.__getattribute__(target_proxy, "_provenance")
+        if isinstance(target_proxy, InterceptProxy)
+        else None
+    )
+    raw = unproxy(target_proxy)
+    for e in edges:
+        if session is not None:
+            session.record_edge(type(e) if e is not None else type(raw), e, provenance)
+        elif spatial_buf is not None:
+            spatial_buf.add(e)
+
+
+def harvest_int_lt(a: Any, b: Any, spatial_buf: Optional[SpatialBuffer] = None) -> bool:
+    raw_a = unproxy(a)
+    raw_b = unproxy(b)
+    if isinstance(a, InterceptProxy) and isinstance(raw_b, int) and not isinstance(raw_b, bool):
+        _record_harvested_value(a, [raw_b - 1, raw_b, raw_b + 1], spatial_buf)
+    if isinstance(b, InterceptProxy) and isinstance(raw_a, int) and not isinstance(raw_a, bool):
+        _record_harvested_value(b, [raw_a - 1, raw_a, raw_a + 1], spatial_buf)
+    return raw_a < raw_b
+
+
+def harvest_int_le(a: Any, b: Any, spatial_buf: Optional[SpatialBuffer] = None) -> bool:
+    raw_a = unproxy(a)
+    raw_b = unproxy(b)
+    if isinstance(a, InterceptProxy) and isinstance(raw_b, int) and not isinstance(raw_b, bool):
+        _record_harvested_value(a, [raw_b - 1, raw_b, raw_b + 1], spatial_buf)
+    if isinstance(b, InterceptProxy) and isinstance(raw_a, int) and not isinstance(raw_a, bool):
+        _record_harvested_value(b, [raw_a - 1, raw_a, raw_a + 1], spatial_buf)
+    return raw_a <= raw_b
+
+
+def harvest_int_gt(a: Any, b: Any, spatial_buf: Optional[SpatialBuffer] = None) -> bool:
+    raw_a = unproxy(a)
+    raw_b = unproxy(b)
+    if isinstance(a, InterceptProxy) and isinstance(raw_b, int) and not isinstance(raw_b, bool):
+        _record_harvested_value(a, [raw_b - 1, raw_b, raw_b + 1], spatial_buf)
+    if isinstance(b, InterceptProxy) and isinstance(raw_a, int) and not isinstance(raw_a, bool):
+        _record_harvested_value(b, [raw_a - 1, raw_a, raw_a + 1], spatial_buf)
+    return raw_a > raw_b
+
+
+def harvest_int_ge(a: Any, b: Any, spatial_buf: Optional[SpatialBuffer] = None) -> bool:
+    raw_a = unproxy(a)
+    raw_b = unproxy(b)
+    if isinstance(a, InterceptProxy) and isinstance(raw_b, int) and not isinstance(raw_b, bool):
+        _record_harvested_value(a, [raw_b - 1, raw_b, raw_b + 1], spatial_buf)
+    if isinstance(b, InterceptProxy) and isinstance(raw_a, int) and not isinstance(raw_a, bool):
+        _record_harvested_value(b, [raw_a - 1, raw_a, raw_a + 1], spatial_buf)
+    return raw_a >= raw_b
+
+
+def harvest_eq(a: Any, b: Any, spatial_buf: Optional[SpatialBuffer] = None) -> bool:
+    raw_a = unproxy(a)
+    raw_b = unproxy(b)
+    if isinstance(a, InterceptProxy):
+        _record_harvested_value(a, [raw_b], spatial_buf)
+    if isinstance(b, InterceptProxy):
+        _record_harvested_value(b, [raw_a], spatial_buf)
+    return raw_a == raw_b
+
+
+def harvest_ne(a: Any, b: Any, spatial_buf: Optional[SpatialBuffer] = None) -> bool:
+    raw_a = unproxy(a)
+    raw_b = unproxy(b)
+    if isinstance(a, InterceptProxy):
+        _record_harvested_value(a, [raw_b], spatial_buf)
+    if isinstance(b, InterceptProxy):
+        _record_harvested_value(b, [raw_a], spatial_buf)
+    return raw_a != raw_b
+
+
+def _harvest_and(*thunks: Callable[[], Any]) -> Any:
+    """Evaluates all boolean conjuncts in harvest mode so RHS clauses still yield edges."""
+    result: Any = True
+    failed = False
+    for idx, thunk in enumerate(thunks):
+        try:
+            val = thunk()
+        except Exception:
+            if not failed:
+                raise
+            continue
+        if not failed:
+            result = val
+            if not val:
+                failed = True
+        elif idx == len(thunks) - 1 and not failed:
+            result = val
+    return result
+
+
+def _harvest_or(*thunks: Callable[[], Any]) -> Any:
+    """Evaluates all boolean disjuncts in harvest mode so RHS clauses still yield edges."""
+    result: Any = False
+    succeeded = False
+    for thunk in thunks:
+        try:
+            val = thunk()
+        except Exception:
+            if not succeeded:
+                raise
+            continue
+        if not succeeded:
+            result = val
+            if val:
+                succeeded = True
+    return result
+
+
+def _harvest_in(item: Any, container: Any) -> bool:
+    raw_item: Any = unproxy(item)
+    raw_container: Any = unproxy(container)
+    if isinstance(item, InterceptProxy):
+        edges: List[Any] = []
+        if isinstance(raw_container, (str, bytes)):
+            if isinstance(raw_item, str) and isinstance(raw_container, str):
+                edges.extend([raw_container, "__non_member__"])
+        elif hasattr(raw_container, "__iter__"):
+            for count, elem in enumerate(raw_container):
+                if count >= 5:
+                    break
+                edges.append(elem)
+            if isinstance(raw_item, str):
+                edges.append("__non_member__")
+            elif isinstance(raw_item, int) and not isinstance(raw_item, bool):
+                edges.append(-999)
+        if edges:
+            _record_harvested_value(item, edges)
+    return bool(typing.cast(Any, raw_item) in typing.cast(Any, raw_container))
+
+
+def _harvest_not_in(item: Any, container: Any) -> bool:
+    return not _harvest_in(item, container)
+
+
+def _harvest_len(obj: Any) -> Any:
+    raw = unproxy(obj)
+    length = len(raw)
+    if isinstance(obj, InterceptProxy):
+        session = object.__getattribute__(obj, "_session")
+        buf = object.__getattribute__(obj, "_spatial_buf")
+        prev_prov = object.__getattribute__(obj, "_provenance")
+        transform = (
+            prev_prov[2]
+            if prev_prov is not None and prev_prov[2] is not None
+            else ("str_len" if isinstance(raw, str) else "len")
+        )
+        root = prev_prov[0] if prev_prov is not None else raw
+        prov = (root, None, transform)
+        if session is not None:
+            session.record_edge(int, 0, prov)
+            session.record_edge(int, 1, prov)
+        return InterceptProxy(length, buf, session=session, provenance=prov)
+    return length
+
+
+def _harvest_int_cast(obj: Any, *args: Any, **kwargs: Any) -> Any:
+    raw = unproxy(obj)
+    val = int(raw, *args, **kwargs)
+    if isinstance(obj, InterceptProxy) and isinstance(raw, str):
+        session = object.__getattribute__(obj, "_session")
+        buf = object.__getattribute__(obj, "_spatial_buf")
+        return InterceptProxy(val, buf, session=session, provenance=(raw, None, "str_to_int"))
+    return val
+
+
+def _harvest_isinstance(obj: Any, classinfo: Any) -> bool:
+    return isinstance(unproxy(obj), unproxy(classinfo))
+
+
+def _harvest_regex_call(recv: Any, method_name: str, arg: Any, *rest: Any, **kwargs: Any) -> Any:
+    import re as _re
+    import warnings as _warnings
+
+    raw_recv = unproxy(recv)
+    raw_arg = unproxy(arg)
+    if isinstance(raw_recv, _re.Pattern) and isinstance(raw_recv.pattern, str):
+        session = _ACTIVE_HARVEST_SESSION.get()
+        if session is not None:
+            samples = _REGEX_EDGE_CACHE.get(raw_recv.pattern)
+            if samples is None:
+                samples = []
+                try:
+                    from hypothesis import strategies as _st
+
+                    strat = _st.from_regex(raw_recv, fullmatch=(method_name == "fullmatch"))
+                    with _warnings.catch_warnings():
+                        _warnings.simplefilter("ignore")
+                        for _ in range(3):
+                            s = strat.example()
+                            if isinstance(s, str) and s not in samples:
+                                samples.append(s)
+                except Exception:
+                    pass
+                _REGEX_EDGE_CACHE[raw_recv.pattern] = samples
+            for s in samples:
+                session.record_edge(str, s)
+    return getattr(raw_recv, method_name)(raw_arg, *rest, **kwargs)
+
+
+class InterceptProxy:
+    """Transparent proxy intercepting comparisons, field accesses, and string/regex ops for harvesting."""
+
+    def __init__(
+        self,
+        raw_val: Any,
+        spatial_buf: Optional[SpatialBuffer] = None,
+        session: Optional[HarvestSession] = None,
+        provenance: Optional[Tuple[Any, Optional[str], Any]] = None,
+    ) -> None:
+        object.__setattr__(self, "_raw_val", raw_val)
+        object.__setattr__(self, "_spatial_buf", spatial_buf)
+        object.__setattr__(self, "_session", session)
+        object.__setattr__(self, "_provenance", provenance)
+
+    def __lt__(self, other: Any) -> bool:
+        buf = object.__getattribute__(self, "_spatial_buf")
+        return harvest_int_lt(self, other, buf)
+
+    def __le__(self, other: Any) -> bool:
+        buf = object.__getattribute__(self, "_spatial_buf")
+        return harvest_int_le(self, other, buf)
+
+    def __gt__(self, other: Any) -> bool:
+        buf = object.__getattribute__(self, "_spatial_buf")
+        return harvest_int_gt(self, other, buf)
+
+    def __ge__(self, other: Any) -> bool:
+        buf = object.__getattribute__(self, "_spatial_buf")
+        return harvest_int_ge(self, other, buf)
+
+    def __eq__(self, other: Any) -> bool:
+        buf = object.__getattribute__(self, "_spatial_buf")
+        return harvest_eq(self, other, buf)
+
+    def __ne__(self, other: Any) -> bool:
+        buf = object.__getattribute__(self, "_spatial_buf")
+        return harvest_ne(self, other, buf)
+
+    def __contains__(self, item: Any) -> bool:
+        return _harvest_in(item, self)
+
+    def __getitem__(self, key: Any) -> Any:
+        raw = object.__getattribute__(self, "_raw_val")
+        buf = object.__getattribute__(self, "_spatial_buf")
+        session = object.__getattribute__(self, "_session")
+        prov = object.__getattribute__(self, "_provenance")
+        item = raw[unproxy(key)]
+        item_buf = (
+            session.get_spatial_buf(type(item))
+            if session is not None
+            else (buf if type(item) is type(raw) else None)
+        )
+        return wrap_proxy(item, item_buf, session=session, provenance=prov)
+
+    def __getattr__(self, name: str) -> Any:
+        raw = object.__getattribute__(self, "_raw_val")
+        buf = object.__getattribute__(self, "_spatial_buf")
+        session = object.__getattribute__(self, "_session")
+        prov = object.__getattribute__(self, "_provenance")
+        attr = getattr(raw, name)
+        if callable(attr):
+            if isinstance(raw, str):
+                def str_method_proxy(*args: Any, **kwargs: Any) -> Any:
+                    unproxied_args = [unproxy(a) for a in args]
+                    unproxied_kwargs = {k: unproxy(v) for k, v in kwargs.items()}
+                    res = attr(*unproxied_args, **unproxied_kwargs)
+                    if session is not None:
+                        if name in ("startswith", "endswith") and unproxied_args and isinstance(unproxied_args[0], str):
+                            prefix = unproxied_args[0]
+                            session.record_edge(str, prefix)
+                            session.record_edge(str, f"{prefix}x" if name == "startswith" else f"x{prefix}")
+                            session.record_edge(str, "")
+                        elif name == "split":
+                            sep = unproxied_args[0] if unproxied_args and isinstance(unproxied_args[0], str) else " "
+                            if sep:
+                                session.record_edge(str, sep)
+                                session.record_edge(str, f"1{sep}2")
+                                session.record_edge(str, f"1{sep}2{sep}3")
+                            return wrap_proxy(
+                                res,
+                                session.get_spatial_buf(type(res)),
+                                session=session,
+                                provenance=(raw, None, ("str_split", sep)),
+                            )
+                        elif name == "isdigit":
+                            for tok in ("0", "1", "abc", ""):
+                                session.record_edge(str, tok)
+                        elif name == "strip":
+                            session.record_edge(str, "")
+                            session.record_edge(str, f" {raw.strip()} ")
+                    return res
+
+                return str_method_proxy
+
+            def method_proxy(*args: Any, **kwargs: Any) -> Any:
+                unproxied_args = [unproxy(a) for a in args]
+                unproxied_kwargs = {k: unproxy(v) for k, v in kwargs.items()}
+                return attr(*unproxied_args, **unproxied_kwargs)
+
+            return method_proxy
+
+        attr_buf = (
+            session.get_spatial_buf(type(attr))
+            if session is not None
+            else (buf if type(attr) is type(raw) else None)
+        )
+        root = prov[0] if prov is not None else raw
+        field_name = name if prov is None else (prov[1] or name)
+        return wrap_proxy(
+            attr,
+            attr_buf,
+            session=session,
+            provenance=(root, field_name, prov[2] if prov is not None else None),
+        )
+
+    def __bool__(self) -> bool:
+        return bool(object.__getattribute__(self, "_raw_val"))
+
+    def __repr__(self) -> str:
+        return f"InterceptProxy({object.__getattribute__(self, '_raw_val')!r})"
+
+    def __hash__(self) -> int:
+        return hash(object.__getattribute__(self, "_raw_val"))
+
+
+def wrap_proxy(
+    val: Any,
+    spatial_buf: Optional[SpatialBuffer] = None,
+    session: Optional[HarvestSession] = None,
+    provenance: Optional[Tuple[Any, Optional[str], Any]] = None,
+) -> Any:
+    if isinstance(val, InterceptProxy):
+        return val
+    return InterceptProxy(val, spatial_buf, session=session, provenance=provenance)
+
+
+class _HarvestASTTransformer(ast.NodeTransformer):
+    """Rewrites BoolOp, In/NotIn, len(), int(), and regex calls for non-short-circuiting edge harvesting."""
+
+    def visit_BoolOp(self, node: ast.BoolOp) -> ast.AST:
+        self.generic_visit(node)
+        helper_name = "_harvest_and" if isinstance(node.op, ast.And) else "_harvest_or"
+        thunks: List[ast.expr] = [
+            ast.Lambda(
+                args=ast.arguments(
+                    posonlyargs=[], args=[], kwonlyargs=[], kw_defaults=[], defaults=[]
+                ),
+                body=val,
+            )
+            for val in node.values
+        ]
+        return ast.copy_location(
+            ast.Call(
+                func=ast.Name(id=helper_name, ctx=ast.Load()),
+                args=thunks,
+                keywords=[],
+            ),
+            node,
+        )
+
+    def visit_Compare(self, node: ast.Compare) -> ast.AST:
+        self.generic_visit(node)
+        if len(node.ops) == 1 and isinstance(node.ops[0], (ast.In, ast.NotIn)):
+            helper_name = "_harvest_in" if isinstance(node.ops[0], ast.In) else "_harvest_not_in"
+            return ast.copy_location(
+                ast.Call(
+                    func=ast.Name(id=helper_name, ctx=ast.Load()),
+                    args=[node.left, node.comparators[0]],
+                    keywords=[],
+                ),
+                node,
+            )
+        return node
+
+    def visit_Call(self, node: ast.Call) -> ast.AST:
+        self.generic_visit(node)
+        if isinstance(node.func, ast.Name) and node.func.id == "isinstance" and len(node.args) == 2 and not node.keywords:
+            return ast.copy_location(
+                ast.Call(
+                    func=ast.Name(id="_harvest_isinstance", ctx=ast.Load()),
+                    args=node.args,
+                    keywords=[],
+                ),
+                node,
+            )
+        if isinstance(node.func, ast.Name) and node.func.id == "len" and len(node.args) == 1 and not node.keywords:
+            return ast.copy_location(
+                ast.Call(
+                    func=ast.Name(id="_harvest_len", ctx=ast.Load()),
+                    args=node.args,
+                    keywords=[],
+                ),
+                node,
+            )
+        if isinstance(node.func, ast.Name) and node.func.id == "int" and node.args:
+            return ast.copy_location(
+                ast.Call(
+                    func=ast.Name(id="_harvest_int_cast", ctx=ast.Load()),
+                    args=node.args,
+                    keywords=node.keywords,
+                ),
+                node,
+            )
+        if (
+            isinstance(node.func, ast.Attribute)
+            and node.func.attr in ("match", "search", "fullmatch")
+            and node.args
+        ):
+            return ast.copy_location(
+                ast.Call(
+                    func=ast.Name(id="_harvest_regex_call", ctx=ast.Load()),
+                    args=[node.func.value, ast.Constant(value=node.func.attr), *node.args],
+                    keywords=node.keywords,
+                ),
+                node,
+            )
+        return node
+
+
+def _compile_harvest_callable(
+    orig_fn: Callable[..., Any],
+    harvest_globs: Dict[str, Any],
+    clone_name: str,
+) -> Callable[..., Any]:
+    """Compiles an AST-instrumented harvest clone, falling back to __code__.replace() if source is unavailable."""
+    harvest_globs.setdefault("_harvest_and", _harvest_and)
+    harvest_globs.setdefault("_harvest_or", _harvest_or)
+    harvest_globs.setdefault("_harvest_in", _harvest_in)
+    harvest_globs.setdefault("_harvest_not_in", _harvest_not_in)
+    harvest_globs.setdefault("_harvest_len", _harvest_len)
+    harvest_globs.setdefault("_harvest_int_cast", _harvest_int_cast)
+    harvest_globs.setdefault("_harvest_isinstance", _harvest_isinstance)
+    harvest_globs.setdefault("_harvest_regex_call", _harvest_regex_call)
+    closure = getattr(orig_fn, "__closure__", None)
+    code_obj_orig = getattr(orig_fn, "__code__", None)
+    if closure and code_obj_orig is not None:
+        for var_name, cell in zip(code_obj_orig.co_freevars, closure):
+            try:
+                val = cell.cell_contents
+                if isinstance(val, DomainWrapper):
+                    val = val.get_harvest_clone()
+                harvest_globs.setdefault(var_name, val)
+            except ValueError:
+                pass
+    try:
+        src = textwrap.dedent(inspect.getsource(orig_fn))
+        tree = ast.parse(src)
+        if tree.body and isinstance(tree.body[0], ast.FunctionDef):
+            fn_node = tree.body[0]
+            fn_node.decorator_list = []
+            fn_node.name = clone_name
+            transformed = _HarvestASTTransformer().visit(fn_node)
+            ast.fix_missing_locations(transformed)
+            mod = ast.Module(body=[transformed], type_ignores=[])
+            code_obj = compile(mod, filename=inspect.getsourcefile(orig_fn) or "<harvest>", mode="exec")
+            local_ns: Dict[str, Any] = {}
+            exec(code_obj, harvest_globs, local_ns)
+            if clone_name in local_ns and callable(local_ns[clone_name]):
+                return local_ns[clone_name]
+    except Exception:
+        pass
+    if hasattr(orig_fn, "__code__"):
+        return types.FunctionType(
+            orig_fn.__code__.replace(),
+            harvest_globs,
+            name=clone_name,
+            argdefs=getattr(orig_fn, "__defaults__", None),
+            closure=getattr(orig_fn, "__closure__", None),
+        )
+    return orig_fn
+
+
+class DomainWrapper(Generic[S_Dom, T_Dom]):
+    """Wraps a procedural recognizer method with finite-sequence candidate producers."""
+
+    def __init__(
+        self,
+        fn: Callable[[S_Dom, T_Dom], bool],
+        valid: Optional[Callable[[S_Dom], Sequence[T_Dom]]] = None,
+        invalid: Optional[Callable[[S_Dom], Sequence[object]]] = None,
+        _instance: Optional[S_Dom] = None,
+        _parent: Optional[DomainWrapper[S_Dom, T_Dom]] = None,
+    ) -> None:
+        self.fn = fn
+        self.valid = valid
+        self.invalid = invalid
+        self._instance = _instance
+        self._parent = _parent
+        self._harvest_clone: Optional[Callable[[S_Dom, object], bool]] = None
+        self.__name__ = getattr(fn, "__name__", "domain_recognizer")
+        self.__doc__ = getattr(fn, "__doc__", None)
+        mod = getattr(fn, "__module__", "")
+        self.__module__ = mod if mod is not None else ""
+
+    @overload
+    def __get__(
+        self, instance: None, owner: type[S_Dom]
+    ) -> DomainWrapper[S_Dom, T_Dom]: ...
+
+    @overload
+    def __get__(
+        self, instance: S_Dom, owner: type[S_Dom]
+    ) -> DomainWrapper[S_Dom, T_Dom]: ...
+
+    def __get__(
+        self, instance: Optional[S_Dom], owner: Optional[type[S_Dom]] = None
+    ) -> DomainWrapper[S_Dom, T_Dom]:
+        if instance is None:
+            return self
+        return DomainWrapper(
+            self.fn,
+            valid=self.valid,
+            invalid=self.invalid,
+            _instance=instance,
+            _parent=self._parent or self,
+        )
+
+    def __call__(self, val: object) -> bool:
+        if self._instance is None:
+            raise TypeError(
+                f"@domain recognizer {self.__name__!r} must be accessed as a bound method (self.{self.__name__})"
+            )
+        return bool(self.fn(self._instance, cast(T_Dom, val)))
+
+    def validate(self, val: object) -> bool:
+        return self(val)
+
+    def valid_candidates(self) -> Sequence[T_Dom]:
+        if self.valid is None or self._instance is None:
+            return ()
+        return tuple(self.valid(self._instance))
+
+    def invalid_candidates(self) -> Sequence[object]:
+        if self.invalid is None or self._instance is None:
+            return ()
+        return tuple(self.invalid(self._instance))
+
+    def get_harvest_clone(
+        self, _visiting: Optional[Set[int]] = None
+    ) -> Callable[[object], bool]:
+        owner = self._parent if self._parent is not None else self
+        if owner._harvest_clone is None:
+            orig_fn = owner.fn
+            if hasattr(orig_fn, "__code__"):
+                visiting = set() if _visiting is None else _visiting
+                if id(owner) in visiting:
+                    return self
+                visiting.add(id(owner))
+                harvest_globs = dict(orig_fn.__globals__)
+                for k, v in list(harvest_globs.items()):
+                    if isinstance(v, DomainWrapper) and v is not owner:
+                        harvest_globs[k] = v.get_harvest_clone(visiting)
+                owner._harvest_clone = cast(
+                    Callable[[S_Dom, object], bool],
+                    _compile_harvest_callable(
+                        orig_fn, harvest_globs, f"{owner.__name__}_harvest"
+                    ),
+                )
+            else:
+                owner._harvest_clone = cast(Callable[[S_Dom, object], bool], orig_fn)
+        compiled = owner._harvest_clone
+        inst = self._instance
+        if inst is not None:
+            return lambda proxy_val: bool(compiled(inst, proxy_val))
+        return cast(Callable[[object], bool], compiled)
+
+
+def domain(
+    valid: Optional[Callable[[S_Dom], Sequence[T_Dom]]] = None,
+    invalid: Optional[Callable[[S_Dom], Sequence[object]]] = None,
+) -> Callable[[Callable[[S_Dom, T_Dom], bool]], DomainWrapper[S_Dom, T_Dom]]:
+    """Method decorator attaching finite-sequence candidate producers to a procedural recognizer."""
+    def decorator(fn: Callable[[S_Dom, T_Dom], bool]) -> DomainWrapper[S_Dom, T_Dom]:
+        return DomainWrapper(fn, valid=valid, invalid=invalid)
+    return decorator
+
+
+def _validate_requirement(val: Any, requirement: Any) -> bool:
+    """Checks whether a runtime value satisfies a Pretense domain, type, generic alias, or predicate."""
+    if requirement is typing.Any:
+        return True
+    if isinstance(requirement, type):
+        return isinstance(val, requirement)
+    origin = typing.get_origin(requirement)
+    if origin is not None:
+        import collections.abc as _cabc
+        import types as _types
+
+        args = typing.get_args(requirement)
+        if origin is typing.Union or origin is getattr(_types, "UnionType", None):
+            return any(_validate_requirement(val, a) for a in args)
+        if origin in (
+            list,
+            tuple,
+            set,
+            frozenset,
+            _cabc.Collection,
+            _cabc.Sequence,
+            _cabc.Set,
+            _cabc.MutableSet,
+            _cabc.Iterable,
+        ):
+            if isinstance(val, (str, bytes, _cabc.Mapping)) or not isinstance(
+                val, _cabc.Iterable
+            ):
+                return False
+            if origin in (list, set, frozenset, tuple) and not isinstance(val, origin):
+                return False
+            if args:
+                elem_req = args[0]
+                if origin is tuple and len(args) == 2 and args[1] is Ellipsis:
+                    elem_req = args[0]
+                elif origin is tuple and (len(args) != 2 or args[1] is not Ellipsis):
+                    items = list(val)
+                    return len(items) == len(args) and all(
+                        _validate_requirement(x, a) for x, a in zip(items, args)
+                    )
+                return all(_validate_requirement(x, elem_req) for x in val)
+            return True
+        if origin in (dict, _cabc.Mapping, _cabc.MutableMapping):
+            if not isinstance(val, _cabc.Mapping):
+                return False
+            if len(args) == 2:
+                k_req, v_req = args
+                return all(
+                    _validate_requirement(k, k_req) and _validate_requirement(v, v_req)
+                    for k, v in val.items()
+                )
+            return True
+    if isinstance(requirement, (set, frozenset, list, tuple, dict)):
+        return val in requirement
+    if isinstance(requirement, (DomainWrapper, Domain)):
+        return requirement.validate(val)
+    if callable(requirement):
+        try:
+            return bool(requirement(val))
+        except Exception:
+            return False
+    return val == requirement
+
+
 def require_arg(
     val: Any,
-    domain: Any,
-    preferred: Optional[
-        Union[Sequence[Any], Type[BaseException], BaseException]
-    ] = None,
+    requirement: Any,
     error: Optional[Union[Type[BaseException], BaseException]] = None,
     *,
     fuzz_domain: Optional[Any] = None,
 ) -> None:
-    """Argument domain validation and preferred candidate binding."""
+    """Argument requirement validation and candidate binding."""
     if _disable_preconditions.get():
         return
-    if preferred is not None and (
-        isinstance(preferred, BaseException)
-        or (isinstance(preferred, type) and issubclass(preferred, BaseException))
-    ):
-        error = cast(Any, preferred)
-        preferred = None
-    dom: Domain[Any] = domain if isinstance(domain, Domain) else Domain.of(domain)
-    if not dom.validate(val):
+
+    is_valid = _validate_requirement(val, requirement)
+
+    if not is_valid:
         if error is not None:
             if isinstance(error, BaseException):
                 raise error
             try:
                 raise error()
             except TypeError:
-                raise error(
-                    f"Argument value {val!r} failed domain validation for {domain}"
-                )
+                msg = f"Argument value {val!r} failed requirement validation for {requirement}"
+                if issubclass(error, Exception):
+                    raise _safe_instantiate_exception(error, msg)
+                raise error(msg)
         raise PretenseSpecificationError(
-            f"Argument value {val!r} failed domain validation for {domain}. "
+            f"Argument value {val!r} failed domain validation for {requirement}. "
             "If this argument is valid per the specification contract (e.g. testing error paths or edge cases), "
-            "the domain passed to require_arg may be too restrictive. Consider using Domain.type(...) or open domains, "
-            "and pass preferred=[...] for fuzz generation sizing."
+            "the domain passed to require_arg may be too restrictive. Consider using open native types, collections, "
+            "single-argument lambdas, or @domain."
         )
 
 
@@ -717,16 +1488,14 @@ def ensure(condition: bool, reason: str = "") -> None:
 
 def ensure_ret(
     call_expr: T,
-    domain: Optional[Domain[T]] = None,
-    preferred: Optional[Sequence[T]] = None,
+    requirement: Optional[Any] = None,
 ) -> T:
-    """Wrapped execution verifying return value against an expected domain or value."""
+    """Wrapped execution verifying return value against an expected requirement or value."""
     _last_ensured_ret.set(call_expr)
-    if domain is not None:
-        dom: Domain[T] = domain if isinstance(domain, Domain) else Domain.of(domain)
-        if not dom.validate(call_expr):
+    if requirement is not None:
+        if not _validate_requirement(call_expr, requirement):
             raise AssertionError(
-                f"Return value {call_expr!r} does not belong to expected domain {domain}"
+                f"Return value {call_expr!r} does not satisfy expected requirement {requirement}"
             )
     return call_expr
 
@@ -2802,6 +3571,35 @@ def _resolve_suts_and_target(
     return target_obj, suts_obj
 
 
+def _normalize_chained_comparisons(node: ast.AST) -> ast.AST:
+    """Normalizes chained comparisons like 0 < x < 100 into x > 0 and x < 100."""
+    class Transformer(ast.NodeTransformer):
+        def visit_Compare(self, node: ast.Compare) -> ast.AST:
+            self.generic_visit(node)
+            comp = node
+            if len(comp.ops) <= 1:
+                return comp
+
+            def invert_op(op: ast.cmpop) -> ast.cmpop:
+                if isinstance(op, ast.Lt): return ast.Gt()
+                if isinstance(op, ast.LtE): return ast.GtE()
+                if isinstance(op, ast.Gt): return ast.Lt()
+                if isinstance(op, ast.GtE): return ast.LtE()
+                return op
+
+            terms = [comp.left] + comp.comparators
+            ops = comp.ops
+            parts: List[ast.expr] = []
+            for i in range(len(ops)):
+                t1, op, t2 = terms[i], ops[i], terms[i + 1]
+                if isinstance(t2, ast.Name) and not isinstance(t1, ast.Name):
+                    parts.append(ast.Compare(left=t2, ops=[invert_op(op)], comparators=[t1]))
+                else:
+                    parts.append(ast.Compare(left=t1, ops=[op], comparators=[t2]))
+            return ast.BoolOp(op=ast.And(), values=parts)
+    return Transformer().visit(copy.deepcopy(node))
+
+
 _LINEAR_PARSE_CACHE: Dict[Tuple[Callable[..., Any], str], Dict[str, Any]] = {}
 
 
@@ -2823,7 +3621,9 @@ def _parse_linear_transition(
     has_suts_param = False
 
     req_codes: List[Any] = []
+    req_error_specs: List[Tuple[Any, Any]] = []
     param_domains: Dict[str, Tuple[Any, ...]] = {}
+    arg_error_specs: Dict[str, Any] = {}
 
     try:
         src = textwrap.dedent(inspect.getsource(orig_fn))
@@ -2878,6 +3678,21 @@ def _parse_linear_transition(
                                 "eval",
                             )
                             req_codes.append(code)
+                            err_expr = None
+                            if len(call.args) >= 2:
+                                err_expr = call.args[1]
+                            else:
+                                for kw in call.keywords:
+                                    if kw.arg == "error":
+                                        err_expr = kw.value
+                                        break
+                            if err_expr is not None:
+                                err_code = compile(
+                                    ast.Expression(body=err_expr),
+                                    f"<{attr_name}_require_err_{len(req_error_specs)}>",
+                                    "eval",
+                                )
+                                req_error_specs.append((code, err_code))
                     elif func_name == "require_arg" and len(call.args) >= 2:
                         arg_name_node = call.args[0]
                         arg_name = (
@@ -2885,41 +3700,30 @@ def _parse_linear_transition(
                             if isinstance(arg_name_node, ast.Name)
                             else ""
                         )
+                        raw_req_expr = call.args[1]
+                        norm_req_expr = _normalize_chained_comparisons(raw_req_expr)
                         domain_code = compile(
-                            ast.Expression(body=call.args[1]),
+                            ast.Expression(body=cast(ast.expr, norm_req_expr)),
                             f"<{attr_name}_dom_{arg_name}>",
                             "eval",
                         )
-                        pref_code = None
+                        err_code = None
                         if len(call.args) >= 3:
-                            arg3 = call.args[2]
-                            is_err = False
-                            if isinstance(arg3, ast.Name) and (
-                                arg3.id.endswith("Error")
-                                or arg3.id.endswith("Exception")
-                            ):
-                                is_err = True
-                            elif isinstance(arg3, ast.Attribute) and (
-                                arg3.attr.endswith("Error")
-                                or arg3.attr.endswith("Exception")
-                            ):
-                                is_err = True
-                            if not is_err:
-                                pref_code = compile(
-                                    ast.Expression(body=arg3),
-                                    f"<{attr_name}_pref_{arg_name}>",
-                                    "eval",
-                                )
-                        fuzz_dom_code = None
-                        if pref_code is None:
+                            err_code = compile(
+                                ast.Expression(body=call.args[2]),
+                                f"<{attr_name}_arg_err_{arg_name}>",
+                                "eval",
+                            )
+                        if err_code is None:
                             for kw in call.keywords:
-                                if kw.arg == "preferred":
-                                    pref_code = compile(
+                                if kw.arg == "error":
+                                    err_code = compile(
                                         ast.Expression(body=kw.value),
-                                        f"<{attr_name}_pref_{arg_name}>",
+                                        f"<{attr_name}_arg_err_{arg_name}>",
                                         "eval",
                                     )
                                     break
+                        fuzz_dom_code = None
                         for kw in call.keywords:
                             if kw.arg == "fuzz_domain":
                                 fuzz_dom_code = compile(
@@ -2929,7 +3733,9 @@ def _parse_linear_transition(
                                 )
                                 break
                         if arg_name:
-                            param_domains[arg_name] = (domain_code, pref_code, fuzz_dom_code)
+                            param_domains[arg_name] = (domain_code, fuzz_dom_code)
+                            if err_code is not None:
+                                arg_error_specs[arg_name] = err_code
     except Exception:
         pass
 
@@ -2942,7 +3748,9 @@ def _parse_linear_transition(
         "has_suts_param": has_suts_param,
         "param_names": param_names,
         "req_codes": req_codes,
+        "req_error_specs": req_error_specs,
         "param_domains": param_domains,
+        "arg_error_specs": arg_error_specs,
         "globals": orig_fn.__globals__,
     }
     _LINEAR_PARSE_CACHE[cache_key] = res
@@ -2970,13 +3778,23 @@ def _build_linear_transition(
     t._target_fn = target_fn
 
     req_codes = list(desc["req_codes"])
+    req_error_specs = list(desc.get("req_error_specs", []))
     param_names = desc["param_names"]
     param_domains = dict(desc["param_domains"])
+    arg_error_specs = dict(desc.get("arg_error_specs", {}))
     fn_globals = desc["globals"]
     eval_globs = dict(fn_globals)
+    orig_fn_obj = desc.get("orig_fn")
+    if orig_fn_obj is not None and getattr(orig_fn_obj, "__closure__", None):
+        for var_name, cell in zip(
+            orig_fn_obj.__code__.co_freevars, orig_fn_obj.__closure__
+        ):
+            try:
+                eval_globs.setdefault(var_name, cell.cell_contents)
+            except ValueError:
+                pass
     eval_globs.setdefault("Domain", Domain)
     eval_globs.setdefault("PretenseSpecificationError", PretenseSpecificationError)
-    eval_globs.setdefault("sut_state", sut_state)
     eval_globs.setdefault("sut", sut)
     eval_globs.setdefault("require", require)
     eval_globs.setdefault("requires", requires)
@@ -3004,6 +3822,10 @@ def _build_linear_transition(
                                 eval_globs.setdefault(k, v)
                     if not req_codes and base_desc.get("req_codes"):
                         req_codes = list(base_desc["req_codes"])
+                    if not req_error_specs and base_desc.get("req_error_specs"):
+                        req_error_specs = list(base_desc["req_error_specs"])
+                    for p_name, err_c in base_desc.get("arg_error_specs", {}).items():
+                        arg_error_specs.setdefault(p_name, err_c)
                     base_target_fn = getattr(base_attr, "__target_fn__", base_raw_fn)
                     break
 
@@ -3064,6 +3886,9 @@ def _build_linear_transition(
                     eval_ns.setdefault(st_cls.__name__, st_cls)
         drawn: Dict[str, Any] = {}
 
+        def check_valid(val: Any, requirement: Any) -> bool:
+            return _validate_requirement(val, requirement)
+
         if is_generation:
             draw = get_current_draw()
             for p_name in param_names:
@@ -3074,63 +3899,227 @@ def _build_linear_transition(
                     )
                 p_dom_info = param_domains[p_name]
                 d_code = p_dom_info[0]
-                pr_code = p_dom_info[1]
-                fuzz_d_code = p_dom_info[2] if len(p_dom_info) > 2 else None
+                fuzz_d_code = p_dom_info[1] if len(p_dom_info) > 1 else None
                 dom = eval(d_code, {**eval_globs, **eval_ns})
-                if not isinstance(dom, Domain):
-                    dom = Domain.of(dom)
 
-                gen_dom = dom
-                if fuzz_d_code is not None:
-                    try:
-                        f_dom = eval(fuzz_d_code, {**eval_globs, **eval_ns})
-                        if f_dom is not None:
-                            gen_dom = (
-                                f_dom if isinstance(f_dom, Domain) else Domain.of(f_dom)
-                            )
-                    except Exception:
-                        gen_dom = dom
+                # Determine target type
+                param_type = inspect.Parameter.empty
+                if hasattr(raw_fn, "__annotations__") and p_name in raw_fn.__annotations__:
+                    param_type = raw_fn.__annotations__[p_name]
 
-                valid_pref: List[Any] = []
-                if pr_code is not None:
-                    try:
-                        pr_vals = eval(pr_code, {**eval_globs, **eval_ns})
-                        if pr_vals:
-                            valid_pref = [v for v in pr_vals if dom.validate(v)]
-                    except Exception:
-                        valid_pref = []
+                target_type = object
+                if isinstance(dom, type):
+                    target_type = dom
+                elif param_type is not inspect.Parameter.empty and isinstance(param_type, type):
+                    target_type = param_type
+                elif isinstance(dom, (set, frozenset, list, tuple)) and dom:
+                    target_type = type(next(iter(dom)))
+                elif param_type is not inspect.Parameter.empty:
+                    p_origin = typing.get_origin(param_type)
+                    if isinstance(p_origin, type):
+                        target_type = p_origin
+                    elif p_origin is not None:
+                        import collections.abc as _cabc
 
-                strat = gen_dom.to_strategy()
-                if getattr(strat, "is_empty", False) and not valid_pref:
-                    raise UnsatisfiedAntecedentError(
-                        f"Domain for parameter '{p_name}' cannot generate valid arguments in state: {state}"
+                        if p_origin in (_cabc.Collection, _cabc.Sequence, _cabc.Iterable):
+                            target_type = tuple
+                        elif p_origin in (_cabc.Set, _cabc.MutableSet):
+                            target_type = set
+                        elif p_origin in (_cabc.Mapping, _cabc.MutableMapping):
+                            target_type = dict
+
+                # Candidate generation pools
+                current_step = getattr(this, "_step_counter", 0)
+                lookup_types = [target_type]
+                if target_type is tuple:
+                    lookup_types.append(list)
+                temporal_pool = []
+                spatial_pool = []
+                for lt in lookup_types:
+                    t_buf = (
+                        this._get_temporal_buffer(lt)
+                        if hasattr(this, "_get_temporal_buffer")
+                        else None
                     )
+                    s_buf = (
+                        this._get_spatial_buffer(lt)
+                        if hasattr(this, "_get_spatial_buffer")
+                        else None
+                    )
+                    if t_buf:
+                        temporal_pool.extend(
+                            v for v in t_buf.get_candidates(current_step) if check_valid(v, dom)
+                        )
+                    if s_buf:
+                        spatial_pool.extend(
+                            v for v in s_buf.get_candidates() if check_valid(v, dom)
+                        )
 
                 chosen_val = NotBound
-                if valid_pref and draw is not None and draw(st.booleans()):
-                    chosen_val = draw(st.sampled_from(valid_pref))
-                elif draw is not None:
-                    try:
-                        chosen_val = _draw_from_domain(gen_dom, draw)
-                    except Exception as e:
-                        if valid_pref:
-                            chosen_val = draw(st.sampled_from(valid_pref))
-                        else:
-                            raise UnsatisfiedAntecedentError(
-                                f"Domain for parameter '{p_name}' failed to generate valid argument in state: {state}"
-                            ) from e
-                else:
-                    chosen_val = _resolve_argument_value(strat, None)
 
-                if chosen_val is NotBound or not dom.validate(chosen_val):
-                    if valid_pref:
-                        chosen_val = valid_pref[0]
+                if isinstance(dom, DomainWrapper):
+                    valid_cands = [e for e in dom.valid_candidates() if check_valid(e, dom)]
+                    if valid_cands:
+                        if draw is not None:
+                            roll = draw(st.integers(1, 100))
+                            if roll <= 60:
+                                chosen_val = draw(st.sampled_from(valid_cands))
+                            elif roll <= 80 and temporal_pool:
+                                chosen_val = draw(st.sampled_from(temporal_pool))
+                            elif spatial_pool:
+                                chosen_val = draw(st.sampled_from(spatial_pool))
+                            else:
+                                chosen_val = draw(st.sampled_from(valid_cands))
+                        else:
+                            chosen_val = valid_cands[0]
+                    elif temporal_pool and draw is not None and draw(st.integers(1, 100)) <= 50:
+                        cand = draw(st.sampled_from(temporal_pool))
+                        if check_valid(cand, dom):
+                            chosen_val = cand
+
+                # If direct collection/set
+                if chosen_val is NotBound and isinstance(dom, (set, frozenset, list, tuple)) and not callable(dom):
+                    if len(dom) == 0:
+                        return None
+                    if temporal_pool and draw is not None and draw(st.integers(1, 100)) <= 30:
+                        chosen_val = draw(st.sampled_from(temporal_pool))
+                    elif draw is not None:
+                        chosen_val = draw(st.sampled_from(list(dom)))
                     else:
-                        raise UnsatisfiedAntecedentError(
-                            f"Domain for parameter '{p_name}' failed to generate valid argument in state: {state}"
-                        )
+                        chosen_val = next(iter(dom))
+                elif chosen_val is NotBound and isinstance(dom, Domain):
+                    gen_dom = dom
+                    if fuzz_d_code is not None:
+                        try:
+                            f_dom = eval(fuzz_d_code, {**eval_globs, **eval_ns})
+                            if f_dom is not None:
+                                gen_dom = f_dom if isinstance(f_dom, Domain) else Domain.of(f_dom)
+                        except Exception:
+                            gen_dom = dom
+                    strat = gen_dom.to_strategy()
+                    if getattr(strat, "is_empty", False):
+                        return None
+                    if draw is not None:
+                        try:
+                            chosen_val = _draw_from_domain(gen_dom, draw)
+                        except Exception:
+                            return None
+                    else:
+                        chosen_val = _resolve_argument_value(strat, None)
+                else:
+                    # Native type, generic alias (Optional/Collection/Mapping), Enum, or lambda recognizer
+                    import collections.abc as _cabc
+                    import enum
+                    import types as _types
+
+                    def _build_fresh_strat(spec: Any, fb_type: Any) -> Any:
+                        if spec is type(None):
+                            return st.none()
+                        origin = typing.get_origin(spec)
+                        if origin is not None:
+                            args = typing.get_args(spec)
+                            if origin is typing.Union or origin is getattr(
+                                _types, "UnionType", None
+                            ):
+                                sub = [_build_fresh_strat(a, object) for a in args]
+                                return st.one_of(*sub) if sub else st.nothing()
+                            if origin in (
+                                list,
+                                _cabc.Collection,
+                                _cabc.Sequence,
+                                _cabc.Iterable,
+                            ):
+                                elem_s = (
+                                    _build_fresh_strat(args[0], object)
+                                    if args
+                                    else st.integers(-10, 10)
+                                )
+                                return st.lists(elem_s, max_size=5)
+                            if origin in (set, frozenset, _cabc.Set, _cabc.MutableSet):
+                                elem_s = (
+                                    _build_fresh_strat(args[0], object)
+                                    if args
+                                    else st.integers(-10, 10)
+                                )
+                                base = st.sets(elem_s, max_size=5)
+                                return base.map(frozenset) if origin is frozenset else base
+                            if origin is tuple:
+                                if len(args) == 2 and args[1] is Ellipsis:
+                                    return st.lists(
+                                        _build_fresh_strat(args[0], object), max_size=5
+                                    ).map(tuple)
+                                if args:
+                                    return st.tuples(
+                                        *(_build_fresh_strat(a, object) for a in args)
+                                    )
+                                return st.lists(st.integers(-10, 10), max_size=5).map(tuple)
+                            if origin in (dict, _cabc.Mapping, _cabc.MutableMapping):
+                                k_s = (
+                                    _build_fresh_strat(args[0], object)
+                                    if len(args) >= 1
+                                    else st.text(min_size=1, max_size=8)
+                                )
+                                v_s = (
+                                    _build_fresh_strat(args[1], object)
+                                    if len(args) >= 2
+                                    else st.integers(-10, 10)
+                                )
+                                return st.dictionaries(k_s, v_s, max_size=5)
+                        eff = spec if isinstance(spec, type) else fb_type
+                        if isinstance(eff, type) and issubclass(eff, enum.Enum):
+                            members = list(eff)
+                            return st.sampled_from(members) if members else st.nothing()
+                        if (
+                            eff is int
+                            or (isinstance(eff, type) and issubclass(eff, int))
+                        ) and eff is not bool:
+                            return st.integers(min_value=-1000, max_value=1000)
+                        if eff is str:
+                            return st.text(min_size=0, max_size=30)
+                        if eff is bool:
+                            return st.booleans()
+                        if eff is float:
+                            return st.floats(allow_nan=False, allow_infinity=False)
+                        if isinstance(eff, type) and eff is not object:
+                            try:
+                                return st.from_type(eff)
+                            except Exception:
+                                pass
+                        return st.integers(min_value=-1000, max_value=1000)
+
+                    fresh_strat = _build_fresh_strat(
+                        dom
+                        if (isinstance(dom, type) or typing.get_origin(dom) is not None)
+                        else target_type,
+                        target_type,
+                    )
+
+                    if draw is not None:
+                        for _ in range(50):
+                            roll = draw(st.integers(1, 100))
+                            cand = NotBound
+                            try:
+                                if roll <= 40:
+                                    cand = draw(fresh_strat)
+                                elif roll <= 70 and temporal_pool:
+                                    cand = draw(st.sampled_from(temporal_pool))
+                                elif spatial_pool:
+                                    cand = draw(st.sampled_from(spatial_pool))
+                                else:
+                                    cand = draw(fresh_strat)
+                            except Exception:
+                                continue
+                            if cand is not NotBound and check_valid(cand, dom):
+                                chosen_val = cand
+                                break
+                    else:
+                        cand = _resolve_argument_value(fresh_strat, None)
+                        if check_valid(cand, dom):
+                            chosen_val = cand
+
+                if chosen_val is NotBound or not check_valid(chosen_val, dom):
+                    return None
                 drawn[p_name] = chosen_val
-            return tuple(drawn[p] for p in param_names)
         else:
             actual_args = args
             for i, p_name in enumerate(param_names):
@@ -3149,15 +4138,245 @@ def _build_linear_transition(
                 if p_name in param_domains:
                     d_code = param_domains[p_name][0]
                     dom = eval(d_code, {**eval_globs, **eval_ns})
-                    if not isinstance(dom, Domain):
-                        dom = Domain.of(dom)
-                    if not dom.validate(val):
-                        t._last_reject_reason = f"parameter '{p_name}' failed domain validation (expected {dom}, got {val!r})"
+                    if not check_valid(val, dom):
+                        t._last_reject_reason = f"parameter '{p_name}' failed requirement validation (expected {dom}, got {val!r})"
                         return None
                 drawn[p_name] = val
-            return tuple(drawn[p] for p in param_names)
+
+        # Committed arguments: record in temporal buffer & run Phase 2 JIT harvesting
+        current_step = getattr(this, "_step_counter", 0)
+        setattr(this, "_step_counter", current_step + 1)
+        final_args = tuple(drawn[p] for p in param_names)
+        auditor = getattr(this, "_edge_auditor", None)
+        session = (
+            HarvestSession(this._get_spatial_buffer, auditor=auditor)
+            if hasattr(this, "_get_spatial_buffer")
+            else None
+        )
+        tok = _ACTIVE_HARVEST_SESSION.set(session)
+        try:
+            for p_name, val in zip(param_names, final_args):
+                if auditor is not None:
+                    auditor.record_hit(type(val), val)
+                if hasattr(this, "_get_temporal_buffer"):
+                    this._get_temporal_buffer(type(val)).record(val, current_step)
+                if p_name in param_domains:
+                    try:
+                        d_code = param_domains[p_name][0]
+                        req_obj = eval(d_code, {**eval_globs, **eval_ns})
+                        if isinstance(req_obj, DomainWrapper) and auditor is not None:
+                            for e in req_obj.valid_candidates():
+                                auditor.record_seeded(type(e), e)
+                        spatial_buf = (
+                            this._get_spatial_buffer(type(val))
+                            if hasattr(this, "_get_spatial_buffer")
+                            else None
+                        )
+                        proxy_val = wrap_proxy(val, spatial_buf, session=session)
+                        if isinstance(req_obj, DomainWrapper):
+                            req_obj.get_harvest_clone()(proxy_val)
+                        elif callable(req_obj):
+                            h_fn = _CALLABLE_HARVEST_CACHE.get(id(req_obj))
+                            if h_fn is None:
+                                globs = dict(getattr(req_obj, "__globals__", {}) or {})
+                                h_fn = _compile_harvest_callable(
+                                    req_obj, globs, f"{getattr(req_obj, '__name__', 'pred')}_harvest"
+                                )
+                                _CALLABLE_HARVEST_CACHE[id(req_obj)] = h_fn
+                            h_fn(proxy_val)
+                    except Exception:
+                        pass
+            if session is not None:
+                session.compose_bool_edges()
+        finally:
+            _ACTIVE_HARVEST_SESSION.reset(tok)
+        return final_args
 
     t.args_fn = linear_args
+
+    violation_specs: List[Dict[str, Any]] = []
+    for c_code, e_code in req_error_specs:
+        violation_specs.append({"kind": "state", "cond_code": c_code, "error_code": e_code})
+    for a_name, e_code in arg_error_specs.items():
+        if a_name in param_domains:
+            violation_specs.append(
+                {
+                    "kind": "arg",
+                    "arg_name": a_name,
+                    "domain_code": param_domains[a_name][0],
+                    "error_code": e_code,
+                }
+            )
+    t.violation_specs = violation_specs
+
+    def build_violation_call(
+        state: Any, this: Any, v_spec: Dict[str, Any], draw: Any
+    ) -> Optional[Tuple[Tuple[Any, ...], Any]]:
+        if draw is None:
+            return None
+        eval_ns = {"self": this, "state": state}
+        for s_inst in list(_ACTIVE_SUTS.get().values()):
+            if hasattr(s_inst, "state") and s_inst.state is not None:
+                st_cls = type(s_inst.state)
+                eval_ns.setdefault(st_cls.__name__, st_cls)
+        if hasattr(this, "singletons") and isinstance(this.singletons, dict):
+            for s_inst in this.singletons.values():
+                if hasattr(s_inst, "state") and s_inst.state is not None:
+                    st_cls = type(s_inst.state)
+                    eval_ns.setdefault(st_cls.__name__, st_cls)
+
+        try:
+            err_cls = eval(v_spec["error_code"], {**eval_globs, **eval_ns})
+        except Exception:
+            return None
+        if err_cls is None:
+            return None
+
+        def _check_v(val: Any, req: Any) -> bool:
+            return _validate_requirement(val, req)
+
+        if v_spec["kind"] == "state":
+            # Target condition must be False; all other state requirements must be True
+            try:
+                if bool(eval(v_spec["cond_code"], {**eval_globs, **eval_ns})):
+                    return None
+                for rc in req_codes:
+                    if rc is not v_spec["cond_code"]:
+                        if not bool(eval(rc, {**eval_globs, **eval_ns})):
+                            return None
+            except Exception:
+                return None
+            with with_draw(draw):
+                valid_args = linear_args(state, this)
+            if valid_args is None:
+                return None
+            return (tuple(valid_args), err_cls)
+
+        # kind == "arg"
+        for rc in req_codes:
+            try:
+                if not bool(eval(rc, {**eval_globs, **eval_ns})):
+                    return None
+            except Exception:
+                return None
+
+        target_arg = v_spec["arg_name"]
+        drawn: Dict[str, Any] = {}
+        current_step = getattr(this, "_step_counter", 0)
+        for p_name in param_names:
+            eval_ns.update(drawn)
+            if p_name == target_arg:
+                try:
+                    dom = eval(v_spec["domain_code"], {**eval_globs, **eval_ns})
+                except Exception:
+                    return None
+                ann_type: Any = (
+                    raw_fn.__annotations__.get(p_name, Any)
+                    if hasattr(raw_fn, "__annotations__")
+                    else Any
+                )
+                t_type: Any = Any
+                if isinstance(dom, type):
+                    t_type = dom
+                elif isinstance(ann_type, type):
+                    t_type = ann_type
+                elif isinstance(dom, (set, frozenset, list, tuple)) and dom:
+                    t_type = type(next(iter(dom)))
+                temporal_buf = (
+                    this._get_temporal_buffer(t_type)
+                    if hasattr(this, "_get_temporal_buffer")
+                    else None
+                )
+                spatial_buf = (
+                    this._get_spatial_buffer(t_type)
+                    if hasattr(this, "_get_spatial_buffer")
+                    else None
+                )
+                inv_pool: List[Any] = []
+                if temporal_buf:
+                    inv_pool.extend(
+                        v for v in temporal_buf.get_candidates(current_step) if not _check_v(v, dom)
+                    )
+                if spatial_buf:
+                    inv_pool.extend(
+                        v for v in spatial_buf.get_candidates() if not _check_v(v, dom)
+                    )
+                inv_val = NotBound
+                if isinstance(dom, DomainWrapper) and dom.invalid is not None:
+                    inv_cands = [e for e in dom.invalid_candidates() if not _check_v(e, dom)]
+                    if inv_cands:
+                        inv_val = draw(st.sampled_from(inv_cands)) if draw is not None else inv_cands[0]
+                if inv_val is NotBound and inv_pool:
+                    cand = draw(st.sampled_from(inv_pool)) if draw is not None else inv_pool[0]
+                    if not _check_v(cand, dom):
+                        inv_val = cand
+                if inv_val is NotBound:
+                    if t_type is str:
+                        sentinels: List[Any] = ["", "__invalid__"]
+                        fallback_strats: List[Any] = [st.text(min_size=0, max_size=8)]
+                    elif t_type is int:
+                        sentinels = [-1, 0]
+                        fallback_strats = [st.integers(-10, 10)]
+                    elif t_type is float:
+                        sentinels = [-1.0, 0.0]
+                        fallback_strats = [
+                            st.floats(allow_nan=False, allow_infinity=False)
+                        ]
+                    elif t_type is bool:
+                        sentinels = [False, True]
+                        fallback_strats = []
+                    else:
+                        sentinels = []
+                        fallback_strats = []
+                        if ann_type is not Any and ann_type is not object:
+                            try:
+                                fallback_strats = [st.from_type(ann_type)]
+                            except Exception:
+                                fallback_strats = []
+                    for cand in sentinels:
+                        try:
+                            if not _check_v(cand, dom):
+                                inv_val = cand
+                                break
+                        except Exception:
+                            continue
+                    if inv_val is NotBound and draw is not None:
+                        for f_strat in fallback_strats:
+                            for _ in range(2):
+                                try:
+                                    cand = draw(f_strat)
+                                    if not _check_v(cand, dom):
+                                        inv_val = cand
+                                        break
+                                except Exception:
+                                    continue
+                            if inv_val is not NotBound:
+                                break
+                if inv_val is NotBound:
+                    return None
+                drawn[p_name] = inv_val
+            else:
+                if p_name in param_domains:
+                    with with_draw(draw):
+                        # Draw a single valid arg using linear_args? Use direct eval + strat
+                        pass
+                # Reuse linear_args for non-target args by falling back to linear_args
+                drawn[p_name] = NotBound
+
+        # Fill non-target parameters using valid linear_args
+        if any(v is NotBound for k, v in drawn.items() if k != target_arg):
+            with with_draw(draw):
+                valid_tuple = linear_args(state, this)
+            if valid_tuple is None:
+                return None
+            out_args = list(valid_tuple)
+            idx = param_names.index(target_arg)
+            out_args[idx] = drawn[target_arg]
+            return (tuple(out_args), err_cls)
+
+        return (tuple(drawn[p] for p in param_names), err_cls)
+
+    t.build_violation_call = build_violation_call
     return t
 
 
@@ -3185,6 +4404,8 @@ class Transition:
         self._target_fn: Optional[Callable[..., Any]] = None
         self._run_consequent: Optional[Callable[..., None]] = None
         self._last_reject_reason: Optional[str] = None
+        self.violation_specs: List[Dict[str, Any]] = []
+        self.build_violation_call: Optional[Callable[..., Any]] = None
 
     def require(self, fn: Callable[..., bool]) -> Callable[..., bool]:
         self.requirements.append(fn)
@@ -3320,6 +4541,27 @@ class StateMachine(Generic[StateT]):
 
     _compiler: Optional[Callable[..., Any]] = None
 
+    def _get_temporal_buffer(self, key_type: Any = object) -> TemporalBuffer:
+        if key_type not in self._temporal_buffers:
+            self._temporal_buffers[key_type] = TemporalBuffer(lookback_horizon=3)
+        return self._temporal_buffers[key_type]
+
+    def _get_spatial_buffer(self, key_type: Any = object) -> SpatialBuffer:
+        if key_type not in self._spatial_buffers:
+            buf = SpatialBuffer(maxlen=30)
+            buf.is_frozen = self._spatial_frozen
+            self._spatial_buffers[key_type] = buf
+        return self._spatial_buffers[key_type]
+
+    def _freeze_spatial_buffers(self) -> None:
+        self._spatial_frozen = True
+        for buf in self._spatial_buffers.values():
+            buf.is_frozen = True
+
+    def get_edge_coverage_report(self) -> Dict[Any, Dict[str, Any]]:
+        """Returns seeded vs. hit boundary edge counts and unhit edges per type."""
+        return self._edge_auditor.get_report()
+
     @classmethod
     def register_compiler(cls, compiler: Callable[..., Any]) -> None:
         cls._compiler = compiler
@@ -3343,6 +4585,11 @@ class StateMachine(Generic[StateT]):
             list(invariants) if invariants is not None else []
         )
         self.singletons: Dict[Type[Any], Any] = dict(singletons or {})
+        self._step_counter: int = 0
+        self._temporal_buffers: Dict[Any, TemporalBuffer] = {}
+        self._spatial_buffers: Dict[Any, SpatialBuffer] = {}
+        self._edge_auditor: EdgeHitAuditor = EdgeHitAuditor()
+        self._spatial_frozen: bool = False
         if state is not None:
             self.state = state
         elif hasattr(self, "make_initial_state") and callable(
@@ -3426,7 +4673,7 @@ class StateMachine(Generic[StateT]):
             T,
             FakeAdapter(
                 target_protocol=target,
-                state=self.state,
+                state=getattr(self, "state", None),
                 transitions=self.transitions,
                 state_machine=self,
             ),
@@ -3448,67 +4695,13 @@ class StateMachine(Generic[StateT]):
     @state.setter
     def state(self, value: Any) -> None:
         self._raw_state = value
-        self._apply_state_bindings()
-
-    def bind_state(self, attr_name: str, getter: Callable[[], Any]) -> None:
-        """Binds a virtual state attribute to a dynamic evaluator function."""
-        if not hasattr(self, "_state_bindings"):
-            self._state_bindings: Dict[str, Callable[[], Any]] = {}
-        self._state_bindings[attr_name] = getter
-        self._apply_state_bindings()
-
-    def _apply_state_bindings(self) -> None:
-        state_obj = getattr(self, "_raw_state", None)
-        if state_obj is None:
-            return
-        bindings = getattr(self, "_state_bindings", None)
-        if not bindings:
-            return
-        state_cls = type(state_obj)
-        if not getattr(state_cls, "_is_bound_state_subclass", False):
-            bound_cls = type(
-                f"_Bound_{state_cls.__name__}",
-                (state_cls,),
-                {"_is_bound_state_subclass": True},
-            )
-            state_obj.__class__ = bound_cls
-            state_cls = bound_cls
-
-        state_obj._instance_bindings = bindings
-        state_obj._owner_sm = self
-        for attr_name in bindings:
-            if not isinstance(getattr(state_cls, attr_name, None), property):
-                def _make_prop(a_name: str) -> property:
-                    def getter(s: Any) -> Any:
-                        b = getattr(s, "_instance_bindings", {})
-                        if a_name in b:
-                            owner = getattr(s, "_owner_sm", None)
-                            if owner is not None and _current_sm.get() is None:
-                                token_sm = _current_sm.set(owner)
-                                try:
-                                    return b[a_name]()
-                                finally:
-                                    _current_sm.reset(token_sm)
-                            return b[a_name]()
-                        return getattr(s, f"_unbound_{a_name}", None)
-
-                    def setter(s: Any, val: Any) -> None:
-                        setattr(s, f"_unbound_{a_name}", val)
-
-                    return property(getter, setter)
-
-                setattr(state_cls, attr_name, _make_prop(attr_name))
 
     def bind(
         self,
-        target_or_attr: Any,
-        getter: Optional[Callable[[], Any]] = None,
+        target: Any,
     ) -> Any:
-        """Binds a virtual state attribute or binds this state machine to a concrete target instance."""
-        if isinstance(target_or_attr, str) and getter is not None:
-            self.bind_state(target_or_attr, getter)
-            return None
-        return CheckedAdapter(type(target_or_attr), self, target_or_attr)
+        """Binds this state machine to a concrete target instance via CheckedAdapter."""
+        return CheckedAdapter(type(target), self, target)
 
     def make_state_machine(self, initial_state: Any) -> StateMachine:
         try:
@@ -4239,7 +5432,8 @@ def synthesize_fake(
 ) -> Type[Any]:
     """Synthesizes a pure in-memory test double class from a linear state machine."""
     target_fake_name = (
-        fake_name or f"Fake{machine_cls.__name__.replace('StateMachine', '')}"
+        fake_name
+        or f"Fake{machine_cls.__name__.replace('FakeStateMachine', '').replace('StateMachine', '')}"
     )
 
     class SynthesizedFake:

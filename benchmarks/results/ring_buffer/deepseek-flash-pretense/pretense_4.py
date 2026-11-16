@@ -220,7 +220,6 @@ from dataclasses import dataclass, field
 from typing import Any, List, Optional
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -271,7 +270,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
     ) -> Optional[Any]:
         """Store an item, evicting the oldest element when at capacity."""
         require(self.state.initialized)
-        require_arg(item, Domain.any())
+        require_arg(item, object)
         was_full = len(self.state.items) >= self.state.capacity
         evicted: Optional[Any] = None
         if was_full:

@@ -300,11 +300,10 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
-    require_arg,
+    domain, require_arg,
     sut,
     sut_state,
     synthesize_fake,
@@ -424,7 +423,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         self,
         capacity: int,
     ) -> None:
-        require_arg(capacity, Domain.range(1, 100), preferred=[1, 2, 3])
+        require_arg(capacity, (self._dom_configure_capacity))
         ret = self.inner_configure(capacity)
         assert ret is None
         self.state.capacity = capacity
@@ -444,8 +443,8 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         key: str,
         default: Optional[Any],
     ) -> Any:
-        require_arg(key, Domain.type(str), preferred=["alpha", "beta", "gamma"])
-        require_arg(default, Domain.optional(Domain.type(int)), preferred=[None, -1])
+        require_arg(key, str)
+        require_arg(default, Optional[int])
         present = key in self.state.items
         expected = self.state.items[key] if present else default
         ret = self.inner_get(key, default)
@@ -466,8 +465,8 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         key: str,
         value: Any,
     ) -> Optional[Tuple[str, Any]]:
-        require_arg(key, Domain.type(str), preferred=["alpha", "beta", "gamma"])
-        require_arg(value, Domain.type(int), preferred=[0, 1, 2])
+        require_arg(key, str)
+        require_arg(value, int)
         exists = key in self.state.items
         at_capacity = len(self.state.items) >= self.state.capacity
         evicted: Optional[Tuple[str, Any]] = None
@@ -496,8 +495,8 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         key: str,
         default: Optional[Any],
     ) -> Any:
-        require_arg(key, Domain.type(str), preferred=["alpha", "beta", "gamma"])
-        require_arg(default, Domain.optional(Domain.type(int)), preferred=[None, -1])
+        require_arg(key, str)
+        require_arg(default, Optional[int])
         present = key in self.state.items
         expected = self.state.items[key] if present else default
         order_before = list(self.state.items.keys())
@@ -511,7 +510,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         self,
         key: str,
     ) -> Any:
-        require_arg(key, Domain.in_set(list(self.state.items.keys())))
+        require_arg(key, self._dom_remove_key)
         ret = self.inner_remove(key)
         expected = self.state.items[key]
         assert ret == expected
@@ -615,6 +614,14 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         self.state.hits = 0
         self.state.misses = 0
         self.state.evictions = 0
+
+    @domain()
+    def _dom_configure_capacity(self, x: Any) -> bool:
+        return bool(x >= 1 and x <= 100)
+
+    @domain(valid=lambda self: list(list(self.state.items.keys())))
+    def _dom_remove_key(self, val: Any) -> bool:
+        return val in list(self.state.items.keys())
 
 
 proto = LruCacheStateMachine()

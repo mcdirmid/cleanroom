@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import enum
 from typing import Any, Callable, Collection, FrozenSet, Generic, List, Mapping, Optional, Protocol, Sequence, Set, Tuple, TypeVar
-from support.lib.framework import data_type, operation, singleton_type
+from support.lib.framework import data_type, operation, singleton_type, test_only
 from support.lib.lifecycle import Singleton, SystemTier
 
 T = TypeVar("T")
@@ -149,7 +149,7 @@ class DAGRunReport:
         cancelled_nodes: Identifiers of all nodes cancelled prior to execution.
         wall_clock_seconds: Total wall-clock time elapsed for the run.
         critical_path: Sequence of node identifiers forming the critical path.
-        results: Mapping of node identifier to individual NodeResult outcomes.
+        results: Mapping of terminal node identifiers (executed, skipped, and cancelled nodes; pre-terminal nodes are omitted) to individual NodeResult outcomes.
     """
     total_nodes: int
     succeeded_nodes: Tuple[str, ...]
@@ -297,6 +297,26 @@ class DAG(Singleton[SystemTier], Protocol):
 
         Returns:
             Set of all registered node identifiers.
+        """
+        ...
+
+    @test_only
+    @operation
+    def all_dependencies_exist(self) -> bool:
+        """Test-only observability query returning whether all referenced dependencies across registered nodes exist in the graph.
+
+        POSTCONDITIONS:
+        - [slug:dag_lite.dag.observe_dependencies_exist]: MUST return True if and only if every dependency identifier referenced by any registered node is registered in the graph.
+        """
+        ...
+
+    @test_only
+    @operation
+    def is_acyclic(self) -> bool:
+        """Test-only observability query returning whether the graph contains no directed cycles.
+
+        POSTCONDITIONS:
+        - [slug:dag_lite.dag.observe_acyclic]: MUST return True if and only if the graph contains no directed cycles.
         """
         ...
 
@@ -500,7 +520,7 @@ class DAGRunner(Singleton[SystemTier], Protocol):
         - [slug:dag_lite.runner.run.sequential_waves]: MUST execute ready waves sequentially.
         - [slug:dag_lite.runner.run.retry_failures]: MUST execute retries up to the configured retry count for failed node actions.
         - [slug:dag_lite.runner.run.apply_failure_policy]: MUST apply the specified failure_policy to the scheduler upon node failure.
-        - [slug:dag_lite.runner.run.consolidated_report]: MUST return a DAGRunReport capturing all node states, execution durations, and critical path.
+        - [slug:dag_lite.runner.run.consolidated_report]: MUST return a DAGRunReport capturing terminal node states (executed, skipped, and cancelled nodes in results; pre-terminal nodes omitted), execution durations, and critical path.
         """
         ...
 

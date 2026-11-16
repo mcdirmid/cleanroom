@@ -101,7 +101,7 @@ TEST_LEAK_PATTERNS: Sequence[re.Pattern[str]] = [
 
 # Regex for structured blame parsing from single string (supports both [viol:...] and Violation: <phrase>, optional Lines:, and optional Witness:)
 _RE_STRUCTURED_BLAME = re.compile(
-    r"^(\[slug:[^\]]+\])\s+(?:(\[viol:[^\]]+\])|Violation:\s+([^\n\r]+?))\s+Facet:\s+([^\n\r]+?)(?:\s+(?:\[lines:([^\]]+)\]|Lines:\s*([0-9]+(?:-[0-9]+)?)))?(?:\s+(?:\[witness:([^\]]+)\]|Witness:\s+([^\n\r]+)))?$",
+    r"^(\[slug:[^\]]+\])\s+(?:(\[viol:[^\]]+\])|Violation:\s+([^\n\r]+?))\s+Facet:\s+([^\n\r]+?)(?:\s+(?:\[lines:([^\]]+)\]|Lines:\s*([0-9]+(?:-[0-9]+)?)))?(?:\s+(?:\[witness:(.+)\]|Witness:\s+([^\n\r]+)))?$",
     re.IGNORECASE,
 )
 
@@ -180,7 +180,7 @@ def parse_structured_blame(
         norm_witness = witness.strip() if witness else None
         norm_lines = lines.strip() if lines else None
         if norm_lines:
-            if norm_lines.startswith("[lines:") and norm_lines.endswith("]"):
+            if norm_lines.lower().startswith("[lines:") and norm_lines.endswith("]"):
                 norm_lines = norm_lines[7:-1].strip()
             elif norm_lines.lower().startswith("lines:"):
                 norm_lines = norm_lines[6:].strip()
@@ -508,7 +508,7 @@ def _discover_unit_slugs(
                 if any(
                     part in str(bench_p)
                     for part in norm_culprit.parts
-                    if part not in ("lib", "tests", "pretense")
+                    if part not in ("lib", "tests", "pretense_intf", "pretense_impl", "pretense")
                 ):
                     cand_low_dirs.append(bench_p.parent)
 

@@ -50,6 +50,9 @@ class WorkspaceCommandHandler(Singleton[AgentSessionTier], Protocol):
         summary: Optional[str] = None,
         repo_root: Optional[str] = None,
         no_verify: bool = False,
+        kind: Optional[str] = None,
+        scope: Optional[str] = None,
+        why: Optional[str] = None,
     ) -> int:
         """Verifies and submits target to canonical main repository.
 

@@ -31,6 +31,7 @@ By establishing FIFO retrieval ordering, operational availability modeling, and 
 - Retrieving task outcomes returns the recorded outcome for a completed task identifier or empty if not completed. [lookup_task_outcome]
 - Clearing removes all pending tasks and recorded outcomes from the queue, resetting pending count to zero. [purge_queue_state_on_clear]
 - Seeding an unavailable failure configures state machines and fakes to raise queue unavailable exception on subsequent operations. [seed_unavailable_failure_in_fakes]
+- A test-only query reports whether the queue service is currently available. [query_queue_availability]
 - Seeding pending tasks loads a sequence of task identifier and payload pairs into pending tasks in state machines and fakes. [seed_pending_tasks_in_fakes]
 
 ### Woven Contracts

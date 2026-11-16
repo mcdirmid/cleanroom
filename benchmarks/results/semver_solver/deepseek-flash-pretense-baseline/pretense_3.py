@@ -390,11 +390,10 @@ from typing import Any, Collection, FrozenSet, List, Optional, Sequence, Set, Tu
 import unittest
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
-    require_arg,
+    domain, require_arg,
     sut,
     sut_state,
     synthesize_fake,
@@ -545,7 +544,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     @transition(VersionEngine.parse_version)
     def parse_version(self, text: str) -> Version:
         require(self.state.initialized)
-        require_arg(text, Domain.sampled_from(list(_VERSION_TEXTS)), preferred=["1.2.3", "1.0.0-alpha"])
+        require_arg(text, self._dom_parse_version_text)
         ret = self.inner_parse_version(text)
         assert ret is not None
         return ret
@@ -553,8 +552,8 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     @transition(VersionEngine.compare_precedence)
     def compare_precedence(self, v1: Version, v2: Version) -> int:
         require(self.state.initialized)
-        require_arg(v1, Domain.sampled_from(list(_VERSION_SAMPLES)))
-        require_arg(v2, Domain.sampled_from(list(_VERSION_SAMPLES)))
+        require_arg(v1, self._dom_compare_precedence_v1)
+        require_arg(v2, self._dom_compare_precedence_v2)
         ret = self.inner_compare_precedence(v1, v2)
         assert ret is not None
         return ret
@@ -562,7 +561,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     @transition(VersionEngine.parse_range)
     def parse_range(self, text: str) -> VersionRange:
         require(self.state.initialized)
-        require_arg(text, Domain.sampled_from(list(_RANGE_TEXTS)), preferred=[">=1.0.0", "^1.2.3"])
+        require_arg(text, self._dom_parse_range_text)
         ret = self.inner_parse_range(text)
         assert ret is not None
         return ret
@@ -570,9 +569,9 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     @transition(VersionEngine.satisfies)
     def satisfies(self, version: Version, range_constraint: VersionRange, include_prerelease: bool) -> bool:
         require(self.state.initialized)
-        require_arg(version, Domain.sampled_from(list(_VERSION_SAMPLES)))
-        require_arg(range_constraint, Domain.sampled_from(list(_RANGE_SAMPLES)))
-        require_arg(include_prerelease, Domain.boolean())
+        require_arg(version, self._dom_satisfies_version)
+        require_arg(range_constraint, self._dom_satisfies_range_constraint)
+        require_arg(include_prerelease, bool)
         ret = self.inner_satisfies(version, range_constraint, include_prerelease)
         assert ret is not None
         return ret
@@ -580,7 +579,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     @transition(PackageRepository.register_package)
     def register_package(self, release: PackageRelease) -> None:
         require(self.state.initialized)
-        require_arg(release, Domain.sampled_from(list(_RELEASE_SAMPLES)), preferred=[_RELEASE_SAMPLES[0]])
+        require_arg(release, self._dom_register_package_release)
         ret = self.inner_register_package(release)
         self.state.packages.add(release.name)
         self.state.releases.add((release.name, release.version))
@@ -593,7 +592,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         # Caller precondition: lookups only target packages already registered so the
         # repository cannot raise a missing-package contract violation.
         require(self.state.packages >= _REQUIRED_PACKAGES)
-        require_arg(name, Domain.sampled_from(["app", "lib"]), preferred=["lib"])
+        require_arg(name, self._dom_get_releases_name)
         ret = self.inner_get_releases(name)
         assert ret is not None
         return ret
@@ -601,7 +600,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     @transition(PackageRepository.has_package)
     def has_package(self, name: str) -> bool:
         require(self.state.initialized)
-        require_arg(name, Domain.type(str), preferred=["app", "lib"])
+        require_arg(name, str)
         ret = self.inner_has_package(name)
         assert ret is not None
         return ret
@@ -619,7 +618,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         # Caller precondition: every sample release is registered, so the generated root
         # requirements always admit a compatible assignment instead of a conflict.
         require(self.state.releases >= _REQUIRED_RELEASES)
-        require_arg(root_dependencies, Domain.sampled_from(list(_RESOLVE_DOMAINS)), preferred=[()])
+        require_arg(root_dependencies, self._dom_resolve_root_dependencies)
         ret = self.inner_resolve(root_dependencies)
         assert ret is not None
         return ret
@@ -628,6 +627,42 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     def seed_initial(self) -> None:
         """Seed state machine state for fake initialization."""
         self.state.initialized = True
+
+    @domain(valid=lambda self: list(["app", "lib"]))
+    def _dom_get_releases_name(self, val: Any) -> bool:
+        return val in ["app", "lib"]
+
+    @domain(valid=lambda self: list(list(_VERSION_TEXTS)))
+    def _dom_parse_version_text(self, val: Any) -> bool:
+        return val in list(_VERSION_TEXTS)
+
+    @domain(valid=lambda self: list(list(_VERSION_SAMPLES)))
+    def _dom_compare_precedence_v1(self, val: Any) -> bool:
+        return val in list(_VERSION_SAMPLES)
+
+    @domain(valid=lambda self: list(list(_VERSION_SAMPLES)))
+    def _dom_compare_precedence_v2(self, val: Any) -> bool:
+        return val in list(_VERSION_SAMPLES)
+
+    @domain(valid=lambda self: list(list(_RANGE_TEXTS)))
+    def _dom_parse_range_text(self, val: Any) -> bool:
+        return val in list(_RANGE_TEXTS)
+
+    @domain(valid=lambda self: list(list(_VERSION_SAMPLES)))
+    def _dom_satisfies_version(self, val: Any) -> bool:
+        return val in list(_VERSION_SAMPLES)
+
+    @domain(valid=lambda self: list(list(_RANGE_SAMPLES)))
+    def _dom_satisfies_range_constraint(self, val: Any) -> bool:
+        return val in list(_RANGE_SAMPLES)
+
+    @domain(valid=lambda self: list(list(_RELEASE_SAMPLES)))
+    def _dom_register_package_release(self, val: Any) -> bool:
+        return val in list(_RELEASE_SAMPLES)
+
+    @domain(valid=lambda self: list(list(_RESOLVE_DOMAINS)))
+    def _dom_resolve_root_dependencies(self, val: Any) -> bool:
+        return val in list(_RESOLVE_DOMAINS)
 
 
 proto = SemverSolverStateMachine()

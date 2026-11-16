@@ -248,7 +248,6 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     Env,
     StateMachine,
     raises,
@@ -345,19 +344,15 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         require(self.state.initialized)
         require_arg(
             release,
-            Domain.type(PackageRelease),
-            preferred=[
-                PackageRelease("pkg_a", Version(1, 0, 0)),
-                PackageRelease("pkg_b", Version(1, 0, 0), (PackageDependency("pkg_a", VersionRange(">=1.0.0")),)),
-            ],
-            fuzz_domain=Domain.sampled_from([
+            PackageRelease,
+            fuzz_domain=[
                 PackageRelease("pkg_a", Version(1, 0, 0)),
                 PackageRelease("pkg_a", Version(1, 1, 0)),
                 PackageRelease("pkg_a", Version(2, 0, 0)),
                 PackageRelease("pkg_b", Version(1, 0, 0), (PackageDependency("pkg_a", VersionRange(">=1.0.0")),)),
                 PackageRelease("pkg_b", Version(2, 0, 0)),
                 PackageRelease("pkg_c", Version(1, 0, 0)),
-            ]),
+            ],
         )
         self.inner_register_package(release)
         if release.name not in self.state.packages:
@@ -377,7 +372,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
     @transition(PackageRepository.get_releases)
     def get_releases(self, name: str) -> list[PackageRelease]:
         require(bool(self.state.packages))
-        require_arg(name, Domain.in_set(self.state.packages))
+        require_arg(name, self.state.packages)
         ret = self.inner_get_releases(name)
         assert isinstance(ret, list)
         assert len(ret) > 0
@@ -391,9 +386,8 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         require(self.state.initialized)
         require_arg(
             name,
-            Domain.type(str),
-            preferred=["pkg_a", "pkg_b", "missing"],
-            fuzz_domain=Domain.sampled_from(["pkg_a", "pkg_b", "pkg_c", "missing_pkg"]),
+            str,
+            fuzz_domain=["pkg_a", "pkg_b", "pkg_c", "missing_pkg"],
         )
         ret = self.inner_has_package(name)
         assert isinstance(ret, bool)
@@ -422,7 +416,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         require(bool(self.state.packages))
         require_arg(
             root_dependencies,
-            Domain.in_set(self.state.valid_dependency_sets),
+            self.state.valid_dependency_sets,
         )
         ret = self.inner_resolve(root_dependencies)
         assert isinstance(ret, ResolutionOutcome)
@@ -730,7 +724,6 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     Env,
     StateMachine,
     raises,
@@ -795,9 +788,8 @@ class VersionEngineStateMachine(StateMachine[VersionEngineState]):
         require(self.state.initialized)
         require_arg(
             text,
-            Domain.type(str),
-            preferred=["1.0.0", "0.1.0", "1.2.3-alpha.1", "2.0.0+build.7", "1.0.0-rc.1+build.1"],
-            fuzz_domain=Domain.sampled_from([
+            str,
+            fuzz_domain=[
                 "0.0.1",
                 "0.1.0",
                 "1.0.0",
@@ -811,7 +803,7 @@ class VersionEngineStateMachine(StateMachine[VersionEngineState]):
                 "2.0.0",
                 "2.0.0+build.1",
                 "2.0.0-alpha+build.1",
-            ]),
+            ],
         )
         ret = self.inner_parse_version(text)
         self.state.parsed_versions.append(ret)
@@ -838,9 +830,8 @@ class VersionEngineStateMachine(StateMachine[VersionEngineState]):
         require(self.state.initialized)
         require_arg(
             v1,
-            Domain.type(Version),
-            preferred=[Version(1, 0, 0), Version(2, 0, 0)],
-            fuzz_domain=Domain.sampled_from([
+            Version,
+            fuzz_domain=[
                 Version(0, 1, 0),
                 Version(1, 0, 0),
                 Version(1, 0, 1),
@@ -850,13 +841,12 @@ class VersionEngineStateMachine(StateMachine[VersionEngineState]):
                 Version(1, 0, 0, prerelease=("alpha", "1")),
                 Version(1, 0, 0, prerelease=("beta",)),
                 Version(1, 0, 0, build=("build",)),
-            ]),
+            ],
         )
         require_arg(
             v2,
-            Domain.type(Version),
-            preferred=[Version(1, 0, 0), Version(2, 0, 0)],
-            fuzz_domain=Domain.sampled_from([
+            Version,
+            fuzz_domain=[
                 Version(0, 1, 0),
                 Version(1, 0, 0),
                 Version(1, 0, 1),
@@ -866,7 +856,7 @@ class VersionEngineStateMachine(StateMachine[VersionEngineState]):
                 Version(1, 0, 0, prerelease=("alpha", "1")),
                 Version(1, 0, 0, prerelease=("beta",)),
                 Version(1, 0, 0, build=("build",)),
-            ]),
+            ],
         )
         ret = self.inner_compare_precedence(v1, v2)
         assert isinstance(ret, int)
@@ -1265,7 +1255,6 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     Env,
     StateMachine,
     raises,
@@ -1325,9 +1314,8 @@ class RangeEngineStateMachine(StateMachine[RangeEngineState]):
         require(self.state.initialized)
         require_arg(
             text,
-            Domain.type(str),
-            preferred=[">=1.0.0", "^1.2.3", "~1.2.0", "1.0.0 - 2.0.0", ">=1.0.0 <2.0.0 || >=3.0.0"],
-            fuzz_domain=Domain.sampled_from([
+            str,
+            fuzz_domain=[
                 "*",
                 ">=1.0.0",
                 "^1.0.0",
@@ -1339,7 +1327,7 @@ class RangeEngineStateMachine(StateMachine[RangeEngineState]):
                 "^1.x",
                 "~1.x",
                 "!=1.x",
-            ]),
+            ],
         )
         ret = self.inner_parse_range(text)
         self.state.parsed_ranges.append(ret)
@@ -1361,32 +1349,29 @@ class RangeEngineStateMachine(StateMachine[RangeEngineState]):
         require(self.state.initialized)
         require_arg(
             version,
-            Domain.type(Version),
-            preferred=[Version(1, 0, 0), Version(2, 0, 0)],
-            fuzz_domain=Domain.sampled_from([
+            Version,
+            fuzz_domain=[
                 Version(1, 0, 0),
                 Version(1, 2, 3),
                 Version(2, 0, 0),
                 Version(1, 0, 0, prerelease=("alpha",)),
-            ]),
+            ],
         )
         require_arg(
             range_constraint,
-            Domain.type(VersionRange),
-            preferred=[VersionRange(">=1.0.0"), VersionRange("*")],
-            fuzz_domain=Domain.sampled_from([
+            VersionRange,
+            fuzz_domain=[
                 VersionRange(">=1.0.0"),
                 VersionRange("*"),
                 VersionRange("<2.0.0"),
                 VersionRange("^1.0.0"),
                 VersionRange("1.0.0 - 2.0.0"),
-            ]),
+            ],
         )
         require_arg(
             include_prerelease,
-            Domain.type(bool),
-            preferred=[False, True],
-            fuzz_domain=Domain.sampled_from([False, True]),
+            bool,
+            fuzz_domain=[False, True],
         )
         ret = self.inner_satisfies(version, range_constraint, include_prerelease)
         assert isinstance(ret, bool)

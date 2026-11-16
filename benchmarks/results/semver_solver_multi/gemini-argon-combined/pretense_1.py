@@ -330,7 +330,6 @@ from typing import Any, Collection, Dict, List, Optional, Sequence, Set, Tuple
 import unittest
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -573,8 +572,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         require(self.state.initialized)
         require_arg(
             release,
-            Domain.in_set(self.state.valid_releases),
-            preferred=SAMPLE_RELEASES,
+            self.state.valid_releases,
         )
         ret = self.inner_register_package(release)
         current = list(self.state.packages.get(release.name, []))
@@ -588,8 +586,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         require(self.state.initialized)
         require_arg(
             name,
-            Domain.type(str),
-            preferred=["core", "lib_a", "lib_b", "app", "missing_pkg"],
+            str,
         )
         if name not in self.state.packages:
             ret: List[PackageRelease] = []
@@ -606,8 +603,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         require(self.state.initialized)
         require_arg(
             name,
-            Domain.type(str),
-            preferred=["core", "lib_a", "lib_b", "app", "missing_pkg"],
+            str,
         )
         expected = name in self.state.packages
         ret = self.inner_has_package(name)
@@ -630,8 +626,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         require(self.state.initialized)
         require_arg(
             root_dependencies,
-            Domain.in_set(self.state.valid_root_deps),
-            preferred=SAMPLE_ROOT_DEPS,
+            self.state.valid_root_deps,
         )
         solved = solve_resolution_helper(self.state.packages, root_dependencies)
         if solved is None:
@@ -1001,7 +996,6 @@ from typing import Any, Optional, Tuple
 import unittest
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -1112,16 +1106,7 @@ class VersionEngineStateMachine(StateMachine[VersionEngineState]):
         require(self.state.initialized)
         require_arg(
             text,
-            Domain.type(str),
-            preferred=[
-                "1.0.0",
-                "0.1.0",
-                "1.2.3-alpha.1+build.123",
-                "2.0.0-0.3.7",
-                "invalid",
-                "01.1.1",
-                "1.0.0-01",
-            ],
+            str,
         )
         parsed = _try_parse_semver(text)
         if parsed is None:
@@ -1154,8 +1139,8 @@ class VersionEngineStateMachine(StateMachine[VersionEngineState]):
             Version(1, 0, 0, prerelease=("beta", "11")),
             Version(1, 0, 0, build=("20130313144700",)),
         ]
-        require_arg(v1, Domain.type(Version), preferred=sample_versions)
-        require_arg(v2, Domain.type(Version), preferred=sample_versions)
+        require_arg(v1, Version)
+        require_arg(v2, Version)
         expected = _compare_versions(v1, v2)
         ret = self.inner_compare_precedence(v1, v2)
         if expected < 0:
@@ -1561,7 +1546,6 @@ from typing import Any, List, Optional, Tuple
 import unittest
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -1898,24 +1882,7 @@ class RangeEngineStateMachine(StateMachine[RangeEngineState]):
         require(self.state.initialized)
         require_arg(
             text,
-            Domain.type(str),
-            preferred=[
-                ">=1.0.0 <2.0.0",
-                "^1.2.3",
-                "~1.2.3",
-                "1.x",
-                "1.2.*",
-                "*",
-                "1.0.0 - 2.0.0",
-                "==1.0.0 || >=2.0.0",
-                ">= 1.0.0",
-                "",
-                "1.2",
-                "^0.0",
-                "1.2 - 2.3",
-                ">=1.0.0, <2.0.0",
-                ">=1.0.0 ||",
-            ],
+            str,
         )
         compiled = compile_range_helper(text)
         if compiled is None:
@@ -1942,27 +1909,15 @@ class RangeEngineStateMachine(StateMachine[RangeEngineState]):
         require(self.state.initialized)
         require_arg(
             version,
-            Domain.type(Version),
-            preferred=[
-                Version(1, 0, 0),
-                Version(1, 2, 3),
-                Version(1, 5, 0),
-                Version(2, 0, 0),
-                Version(0, 2, 4),
-                Version(0, 0, 3),
-                Version(1, 0, 0, prerelease=("alpha", "1")),
-                Version(1, 0, 0, prerelease=("alpha", "2")),
-            ],
+            Version,
         )
         require_arg(
             range_constraint,
-            Domain.in_set(self.state.parsed_ranges),
-            preferred=_DEFAULT_VALID_RANGES,
+            self.state.parsed_ranges,
         )
         require_arg(
             include_prerelease,
-            Domain.type(bool),
-            preferred=[False, True],
+            bool,
         )
         expected = satisfies_helper(version, range_constraint, include_prerelease)
         ret = self.inner_satisfies(version, range_constraint, include_prerelease)

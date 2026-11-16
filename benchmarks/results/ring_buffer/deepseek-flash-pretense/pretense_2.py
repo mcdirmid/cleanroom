@@ -233,7 +233,6 @@ from typing import Any, List, Optional
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -280,7 +279,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
         item: Any,
     ) -> Optional[Any]:
         require(self.state.initialized)
-        require_arg(item, Domain.any())
+        require_arg(item, object)
         was_full = len(self.state.items) >= self.state.capacity
         evicted: Optional[Any] = None
         if was_full:

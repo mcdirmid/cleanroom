@@ -301,11 +301,10 @@ from typing import Any, List, Optional, Tuple
 import unittest
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
-    require_arg,
+    domain, require_arg,
     sut,
     sut_state,
     synthesize_fake,
@@ -356,7 +355,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         self,
         capacity: int,
     ) -> None:
-        require_arg(capacity, Domain.range(1, 100), preferred=[2, 5])
+        require_arg(capacity, (self._dom_configure_capacity))
         excess = len(self.state.entries) - capacity
         victims: List[str] = list(self.state.entries)[:excess] if excess > 0 else []
         ret = self.inner_configure(capacity)
@@ -374,8 +373,8 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         key: str,
         default: Optional[Any],
     ) -> Any:
-        require_arg(key, Domain.type(str), preferred=["alpha", "beta"])
-        require_arg(default, Domain.optional(Domain.any()), preferred=[None])
+        require_arg(key, str)
+        require_arg(default, Optional[object])
         expected = self.state.entries.get(key, default)
         ret = self.inner_get(key, default)
         if key in self.state.entries:
@@ -393,8 +392,8 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         key: str,
         value: Any,
     ) -> Optional[Tuple[str, Any]]:
-        require_arg(key, Domain.type(str), preferred=["alpha", "beta"])
-        require_arg(value, Domain.any(), preferred=[1, "value"])
+        require_arg(key, str)
+        require_arg(value, object)
         expected: Optional[Tuple[str, Any]] = None
         if key not in self.state.entries and len(self.state.entries) >= self.state.capacity:
             victim = self._oldest_key
@@ -418,8 +417,8 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         key: str,
         default: Optional[Any],
     ) -> Any:
-        require_arg(key, Domain.type(str), preferred=["alpha", "beta"])
-        require_arg(default, Domain.optional(Domain.any()), preferred=[None])
+        require_arg(key, str)
+        require_arg(default, Optional[object])
         expected = self.state.entries.get(key, default)
         ret = self.inner_peek(key, default)
         assert ret == expected
@@ -430,7 +429,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         self,
         key: str,
     ) -> Any:
-        require_arg(key, Domain.in_set(self.state.entries))
+        require_arg(key, self.state.entries)
         expected = self.state.entries[key]
         ret = self.inner_remove(key)
         del self.state.entries[key]
@@ -506,6 +505,10 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         ret = self.inner_is_full()
         assert ret == expected
         return ret
+
+    @domain()
+    def _dom_configure_capacity(self, x: Any) -> bool:
+        return bool(x >= 1 and x <= 100)
 
 
 proto = LruCacheStateMachine()

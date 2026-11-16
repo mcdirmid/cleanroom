@@ -10,7 +10,9 @@ Storing dirty tracking status, audit timestamps, and diagnostic feedback directl
 
 ## Types and Behavior
 
-A *file metadata* record encapsulates in-band metadata attributes: a *last cleaned timestamp* when clean, a *last changed timestamp* when modified, a *change summary*, unacted *feedback items*, role *audit timestamps*, and a *dirty reason* when dirtiness is attributed.
+A *file metadata* record encapsulates in-band metadata attributes: a *last cleaned timestamp* when clean, a *last changed timestamp* when modified, a *change summary*, a chronological list of *change entry* records, unacted *feedback items*, role *audit timestamps*, and a *dirty reason* when dirtiness is attributed.
+
+Each *change entry* records a UTC submission *timestamp*, a *change kind* (`new`, `contract`, `behavior`, `fix`, `refactor`, or `legacy`), deterministic *changed lines* spans in the current file, an optional *change scope*, a *delta* description of what changed locally, and an optional *rationale* explaining the local invariant or fix intent.
 
 The system's *source metadata coordinator* parses, computes, and mutates in-band file metadata.
 
@@ -22,7 +24,9 @@ The source metadata coordinator evaluates whether proposed content changes alter
 
 The source metadata coordinator rewrites metadata comment blocks in content strings and updates files on disk in place. In-band metadata blocks adhere to format-specific commenting conventions positioned at the bottom of the file following source content to preserve code line numbers: Python source files (`.py`, `.pyi`) format metadata as line comments delimited by `# --- CLEANROOM METADATA ---` and `# --- END CLEANROOM METADATA ---` appended at the end of the file; Markdown specifications (`.md`) format metadata as HTML comments delimited by `<!-- CLEANROOM METADATA` and `-->` appended at the end of the document. When extracting metadata, the coordinator detects comment blocks positioned at the bottom or anywhere within the file.
 
-The source metadata coordinator updates lifecycle status by marking files clean, marking files dirty, recording change summaries, appending unacted feedback items with sender role attribution, stamping role audits, clearing role audits, and deleting last cleaned timestamps.
+The source metadata coordinator updates lifecycle status by marking files clean, marking files dirty, recording change entries with optional line-span rebasing and bounded retention, appending unacted feedback items with sender role attribution, stamping role audits, clearing role audits, and deleting last cleaned timestamps.
+
+The source metadata coordinator also computes changed line spans between prior and updated code bodies, filters change entries strictly newer than a viewer's reference timestamp, and projects in-band metadata for role workspaces by stripping lifecycle timestamps and either removing change entries or filtering them by timestamp.
 
 The component also exposes module-level procedural facade functions for metadata extraction, code body isolation, code hashing, modification checks, metadata alteration checks, and lifecycle updates, delegating each operation to the active source metadata coordinator singleton, alongside utilities for role audit tagging, auditor role classification, metadata parsing and formatting, and UTC timestamp generation.
 

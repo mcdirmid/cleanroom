@@ -231,12 +231,11 @@ from typing import Any, List, Optional, Tuple
 import unittest
 
 from pretense import (
-    Domain,
     Env,
     StateMachine,
     raises,
     require,
-    require_arg,
+    domain, require_arg,
     require_env,
     sut,
     sut_state,
@@ -333,10 +332,9 @@ class LRUCacheStateMachine(StateMachine[LRUCacheState]):
     def configure(self, capacity: int) -> None:
         require_arg(
             capacity,
-            Domain.integers(min_value=1),
+            (self._dom_configure_capacity),
             error=CacheCapacityError,
-            preferred=[1, 5, 10, 100],
-            fuzz_domain=Domain.integers(min_value=1, max_value=500),
+            fuzz_domain=(lambda x: x >= 1 and x <= 500),
         )
         ret = self.inner_configure(capacity)
         self.state.capacity = capacity
@@ -355,8 +353,8 @@ class LRUCacheStateMachine(StateMachine[LRUCacheState]):
 
     @transition(LRUCache.get)
     def get(self, key: str, default: Optional[Any]) -> Any:
-        require_arg(key, Domain.text(min_size=1), preferred=["k1", "k2", "seed_k1"])
-        require_arg(default, Domain.optional(Domain.text()), preferred=[None, "missing"])
+        require_arg(key, str)
+        require_arg(default, Optional[str])
         ret = self.inner_get(key, default)
         if key in self.state.items:
             val = self.state.items.pop(key)
@@ -373,8 +371,8 @@ class LRUCacheStateMachine(StateMachine[LRUCacheState]):
 
     @transition(LRUCache.put)
     def put(self, key: str, value: Any) -> Optional[Tuple[str, Any]]:
-        require_arg(key, Domain.text(min_size=1), preferred=["k1", "k2", "k3"])
-        require_arg(value, Domain.text(), preferred=["v1", "v2", "v3"])
+        require_arg(key, str)
+        require_arg(value, str)
         ret = self.inner_put(key, value)
         if key in self.state.items:
             del self.state.items[key]
@@ -402,8 +400,8 @@ class LRUCacheStateMachine(StateMachine[LRUCacheState]):
 
     @transition(LRUCache.peek)
     def peek(self, key: str, default: Optional[Any]) -> Any:
-        require_arg(key, Domain.text(min_size=1), preferred=["k1", "k2", "seed_k1"])
-        require_arg(default, Domain.optional(Domain.text()), preferred=[None, "missing"])
+        require_arg(key, str)
+        require_arg(default, Optional[str])
         ret = self.inner_peek(key, default)
         if key in self.state.items:
             assert ret == self.state.items[key]
@@ -417,7 +415,7 @@ class LRUCacheStateMachine(StateMachine[LRUCacheState]):
     @transition(LRUCache.remove)
     def remove(self, key: str) -> Any:
         require(bool(self.state.items), error=CacheKeyNotFoundError)
-        require_arg(key, Domain.in_set(self.state.items), error=CacheKeyNotFoundError)
+        require_arg(key, self.state.items, error=CacheKeyNotFoundError)
         ret = self.inner_remove(key)
         val = self.state.items.pop(key)
         assert ret == val
@@ -476,6 +474,10 @@ class LRUCacheStateMachine(StateMachine[LRUCacheState]):
 
     def inner_keys_in_lru_order(self) -> List[str]:
         return list(self.state.items.keys())
+
+    @domain()
+    def _dom_configure_capacity(self, x: Any) -> bool:
+        return bool(x >= 1)
 
 
 proto = LRUCacheStateMachine()

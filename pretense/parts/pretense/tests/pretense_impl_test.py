@@ -1019,7 +1019,6 @@ ctx.returns(lambda v, r: v.is_prerelease)
         with self.assertRaises(pretense.PretenseSpecificationError) as ctx:
             pretense.require_arg("ghost", pretense.Domain.regex(r"^[a-c]$"))
         self.assertIn("failed domain validation", str(ctx.exception))
-        self.assertIn("preferred=[...]", str(ctx.exception))
 
         # Domain.boolean
         d_bool = pretense.Domain.boolean()
@@ -1388,7 +1387,6 @@ ctx.returns(lambda v, r: v.is_prerelease)
             require,
             require_arg,
             sut,
-            sut_state,
             synthesize_fake,
             transition,
         )
@@ -1428,12 +1426,12 @@ ctx.returns(lambda v, r: v.is_prerelease)
 
             @transition(name="allocate")
             def allocate(self, amount: int) -> int:
-                # 1. Express requirement on collaborator state machine state via sut_state:
-                require(sut_state(VaultState).is_active)
-                require(sut_state(VaultState).balance >= 1)
+                # 1. Express requirement on collaborator via sut(FakeVault):
+                require(sut(FakeVault).state.is_active)
+                require(sut(FakeVault).state.balance >= 1)
                 require_arg(
                     amount,
-                    Domain.range(1, max(1, min(10, sut_state(VaultState).balance))),
+                    Domain.range(1, max(1, min(10, sut(FakeVault).state.balance))),
                 )
 
                 # 2. Mutate collaborator fake directly
@@ -1917,7 +1915,7 @@ ctx.returns(lambda v, r: v.is_prerelease)
 
     def test_require_env_and_bind_with_checked_adapter(self) -> None:
         """Requirement: bind connects virtual state to collaborator state, verifying SUT exception raising."""
-        from pretense import StateMachine, require_env, sut, sut_state, synthesize_fake, transition
+        from pretense import StateMachine, require_env, sut, synthesize_fake, transition
 
         class RemoteClientException(Exception):
             pass
@@ -1945,6 +1943,10 @@ ctx.returns(lambda v, r: v.is_prerelease)
             def inner_send(self, data: str) -> str:
                 return f"sent_{data}"
 
+            @transition(name="is_network_healthy")
+            def is_network_healthy(self) -> bool:
+                return not self.state.is_disconnected
+
         @dataclass
         class ManagerState:
             network_is_down: bool = False
@@ -1956,10 +1958,13 @@ ctx.returns(lambda v, r: v.is_prerelease)
 
             @transition(name="sync_item")
             def sync_item(self, item: str) -> str:
-                require_env(not self.state.network_is_down, SyncException, "sync failed")
+                require_env(self.inner_is_network_healthy(), SyncException, "sync failed")
                 ret = self.inner_sync_item(item)
                 self.state.items.append(item)
                 return ret
+
+            def inner_is_network_healthy(self) -> bool:
+                return not self.state.network_is_down
 
             def inner_sync_item(self, item: str) -> str:
                 return f"fake_mgr_{item}"
@@ -1968,6 +1973,9 @@ ctx.returns(lambda v, r: v.is_prerelease)
         class RealClient:
             def __init__(self) -> None:
                 self.disconnected = False
+
+            def is_network_healthy(self) -> bool:
+                return not self.disconnected
 
             def send(self, data: str) -> str:
                 if self.disconnected:
@@ -1999,7 +2007,9 @@ ctx.returns(lambda v, r: v.is_prerelease)
         class ManagerImplPseudoStateMachine(ManagerStateMachine):
             def __init__(self, state: Optional[ManagerState] = None, singletons: Any = None) -> None:
                 super().__init__(state=state or ManagerState(), singletons=singletons)
-                self.bind("network_is_down", lambda: sut_state(ClientState).is_disconnected)
+
+            def inner_is_network_healthy(self) -> bool:
+                return sut(RealClient).is_network_healthy()
 
             def inner_sync_item(self, item: str) -> str:
                 return sut(RealManager).sync_item(item)
@@ -2007,7 +2017,9 @@ ctx.returns(lambda v, r: v.is_prerelease)
         class BadManagerImplPseudoStateMachine(ManagerStateMachine):
             def __init__(self, state: Optional[ManagerState] = None, singletons: Any = None) -> None:
                 super().__init__(state=state or ManagerState(), singletons=singletons)
-                self.bind("network_is_down", lambda: sut_state(ClientState).is_disconnected)
+
+            def inner_is_network_healthy(self) -> bool:
+                return sut(RealClient).is_network_healthy()
 
             def inner_sync_item(self, item: str) -> str:
                 return sut(BadManager).sync_item(item)
@@ -2033,10 +2045,9 @@ ctx.returns(lambda v, r: v.is_prerelease)
         checked_collab_mgr = mgr_checked_collab.as_checked(RealManager, real_mgr)
         self.assertEqual(checked_collab_mgr.sync_item("delta"), "real_sent_delta")
 
-        # Disconnect client fake -> bound state network_is_down becomes True
+        # Disconnect client fake -> require_env delegates to sut_state(ClientState) during checked dispatch
         client_fake.seed_disconnect()
         real_client.disconnected = True
-        self.assertTrue(mgr_sm.state.network_is_down)
 
         with self.assertRaises(SyncException):
             checked.sync_item("beta")
@@ -2053,7 +2064,7 @@ ctx.returns(lambda v, r: v.is_prerelease)
 
     def test_require_env_and_bind_hypothesis_fuzzing(self) -> None:
         """Requirement: Hypothesis fuzzing executes collaborator seeding, suppresses target seeding, and tolerates contracted require_env exceptions."""
-        from pretense import StateMachine, compile_hypothesis_test_case, require_env, sut, sut_state, synthesize_fake, transition
+        from pretense import StateMachine, compile_hypothesis_test_case, require_env, sut, synthesize_fake, transition
 
         class NetworkException(Exception):
             pass
@@ -2078,6 +2089,10 @@ ctx.returns(lambda v, r: v.is_prerelease)
             def inner_ping(self) -> bool:
                 return True
 
+            @transition(name="is_network_healthy")
+            def is_network_healthy(self) -> bool:
+                return not self.state.is_down
+
         @dataclass
         class AppState:
             network_is_down: bool = False
@@ -2094,10 +2109,13 @@ ctx.returns(lambda v, r: v.is_prerelease)
 
             @transition(name="check_status")
             def check_status(self) -> bool:
-                require_env(not self.state.network_is_down, NetworkException, "network down")
+                require_env(self.inner_is_network_healthy(), NetworkException, "network down")
                 ret = self.inner_check_status()
                 self.state.pings += 1
                 return ret
+
+            def inner_is_network_healthy(self) -> bool:
+                return not self.state.network_is_down
 
             def inner_check_status(self) -> bool:
                 return True
@@ -2105,6 +2123,9 @@ ctx.returns(lambda v, r: v.is_prerelease)
         class RealRemote:
             def __init__(self) -> None:
                 self.is_down = False
+
+            def is_network_healthy(self) -> bool:
+                return not self.is_down
 
             def ping(self) -> bool:
                 if self.is_down:
@@ -2121,7 +2142,9 @@ ctx.returns(lambda v, r: v.is_prerelease)
         class AppImplPseudoStateMachine(AppStateMachine):
             def __init__(self, state: Optional[AppState] = None, singletons: Any = None) -> None:
                 super().__init__(state=state or AppState(), singletons=singletons)
-                self.bind("network_is_down", lambda: sut_state(RemoteState).is_down)
+
+            def inner_is_network_healthy(self) -> bool:
+                return sut(RealRemote).is_network_healthy()
 
             def inner_check_status(self) -> bool:
                 return sut(RealApp).check_status()
@@ -2146,13 +2169,707 @@ ctx.returns(lambda v, r: v.is_prerelease)
         # Collaborator seeding transition is executed
         runner.step_collab_RemoteStateMachine_seed_network_down()
         self.assertTrue(fake_remote.state.is_down)
-        self.assertTrue(runner.sm.state.network_is_down)
 
         # Transition when condition is False verifies SUT raises NetworkException and passes
         runner.step_check_status()
 
         # Full hypothesis run
         FuzzCase.TestCase().runTest()
+
+    def test_domain_decorator_and_recognizer(self) -> None:
+        """Verify @domain method decorator, finite-sequence producers, and harvest clone."""
+        from pretense import domain
+
+        class _NumDom:
+            @domain(
+                valid=lambda self: [1, 42],
+                invalid=lambda self: [0, -1],
+            )
+            def is_positive(self, val: int) -> bool:
+                return val > 0
+
+            @domain(valid=lambda self: [2, 4])
+            def is_even(self, x: Any) -> bool:
+                return isinstance(x, int) and x % 2 == 0
+
+            @domain(valid=lambda self: [4, 6])
+            def is_positive_even(self, x: Any) -> bool:
+                return self.is_positive(x) and self.is_even(x)
+
+        inst = _NumDom()
+        self.assertTrue(inst.is_positive(10))
+        self.assertFalse(inst.is_positive(-5))
+        self.assertEqual(inst.is_positive.valid_candidates(), (1, 42))
+        self.assertEqual(inst.is_positive.invalid_candidates(), (0, -1))
+
+        clone = inst.is_positive.get_harvest_clone()
+        self.assertIsNotNone(clone)
+        self.assertTrue(clone(10))
+        self.assertFalse(clone(-5))
+
+        # Two DomainWrappers sharing module globals must not infinitely recurse.
+        _NumDom.is_even.fn.__globals__["_test_other_domain"] = _NumDom.is_positive_even
+        _NumDom.is_positive_even.fn.__globals__["_test_even_domain"] = _NumDom.is_even
+        try:
+            even_clone = inst.is_positive_even.get_harvest_clone()
+            self.assertTrue(even_clone(4))
+            self.assertFalse(even_clone(3))
+        finally:
+            _NumDom.is_even.fn.__globals__.pop("_test_other_domain", None)
+            _NumDom.is_positive_even.fn.__globals__.pop("_test_even_domain", None)
+
+    def test_edge_buffers_and_intercept_proxy(self) -> None:
+        """Verify TemporalBuffer, SpatialBuffer, and InterceptProxy harvest."""
+        from pretense.parts.pretense.lib.pretense import (
+            TemporalBuffer,
+            SpatialBuffer,
+            InterceptProxy,
+            wrap_proxy,
+            unproxy,
+        )
+
+        # TemporalBuffer with lookback horizon
+        t_buf = TemporalBuffer(lookback_horizon=2)
+        t_buf.record("user_1", step_idx=1)
+        t_buf.record("user_2", step_idx=2)
+        self.assertEqual(set(t_buf.get_candidates(current_step=2)), {"user_1", "user_2"})
+
+        # Step advances past horizon: user_1 expires at step 4 (4 - 1 > 2)
+        self.assertEqual(t_buf.get_candidates(current_step=4), ["user_2"])
+
+        # SpatialBuffer with static seeds and freezing
+        s_buf = SpatialBuffer(maxlen=5)
+        s_buf.add_many([0, 1, 2])
+        self.assertEqual(s_buf.get_candidates(), [0, 1, 2])
+
+        # InterceptProxy comparison harvesting
+        proxy_val = wrap_proxy(5, s_buf)
+        self.assertEqual(unproxy(proxy_val), 5)
+        # 5 < 10 intercepts threshold 10 and populates 9, 10, 11
+        result = proxy_val < 10
+        self.assertTrue(result)
+        self.assertIn(10, s_buf.get_candidates())
+        self.assertIn(9, s_buf.get_candidates())
+        self.assertIn(11, s_buf.get_candidates())
+
+        # Freezing suppresses further additions (e.g. during Hypothesis shrinking)
+        s_buf.is_frozen = True
+        s_buf.add(999)
+        self.assertNotIn(999, s_buf.get_candidates())
+
+        # Attribute access on a composite object must not pollute its SpatialBuffer with scalar field thresholds
+        from dataclasses import dataclass
+
+        @dataclass
+        class _DummyBox:
+            count: int
+
+        box_buf = SpatialBuffer(maxlen=5)
+        box_proxy = wrap_proxy(_DummyBox(count=5), box_buf)
+        self.assertTrue(box_proxy.count >= 0)
+        self.assertEqual(box_buf.get_candidates(), [])
+
+    def test_ast_chained_comparison_normalization(self) -> None:
+        """Verify chained comparisons (0 < x < 100) are normalized into conjunctions."""
+        import ast
+        from pretense.parts.pretense.lib.pretense import _normalize_chained_comparisons
+
+        expr = ast.parse("lambda x: 0 < x < 100", mode="eval").body
+        norm = _normalize_chained_comparisons(expr)
+        unparsed = ast.unparse(norm)
+        self.assertIn("x > 0", unparsed)
+        self.assertIn("x < 100", unparsed)
+        self.assertIn("and", unparsed)
+
+    def test_flexible_require_arg_forms_and_zero_exceptions(self) -> None:
+        """Verify require_arg with types, collections, lambdas, and @domain."""
+        import pretense
+        from pretense import domain
+
+        # 1. Native type
+        pretense.require_arg(42, int)
+        with self.assertRaises(pretense.PretenseSpecificationError):
+            pretense.require_arg("not_an_int", int)
+
+        # 2. Direct collection/set
+        users = {"alice", "bob"}
+        pretense.require_arg("alice", users)
+        with self.assertRaises(pretense.PretenseSpecificationError):
+            pretense.require_arg("eve", users)
+
+        # 3. Unary lambda
+        pretense.require_arg(10, lambda x: x > 0)
+        with self.assertRaises(pretense.PretenseSpecificationError):
+            pretense.require_arg(-5, lambda x: x > 0)
+
+        # 4. @domain method recognizer
+        class _VerDom:
+            @domain(valid=lambda self: ["v1.0.0", "v2.0.0"])
+            def is_valid_ver(self, v: str) -> bool:
+                return v.startswith("v")
+
+        ver_dom = _VerDom()
+        pretense.require_arg("v2.1.0", ver_dom.is_valid_ver)
+        with self.assertRaises(pretense.PretenseSpecificationError):
+            pretense.require_arg("invalid", ver_dom.is_valid_ver)
+
+        # 5. Enum native type in require_arg + Hypothesis fuzzing
+        from enum import Enum
+        from dataclasses import dataclass
+        from hypothesis import settings as hyp_settings
+
+        class Mode(Enum):
+            FAST = "fast"
+            SAFE = "safe"
+
+        class Runner:
+            def run(self, mode: Mode) -> str:
+                raise NotImplementedError
+
+        @dataclass
+        class RunnerState:
+            last_mode: Optional[Mode] = None
+
+        class RunnerSM(pretense.StateMachine[RunnerState]):
+            def make_initial_state(self) -> RunnerState:
+                return RunnerState()
+
+            @pretense.transition(Runner.run)
+            def run(self, mode: Mode) -> str:
+                pretense.require_arg(mode, Mode)
+                ret = self.inner_run(mode)
+                self.state.last_mode = mode
+                assert ret == mode.value
+                return ret
+
+            def inner_run(self, mode: Mode) -> str:
+                return mode.value
+
+        enum_fuzz = compile_hypothesis_test_case(
+            RunnerSM,
+            settings=hyp_settings(max_examples=10, stateful_step_count=4, deadline=None),
+            name="EnumRunnerFuzz",
+        )
+        suite_enum = unittest.defaultTestLoader.loadTestsFromTestCase(enum_fuzz.TestCase)
+        res_enum = unittest.TextTestRunner(verbosity=0).run(suite_enum)
+        self.assertTrue(res_enum.wasSuccessful())
+
+    def test_terminal_contract_violation_fuzzing(self) -> None:
+        from dataclasses import dataclass
+        from hypothesis import settings as hyp_settings
+
+        class NegativeAmountError(Exception):
+            pass
+
+        class Wallet:
+            def deposit(self, amount: int) -> int:
+                raise NotImplementedError
+
+        class GoodWallet:
+            def deposit(self, amount: int) -> int:
+                if amount <= 0:
+                    raise NegativeAmountError("must be positive")
+                return amount
+
+        class BadWallet:
+            def deposit(self, amount: int) -> int:
+                # Bug: omits NegativeAmountError check
+                return amount
+
+        @dataclass
+        class WalletState:
+            total: int = 0
+
+        class WalletSM(pretense.StateMachine[WalletState]):
+            def make_initial_state(self) -> WalletState:
+                return WalletState()
+
+            @pretense.transition(Wallet.deposit)
+            def deposit(self, amount: int) -> int:
+                pretense.require_arg(
+                    amount,
+                    lambda x: x > 0,
+                    error=NegativeAmountError,
+                )
+                ret = self.inner_deposit(amount)
+                self.state.total += amount
+                assert ret == amount
+                return ret
+
+            def inner_deposit(self, amount: int) -> int:
+                return amount
+
+        # 1. GoodWallet passes terminal contract-violation fuzzing
+        good_fuzz = compile_hypothesis_test_case(
+            WalletSM,
+            sut_factory=GoodWallet,
+            settings=hyp_settings(max_examples=15, stateful_step_count=5, deadline=None),
+            name="GoodWalletFuzz",
+        )
+        suite_good = unittest.defaultTestLoader.loadTestsFromTestCase(good_fuzz.TestCase)
+        res_good = unittest.TextTestRunner(verbosity=0).run(suite_good)
+        self.assertTrue(res_good.wasSuccessful())
+
+        # 2. BadWallet fails terminal contract-violation fuzzing (boundary disagreement)
+        bad_fuzz = compile_hypothesis_test_case(
+            WalletSM,
+            sut_factory=BadWallet,
+            settings=hyp_settings(max_examples=30, stateful_step_count=6, deadline=None),
+            name="BadWalletFuzz",
+        )
+        suite_bad = unittest.defaultTestLoader.loadTestsFromTestCase(bad_fuzz.TestCase)
+        res_bad = unittest.TextTestRunner(verbosity=0).run(suite_bad)
+        self.assertFalse(res_bad.wasSuccessful())
+
+    def test_require_arg_generic_collection_and_domain_initial_edges(self) -> None:
+        """Verify typing.Collection[T] works in require_arg and initial_edges seeds without valid=."""
+        from collections.abc import Collection
+        from hypothesis import settings as hyp_settings
+        from pretense.parts.pretense.lib.pretense import (
+            PretenseSpecificationError,
+            StateMachine,
+            domain,
+            require_arg,
+            transition,
+        )
+
+        require_arg(("a", "b"), Collection[str])
+        require_arg((), Collection[str])
+        with self.assertRaises(PretenseSpecificationError):
+            require_arg(-1, Collection[str])
+        with self.assertRaises(PretenseSpecificationError):
+            require_arg(["a", 1], Collection[str])
+
+        class SeededTarget:
+            def accept(self, expr: str) -> str:
+                return expr
+
+        class SeededSM(StateMachine[int]):
+            def __init__(self, state: int = 0, singletons: Any = None) -> None:
+                super().__init__(state=state, singletons=singletons)
+
+            @domain(valid=lambda self: [">=1.0.0", "^2.1.0"])
+            def is_seeded_expr(self, val: Any) -> bool:
+                return isinstance(val, str) and (val.startswith(">=") or val.startswith("^"))
+
+            @transition(SeededTarget.accept)
+            def accept(self, expr: str) -> str:
+                require_arg(expr, self.is_seeded_expr)
+                return expr
+
+        fuzz_cls = compile_hypothesis_test_case(
+            SeededSM,
+            settings=hyp_settings(max_examples=10, stateful_step_count=3, deadline=None),
+            name="SeededEdgesFuzz",
+        )
+        suite = unittest.defaultTestLoader.loadTestsFromTestCase(fuzz_cls.TestCase)
+        res = unittest.TextTestRunner(verbosity=0).run(suite)
+        self.assertTrue(res.wasSuccessful())
+
+        # Dataclass/class domains (e.g. Version) must generate instances via st.from_type
+        from dataclasses import dataclass
+
+        @dataclass(frozen=True)
+        class _MiniVer:
+            major: int
+            minor: int
+
+        seen_versions: List[_MiniVer] = []
+
+        class _VerTarget:
+            def record(self, v: _MiniVer) -> int:
+                return v.major
+
+        class _VerSM(StateMachine[int]):
+            def __init__(self, state: int = 0, singletons: Any = None) -> None:
+                super().__init__(state=state, singletons=singletons)
+
+            @transition(_VerTarget.record)
+            def record(self, v: _MiniVer) -> int:
+                require_arg(v, _MiniVer)
+                seen_versions.append(v)
+                return v.major
+
+        ver_fuzz = compile_hypothesis_test_case(
+            _VerSM,
+            settings=hyp_settings(max_examples=8, stateful_step_count=3, deadline=None),
+            name="DataclassDomainFuzz",
+        )
+        ver_res = unittest.TextTestRunner(verbosity=0).run(
+            unittest.defaultTestLoader.loadTestsFromTestCase(ver_fuzz.TestCase)
+        )
+        self.assertTrue(ver_res.wasSuccessful())
+        self.assertGreater(len(seen_versions), 0)
+
+    def test_rich_harvesting_fields_bool_composition_and_str_int_propagation(self) -> None:
+        """Verify field-level harvesting, non-short-circuiting and/or composition, str<->int edges, and EdgeHitAuditor."""
+        from dataclasses import dataclass
+        import re
+        from pretense.parts.pretense.lib.pretense import (
+            _ACTIVE_HARVEST_SESSION,
+            HarvestSession,
+            StateMachine,
+            domain,
+            wrap_proxy,
+        )
+
+        @dataclass(frozen=True)
+        class _Pair:
+            foo: int
+            bar: int
+
+        @domain(valid=lambda _d: _Pair(foo=5, bar=7))
+        def is_pos_pair(x: Any) -> bool:
+            return isinstance(x, _Pair) and x.foo > 0 and x.bar > 0
+
+        @domain(valid=lambda _d: "1.2.3")
+        def is_dotted_ver(s: Any) -> bool:
+            return (
+                isinstance(s, str)
+                and len(s.split(".")) == 3
+                and s.split(".")[0].isdigit()
+                and int(s.split(".")[0]) >= 0
+                and bool(re.compile(r"\d+\.\d+\.\d+").fullmatch(s))
+            )
+
+        sm = StateMachine[int](state=0)
+        session = HarvestSession(sm._get_spatial_buffer, auditor=sm._edge_auditor)
+        tok = _ACTIVE_HARVEST_SESSION.set(session)
+        try:
+            # Even with foo=0 (LHS False), non-short-circuiting _harvest_and must still harvest x.bar > 0!
+            p_proxy = wrap_proxy(_Pair(foo=0, bar=5), sm._get_spatial_buffer(_Pair), session=session)
+            self.assertFalse(is_pos_pair.get_harvest_clone()(p_proxy))
+            session.compose_bool_edges()
+
+            pair_edges = sm._get_spatial_buffer(_Pair).get_candidates()
+            # Single-field perturbations relative to _Pair(0, 5)
+            self.assertIn(_Pair(foo=1, bar=5), pair_edges)
+            self.assertIn(_Pair(foo=0, bar=0), pair_edges)
+            self.assertIn(_Pair(foo=0, bar=1), pair_edges)
+            # Composed multi-field corners
+            self.assertIn(_Pair(foo=-1, bar=-1), pair_edges)
+            self.assertIn(_Pair(foo=1, bar=1), pair_edges)
+            # Scalar int buffer also receives -1, 0, 1 without polluting _Pair buffer
+            self.assertEqual(set(sm._get_spatial_buffer(int).get_candidates()), {-1, 0, 1})
+
+            # Cross-type str <-> int + split/len/isdigit/regex harvesting
+            s_proxy = wrap_proxy("1.2.3", sm._get_spatial_buffer(str), session=session)
+            self.assertTrue(is_dotted_ver.get_harvest_clone()(s_proxy))
+            str_edges = sm._get_spatial_buffer(str).get_candidates()
+            self.assertIn(".", str_edges)
+            self.assertIn("1.1.1", str_edges)
+            self.assertIn("0", str_edges)
+            self.assertIn("1", str_edges)
+        finally:
+            _ACTIVE_HARVEST_SESSION.reset(tok)
+
+        sm._edge_auditor.record_hit(_Pair, _Pair(foo=1, bar=1))
+        report = sm.get_edge_coverage_report()
+        self.assertIn(_Pair, report)
+        self.assertGreaterEqual(report[_Pair]["hit"], 1)
+
+    def test_stateless_interface_fake_impl_split_and_cross_test(self) -> None:
+        """Validate TODO 17 + TODO 18: stateless IfaceSM, stateful FakeSM, ImplSM, and A<->B cross-testing."""
+        from dataclasses import dataclass, field
+        from hypothesis import settings as hyp_settings
+        from pretense import (
+            NoMatchingTransitionError,
+            StateMachine,
+            domain,
+            require,
+            require_arg,
+            sut,
+            synthesize_fake,
+            transition,
+        )
+
+        class RingBufferProto:
+            def capacity(self) -> int:
+                raise NotImplementedError
+
+            def size(self) -> int:
+                raise NotImplementedError
+
+            def push(self, item: int) -> Optional[int]:
+                raise NotImplementedError
+
+            def pop(self) -> int:
+                raise NotImplementedError
+
+            def clear(self) -> None:
+                raise NotImplementedError
+
+            def snapshot_items(self) -> List[int]:
+                raise NotImplementedError
+
+        class RingBufferImpl(RingBufferProto):
+            def __init__(self, cap: int = 3) -> None:
+                self._cap = cap
+                self._items: List[int] = []
+
+            def capacity(self) -> int:
+                return self._cap
+
+            def size(self) -> int:
+                return len(self._items)
+
+            def push(self, item: int) -> Optional[int]:
+                evicted: Optional[int] = None
+                if len(self._items) >= self._cap:
+                    evicted = self._items.pop(0)
+                self._items.append(item)
+                return evicted
+
+            def pop(self) -> int:
+                return self._items.pop(0)
+
+            def clear(self) -> None:
+                self._items.clear()
+
+            def snapshot_items(self) -> List[int]:
+                return list(self._items)
+
+        class RingBufferIntfA(StateMachine[None]):
+            @domain(valid=lambda self: [0, 5, 10, -3], invalid=lambda self: ["bad"])
+            def valid_item(self, item: int) -> bool:
+                return isinstance(item, int) and not isinstance(item, bool)
+
+            @transition(RingBufferProto.push)
+            def push(self, item: int) -> Optional[int]:
+                require_arg(item, self.valid_item)
+                old_items = self.inner_snapshot_items()
+                cap = self.inner_capacity()
+                was_full = len(old_items) >= cap
+                ret = self.inner_push(item)
+                new_items = self.inner_snapshot_items()
+                if was_full:
+                    assert ret == old_items[0]
+                    assert new_items == old_items[1:] + [item]
+                else:
+                    assert ret is None
+                    assert new_items == old_items + [item]
+                return ret
+
+            def inner_push(self, item: int) -> Optional[int]:
+                raise NotImplementedError
+
+            @transition(RingBufferProto.pop)
+            def pop(self) -> int:
+                require(self.inner_size() > 0)
+                old_items = self.inner_snapshot_items()
+                ret = self.inner_pop()
+                assert ret == old_items[0]
+                assert self.inner_snapshot_items() == old_items[1:]
+                return ret
+
+            def inner_pop(self) -> int:
+                raise NotImplementedError
+
+            @transition(RingBufferProto.clear)
+            def clear(self) -> None:
+                self.inner_clear()
+                assert self.inner_size() == 0
+
+            def inner_clear(self) -> None:
+                raise NotImplementedError
+
+            @transition(RingBufferProto.capacity)
+            def capacity(self) -> int:
+                ret = self.inner_capacity()
+                assert ret >= 1
+                return ret
+
+            def inner_capacity(self) -> int:
+                raise NotImplementedError
+
+            @transition(RingBufferProto.size)
+            def size(self) -> int:
+                ret = self.inner_size()
+                assert 0 <= ret <= self.inner_capacity()
+                return ret
+
+            def inner_size(self) -> int:
+                raise NotImplementedError
+
+            @transition(RingBufferProto.snapshot_items)
+            def snapshot_items(self) -> List[int]:
+                ret = self.inner_snapshot_items()
+                assert len(ret) == self.inner_size()
+                return ret
+
+            def inner_snapshot_items(self) -> List[int]:
+                raise NotImplementedError
+
+        # Independent second interface SM (same contract, different author style)
+        class RingBufferIntfB(StateMachine[None]):
+            @domain(valid=lambda self: [1, 2, -1, 99], invalid=lambda self: [None])
+            def item_dom(self, x: int) -> bool:
+                return isinstance(x, int) and not isinstance(x, bool)
+
+            @transition(RingBufferProto.push)
+            def push(self, item: int) -> Optional[int]:
+                require_arg(item, self.item_dom)
+                before = self.inner_snapshot_items()
+                cap = self.inner_capacity()
+                ret = self.inner_push(item)
+                after = self.inner_snapshot_items()
+                if len(before) == cap:
+                    assert ret == before[0] and after == before[1:] + [item]
+                else:
+                    assert ret is None and after == before + [item]
+                return ret
+
+            def inner_push(self, item: int) -> Optional[int]:
+                raise NotImplementedError
+
+            @transition(RingBufferProto.pop)
+            def pop(self) -> int:
+                require(len(self.inner_snapshot_items()) > 0)
+                before = self.inner_snapshot_items()
+                ret = self.inner_pop()
+                assert ret == before[0]
+                assert self.inner_size() == len(before) - 1
+                return ret
+
+            def inner_pop(self) -> int:
+                raise NotImplementedError
+
+            @transition(RingBufferProto.clear)
+            def clear(self) -> None:
+                self.inner_clear()
+                assert self.inner_snapshot_items() == []
+
+            def inner_clear(self) -> None:
+                raise NotImplementedError
+
+            @transition(RingBufferProto.capacity)
+            def capacity(self) -> int:
+                ret = self.inner_capacity()
+                assert ret > 0
+                return ret
+
+            def inner_capacity(self) -> int:
+                raise NotImplementedError
+
+            @transition(RingBufferProto.size)
+            def size(self) -> int:
+                ret = self.inner_size()
+                assert ret == len(self.inner_snapshot_items())
+                return ret
+
+            def inner_size(self) -> int:
+                raise NotImplementedError
+
+            @transition(RingBufferProto.snapshot_items)
+            def snapshot_items(self) -> List[int]:
+                ret = self.inner_snapshot_items()
+                assert len(ret) <= self.inner_capacity()
+                return ret
+
+            def inner_snapshot_items(self) -> List[int]:
+                raise NotImplementedError
+
+        @dataclass
+        class RingBufferState:
+            capacity: int = 3
+            items: List[int] = field(default_factory=list)
+
+        class _FakeMixin:
+            state: RingBufferState
+
+            def make_initial_state(self) -> RingBufferState:
+                return RingBufferState()
+
+            @transition.seeding
+            def seed_items(self) -> None:
+                self.state.items = [1, 2]
+
+            def inner_capacity(self) -> int:
+                return self.state.capacity
+
+            def inner_size(self) -> int:
+                return len(self.state.items)
+
+            def inner_push(self, item: int) -> Optional[int]:
+                evicted: Optional[int] = None
+                if len(self.state.items) >= self.state.capacity:
+                    evicted = self.state.items.pop(0)
+                self.state.items.append(item)
+                return evicted
+
+            def inner_pop(self) -> int:
+                return self.state.items.pop(0)
+
+            def inner_clear(self) -> None:
+                self.state.items.clear()
+
+            def inner_snapshot_items(self) -> List[int]:
+                return list(self.state.items)
+
+        class RingBufferFakeA(_FakeMixin, RingBufferIntfA):
+            def __init__(self, state: Optional[RingBufferState] = None, singletons: Any = None) -> None:
+                super().__init__(state=state or self.make_initial_state(), singletons=singletons)
+
+        class RingBufferFakeB(_FakeMixin, RingBufferIntfB):
+            def __init__(self, state: Optional[RingBufferState] = None, singletons: Any = None) -> None:
+                super().__init__(state=state or self.make_initial_state(), singletons=singletons)
+
+        class _ImplMixin:
+            def inner_capacity(self) -> int:
+                return sut(RingBufferProto).capacity()
+
+            def inner_size(self) -> int:
+                return sut(RingBufferProto).size()
+
+            def inner_push(self, item: int) -> Optional[int]:
+                return sut(RingBufferProto).push(item)
+
+            def inner_pop(self) -> int:
+                return sut(RingBufferProto).pop()
+
+            def inner_clear(self) -> None:
+                sut(RingBufferProto).clear()
+
+            def inner_snapshot_items(self) -> List[int]:
+                return sut(RingBufferProto).snapshot_items()
+
+        class RingBufferImplA(_ImplMixin, RingBufferIntfA):
+            pass
+
+        class RingBufferImplB(_ImplMixin, RingBufferIntfB):
+            pass
+
+        # 1. Verify FakeA, FakeB, and cross-swapped FakeA_with_IntfB / FakeB_with_IntfA
+        FakeCls = synthesize_fake(RingBufferFakeA, fake_name="FakeRingBuffer")
+        self.assertEqual(FakeCls.__name__, "FakeRingBuffer")
+        for sm_cls, factory, label in [
+            (RingBufferFakeA, None, "FakeA_IntfA"),
+            (RingBufferFakeB, None, "FakeB_IntfB"),
+            (RingBufferImplA, lambda: RingBufferImpl(3), "Impl_IntfA"),
+            (RingBufferImplB, lambda: RingBufferImpl(3), "Impl_IntfB"),
+        ]:
+            fuzz = compile_hypothesis_test_case(
+                sm_cls,
+                sut_factory=factory,
+                settings=hyp_settings(max_examples=12, stateful_step_count=6, deadline=None),
+                name=label,
+            )
+            suite = unittest.defaultTestLoader.loadTestsFromTestCase(fuzz.TestCase)
+            res = unittest.TextTestRunner(verbosity=0).run(suite)
+            self.assertTrue(res.wasSuccessful(), f"{label} failed: {res.errors} {res.failures}")
+
+        # 2. Verify forged/narrower @domain validator fails cross-check against valid inputs
+        class RingBufferIntfForged(RingBufferIntfA):
+            @domain(valid=lambda self: [1, 2])
+            def valid_item(self, item: int) -> bool:
+                return item in (1, 2)
+
+        class RingBufferImplForged(_ImplMixin, RingBufferIntfForged):
+            pass
+
+        sm_forged = RingBufferImplForged(singletons={RingBufferProto: RingBufferImpl(3)})
+        with self.assertRaises(NoMatchingTransitionError):
+            sm_forged.push(5)  # IntfA accepts 5, forged rejects 5 -> catches divergence!
 
 
 if __name__ == "__main__":

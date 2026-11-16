@@ -1,6 +1,7 @@
 from __future__ import annotations
 import json
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -230,18 +231,140 @@ def _write_file_with_perms(
 
 
 def _project_for_role_workspace(content: str, filename: str, is_writable: bool) -> str:
-    """Projects in-band metadata for role workspace: only change and feedback."""
-    meta = src_metadata.extract_metadata_from_text(content, filename)
-    if meta is None:
-        return content
-    return src_metadata.rewrite_metadata_in_text(
-        content,
-        filename,
-        clear_last_cleaned=True,
-        last_changed="",
-        clear_audits=True,
-        clear_dirty=True,
+    """Projects in-band metadata for role workspace, stripping CHANGES: on writable targets."""
+    return src_metadata.project_workspace_metadata(
+        content, filename, strip_changes=is_writable
     )
+
+
+_BOILERPLATE_DELTAS = frozenset(
+    {
+        "update",
+        "updated",
+        "fix",
+        "fixed",
+        "change",
+        "changed",
+        "changes",
+        "edit",
+        "edited",
+        "cleanup",
+        "refactor",
+        "refactored",
+    }
+)
+_SLUG_LEAK_RE = re.compile(r"\[slug:[^\]]+\]")
+_TEST_LEAK_RE = re.compile(r"(?:\btest_[a-zA-Z0-9_]+\b|[a-zA-Z0-9_]+_test\.py)")
+
+
+def _parse_and_validate_change_fields(
+    target_path: str,
+    summary: Optional[str],
+    kind: Optional[str],
+    scope: Optional[str],
+    why: Optional[str],
+    is_new_file: bool,
+) -> Tuple[Optional[str], str, Optional[str], Optional[str], Optional[str]]:
+    """Parses and validates change fields -> (error_msg, delta, kind, scope, why)."""
+    raw = (summary or "").strip()
+    delta = raw
+    parsed_why = why.strip() if why and why.strip() else None
+    if raw.startswith("Delta:"):
+        rest = raw[len("Delta:") :].strip()
+        if " | Why:" in rest and parsed_why is None:
+            d_part, w_part = rest.split(" | Why:", 1)
+            delta = d_part.strip()
+            parsed_why = w_part.strip() or None
+        else:
+            delta = rest
+    elif " | Why:" in raw and parsed_why is None:
+        d_part, w_part = raw.split(" | Why:", 1)
+        delta = d_part.strip()
+        parsed_why = w_part.strip() or None
+
+    delta = " ".join(delta.splitlines()).strip()
+    if parsed_why:
+        parsed_why = " ".join(parsed_why.splitlines()).strip()
+    norm_scope = " ".join(scope.splitlines()).strip() if scope and scope.strip() else None
+
+    if kind is not None and kind.strip():
+        norm_kind = kind.strip().lower()
+        allowed = {"new", "contract", "behavior", "fix", "refactor"}
+        if norm_kind not in allowed:
+            return (
+                f"Error: Invalid --kind '{kind}'. Must be one of: {', '.join(sorted(allowed))}.",
+                delta,
+                norm_kind,
+                norm_scope,
+                parsed_why,
+            )
+    else:
+        norm_kind = "new" if is_new_file else "behavior"
+
+    base_no_ext = os.path.splitext(os.path.basename(target_path))[0].lower()
+    base_name = os.path.basename(target_path).lower()
+    low_delta = delta.lower().strip(". ")
+    if low_delta in _BOILERPLATE_DELTAS or low_delta in (
+        f"updated {base_name}",
+        f"updated {base_no_ext}",
+        f"fixed {base_name}",
+        f"fixed {base_no_ext}",
+    ):
+        return (
+            "Error: Change delta is too generic. Describe what behavior, contract, or structure changed locally.",
+            delta,
+            norm_kind,
+            norm_scope,
+            parsed_why,
+        )
+
+    if len(delta) > 250:
+        return (
+            f"Error: Change delta exceeds 250 characters ({len(delta)}).",
+            delta,
+            norm_kind,
+            norm_scope,
+            parsed_why,
+        )
+    if parsed_why and len(parsed_why) > 200:
+        return (
+            f"Error: Change --why exceeds 200 characters ({len(parsed_why)}).",
+            delta,
+            norm_kind,
+            norm_scope,
+            parsed_why,
+        )
+    if norm_scope and len(norm_scope) > 120:
+        return (
+            f"Error: Change --scope exceeds 120 characters ({len(norm_scope)}).",
+            delta,
+            norm_kind,
+            norm_scope,
+            parsed_why,
+        )
+
+    norm_path = target_path.replace("\\", "/")
+    combined = " ".join(p for p in (delta, parsed_why or "", norm_scope or "") if p)
+    if "/lib/" in norm_path or "/tests/" in norm_path:
+        if _SLUG_LEAK_RE.search(combined):
+            return (
+                "Error: Specification [slug:...] references are forbidden in lib/ and tests/ change messages.",
+                delta,
+                norm_kind,
+                norm_scope,
+                parsed_why,
+            )
+    if "/lib/" in norm_path:
+        if _TEST_LEAK_RE.search(combined):
+            return (
+                "Error: Test symbol or test file references are forbidden in lib/ change messages.",
+                delta,
+                norm_kind,
+                norm_scope,
+                parsed_why,
+            )
+
+    return None, delta, norm_kind, norm_scope, parsed_why
 
 
 def _copy_projected_file(src: str, dst: str, is_writable: bool) -> None:
@@ -685,6 +808,9 @@ class SubmissionCoordinator(submit.SubmissionCoordinator):
         repo_root: Optional[str] = None,
         workspace_root: Optional[str] = None,
         role_name: Optional[str] = None,
+        kind: Optional[str] = None,
+        scope: Optional[str] = None,
+        why: Optional[str] = None,
     ) -> submit.SubmissionOutcome:
         """Submits a file target after validating gating rules and updating metadata."""
         ws_root = os.path.realpath(
@@ -937,11 +1063,36 @@ class SubmissionCoordinator(submit.SubmissionCoordinator):
         part_dir, u_name, _ = _parse_unit_from_file_path(target_path, ws_root)
         active_unit = unit_name or u_name
 
+        prior_main_content: Optional[str] = None
+        if os.path.isfile(main_file):
+            try:
+                with open(main_file, "r", encoding="utf-8") as f:
+                    prior_main_content = f.read()
+            except OSError:
+                prior_main_content = None
+
         if is_modified:
+            err_msg, v_delta, v_kind, v_scope, v_why = _parse_and_validate_change_fields(
+                target_path=target_path,
+                summary=summary,
+                kind=kind,
+                scope=scope,
+                why=why,
+                is_new_file=(prior_main_content is None),
+            )
+            if err_msg:
+                return submit.SubmissionOutcome(accepted=False, message=err_msg)
             if ws_root != main_root and os.path.isfile(target_path):
                 _copy_file_with_perms(target_path, main_file, readonly=False)
-            src_metadata.record_change(main_file, summary_text)
-            msg = f"[CHANGE] {rel_path}: {summary_text}"
+            src_metadata.record_change(
+                main_file,
+                v_delta,
+                kind=v_kind,
+                scope=v_scope,
+                why=v_why,
+                prior_content=prior_main_content,
+            )
+            msg = f"[CHANGE] {rel_path}: [{v_kind}] {v_delta}"
         else:
             src_metadata.mark_clean(main_file)
             msg = f"[CLEAN] {rel_path}"
@@ -971,10 +1122,24 @@ class SubmissionCoordinator(submit.SubmissionCoordinator):
                     comp_mod = src_metadata.is_code_modified(
                         ws_comp, workspace_root=ws_root
                     )
+                    comp_prior: Optional[str] = None
+                    if os.path.isfile(main_comp):
+                        try:
+                            with open(main_comp, "r", encoding="utf-8") as f:
+                                comp_prior = f.read()
+                        except OSError:
+                            comp_prior = None
                     if ws_root != main_root:
                         _copy_file_with_perms(ws_comp, main_comp, readonly=False)
                     if comp_mod:
-                        src_metadata.record_change(main_comp, summary_text)
+                        src_metadata.record_change(
+                            main_comp,
+                            v_delta if is_modified else summary_text,
+                            kind=v_kind if is_modified else ("new" if comp_prior is None else "behavior"),
+                            scope=v_scope if is_modified else None,
+                            why=v_why if is_modified else None,
+                            prior_content=comp_prior,
+                        )
                     else:
                         src_metadata.mark_clean(main_comp)
                     if ws_root != main_root and os.path.isfile(main_comp):

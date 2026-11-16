@@ -208,7 +208,6 @@ from dataclasses import dataclass, field
 from typing import Any, List, Optional
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -250,7 +249,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
 
     @transition(RingBuffer.push)
     def push(self, item: Any) -> Optional[Any]:
-        require_arg(item, Domain.any())
+        require_arg(item, object)
         # POSTCONDITIONS: WHEN size equals capacity, MUST evict oldest, store new item,
         # maintain size at capacity, and return the evicted item.
         if len(self.state.items) == self.state.capacity:

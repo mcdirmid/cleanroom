@@ -150,7 +150,7 @@ def _normalize_unit_stem(name: str) -> str:
     changed = True
     while changed:
         changed = False
-        for suffix in ("_pretense", "_test", "_impl"):
+        for suffix in ("_pretense", "_test"):
             if stem.endswith(suffix):
                 stem = stem[: -len(suffix)]
                 changed = True

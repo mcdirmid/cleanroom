@@ -171,7 +171,6 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -266,7 +265,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
 
     @transition(RingBuffer.push)
     def push(self, item: Any) -> Optional[Any]:
-        require_arg(item, Domain.any(), preferred=[1, 2, 3])
+        require_arg(item, object)
         expected_evicted = self.state.items[0] if len(self.state.items) >= self.state.capacity else None
         ret = self.inner_push(item)
         assert ret == expected_evicted

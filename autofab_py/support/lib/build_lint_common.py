@@ -2931,9 +2931,13 @@ def check_test_imports(lib_pkg: str, file_path: str) -> list[str]:
                     errors.append(
                         f"{file_path}:{node.lineno}: error: import of lib module '{alias.name}' must be 'import {expected_prefix}.{name}' (bare 'lib' imports are disallowed)"
                     )
-                elif is_scoped and (
-                    alias.name == f"{unit_name}.lib"
-                    or alias.name.startswith(f"{unit_name}.lib.")
+                elif (
+                    is_scoped
+                    and expected_prefix != f"{unit_name}.lib"
+                    and (
+                        alias.name == f"{unit_name}.lib"
+                        or alias.name.startswith(f"{unit_name}.lib.")
+                    )
                 ):
                     name = alias.name.split(".")[-1]
                     errors.append(
@@ -2969,9 +2973,13 @@ def check_test_imports(lib_pkg: str, file_path: str) -> list[str]:
                     errors.append(
                         f"{file_path}:{node.lineno}: error: import of lib module '{node.module}' must be 'from {expected_prefix}.{name} import ...' (bare 'lib' imports are disallowed)"
                     )
-                elif is_scoped and (
-                    node.module == f"{unit_name}.lib"
-                    or node.module.startswith(f"{unit_name}.lib.")
+                elif (
+                    is_scoped
+                    and expected_prefix != f"{unit_name}.lib"
+                    and (
+                        node.module == f"{unit_name}.lib"
+                        or node.module.startswith(f"{unit_name}.lib.")
+                    )
                 ):
                     if node.module == f"{unit_name}.lib":
                         for alias in node.names:

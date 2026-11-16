@@ -617,7 +617,6 @@ from typing import Any, Collection, Dict, List, Optional, Sequence, Set, Tuple, 
 import unittest
 
 from pretense import (
-    Domain,
     StateMachine,
     require,
     require_arg,
@@ -672,7 +671,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     @transition(VersionEngine.parse_version)
     def parse_version(self, text: str) -> Version:
         require(self.state.initialized)
-        require_arg(text, Domain.type(str), preferred=["1.2.3"])
+        require_arg(text, str)
         fake_ret = cast(Version, None)
         ret = self.inner_parse_version(text)
         return ret
@@ -680,8 +679,8 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     @transition(VersionEngine.compare_precedence)
     def compare_precedence(self, v1: Version, v2: Version) -> int:
         require(self.state.initialized)
-        require_arg(v1, Domain.type(Version))
-        require_arg(v2, Domain.type(Version))
+        require_arg(v1, Version)
+        require_arg(v2, Version)
         fake_ret = 0
         ret = self.inner_compare_precedence(v1, v2)
         return ret
@@ -689,7 +688,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     @transition(VersionEngine.parse_range)
     def parse_range(self, text: str) -> VersionRange:
         require(self.state.initialized)
-        require_arg(text, Domain.type(str), preferred=[">=1.0.0"])
+        require_arg(text, str)
         fake_ret = cast(VersionRange, None)
         ret = self.inner_parse_range(text)
         return ret
@@ -702,9 +701,9 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         include_prerelease: bool,
     ) -> bool:
         require(self.state.initialized)
-        require_arg(version, Domain.type(Version))
-        require_arg(range_constraint, Domain.type(VersionRange))
-        require_arg(include_prerelease, Domain.boolean())
+        require_arg(version, Version)
+        require_arg(range_constraint, VersionRange)
+        require_arg(include_prerelease, bool)
         fake_ret = False
         ret = self.inner_satisfies(version, range_constraint, include_prerelease)
         return ret
@@ -712,7 +711,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     @transition(PackageRepository.register_package)
     def register_package(self, release: PackageRelease) -> None:
         require(self.state.initialized)
-        require_arg(release, Domain.type(PackageRelease))
+        require_arg(release, PackageRelease)
         ret = self.inner_register_package(release)
         self.state.packages.setdefault(release.name, []).append(
             release.version.format()
@@ -722,7 +721,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     @transition(PackageRepository.get_releases)
     def get_releases(self, name: str) -> List[PackageRelease]:
         require(self.state.initialized)
-        require_arg(name, Domain.type(str), preferred=["alpha"])
+        require_arg(name, str)
         fake_ret: List[PackageRelease] = []
         ret = self.inner_get_releases(name)
         return ret
@@ -730,7 +729,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     @transition(PackageRepository.has_package)
     def has_package(self, name: str) -> bool:
         require(self.state.initialized)
-        require_arg(name, Domain.type(str), preferred=["alpha"])
+        require_arg(name, str)
         fake_ret = name in self.state.packages
         ret = self.inner_has_package(name)
         return ret
@@ -752,7 +751,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
             root_dependencies,
             cast(
                 Domain[Collection[PackageDependency]],
-                Domain.list_of(Domain.type(PackageDependency)),
+                list,
             ),
         )
         fake_ret = cast(ResolutionOutcome, None)

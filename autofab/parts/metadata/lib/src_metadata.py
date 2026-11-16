@@ -3,6 +3,7 @@ from support.lib.lifecycle import Singleton, SystemTier
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import os
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Protocol, Tuple
 
@@ -134,6 +135,23 @@ def is_auditor_role(role_name: str) -> bool:
     return clean in ("auditor", "audit") or clean.endswith(("_audit", "_auditor"))
 
 
+MAX_CHANGE_ENTRIES = 10
+VALID_CHANGE_KINDS = ("new", "contract", "behavior", "fix", "refactor", "legacy")
+
+
+# Contract: ChangeEntry encapsulates a single timestamped structured change entry in CHANGES:.
+@dataclass(frozen=True)
+class ChangeEntry:
+    """Encapsulates a single timestamped structured change entry in CHANGES:."""
+
+    timestamp: str
+    kind: str
+    lines: str
+    scope: Optional[str]
+    delta: str
+    why: Optional[str] = None
+
+
 # Contract: FileMetadata encapsulates in-band source file metadata attributes.
 @dataclass(frozen=True)
 class FileMetadata:
@@ -145,6 +163,7 @@ class FileMetadata:
     feedback: List[str]
     audits: Dict[str, str] = field(default_factory=dict)
     dirty: Optional[str] = None
+    changes: List[ChangeEntry] = field(default_factory=list)
 
 
 # Contract: SourceMetadataCoordinator protocol for parsing, hashing, and mutating in-band source metadata.
@@ -215,6 +234,9 @@ class SourceMetadataCoordinator(Singleton[SystemTier], Protocol):
         stamp_audit: Optional[str] = None,
         dirty: Optional[str] = None,
         clear_dirty: bool = False,
+        changes: Optional[List[ChangeEntry]] = None,
+        clear_changes: bool = False,
+        append_change: Optional[ChangeEntry] = None,
     ) -> str: ...
 
     # Contract: Rewrites file on disk in-place, updating metadata block while preserving code.
@@ -232,6 +254,9 @@ class SourceMetadataCoordinator(Singleton[SystemTier], Protocol):
         stamp_audit: Optional[str] = None,
         dirty: Optional[str] = None,
         clear_dirty: bool = False,
+        changes: Optional[List[ChangeEntry]] = None,
+        clear_changes: bool = False,
+        append_change: Optional[ChangeEntry] = None,
     ) -> None: ...
 
     # Contract: Removes LAST_CLEANED timestamp from file in-band metadata block.
@@ -254,12 +279,49 @@ class SourceMetadataCoordinator(Singleton[SystemTier], Protocol):
         default_change: str = "new file",
     ) -> None: ...
 
-    # Contract: Marks node changed with updated timestamps and change description.
+    # Contract: Marks node changed with updated timestamps, rebased prior spans, and bounded structured change entry.
     def record_change(
         self,
         file_path: Path | str,
         change_description: str,
+        kind: str = "behavior",
+        scope: Optional[str] = None,
+        why: Optional[str] = None,
+        prior_content: Optional[str] = None,
     ) -> None: ...
+
+    # Contract: Computes 1-based changed line spans between old_content and new_content code bodies.
+    def compute_changed_lines(
+        self,
+        old_content: Optional[str],
+        new_content: str,
+        filename_or_ext: str,
+    ) -> str: ...
+
+    # Contract: Rebases existing ChangeEntry line spans from old_content coordinates to new_content coordinates.
+    def rebase_change_entries(
+        self,
+        entries: List[ChangeEntry],
+        old_content: Optional[str],
+        new_content: str,
+        filename_or_ext: str,
+    ) -> List[ChangeEntry]: ...
+
+    # Contract: Filters ChangeEntry items strictly newer than since_timestamp.
+    def filter_changes_since(
+        self,
+        entries: List[ChangeEntry],
+        since_timestamp: Optional[str],
+    ) -> List[ChangeEntry]: ...
+
+    # Contract: Projects in-band metadata for a role workspace by clearing lifecycle timestamps and filtering CHANGES:.
+    def project_workspace_metadata(
+        self,
+        content: str,
+        filename_or_ext: str,
+        strip_changes: bool = False,
+        since_timestamp: Optional[str] = None,
+    ) -> str: ...
 
     # Contract: Appends unacted feedback item with sender role attribution to file metadata block and advances LAST_CLEANED.
     def append_feedback(
@@ -327,17 +389,86 @@ def _extract_block_boundaries(
     return None
 
 
+_CHANGE_ENTRY_RE = re.compile(
+    r"^\[(?P<ts>[^\]]+)\]\s+"
+    r"(?:\[kind:(?P<kind>[^\]]+)\]\s+)?"
+    r"(?:\[Lines:\s*(?P<lines>[^\]]*)\]\s+)?"
+    r"(?:\[Scope:\s*(?P<scope>[^\]]*)\]\s+)?"
+    r"(?P<body>.+)$"
+)
+
+
+def parse_change_entry_line(item: str) -> ChangeEntry:
+    """Parses a single CHANGES: list item into a ChangeEntry."""
+    text = item.strip()
+    m = _CHANGE_ENTRY_RE.match(text)
+    if not m:
+        return ChangeEntry(
+            timestamp="",
+            kind="legacy",
+            lines="",
+            scope=None,
+            delta=text,
+            why=None,
+        )
+    ts = (m.group("ts") or "").strip()
+    kind = (m.group("kind") or "behavior").strip().lower()
+    lines = (m.group("lines") or "").strip()
+    scope_raw = m.group("scope")
+    scope = scope_raw.strip() if scope_raw and scope_raw.strip() else None
+    body = (m.group("body") or "").strip()
+    delta = body
+    why: Optional[str] = None
+    if body.startswith("Delta:"):
+        rest = body[len("Delta:") :].strip()
+        if " | Why:" in rest:
+            d_part, w_part = rest.split(" | Why:", 1)
+            delta = d_part.strip()
+            why = w_part.strip() or None
+        else:
+            delta = rest
+    return ChangeEntry(
+        timestamp=ts,
+        kind=kind,
+        lines=lines,
+        scope=scope,
+        delta=delta,
+        why=why,
+    )
+
+
+def format_change_entry_line(entry: ChangeEntry) -> str:
+    """Formats a ChangeEntry into a single CHANGES: list item string (without leading '- ')."""
+    parts: List[str] = []
+    ts = entry.timestamp or current_utc_timestamp()
+    parts.append(f"[{ts}]")
+    kind = (entry.kind or "behavior").strip().lower()
+    parts.append(f"[kind:{kind}]")
+    lines_str = (entry.lines or "").strip()
+    if lines_str:
+        parts.append(f"[Lines: {lines_str}]")
+    if entry.scope and entry.scope.strip():
+        parts.append(f"[Scope: {entry.scope.strip()}]")
+    body = f"Delta: {entry.delta.strip()}"
+    if entry.why and entry.why.strip():
+        body = f"{body} | Why: {entry.why.strip()}"
+    parts.append(body)
+    return " ".join(parts)
+
+
 # Contract: __orphan__ - MUST parse in-band metadata block content into FileMetadata records.
 def parse_metadata_content(block_lines: List[str]) -> FileMetadata:
     """Parses raw metadata block lines into FileMetadata."""
     last_cleaned: Optional[str] = None
     last_changed: Optional[str] = None
     change_summary = ""
+    changes: List[ChangeEntry] = []
     feedback: List[str] = []
     audits: Dict[str, str] = {}
     dirty: Optional[str] = None
 
     in_feedback = False
+    in_changes = False
     for line in block_lines:
         raw = line.strip()
         if raw.startswith("<!--"):
@@ -358,22 +489,35 @@ def parse_metadata_content(block_lines: List[str]) -> FileMetadata:
             val = raw.split(":", 1)[1].strip()
             last_cleaned = val if val else None
             in_feedback = False
+            in_changes = False
         elif raw.startswith("LAST_CHANGED:") or raw.startswith("LAST_UPDATED:"):
             val = raw.split(":", 1)[1].strip()
             last_changed = val if val else None
             in_feedback = False
+            in_changes = False
         elif raw.startswith("CHANGE:"):
             change_summary = raw.split(":", 1)[1].strip()
             in_feedback = False
+            in_changes = False
+        elif raw.startswith("CHANGES:"):
+            in_changes = True
+            in_feedback = False
+        elif in_changes and raw.startswith("-"):
+            item = raw[1:].strip()
+            if item:
+                changes.append(parse_change_entry_line(item))
         elif raw.startswith("CODE_HASH:"):
             # Legacy in-band field ignored; baseline code hashes live in .autofab/pull_manifest.json
             in_feedback = False
+            in_changes = False
         elif raw.startswith("DIRTY:"):
             val = raw.split(":", 1)[1].strip()
             dirty = val if val else "True"
             in_feedback = False
+            in_changes = False
         elif raw.startswith("FEEDBACK:"):
             in_feedback = True
+            in_changes = False
         elif in_feedback and raw.startswith("-"):
             item = raw[1:].strip()
             if item:
@@ -385,8 +529,24 @@ def parse_metadata_content(block_lines: List[str]) -> FileMetadata:
             if key.endswith("_AUDIT") and val:
                 audits[key] = val
             in_feedback = False
+            in_changes = False
         else:
             in_feedback = False
+            in_changes = False
+
+    if changes:
+        change_summary = changes[-1].delta
+    elif change_summary:
+        changes.append(
+            ChangeEntry(
+                timestamp=last_changed or last_cleaned or "",
+                kind="legacy",
+                lines="",
+                scope=None,
+                delta=change_summary,
+                why=None,
+            )
+        )
 
     return FileMetadata(
         last_cleaned=last_cleaned,
@@ -395,6 +555,7 @@ def parse_metadata_content(block_lines: List[str]) -> FileMetadata:
         feedback=feedback,
         audits=audits,
         dirty=dirty,
+        changes=changes,
     )
 
 
@@ -402,6 +563,18 @@ def parse_metadata_content(block_lines: List[str]) -> FileMetadata:
 def format_metadata_block(meta: FileMetadata, is_html: bool) -> List[str]:
     """Formats a FileMetadata record into comment block lines."""
     ch = meta.change_summary or ""
+    changes = list(meta.changes) if meta.changes else []
+    use_legacy_change = bool(
+        ch
+        and (
+            not changes
+            or (
+                len(changes) == 1
+                and changes[0].kind == "legacy"
+                and not changes[0].lines
+            )
+        )
+    )
 
     lines: List[str] = []
     if is_html:
@@ -410,8 +583,12 @@ def format_metadata_block(meta: FileMetadata, is_html: bool) -> List[str]:
             lines.append(f"LAST_CLEANED: {meta.last_cleaned}")
         if meta.last_changed:
             lines.append(f"LAST_CHANGED: {meta.last_changed}")
-        if ch:
+        if use_legacy_change:
             lines.append(f"CHANGE: {ch}")
+        elif changes:
+            lines.append("CHANGES:")
+            for ce in changes:
+                lines.append(f"- {format_change_entry_line(ce)}")
         if meta.dirty:
             lines.append(f"DIRTY: {meta.dirty}")
         if meta.audits:
@@ -428,8 +605,12 @@ def format_metadata_block(meta: FileMetadata, is_html: bool) -> List[str]:
             lines.append(f"# LAST_CLEANED: {meta.last_cleaned}")
         if meta.last_changed:
             lines.append(f"# LAST_CHANGED: {meta.last_changed}")
-        if ch:
+        if use_legacy_change:
             lines.append(f"# CHANGE: {ch}")
+        elif changes:
+            lines.append("# CHANGES:")
+            for ce in changes:
+                lines.append(f"# - {format_change_entry_line(ce)}")
         if meta.dirty:
             lines.append(f"# DIRTY: {meta.dirty}")
         if meta.audits:
@@ -534,8 +715,11 @@ def rewrite_metadata_in_text(
     stamp_audit: Optional[str] = None,
     dirty: Optional[str] = None,
     clear_dirty: bool = False,
+    changes: Optional[List[ChangeEntry]] = None,
+    clear_changes: bool = False,
+    append_change: Optional[ChangeEntry] = None,
 ) -> str:
-    return _get_coordinator().rewrite_metadata_in_text(
+    kwargs: Dict[str, Any] = dict(
         content=content,
         filename_or_ext=filename_or_ext,
         last_cleaned=last_cleaned,
@@ -550,6 +734,13 @@ def rewrite_metadata_in_text(
         dirty=dirty,
         clear_dirty=clear_dirty,
     )
+    if changes is not None:
+        kwargs["changes"] = changes
+    if clear_changes:
+        kwargs["clear_changes"] = clear_changes
+    if append_change is not None:
+        kwargs["append_change"] = append_change
+    return _get_coordinator().rewrite_metadata_in_text(**kwargs)
 
 
 # Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
@@ -566,8 +757,11 @@ def update_metadata(
     stamp_audit: Optional[str] = None,
     dirty: Optional[str] = None,
     clear_dirty: bool = False,
+    changes: Optional[List[ChangeEntry]] = None,
+    clear_changes: bool = False,
+    append_change: Optional[ChangeEntry] = None,
 ) -> None:
-    _get_coordinator().update_metadata(
+    kwargs: Dict[str, Any] = dict(
         file_path=file_path,
         last_cleaned=last_cleaned,
         clear_last_cleaned=clear_last_cleaned,
@@ -581,6 +775,13 @@ def update_metadata(
         dirty=dirty,
         clear_dirty=clear_dirty,
     )
+    if changes is not None:
+        kwargs["changes"] = changes
+    if clear_changes:
+        kwargs["clear_changes"] = clear_changes
+    if append_change is not None:
+        kwargs["append_change"] = append_change
+    _get_coordinator().update_metadata(**kwargs)
 
 
 # Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
@@ -602,8 +803,97 @@ def mark_clean(file_path: Path | str, default_change: str = "new file") -> None:
 def record_change(
     file_path: Path | str,
     change_description: str,
+    kind: str = "behavior",
+    scope: Optional[str] = None,
+    why: Optional[str] = None,
+    prior_content: Optional[str] = None,
 ) -> None:
-    _get_coordinator().record_change(file_path, change_description)
+    kwargs: Dict[str, Any] = {}
+    if kind != "behavior":
+        kwargs["kind"] = kind
+    if scope is not None:
+        kwargs["scope"] = scope
+    if why is not None:
+        kwargs["why"] = why
+    if prior_content is not None:
+        kwargs["prior_content"] = prior_content
+    _get_coordinator().record_change(file_path, change_description, **kwargs)
+
+
+# Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
+def compute_changed_lines(
+    old_content: Optional[str],
+    new_content: str,
+    filename_or_ext: str,
+) -> str:
+    return _get_coordinator().compute_changed_lines(
+        old_content, new_content, filename_or_ext
+    )
+
+
+# Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
+def rebase_change_entries(
+    entries: List[ChangeEntry],
+    old_content: Optional[str],
+    new_content: str,
+    filename_or_ext: str,
+) -> List[ChangeEntry]:
+    return _get_coordinator().rebase_change_entries(
+        entries, old_content, new_content, filename_or_ext
+    )
+
+
+# Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
+def filter_changes_since(
+    entries: List[ChangeEntry],
+    since_timestamp: Optional[str],
+) -> List[ChangeEntry]:
+    coord = _get_coordinator()
+    if hasattr(coord, "filter_changes_since"):
+        return coord.filter_changes_since(entries, since_timestamp)
+    if not since_timestamp:
+        return list(entries)
+    return [e for e in entries if e.timestamp and e.timestamp > since_timestamp]
+
+
+# Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.
+def project_workspace_metadata(
+    content: str,
+    filename_or_ext: str,
+    strip_changes: bool = False,
+    since_timestamp: Optional[str] = None,
+) -> str:
+    coord = _get_coordinator()
+    if hasattr(coord, "project_workspace_metadata"):
+        return coord.project_workspace_metadata(
+            content,
+            filename_or_ext,
+            strip_changes=strip_changes,
+            since_timestamp=since_timestamp,
+        )
+    meta = coord.extract_metadata_from_text(content, filename_or_ext)
+    if meta is None:
+        return content
+    if strip_changes:
+        return rewrite_metadata_in_text(
+            content,
+            filename_or_ext,
+            clear_last_cleaned=True,
+            last_changed="",
+            change_summary="",
+            clear_audits=True,
+            clear_dirty=True,
+        )
+    filtered = filter_changes_since(meta.changes, since_timestamp)
+    return rewrite_metadata_in_text(
+        content,
+        filename_or_ext,
+        clear_last_cleaned=True,
+        last_changed="",
+        change_summary=filtered[-1].delta if filtered else "",
+        clear_audits=True,
+        clear_dirty=True,
+    )
 
 
 # Contract: __orphan__ - module-level procedural facade delegating to SourceMetadataCoordinator.

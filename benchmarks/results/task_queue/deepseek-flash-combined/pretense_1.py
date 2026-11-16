@@ -265,7 +265,6 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -318,8 +317,8 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
         task_id: str,
         payload: str,
     ) -> None:
-        require_arg(task_id, Domain.type(str), preferred=["task-1", "task-2"])
-        require_arg(payload, Domain.type(str), preferred=["payload"])
+        require_arg(task_id, str)
+        require_arg(payload, str)
         if self.state.available:
             before = len(self.state.pending)
             self.state.pending.append((task_id, payload))
@@ -353,8 +352,8 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
         task_id: str,
         outcome: str,
     ) -> None:
-        require_arg(task_id, Domain.type(str), preferred=["task-1", "task-2"])
-        require_arg(outcome, Domain.type(str), preferred=["PROCESSED:PAYLOAD"])
+        require_arg(task_id, str)
+        require_arg(outcome, str)
         if self.state.available:
             self.state.outcomes[task_id] = outcome
             ret = self.inner_complete(task_id, outcome)
@@ -370,7 +369,7 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
         self,
         task_id: str,
     ) -> Optional[str]:
-        require_arg(task_id, Domain.type(str), preferred=["task-1", "task-2"])
+        require_arg(task_id, str)
         expected = self.state.outcomes.get(task_id)
         ret = self.inner_get_outcome(task_id)
         assert ret == expected
@@ -392,7 +391,7 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
         self,
         available: bool,
     ) -> None:
-        require_arg(available, Domain.boolean(), preferred=[True])
+        require_arg(available, bool)
         self.state.available = available
         ret = self.inner_set_available(available)
         assert self.state.available == available
@@ -727,7 +726,6 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -779,8 +777,8 @@ class TaskWorkerStateMachine(StateMachine[TaskWorkerState]):
         task_id: str,
         payload: str,
     ) -> str:
-        require_arg(task_id, Domain.type(str), preferred=["task-1", "task-2"])
-        require_arg(payload, Domain.type(str), preferred=["payload"])
+        require_arg(task_id, str)
+        require_arg(payload, str)
         if task_id in self.state.failing_tasks:
             ret: str = ""
             with raises(WorkerExecutionException):
@@ -806,8 +804,8 @@ class TaskWorkerStateMachine(StateMachine[TaskWorkerState]):
         task_id: str,
         failing: bool,
     ) -> None:
-        require_arg(task_id, Domain.type(str), preferred=["task-1", "task-2"])
-        require_arg(failing, Domain.boolean(), preferred=[True])
+        require_arg(task_id, str)
+        require_arg(failing, bool)
         if failing:
             self.state.failing_tasks.add(task_id)
         else:

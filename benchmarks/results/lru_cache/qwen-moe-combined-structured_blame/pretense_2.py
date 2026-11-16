@@ -325,7 +325,6 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -399,7 +398,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         self,
         capacity: int,
     ) -> None:
-        require_arg(capacity, Domain.type(int))
+        require_arg(capacity, int)
         if capacity <= 0:
             ret = None
             with raises(CacheCapacityError):
@@ -424,8 +423,8 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         key: str,
         default: Optional[Any],
     ) -> Any:
-        require_arg(key, Domain.type(str))
-        require_arg(default, Domain.optional(Domain.any()))
+        require_arg(key, str)
+        require_arg(default, Optional[object])
         if key in self.state.items:
             self.state.order.remove(key)
             self.state.order.append(key)
@@ -443,8 +442,8 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         key: str,
         value: Any,
     ) -> Optional[Tuple[str, Any]]:
-        require_arg(key, Domain.type(str))
-        require_arg(value, Domain.any())
+        require_arg(key, str)
+        require_arg(value, object)
         if key in self.state.items:
             self.state.order.remove(key)
             self.state.items[key] = value
@@ -474,8 +473,8 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         key: str,
         default: Optional[Any],
     ) -> Any:
-        require_arg(key, Domain.type(str))
-        require_arg(default, Domain.optional(Domain.any()))
+        require_arg(key, str)
+        require_arg(default, Optional[object])
         if key in self.state.items:
             ret = self.inner_peek(key, default)
             return ret
@@ -488,7 +487,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         self,
         key: str,
     ) -> Any:
-        require_arg(key, Domain.type(str))
+        require_arg(key, str)
         if key not in self.state.items:
             ret = None
             with raises(CacheKeyNotFoundError):

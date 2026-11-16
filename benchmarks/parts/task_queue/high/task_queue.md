@@ -24,7 +24,7 @@ The queue supports *retrieving task outcomes*, returning the recorded outcome st
 
 The queue supports *clearing*, purging all pending tasks and recorded outcomes and resetting pending count to zero.
 
-The queue supports *seeding an unavailable failure* in state machines and fakes to simulate an unavailable queue service, causing submitting, dispatching, or completing to raise queue unavailable exception. The queue supports *seeding pending tasks* in state machines and fakes, loading a sequence of task identifier and payload pairs into pending tasks to initialize pre-existing queue state for worker verification.
+The queue supports *seeding an unavailable failure* in state machines and fakes to simulate an unavailable queue service, causing submitting, dispatching, or completing to raise queue unavailable exception, and exposes a test-only *is available* query returning whether the queue service is currently available. The queue supports *seeding pending tasks* in state machines and fakes, loading a sequence of task identifier and payload pairs into pending tasks to initialize pre-existing queue state for worker verification.
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-11-03T23:10:00Z

@@ -142,8 +142,13 @@ def check_pretense_structure(
     """Validates that the pretense module defines model state/transitions (interface) or test cases (implementation)."""
     errors: list[str] = []
     if not is_interface and file_path:
+        norm_fp = file_path.replace("\\", "/")
         stem = os.path.basename(file_path)
-        if stem.endswith("_pretense.py") and not stem.endswith("_impl_pretense.py"):
+        if "/pretense_impl/" in norm_fp or norm_fp.startswith("pretense_impl/"):
+            is_interface = False
+        elif "/pretense_intf/" in norm_fp or norm_fp.startswith("pretense_intf/"):
+            is_interface = True
+        elif stem.endswith("_pretense.py") and not stem.endswith("_impl_pretense.py"):
             is_interface = True
 
     body = getattr(tree, "body", [])
@@ -217,6 +222,7 @@ def check_pretense_structure(
         return errors
 
 
+
     # Implementation pretense module
     if (imported_sm or imported_state) and state_classes:
         errors.append(
@@ -243,6 +249,7 @@ def check_pretense_structure(
 
 
 
+
 def check_pretense_imports(
     content: str,
     pyi_path: str | None = None,
@@ -254,6 +261,7 @@ def check_pretense_imports(
     if "pretense" not in content:
         errors.append("Missing pretense imports (must import from pretense).")
         return errors
+
 
 
     try:
@@ -289,6 +297,7 @@ def check_pretense_imports(
 
 
 
+
 def check_single_argument_assertions(tree: ast.AST, file_path: str = "") -> list[str]:
     """Enforces single-argument native assert statements (PRE_LINT_ASSERT_SINGLE_ARG)."""
     errors: list[str] = []
@@ -306,6 +315,7 @@ def check_single_argument_assertions(tree: ast.AST, file_path: str = "") -> list
                     "assert test cannot be a tuple 'assert (x, y)'. A non-empty tuple evaluates to True."
                 )
     return errors
+
 
 
 
@@ -384,6 +394,7 @@ def check_transition_outcomes(tree: ast.AST, file_path: str = "") -> list[str]:
 
 
 
+
 def _is_ctx_gated_if(test_expr: ast.AST) -> bool:
     """Returns True if an `if` condition references `ctx.updates` or `ctx.target`."""
     for sub in ast.walk(test_expr):
@@ -440,10 +451,14 @@ def check_pretense_next_transition(
             has_trans_dec = True
             if isinstance(d, ast.Attribute) and d.attr == "seeding":
                 is_seeding = True
+                errors.append(
+                    f"{file_path}:{d.lineno}: error [PRE_LINT_SEEDING_CALL_REQUIRED]: Use '@transition.seeding()' with parentheses instead of bare '@transition.seeding'."
+                )
             break
 
     if not has_trans_dec:
         return errors
+
 
 
     if is_impl:
@@ -480,11 +495,11 @@ def check_pretense_next_transition(
 
     input_args = set(param_names[1:])
 
-    # PN002: NO LAMBDAS
+    # PN002: NO LAMBDAS in @transition bodies (use @domain methods on the state machine)
     for child in ast.walk(node):
         if isinstance(child, ast.Lambda):
             errors.append(
-                f"{file_path}:{child.lineno}: error [PN002_NO_LAMBDAS]: Lambdas are prohibited in Pretense Next transitions. Write plain Python expressions."
+                f"{file_path}:{child.lineno}: error [PN002_NO_LAMBDAS]: Lambdas are prohibited in Pretense Next transitions. Use native types or @domain-decorated methods on the state machine."
             )
 
     # PN001: NO EXPR LIFTING
@@ -542,13 +557,14 @@ def check_pretense_next_transition(
                         )
                     ):
                         errors.append(
-                            f"{file_path}:{child.lineno}: error [PN009_REQUIRE_PURITY]: require() cannot reference SUT via sut(...). It must only inspect 'self.state' or collaborator 'sut_state(...)'."
+                            f"{file_path}:{child.lineno}: error [PN009_REQUIRE_PURITY]: require() cannot reference SUT via sut(...). It must only inspect 'self.state' or 'self.inner_<query>()'."
                         )
                     elif isinstance(sub, ast.Name) and sub.id in input_args:
                         errors.append(
                             f"{file_path}:{child.lineno}: error [PN009_REQUIRE_PURITY]: require() cannot reference transition input argument '{sub.id}'. "
-                            f"Preconditions only evaluate state. To constrain input arguments relative to state collections (such as entity existence), use: "
-                            f"'require_arg({sub.id}, Domain.in_set(self.state.<collection>))' (optionally with 'error=ExpectedError' as documentation)."
+                            f"Preconditions only evaluate state or delegate argument validation to '@domain'. "
+                            f"Use 'require_arg({sub.id}, self.<domain_method>)' with a '@domain(valid=..., invalid=...)' method on the state machine "
+                            f"(calling 'self.inner_<query>()' on stateless interface machines, or 'self.state' on fake state machines)."
                         )
 
     # Pivot Node Verification (only for non-seeding transitions)
@@ -658,6 +674,7 @@ def check_pretense_next_transition(
 
 
 
+
 def _check_inner_transition_body(
     node: ast.FunctionDef | ast.AsyncFunctionDef,
     file_path: str,
@@ -759,6 +776,7 @@ def _check_inner_transition_body(
 
 
 
+
 def check_impl_pseudo_state_machines(
     tree: ast.AST,
     file_path: str = "",
@@ -798,9 +816,12 @@ def check_impl_pseudo_state_machines(
             for b in base_names
         )
         is_impl_pseudo = (
-            node.name.endswith("ImplPseudoStateMachine")
-            or is_impl_sm
-            or (is_impl and is_sm and not any("TestCase" in b for b in base_names))
+            not node.name.endswith("FakeStateMachine")
+            and (
+                node.name.endswith("ImplPseudoStateMachine")
+                or is_impl_sm
+                or (is_impl and is_sm and not any("TestCase" in b for b in base_names))
+            )
         )
 
         if is_impl_pseudo:
@@ -863,6 +884,7 @@ def check_impl_pseudo_state_machines(
                     )
 
     return errors
+
 
 
 
@@ -1101,6 +1123,7 @@ def check_no_residual_sentinels(tree: ast.AST, file_path: str = "") -> list[str]
 
 
 
+
 def _extract_transition_target(dec: ast.expr) -> str | None:
     """Extracts target identifier from a @transition decorator."""
     if isinstance(dec, ast.Call):
@@ -1244,6 +1267,7 @@ def check_multi_transition_disambiguation(
 
 
 
+
 def check_no_algorithmic_state_machines(
     tree: ast.AST, file_path: str = ""
 ) -> list[str]:
@@ -1336,6 +1360,7 @@ def check_no_algorithmic_state_machines(
                     )
 
     return errors
+
 
 
 
@@ -1447,6 +1472,7 @@ def check_pretense_target_internals(
 
 
 
+
 def check_no_scaffold_placeholders(tree: ast.AST, file_path: str = "") -> list[str]:
     """Validates that transitions and tests do not contain residual scaffold crash placeholders."""
     errors: list[str] = []
@@ -1523,6 +1549,7 @@ def check_no_scaffold_placeholders(tree: ast.AST, file_path: str = "") -> list[s
                         f"Empty tests are strictly prohibited; tests must exercise transitions or assert concrete contracts."
                     )
     return errors
+
 
 
 
@@ -1656,6 +1683,113 @@ def check_no_pre_seeding(tree: ast.AST, file_path: str = "") -> list[str]:
                                         )
     return errors
 
+def _is_domain_decorator(dec: ast.expr) -> bool:
+    if isinstance(dec, ast.Name) and dec.id == "domain":
+        return True
+    if isinstance(dec, ast.Call):
+        if isinstance(dec.func, ast.Name) and dec.func.id == "domain":
+            return True
+        if isinstance(dec.func, ast.Attribute) and dec.func.attr == "domain":
+            return True
+    if isinstance(dec, ast.Attribute) and dec.attr == "domain":
+        return True
+    return False
+
+
+def check_require_arg_domain_form(tree: ast.AST, file_path: str = "") -> list[str]:
+    """Enforces @domain method-decorator usage and bans fixed sets, lambdas, and undecorated defs in require_arg."""
+    errors: list[str] = []
+    module_fn_defs: dict[str, ast.FunctionDef] = {}
+    class_methods: dict[str, dict[str, ast.FunctionDef]] = {}
+
+    if isinstance(tree, ast.Module):
+        for stmt in tree.body:
+            if isinstance(stmt, ast.FunctionDef):
+                module_fn_defs[stmt.name] = stmt
+                for dec in stmt.decorator_list:
+                    if _is_domain_decorator(dec):
+                        errors.append(
+                            f"{file_path}:{stmt.lineno}: error: [PRE_LINT_DOMAIN_MUST_BE_METHOD] "
+                            f"@domain recognizer '{stmt.name}' must be a method on the state machine taking 'self', not a module-level function."
+                        )
+            elif isinstance(stmt, ast.ClassDef):
+                methods: dict[str, ast.FunctionDef] = {}
+                for c_stmt in stmt.body:
+                    if isinstance(c_stmt, ast.FunctionDef):
+                        methods[c_stmt.name] = c_stmt
+                class_methods[stmt.name] = methods
+
+    # Check all @domain(...) decorator calls for obsolete initial_edges=
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef):
+            for dec in node.decorator_list:
+                if _is_domain_decorator(dec) and isinstance(dec, ast.Call):
+                    for kw in dec.keywords:
+                        if kw.arg == "initial_edges":
+                            errors.append(
+                                f"{file_path}:{dec.lineno}: error: [PRE_LINT_DOMAIN_NO_INITIAL_EDGES] "
+                                f"'initial_edges' is removed from @domain. Provide finite-sequence callables via valid=lambda self: [...] and invalid=lambda self: [...]."
+                            )
+
+    # Check require_arg(...) domain arguments
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        is_req_arg = (
+            (isinstance(node.func, ast.Name) and node.func.id == "require_arg")
+            or (isinstance(node.func, ast.Attribute) and node.func.attr == "require_arg")
+        )
+        if not is_req_arg:
+            continue
+        dom_arg: ast.expr | None = node.args[1] if len(node.args) >= 2 else None
+        if dom_arg is None:
+            for kw in node.keywords:
+                if kw.arg == "domain":
+                    dom_arg = kw.value
+                    break
+        if dom_arg is None:
+            continue
+
+        lineno = getattr(node, "lineno", 1)
+        if isinstance(dom_arg, ast.Lambda):
+            errors.append(
+                f"{file_path}:{lineno}: error: [PRE_LINT_REQUIRE_ARG_DOMAIN_FORM] "
+                f"Bare lambda is prohibited in require_arg. Define a @domain-decorated method on the state machine (self.<validator>) instead."
+            )
+        elif isinstance(dom_arg, (ast.Set, ast.List, ast.Tuple, ast.Dict, ast.SetComp, ast.ListComp)):
+            errors.append(
+                f"{file_path}:{lineno}: error: [PRE_LINT_REQUIRE_ARG_DOMAIN_FORM] "
+                f"Fixed set or literal collection is prohibited in require_arg. Use a native type or a @domain-decorated method on the state machine."
+            )
+        elif isinstance(dom_arg, ast.Call) and isinstance(dom_arg.func, ast.Name) and dom_arg.func.id in ("set", "list", "tuple", "frozenset"):
+            errors.append(
+                f"{file_path}:{lineno}: error: [PRE_LINT_REQUIRE_ARG_DOMAIN_FORM] "
+                f"Fixed collection constructor '{dom_arg.func.id}(...)' is prohibited in require_arg. Use a native type or a @domain-decorated method on the state machine."
+            )
+        elif isinstance(dom_arg, ast.Name) and dom_arg.id in module_fn_defs:
+            errors.append(
+                f"{file_path}:{lineno}: error: [PRE_LINT_REQUIRE_ARG_DOMAIN_FORM] "
+                f"Function '{dom_arg.id}' in require_arg must be a @domain-decorated method on the state machine (self.{dom_arg.id}), not a standalone function."
+            )
+        elif (
+            isinstance(dom_arg, ast.Attribute)
+            and isinstance(dom_arg.value, ast.Name)
+            and dom_arg.value.id == "self"
+        ):
+            m_name = dom_arg.attr
+            for cls_meths in class_methods.values():
+                if m_name in cls_meths:
+                    m_def = cls_meths[m_name]
+                    if not any(_is_domain_decorator(d) for d in m_def.decorator_list):
+                        errors.append(
+                            f"{file_path}:{lineno}: error: [PRE_LINT_REQUIRE_ARG_DOMAIN_FORM] "
+                            f"Method 'self.{m_name}' passed to require_arg must be decorated with @domain(valid=..., invalid=...)."
+                        )
+                    break
+
+    return errors
+
+
 
 
 def check_no_raises_in_test_cases(tree: ast.AST, file_path: str = "") -> list[str]:
@@ -1733,6 +1867,7 @@ def check_no_raises_in_test_cases(tree: ast.AST, file_path: str = "") -> list[st
 
 
 
+
 def check_no_assert_raises(tree: ast.AST, file_path: str = "") -> list[str]:
     """Ensures test methods do not use 'assertRaises' for contract errors (*Error) or wrap 'violating(...)'.
 
@@ -1766,6 +1901,7 @@ def check_no_assert_raises(tree: ast.AST, file_path: str = "") -> list[str]:
                     "Operational exceptions (*Exception) may use 'with self.assertRaises(ExpectedException):'."
                 )
     return errors
+
 
 
 
@@ -1838,6 +1974,7 @@ def check_no_raises_for_errors(tree: ast.AST, file_path: str = "") -> list[str]:
 
 
 
+
 def check_require_sticks_to_error(tree: ast.AST, file_path: str = "") -> list[str]:
     """Ensures 'require(...)' and 'require_arg(...)' only specify contract violation errors (*Error), never operational exceptions (*Exception)."""
     errors: list[str] = []
@@ -1900,6 +2037,7 @@ def check_require_sticks_to_error(tree: ast.AST, file_path: str = "") -> list[st
 
 
 
+
 def check_require_env_sticks_to_exception(tree: ast.AST, file_path: str = "") -> list[str]:
     """Ensures 'require_env(...)' only specifies operational exceptions (*Exception), never contract violation errors (*Error)."""
     errors: list[str] = []
@@ -1954,6 +2092,7 @@ def check_require_env_sticks_to_exception(tree: ast.AST, file_path: str = "") ->
 
 
 
+
 def _is_env_annotation(ann: ast.AST) -> bool:
     """Returns True if an annotation AST node is Env[...] or Annotated[..., _EnvStateMarker]."""
     if isinstance(ann, ast.Subscript):
@@ -2000,46 +2139,8 @@ def _extract_env_state_fields(tree: ast.AST) -> set[str]:
     return env_fields
 
 
-def check_require_env_depends_on_env_state(
-    tree: ast.AST, file_path: str = ""
-) -> list[str]:
-    """Ensures 'require_env(...)' conditions reference at least one declared Env[...] field."""
-    errors: list[str] = []
-    env_fields = _extract_env_state_fields(tree)
 
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
-            continue
-        func_name = ""
-        if isinstance(node.func, ast.Name):
-            func_name = node.func.id
-        elif isinstance(node.func, ast.Attribute):
-            func_name = node.func.attr
-        if func_name != "require_env":
-            continue
 
-        cond_node: ast.AST | None = None
-        if node.args:
-            cond_node = node.args[0]
-        else:
-            for kw in node.keywords:
-                if kw.arg in ("condition", "cond"):
-                    cond_node = kw.value
-                    break
-        if cond_node is None:
-            continue
-
-        refs_env = bool(env_fields) and any(
-            isinstance(child, ast.Attribute) and child.attr in env_fields
-            for child in ast.walk(cond_node)
-        )
-        if not refs_env:
-            errors.append(
-                f"{file_path}:{node.lineno}: error: [PRE_LINT_REQUIRE_ENV_NEEDS_ENV_STATE] "
-                "'require_env(...)' condition must reference at least one declared 'Env[...]' "
-                "state field on the State dataclass (e.g., 'self.state.<env_field>')."
-            )
-    return errors
 
 
 
@@ -2088,11 +2189,13 @@ def check_violating_sticks_to_error(tree: ast.AST, file_path: str = "") -> list[
 
 
 
+
 def check_impl_env_state_bindings(tree: ast.AST, file_path: str = "") -> list[str]:
     """Ensures implementation pseudo-SMs bind every Env[...] field inherited from implemented interfaces."""
     errors: list[str] = []
     if not file_path or not file_path.endswith("_impl_pretense.py"):
         return errors
+
 
 
     pseudo_sm_cls: ast.ClassDef | None = None
@@ -2105,6 +2208,7 @@ def check_impl_env_state_bindings(tree: ast.AST, file_path: str = "") -> list[st
             break
     if pseudo_sm_cls is None:
         return errors
+
 
 
     base_names: set[str] = set()
@@ -2137,9 +2241,10 @@ def check_impl_env_state_bindings(tree: ast.AST, file_path: str = "") -> list[st
                     if line_s.startswith("implements:"):
                         raw = line_s[len("implements:") :].strip()
                         for target in (t.strip() for t in raw.split(",") if t.strip()):
-                            cand = unit_dir / "pretense" / f"{target}_pretense.py"
-                            if cand.is_file() and cand not in iface_paths:
-                                iface_paths.append(cand)
+                            for sub_dir in ("pretense_intf", "pretense"):
+                                cand = unit_dir / sub_dir / f"{target}_pretense.py"
+                                if cand.is_file() and cand not in iface_paths:
+                                    iface_paths.append(cand)
                         break
         except Exception:
             pass
@@ -2181,6 +2286,7 @@ def check_impl_env_state_bindings(tree: ast.AST, file_path: str = "") -> list[st
         return errors
 
 
+
     bound_fields: set[str] = set()
     for item in pseudo_sm_cls.body:
         if isinstance(item, ast.FunctionDef) and item.name == "__init__":
@@ -2215,6 +2321,7 @@ def check_impl_env_state_bindings(tree: ast.AST, file_path: str = "") -> list[st
 
 
 
+
 def check_no_local_exception_class(tree: ast.AST, file_path: str = "") -> list[str]:
     """Prohibits redefining exception/error classes locally inside pretense modules."""
     errors: list[str] = []
@@ -2234,6 +2341,7 @@ def check_no_local_exception_class(tree: ast.AST, file_path: str = "") -> list[s
                     f"import contracted errors/exceptions from the target library interface module."
                 )
     return errors
+
 
 
 def check_no_module_level_sut(tree: ast.AST, file_path: str = "") -> list[str]:
@@ -2261,6 +2369,7 @@ def check_no_module_level_sut(tree: ast.AST, file_path: str = "") -> list[str]:
     return errors
 
 
+
 def check_no_violating_in_interface(
     tree: ast.AST, file_path: str = "", is_interface: bool = True
 ) -> list[str]:
@@ -2282,6 +2391,7 @@ def check_no_violating_in_interface(
                 "and calls 'inner_*' directly."
             )
     return errors
+
 
 
 def check_no_raise_in_state_machine(tree: ast.AST, file_path: str = "") -> list[str]:
@@ -2316,6 +2426,7 @@ def check_no_raise_in_state_machine(tree: ast.AST, file_path: str = "") -> list[
                         f"Fake return synthesis and SUT invocation must not raise ad-hoc exceptions."
                     )
     return errors
+
 
 
 
@@ -2372,6 +2483,7 @@ def check_no_direct_real_access(tree: ast.AST, file_path: str = "") -> list[str]
 
 
 
+
 def check_no_direct_sm_access_in_real_tests(tree: ast.AST, file_path: str = "") -> list[str]:
     """Ensures test methods in Test*Real classes do not access 'self.sm' directly (PN_NO_DIRECT_SM_ACCESS_IN_REAL_TEST).
 
@@ -2421,6 +2533,7 @@ def check_no_direct_sm_access_in_real_tests(tree: ast.AST, file_path: str = "") 
 
 
 
+
 def check_impl_allowed_classes_only(
     tree: ast.AST, file_path: str = "", is_impl: bool = False
 ) -> list[str]:
@@ -2433,6 +2546,7 @@ def check_impl_allowed_classes_only(
     errors: list[str] = []
     if not is_impl:
         return errors
+
 
 
     def _get_base_name(base: ast.AST) -> str:
@@ -2468,6 +2582,7 @@ def check_impl_allowed_classes_only(
                 "and TestCase classes."
             )
     return errors
+
 
 
 
@@ -2576,6 +2691,7 @@ def check_terminal_violating(tree: ast.AST, file_path: str = "") -> list[str]:
 
 
 
+
 def check_no_call_target_in_interface(
     tree: ast.AST, file_path: str = "", is_interface: bool = False
 ) -> list[str]:
@@ -2585,16 +2701,78 @@ def check_no_call_target_in_interface(
         return errors
 
 
+
     tree_body: list[ast.stmt] = getattr(tree, "body", [])
+    has_fake_sm = any(
+        isinstance(n, ast.ClassDef) and n.name.endswith("FakeStateMachine")
+        for n in tree_body
+    )
     for node in tree_body:
         if (
             isinstance(node, ast.ClassDef)
             and "StateMachine" in node.name
             and not node.name.endswith("PseudoStateMachine")
         ):
+            is_fake_sm = node.name.endswith("FakeStateMachine")
+            if has_fake_sm and not is_fake_sm:
+                for child in ast.walk(node):
+                    if (
+                        isinstance(child, ast.Attribute)
+                        and isinstance(child.value, ast.Name)
+                        and child.value.id == "self"
+                        and child.attr == "state"
+                    ):
+                        errors.append(
+                            f"{file_path}:{child.lineno}: error: [PRE_LINT_INTF_NO_STATE] Interface state machine '{node.name}' "
+                            f"must be stateless and must not access 'self.state'. Express contracts over contracted properties/methods "
+                            f"and keep fake 'self.state' inside '<Iface>FakeStateMachine'."
+                        )
+                        break
+                    if (
+                        isinstance(child, ast.Call)
+                        and isinstance(child.func, ast.Name)
+                        and child.func.id == "sut_state"
+                    ):
+                        errors.append(
+                            f"{file_path}:{child.lineno}: error: [PRE_LINT_INTF_NO_SUT_STATE] Interface state machine '{node.name}' "
+                            f"must be stateless and must not call 'sut_state(...)'. Use 'self.inner_<query>()' over a contracted @test_only query instead."
+                        )
+                        break
+            if not is_fake_sm:
+                for child in ast.walk(node):
+                    if (
+                        isinstance(child, ast.Call)
+                        and isinstance(child.func, ast.Name)
+                        and child.func.id == "sut_state"
+                    ):
+                        errors.append(
+                            f"{file_path}:{child.lineno}: error: [PRE_LINT_NO_SUT_STATE_IN_IMPL] '{node.name}' "
+                            f"must not call 'sut_state(...)'; access real or '@test_only' members on 'sut(Collaborator)' instead."
+                        )
+                        break
             for item in node.body:
                 if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     is_inner = item.name.startswith("inner_")
+                    if is_fake_sm:
+                        for dec in item.decorator_list:
+                            if _is_non_seeding_transition_decorator(dec):
+                                errors.append(
+                                    f"{file_path}:{item.lineno}: error: [PRE_LINT_FAKE_NO_OUTER_TRANSITION] Fake state machine '{node.name}' "
+                                    f"must not declare non-seeding @transition '{item.name}'. Declare @transition on '<Iface>StateMachine' "
+                                    f"and only override 'inner_<method>' (plus @transition.seeding) on '{node.name}'."
+                                )
+                        for child in ast.walk(item):
+                            if isinstance(child, ast.Call):
+                                fn_id = (
+                                    child.func.id
+                                    if isinstance(child.func, ast.Name)
+                                    else getattr(child.func, "attr", "")
+                                )
+                                if fn_id in ("require_arg", "require"):
+                                    errors.append(
+                                        f"{file_path}:{child.lineno}: error: [PRE_LINT_FAKE_NO_REQUIRE] '{fn_id}(...)' belongs on "
+                                        f"stateless '<Iface>StateMachine', not '{node.name}'."
+                                    )
                     if is_inner:
                         for child in ast.walk(item):
                             if isinstance(child, ast.Assert):
@@ -2603,7 +2781,7 @@ def check_no_call_target_in_interface(
                                     f"must not contain 'assert' statements. Inner transitions exist exclusively to compute fake return values "
                                     f"or raise contracted exceptions. Assertions belong in the outer @transition method."
                                 )
-                            elif isinstance(child, (ast.Assign, ast.AnnAssign)):
+                            elif not is_fake_sm and isinstance(child, (ast.Assign, ast.AnnAssign)):
                                 targets = getattr(child, "targets", [getattr(child, "target", None)])
                                 for tgt in targets:
                                     if (
@@ -2615,7 +2793,7 @@ def check_no_call_target_in_interface(
                                     ):
                                         errors.append(
                                             f"{file_path}:{child.lineno}: error: [PRE_LINT_NO_STATE_MUTATION_IN_INNER] Interface inner transition '{item.name}' "
-                                            f"must not mutate 'self.state'. State mutations belong exclusively in the outer @transition method."
+                                            f"must not mutate 'self.state'. State mutations belong exclusively in '<Iface>FakeStateMachine.inner_{item.name[6:]}'."
                                         )
                             elif isinstance(child, ast.Raise):
                                 exc_name = ""
@@ -2626,7 +2804,7 @@ def check_no_call_target_in_interface(
                                     and isinstance(child.exc.func, ast.Name)
                                 ):
                                     exc_name = child.exc.func.id
-                                if exc_name.endswith("Error"):
+                                if exc_name.endswith("Error") and exc_name != "NotImplementedError":
                                     errors.append(
                                         f"{file_path}:{child.lineno} Interface inner transition '{item.name}' "
                                         f"must never raise contract errors ('{exc_name}'); interface state machines rely strictly on "
@@ -2701,6 +2879,7 @@ def check_no_call_target_in_interface(
 
 
 
+
 def check_no_super_in_impl_inner(
     tree: ast.AST, file_path: str = "", is_impl: bool = False
 ) -> list[str]:
@@ -2708,6 +2887,7 @@ def check_no_super_in_impl_inner(
     errors: list[str] = []
     if not is_impl:
         return errors
+
 
 
     tree_body: list[ast.stmt] = getattr(tree, "body", [])
@@ -2743,6 +2923,337 @@ def check_no_super_in_impl_inner(
 
 
 
+
+def check_no_domain(tree: ast.AST, file_path: str = "") -> list[str]:
+    """Ensures state machines do not use Domain (PRE_LINT_REQUIRE_ARG_NO_DOMAIN)."""
+    errors: list[str] = []
+    reported_lines: set[int] = set()
+    for node in ast.walk(tree):
+        lineno = getattr(node, "lineno", 1)
+        if isinstance(node, ast.ImportFrom) and node.module == "pretense":
+            for alias in node.names:
+                if alias.name == "Domain":
+                    if lineno not in reported_lines:
+                        reported_lines.add(lineno)
+                        errors.append(
+                            f"{file_path}:{lineno}: error: [PRE_LINT_REQUIRE_ARG_NO_DOMAIN] 'Domain' is obsolete and prohibited in Pretense. "
+                            f"Use native types (e.g. int, str) or @domain-decorated methods on the state machine."
+                        )
+        elif (
+            isinstance(node, ast.Attribute)
+            and isinstance(node.value, ast.Name)
+            and node.value.id == "Domain"
+        ):
+            if lineno not in reported_lines:
+                reported_lines.add(lineno)
+                errors.append(
+                    f"{file_path}:{lineno}: error: [PRE_LINT_REQUIRE_ARG_NO_DOMAIN] 'Domain.{node.attr}' is obsolete and prohibited in Pretense. "
+                    f"Use native types (e.g. int, str) or @domain-decorated methods on the state machine."
+                )
+        elif isinstance(node, ast.Name) and node.id == "Domain" and not isinstance(getattr(node, "ctx", None), ast.Store):
+            if lineno not in reported_lines:
+                reported_lines.add(lineno)
+                errors.append(
+                    f"{file_path}:{lineno}: error: [PRE_LINT_REQUIRE_ARG_NO_DOMAIN] 'Domain' is obsolete and prohibited in Pretense. "
+                    f"Use native types (e.g. int, str) or @domain-decorated methods on the state machine."
+                )
+    return errors
+
+
+
+_SAFE_DOMAIN_RECEIVERS = frozenset(
+    {"self", "cls", "re", "math", "json", "str", "int", "float", "bool", "list", "set", "dict", "tuple", "frozenset"}
+)
+
+_SAFE_DOMAIN_METHODS = frozenset(
+    {
+        "match",
+        "fullmatch",
+        "search",
+        "findall",
+        "finditer",
+        "sub",
+        "split",
+        "startswith",
+        "endswith",
+        "isdigit",
+        "isalnum",
+        "isalpha",
+        "isidentifier",
+        "strip",
+        "lstrip",
+        "rstrip",
+        "lower",
+        "upper",
+    }
+)
+
+
+def _expr_references_names(node: ast.AST, names: set[str]) -> bool:
+    for sub in ast.walk(node):
+        if isinstance(sub, ast.Name) and sub.id in names:
+            return True
+    return False
+
+
+def check_domain_call_purity(tree: ast.AST, file_path: str = "") -> list[str]:
+    """Ensures @domain recognizers do not pass validated args into unproxied receiver methods (PRE_LINT_UNPROXIED_RECEIVER)."""
+    errors: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        is_domain_fn = False
+        for dec in node.decorator_list:
+            if isinstance(dec, ast.Name) and dec.id == "domain":
+                is_domain_fn = True
+                break
+            if isinstance(dec, ast.Call):
+                if isinstance(dec.func, ast.Name) and dec.func.id == "domain":
+                    is_domain_fn = True
+                    break
+                if isinstance(dec.func, ast.Attribute) and dec.func.attr == "domain":
+                    is_domain_fn = True
+                    break
+            if isinstance(dec, ast.Attribute) and dec.attr == "domain":
+                is_domain_fn = True
+                break
+        if not is_domain_fn:
+            continue
+
+        param_names = {
+            arg.arg for arg in node.args.args if arg.arg not in ("self", "cls")
+        }
+        if not param_names:
+            continue
+
+        for sub in ast.walk(node):
+            if not isinstance(sub, ast.Call):
+                continue
+            if not isinstance(sub.func, ast.Attribute):
+                continue
+            arg_uses_param = any(
+                _expr_references_names(a, param_names) for a in sub.args
+            ) or any(
+                _expr_references_names(kw.value, param_names) for kw in sub.keywords
+            )
+            if not arg_uses_param:
+                continue
+            if sub.func.attr in _SAFE_DOMAIN_METHODS:
+                continue
+            recv = sub.func.value
+            if _expr_references_names(recv, param_names | _SAFE_DOMAIN_RECEIVERS):
+                continue
+            recv_name = ast.unparse(recv) if hasattr(ast, "unparse") else "<receiver>"
+            errors.append(
+                f"{file_path}:{getattr(sub, 'lineno', node.lineno)}: error: [PRE_LINT_UNPROXIED_RECEIVER] "
+                f"In @domain '{node.name}', passing validated parameter into '{recv_name}.{sub.func.attr}(...)' "
+                f"risks bytecode de-optimization. Use a standalone @domain helper or a method on the parameter."
+            )
+    return errors
+
+
+
+_FIXTURE_POOL_SUFFIXES = ("_options", "_pool", "_samples", "_fixtures")
+_FIXTURE_POOL_PREFIXES = ("sample_", "fixture_")
+
+
+def _is_seeding_decorator(dec: ast.expr) -> bool:
+    """Returns True when a decorator represents @transition.seeding() or @transition.seeding."""
+    target = dec.func if isinstance(dec, ast.Call) else dec
+    return (
+        isinstance(target, ast.Attribute)
+        and target.attr == "seeding"
+        and isinstance(target.value, ast.Name)
+        and target.value.id == "transition"
+    )
+
+
+def _is_non_seeding_transition_decorator(dec: ast.expr) -> bool:
+    """Returns True when a decorator represents @transition(...)."""
+    if isinstance(dec, ast.Call):
+        func = dec.func
+        return (isinstance(func, ast.Name) and func.id == "transition") or (
+            isinstance(func, ast.Attribute) and func.attr == "transition"
+        )
+    return isinstance(dec, ast.Name) and dec.id == "transition"
+
+
+def _is_constant_expr(expr: ast.expr) -> bool:
+    """Returns True when an AST expression is built solely from constant literals."""
+    if isinstance(expr, ast.Constant):
+        return True
+    if isinstance(expr, (ast.List, ast.Tuple, ast.Set)):
+        return all(_is_constant_expr(elt) for elt in expr.elts)
+    if isinstance(expr, ast.Dict):
+        return all(
+            (k is None or _is_constant_expr(k)) and _is_constant_expr(v)
+            for k, v in zip(expr.keys, expr.values)
+        )
+    return False
+
+
+def _collect_dynamic_state_mutations(fn: ast.FunctionDef) -> set[str]:
+    """Collects self.state.<attr> fields mutated with non-constant values inside a transition."""
+    mutated: set[str] = set()
+    mutating_methods = {
+        "append",
+        "extend",
+        "insert",
+        "add",
+        "update",
+        "setdefault",
+        "pop",
+        "remove",
+        "discard",
+        "clear",
+    }
+    for sub in ast.walk(fn):
+        if isinstance(sub, ast.Call) and isinstance(sub.func, ast.Attribute):
+            if sub.func.attr in _SAFE_DOMAIN_METHODS:
+                continue
+            recv = sub.func.value
+            if (
+                sub.func.attr in mutating_methods
+                and isinstance(recv, ast.Attribute)
+                and isinstance(recv.value, ast.Attribute)
+                and recv.value.attr == "state"
+                and isinstance(recv.value.value, ast.Name)
+                and recv.value.value.id == "self"
+            ):
+                if not sub.args or any(not _is_constant_expr(a) for a in sub.args):
+                    mutated.add(recv.attr)
+        elif isinstance(sub, (ast.Assign, ast.AugAssign)):
+            targets = sub.targets if isinstance(sub, ast.Assign) else [sub.target]
+            val = sub.value
+            for tgt in targets:
+                target_attr: ast.Attribute | None = None
+                if isinstance(tgt, ast.Attribute):
+                    target_attr = tgt
+                elif isinstance(tgt, ast.Subscript) and isinstance(tgt.value, ast.Attribute):
+                    target_attr = tgt.value
+                if (
+                    target_attr is not None
+                    and isinstance(target_attr.value, ast.Attribute)
+                    and target_attr.value.attr == "state"
+                    and isinstance(target_attr.value.value, ast.Name)
+                    and target_attr.value.value.id == "self"
+                    and not _is_constant_expr(val)
+                ):
+                    mutated.add(target_attr.attr)
+    return mutated
+
+
+def _collect_bulk_seeded_state_attrs(fn: ast.FunctionDef) -> set[str]:
+    """Collects self.state.<attr> fields bulk-seeded (>3 items) inside @transition.seeding."""
+    bulk_seeded: set[str] = set()
+    for sub in ast.walk(fn):
+        if isinstance(sub, ast.Call) and isinstance(sub.func, ast.Attribute):
+            if sub.func.attr in _SAFE_DOMAIN_METHODS:
+                continue
+            recv = sub.func.value
+            if (
+                sub.func.attr in {"extend", "update"}
+                and isinstance(recv, ast.Attribute)
+                and isinstance(recv.value, ast.Attribute)
+                and recv.value.attr == "state"
+                and isinstance(recv.value.value, ast.Name)
+                and recv.value.value.id == "self"
+                and sub.args
+                and isinstance(sub.args[0], (ast.List, ast.Tuple, ast.Set, ast.Dict))
+            ):
+                arg0 = sub.args[0]
+                size = len(arg0.keys) if isinstance(arg0, ast.Dict) else len(arg0.elts)
+                if size > 3:
+                    bulk_seeded.add(recv.attr)
+    return bulk_seeded
+
+
+def check_no_state_fixture_pool(tree: ast.AST, file_path: str = "") -> list[str]:
+    """Rejects closed fixture collections on State used in require_arg (PRE_LINT_NO_STATE_FIXTURE_POOL)."""
+    errors: list[str] = []
+    has_transitions = False
+    dynamically_mutated_attrs: set[str] = set()
+    bulk_seeded_attrs: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef):
+            if any(_is_non_seeding_transition_decorator(d) for d in node.decorator_list):
+                has_transitions = True
+                dynamically_mutated_attrs.update(_collect_dynamic_state_mutations(node))
+            elif any(_is_seeding_decorator(d) for d in node.decorator_list):
+                bulk_seeded_attrs.update(_collect_bulk_seeded_state_attrs(node))
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        is_req_arg = (
+            (isinstance(node.func, ast.Name) and node.func.id == "require_arg")
+            or (isinstance(node.func, ast.Attribute) and node.func.attr == "require_arg")
+        )
+        if not is_req_arg or len(node.args) < 2:
+            continue
+        dom_arg = node.args[1]
+        if (
+            isinstance(dom_arg, ast.Attribute)
+            and isinstance(dom_arg.value, ast.Attribute)
+            and dom_arg.value.attr == "state"
+            and isinstance(dom_arg.value.value, ast.Name)
+            and dom_arg.value.value.id == "self"
+        ):
+            attr_name = dom_arg.attr
+            if attr_name.endswith(_FIXTURE_POOL_SUFFIXES) or attr_name.startswith(
+                _FIXTURE_POOL_PREFIXES
+            ):
+                errors.append(
+                    f"{file_path}:{getattr(node, 'lineno', 1)}: error: [PRE_LINT_NO_STATE_FIXTURE_POOL] "
+                    f"Closed fixture pool 'self.state.{attr_name}' is prohibited in require_arg. "
+                    f"Use native types (int, str, Enum) or @domain(valid=..., invalid=...) methods instead."
+                )
+            elif has_transitions and (
+                attr_name not in dynamically_mutated_attrs
+                or attr_name in bulk_seeded_attrs
+            ):
+                errors.append(
+                    f"{file_path}:{getattr(node, 'lineno', 1)}: error: [PRE_LINT_NO_STATE_FIXTURE_POOL] "
+                    f"State collection 'self.state.{attr_name}' used in require_arg is not dynamically populated by any @transition "
+                    f"(or is bulk-seeded as a static fixture table). Use @domain(valid=..., invalid=...) methods "
+                    f"for input grammars and reserve self.state.<collection> for runtime state mutated by transitions."
+                )
+    return errors
+
+
+
+def check_no_inner_call_in_assert(tree: ast.AST, file_path: str = "") -> list[str]:
+    """Rejects tautological assert statements calling self.inner_<same_method>(same_args) in @transition methods."""
+    errors: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        if not any(_is_non_seeding_transition_decorator(d) for d in node.decorator_list):
+            continue
+        param_names = [a.arg for a in node.args.args if a.arg != "self"]
+        expected_inner = f"inner_{node.name}"
+        for sub in ast.walk(node):
+            if not isinstance(sub, ast.Assert):
+                continue
+            for call in ast.walk(sub.test):
+                if (
+                    isinstance(call, ast.Call)
+                    and isinstance(call.func, ast.Attribute)
+                    and call.func.attr == expected_inner
+                    and isinstance(call.func.value, ast.Name)
+                    and call.func.value.id == "self"
+                ):
+                    arg_names = [a.id for a in call.args if isinstance(a, ast.Name)]
+                    if len(arg_names) == len(call.args) and arg_names == param_names and not call.keywords:
+                        errors.append(
+                            f"{file_path}:{sub.lineno}: error: [PRE_LINT_NO_INNER_CALL_IN_ASSERT] "
+                            f"Tautological postcondition calling 'self.{expected_inner}({', '.join(param_names)})' inside 'assert'. "
+                            f"Assert semantic invariants on the return value and model state rather than re-invoking the same inner transition."
+                        )
+    return errors
+
+
+
 def check_no_domain_any(tree: ast.AST, file_path: str = "") -> list[str]:
     """Ensures state machines do not use Domain.any() (PRE_LINT_NO_DOMAIN_ANY)."""
     errors: list[str] = []
@@ -2766,11 +3277,13 @@ def check_no_domain_any(tree: ast.AST, file_path: str = "") -> list[str]:
 
 
 
+
 def check_multi_interface_inheritance(tree: ast.AST, file_path: str = "") -> list[str]:
     """Ensures multi-interface implementation pseudo-state machines inherit all implemented interface state machines."""
     errors: list[str] = []
     if not file_path or not file_path.endswith("_impl_pretense.py"):
         return errors
+
 
 
     high_spec_path: Path | None = None
@@ -2790,10 +3303,12 @@ def check_multi_interface_inheritance(tree: ast.AST, file_path: str = "") -> lis
         return errors
 
 
+
     try:
         high_text = high_spec_path.read_text(encoding="utf-8")
     except OSError:
         return errors
+
 
 
     implements_targets: list[str] = []
@@ -2808,6 +3323,7 @@ def check_multi_interface_inheritance(tree: ast.AST, file_path: str = "") -> lis
         return errors
 
 
+
     pseudo_sm_cls: ast.ClassDef | None = None
     tree_body: list[ast.stmt] = getattr(tree, "body", [])
     for node in tree_body:
@@ -2820,6 +3336,7 @@ def check_multi_interface_inheritance(tree: ast.AST, file_path: str = "") -> lis
 
     if pseudo_sm_cls is None:
         return errors
+
 
 
     inherited_bases: set[str] = set()
@@ -2844,6 +3361,7 @@ def check_multi_interface_inheritance(tree: ast.AST, file_path: str = "") -> lis
 
 
 
+
 def check_interface_transition_coverage(
     tree: ast.AST,
     file_path: str = "",
@@ -2854,6 +3372,7 @@ def check_interface_transition_coverage(
     errors: list[str] = []
     if not is_interface:
         return errors
+
 
 
     sm_cls: ast.ClassDef | None = None
@@ -2869,6 +3388,7 @@ def check_interface_transition_coverage(
 
     if sm_cls is None:
         return errors
+
 
 
     declared_transitions: dict[str, ast.FunctionDef | ast.AsyncFunctionDef] = {}
@@ -2917,6 +3437,7 @@ def check_interface_transition_coverage(
                 )
         return errors
 
+
     has_fuzz_suite = any(
         isinstance(node, ast.Call)
         and (
@@ -2928,6 +3449,7 @@ def check_interface_transition_coverage(
     )
     if has_fuzz_suite:
         return errors
+
 
     test_cases: list[ast.ClassDef] = []
     for node in tree_body:
@@ -2954,6 +3476,7 @@ def check_interface_transition_coverage(
             f"Interface pretense modules must include fixed fake tests covering 100% of transitions and seeding transitions."
         )
         return errors
+
 
 
     called_names: set[str] = set()
@@ -2984,6 +3507,7 @@ def check_interface_transition_coverage(
             )
 
     return errors
+
 
 
 def check_unbound_initial_state_factory(tree: ast.AST, file_path: str) -> list[str]:
@@ -3023,6 +3547,7 @@ def check_unbound_initial_state_factory(tree: ast.AST, file_path: str) -> list[s
                     f"pass a bound instance method (e.g. 'proto.make_initial_state') instead."
                 )
     return errors
+
 
 
 def check_setup_super_order(tree: ast.AST, file_path: str) -> list[str]:
@@ -3068,6 +3593,7 @@ def check_setup_super_order(tree: ast.AST, file_path: str) -> list[str]:
                             f"call 'super().setUp()' first so LifecycleTestCase auto-registers imported *_impl singletons."
                         )
     return errors
+
 
 
 def extract_pyi_elements(pyi_path: str) -> dict[str, Any]:
@@ -3172,6 +3698,7 @@ def check_transition_protocol_properties(
         return errors
 
 
+
     protocol_props: dict[str, set[str]] = {}
     for c in pyi_elements["classes"]:
         if c.get("is_protocol") and c.get("properties"):
@@ -3179,6 +3706,7 @@ def check_transition_protocol_properties(
 
     if not protocol_props:
         return errors
+
 
 
     for node in ast.walk(tree):
@@ -3209,6 +3737,7 @@ def check_transition_protocol_properties(
 
 
 
+
 def _default_domain_arg(arg_name: str, arg_type: str = "") -> str:
     """Returns Domain.boolean() for boolean parameters, or Domain.required(...) for all other parameters.
 
@@ -3230,7 +3759,7 @@ def _sample_val_for_arg(arg_name: str, arg_type: str = "") -> str:
 
 
 def _default_arg_val(arg_name: str, arg_type: str = "") -> str:
-    """Legacy helper returning declarative Domain representation."""
+    """Helper returning declarative domain representation."""
     return _default_domain_arg(arg_name, arg_type)
 
 
@@ -3455,13 +3984,11 @@ def generate_pretense_scaffold(
             "from hypothesis import given, settings, strategies as st",
             "",
             "from pretense import (",
-            "    Domain,",
             "    StateMachine,",
             "    raises,",
             "    require,",
             "    require_arg,",
             "    sut,",
-            "    sut_state,",
             "    synthesize_fake,",
             "    transition,",
             ")",
@@ -3485,18 +4012,18 @@ def generate_pretense_scaffold(
                 "# 1. State Machine Specification (Model & Transitions)",
                 "# ==============================================================================",
                 "# NOTE: Transitions model target methods 1:1 (@transition(TargetClass.method)).",
-                "# Contract violations (*Error, e.g. NodeNotFoundError) are preconditions: use require_arg(arg, Domain.in_set(self.state.items)) or require(condition) (optional error=ExpectedError is documentation only). NEVER use with raises(...) for *Error!",
+                "# Contract violations (*Error, e.g. NodeNotFoundError) are preconditions: use require_arg(arg, self.state.items) or require(condition) (optional error=ExpectedError is documentation only). NEVER use with raises(...) for *Error!",
                 "# Operational exceptions (*Exception) use Env[bool] + require_env(healthy_cond, ExpectedException) in interface SMs, bound via self.bind(...) in impl.",
                 "# require_arg defines the caller precondition contract (checked at runtime on real calls).",
-                "# Use Domain.type(T) or open domain; use preferred=[...] to cluster/bias fuzz inputs without restricting the contract.",
+                "# Use native types (T) or @domain-decorated methods on the state machine.",
                 "#",
                 "# REFERENCE PATTERNS:",
-                "#   # 1:1 Transition Pattern with Domain strategies and inner transition delegation:",
+                "#   # 1:1 Transition Pattern with native types/lambdas and inner transition delegation:",
                 "#   @transition(TargetClass.method)",
                 "#   def method(self, arg1: str, count: int) -> ReturnType:",
                 "#       require(self.state.initialized)",
-                '#       require_arg(arg1, Domain.type(str), preferred=["sample"])',
-                "#       require_arg(count, Domain.range(1, 100), preferred=[10])",
+                "#       require_arg(arg1, str)",
+                "#       require_arg(count, lambda c: c >= 1 and c <= 100)",
                 "#       ret = self.inner_method(arg1, count)",
                 "#       self.state.items.append(ret)",
                 "#       return ret",
@@ -3505,7 +4032,7 @@ def generate_pretense_scaffold(
                 "#       return ReturnType(...)  # or None / fake value",
                 "#",
                 "#   # Seeding Transition (sets up state dynamically outside default __init__):",
-                "#   @transition.seeding",
+                "#   @transition.seeding()",
                 "#   def seed_initial(self) -> None:",
                 "#       self.state.initialized = True",
                 "#",
@@ -3659,7 +4186,7 @@ def generate_pretense_scaffold(
         lines.extend(
             [
                 "",
-                "    @transition.seeding",
+                "    @transition.seeding()",
                 "    def seed_initial(self) -> None:",
                 '        """Seed state machine state for fake initialization."""',
                 "        self.state.initialized = True",
@@ -3801,7 +4328,6 @@ def generate_pretense_scaffold(
             "    raises,",
             "    require,",
             "    sut,",
-            "    sut_state,",
             ")",
             "from pretense.compiler import compile_hypothesis_test_case",
         ]
@@ -3812,7 +4338,9 @@ def generate_pretense_scaffold(
             )
 
         pretense_pkg = (
-            lib_pkg.rsplit(".", 1)[0] + ".pretense" if lib_pkg else "pretense"
+            lib_pkg.rsplit(".", 1)[0] + ".pretense_intf"
+            if lib_pkg
+            else "pretense_intf"
         )
         iface_symbols = [iface_sm_cls_name, state_cls_name, f"Fake{pascal_name}"]
         if len(service_classes) > 1:
@@ -4141,14 +4669,12 @@ def generate_pretense_scaffold(
         "from hypothesis import given, settings, strategies as st",
         "",
         "from pretense import (",
-        "    Domain,",
         "    StateMachine,",
         "    call_target,",
         "    raises,",
         "    require,",
         "    require_arg,",
         "    sut,",
-        "    sut_state,",
         "    synthesize_fake,",
         "    transition,",
         ")",
@@ -4186,10 +4712,10 @@ def generate_pretense_scaffold(
             "# 1. State Machine Specification (Model & Transitions)",
             "# ==============================================================================",
             "# NOTE: Transitions model target methods 1:1 (@transition(TargetClass.method)).",
-            "# Contract violations (*Error, e.g. NodeNotFoundError) are preconditions: use require_arg(arg, Domain.in_set(self.state.items)) or require(condition) (optional error=ExpectedError is documentation only). NEVER use with raises(...) for *Error!",
+            "# Contract violations (*Error, e.g. NodeNotFoundError) are preconditions: use require_arg(arg, self.state.items) or require(condition) (optional error=ExpectedError is documentation only). NEVER use with raises(...) for *Error!",
             "# Operational exceptions (*Exception) use Env[bool] + require_env(healthy_cond, ExpectedException) in interface SMs, bound via self.bind(...) in impl.",
             "# require_arg defines the caller precondition contract (checked at runtime on real calls).",
-            "# Use Domain.type(T) or open domain; use preferred=[...] to cluster/bias fuzz inputs without restricting the contract.",
+            "# Use native types (T) or @domain-decorated methods on the state machine.",
             "",
             "def _unimplemented_transition(name: str) -> Any:",
             '    """Placeholder for unmodeled transition return contracts that crashes at runtime."""',
@@ -4385,7 +4911,7 @@ def generate_pretense_scaffold(
     lines.extend(
         [
             "",
-            "    @transition.seeding",
+            "    @transition.seeding()",
             "    def seed_initial(self) -> None:",
             '        """Seed state machine state for fake initialization."""',
             "        self.state.initialized = True",
@@ -4602,7 +5128,7 @@ def _resolve_lib_dir_and_pkg(
     abs_mod = os.path.abspath(module_path)
     parent_dir = os.path.dirname(abs_mod)
     # Check if pretense or tests directory
-    if os.path.basename(parent_dir) in ("pretense", "tests"):
+    if os.path.basename(parent_dir) in ("pretense_intf", "pretense_impl", "pretense", "tests"):
         part_dir = os.path.dirname(parent_dir)
     else:
         part_dir = parent_dir
@@ -4762,7 +5288,7 @@ def main() -> int:
     ):
         sys.stderr.write(
             f"{args.module_path} is uninitialized (missing State dataclass or TestCase classes). "
-            f"Consult your Companion Guide (autofab_py/guides/pretense.md) for required structure.\n"
+            f"Consult your Companion Guide (autofab_py/guides/pretense_intf.md or autofab_py/guides/pretense_impl.md) for required structure.\n"
         )
         return 1
 
@@ -4783,8 +5309,14 @@ def main() -> int:
         basename = os.path.basename(pyi_path)
         is_interface = not basename.endswith("_impl.pyi")
     elif args.module_path:
+        norm_mp = args.module_path.replace("\\", "/")
         stem = os.path.basename(args.module_path)
-        is_interface = not stem.endswith("_impl_pretense.py")
+        if "/pretense_impl/" in norm_mp or norm_mp.startswith("pretense_impl/"):
+            is_interface = False
+        elif "/pretense_intf/" in norm_mp or norm_mp.startswith("pretense_intf/"):
+            is_interface = True
+        else:
+            is_interface = not stem.endswith("_impl_pretense.py")
 
     struct_errs = check_pretense_structure(
         tree, args.module_path, is_interface=is_interface
@@ -4871,13 +5403,30 @@ def main() -> int:
     )
     all_errors.extend(no_super_errs)
 
+    no_domain_errs = check_no_domain(tree, args.module_path)
+    all_errors.extend(no_domain_errs)
+
+    domain_purity_errs = check_domain_call_purity(tree, args.module_path)
+    all_errors.extend(domain_purity_errs)
+
+    fixture_pool_errs = check_no_state_fixture_pool(tree, args.module_path)
+    all_errors.extend(fixture_pool_errs)
+
+    inner_assert_errs = check_no_inner_call_in_assert(tree, args.module_path)
+    all_errors.extend(inner_assert_errs)
+
+    domain_form_errs = check_require_arg_domain_form(tree, args.module_path)
+    all_errors.extend(domain_form_errs)
+
     no_domain_any_errs = check_no_domain_any(tree, args.module_path)
     all_errors.extend(no_domain_any_errs)
 
     no_raises_errs = check_no_raises_in_test_cases(tree, args.module_path)
     all_errors.extend(no_raises_errs)
 
-    assert_raises_errs = check_no_assert_raises(tree, args.module_path)
+    assert_raises_errs = (
+        [] if is_interface else check_no_assert_raises(tree, args.module_path)
+    )
     all_errors.extend(assert_raises_errs)
 
     no_raises_error_errs = check_no_raises_for_errors(tree, args.module_path)
@@ -4888,9 +5437,6 @@ def main() -> int:
 
     require_env_errs = check_require_env_sticks_to_exception(tree, args.module_path)
     all_errors.extend(require_env_errs)
-
-    require_env_state_errs = check_require_env_depends_on_env_state(tree, args.module_path)
-    all_errors.extend(require_env_state_errs)
 
     impl_env_bind_errs = check_impl_env_state_bindings(tree, args.module_path)
     all_errors.extend(impl_env_bind_errs)

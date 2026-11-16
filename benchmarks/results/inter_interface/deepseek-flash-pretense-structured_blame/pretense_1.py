@@ -181,7 +181,6 @@ from typing import Any, Optional
 import unittest
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -230,7 +229,7 @@ class InterInterfaceStateMachine(StateMachine[InterInterfaceState]):
         amount: int,
     ) -> None:
         """Allocates funds by reserving them from the collaborator vault."""
-        require_arg(amount, Domain.type(int), preferred=[1, 10, 100])
+        require_arg(amount, int)
         if amount <= 0:
             with raises(AllocationLimitError):
                 self.inner_allocate(amount)
@@ -251,7 +250,7 @@ class InterInterfaceStateMachine(StateMachine[InterInterfaceState]):
         amount: int,
     ) -> None:
         """Releases previously allocated funds back to the collaborator vault."""
-        require_arg(amount, Domain.type(int), preferred=[1, 5, 10])
+        require_arg(amount, int)
         if amount <= 0 or amount > self.state.allocated:
             with raises(AllocationLimitError):
                 self.inner_release(amount)
@@ -545,11 +544,10 @@ from typing import Any, Optional
 import unittest
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
-    require_arg,
+    domain, require_arg,
     sut,
     sut_state,
     synthesize_fake,
@@ -591,7 +589,7 @@ class VaultStateMachine(StateMachine[VaultState]):
         amount: int,
     ) -> None:
         """Deposits funds into the vault, rejecting non-positive amounts."""
-        require_arg(amount, Domain.type(int), preferred=[1, 10, 100])
+        require_arg(amount, int)
         if amount <= 0:
             with raises(InsufficientFundsError):
                 self.inner_deposit(amount)
@@ -611,7 +609,7 @@ class VaultStateMachine(StateMachine[VaultState]):
         amount: int,
     ) -> None:
         """Withdraws funds from the vault, rejecting non-positive or excessive amounts."""
-        require_arg(amount, Domain.type(int), preferred=[1, 5, 10])
+        require_arg(amount, int)
         if amount <= 0 or amount > self.state.balance:
             with raises(InsufficientFundsError):
                 self.inner_withdraw(amount)
@@ -631,7 +629,7 @@ class VaultStateMachine(StateMachine[VaultState]):
         active: bool,
     ) -> None:
         """Test-only hook toggling vault availability."""
-        require_arg(active, Domain.boolean())
+        require_arg(active, bool)
         self.state.is_active = active
         ret = self.inner_set_active(active)
         assert self.state.is_active == active
@@ -655,13 +653,17 @@ class VaultStateMachine(StateMachine[VaultState]):
     def seed_balance(self, amount: int) -> None:
         """Seeds pre-existing vault reserves to exercise withdrawal scenarios."""
         require(self.state.is_active)
-        require_arg(amount, Domain.range(1, 1000), preferred=[100])
+        require_arg(amount, (self._dom_seed_balance_amount))
         self.state.balance += amount
 
     @transition.seeding
     def seed_inactive(self) -> None:
         """Seeds an inactive vault to exercise contracted failure postconditions."""
         self.state.is_active = False
+
+    @domain()
+    def _dom_seed_balance_amount(self, x: Any) -> bool:
+        return bool(x >= 1 and x <= 1000)
 
 
 proto = VaultStateMachine()

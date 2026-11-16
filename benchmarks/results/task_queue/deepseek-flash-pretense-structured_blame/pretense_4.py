@@ -199,12 +199,11 @@ from typing import Any, Optional
 import unittest
 
 from pretense import (
-    Domain,
     Env,
     StateMachine,
     raises,
     require,
-    require_arg,
+    domain, require_arg,
     require_env,
     sut,
     sut_state,
@@ -266,8 +265,8 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
     def submit(self, task_id: str, payload: str) -> None:
         require_env(self.state.available, QueueUnavailableException, task_id, payload)
         require(len(self.state.pending) < self.state.capacity)
-        require_arg(task_id, Domain.text(min_size=1), preferred=["task-1"])
-        require_arg(payload, Domain.text(min_size=1), preferred=["alpha"])
+        require_arg(task_id, str)
+        require_arg(payload, str)
         self.inner_submit(task_id, payload)
         self.state.pending.append((task_id, payload))
         assert len(self.state.pending) <= self.state.capacity
@@ -290,8 +289,8 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
     @transition(TaskQueue.complete)
     def complete(self, task_id: str, outcome: str) -> None:
         require_env(self.state.available, QueueUnavailableException, task_id, outcome)
-        require_arg(task_id, Domain.text(min_size=1), preferred=["task-1"])
-        require_arg(outcome, Domain.text(min_size=1), preferred=["PROCESSED:ALPHA"])
+        require_arg(task_id, str)
+        require_arg(outcome, str)
         self.inner_complete(task_id, outcome)
         self.state.outcomes[task_id] = outcome
         assert self.state.outcomes[task_id] == outcome
@@ -301,7 +300,7 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
 
     @transition(TaskQueue.get_outcome)
     def get_outcome(self, task_id: str) -> Optional[str]:
-        require_arg(task_id, Domain.text(min_size=1), preferred=["task-1"])
+        require_arg(task_id, str)
         ret = self.inner_get_outcome(task_id)
         assert ret == self.state.outcomes.get(task_id)
         return ret
@@ -322,7 +321,7 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
 
     @transition(TaskQueue.set_available)
     def set_available(self, available: bool) -> None:
-        require_arg(available, Domain.sampled_from([True, False]), preferred=[True])
+        require_arg(available, self._dom_set_available_available)
         self.inner_set_available(available)
         self.state.available = available
 
@@ -335,6 +334,10 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
         self.state.available = True
         self.state.pending.clear()
         self.state.outcomes.clear()
+
+    @domain(valid=lambda self: list([True, False]))
+    def _dom_set_available_available(self, val: Any) -> bool:
+        return val in [True, False]
 
 
 proto = TaskQueueStateMachine()
@@ -601,12 +604,11 @@ from typing import Any, Optional
 import unittest
 
 from pretense import (
-    Domain,
     Env,
     StateMachine,
     raises,
     require,
-    require_arg,
+    domain, require_arg,
     require_env,
     sut,
     sut_state,
@@ -665,8 +667,8 @@ class TaskWorkerStateMachine(StateMachine[TaskWorkerState]):
             task_id,
             payload,
         )
-        require_arg(task_id, Domain.text(min_size=1), preferred=["task-1"])
-        require_arg(payload, Domain.text(min_size=1), preferred=["alpha"])
+        require_arg(task_id, str)
+        require_arg(payload, str)
         ret = self.inner_execute(task_id, payload)
         self.state.last_task_id = task_id
         self.state.processed_count += 1
@@ -694,8 +696,8 @@ class TaskWorkerStateMachine(StateMachine[TaskWorkerState]):
 
     @transition(TaskWorker.set_failing_task)
     def set_failing_task(self, task_id: str, failing: bool) -> None:
-        require_arg(task_id, Domain.text(min_size=1), preferred=["task-1"])
-        require_arg(failing, Domain.sampled_from([True, False]), preferred=[True])
+        require_arg(task_id, str)
+        require_arg(failing, self._dom_set_failing_task_failing)
         self.inner_set_failing_task(task_id, failing)
         if failing:
             self.state.failing_tasks.add(task_id)
@@ -716,6 +718,10 @@ class TaskWorkerStateMachine(StateMachine[TaskWorkerState]):
         sut_state(TaskQueueState).pending.clear()
         sut_state(TaskQueueState).pending.append(("seed-task", "seed-payload"))
         sut_state(TaskQueueState).outcomes.clear()
+
+    @domain(valid=lambda self: list([True, False]))
+    def _dom_set_failing_task_failing(self, val: Any) -> bool:
+        return val in [True, False]
 
 
 proto = TaskWorkerStateMachine()

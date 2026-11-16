@@ -212,7 +212,6 @@ from typing import Any, Optional
 import unittest
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -307,7 +306,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
 
     @transition(RingBuffer.push)
     def push(self, item: Any) -> Optional[Any]:
-        require_arg(item, Domain.type(int))
+        require_arg(item, int)
         ret = self.inner_push(item)
         if len(self.state.items) == self.state.capacity:
             evicted = self.state.items[0]

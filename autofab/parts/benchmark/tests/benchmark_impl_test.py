@@ -175,7 +175,6 @@ class BenchmarkImplTest(LifecycleTestCase):
                             "--dry-run",
                             "--suite=cpython",
                             "--models=qwen-moe-q6",
-                            "--units=1",
                         ]
                     )
                     self.assertEqual(exit_code, 0)
@@ -192,7 +191,6 @@ class BenchmarkImplTest(LifecycleTestCase):
                         "--dry-run",
                         "--suite=cpython",
                         "--models=qwen-moe-q6",
-                        "--units=1",
                     ],
                 )
                 self.assertEqual(exit_code, 0)
@@ -1244,7 +1242,6 @@ class BenchmarkImplTest(LifecycleTestCase):
                 "--models=gemini-flash",
                 "--harness=antigravity",
                 "--simulation",
-                "--units=1",
             ]
         )
         self.assertEqual(ret, 0)
@@ -1935,7 +1932,7 @@ class BenchmarkImplTest(LifecycleTestCase):
 
             with patch.object(evaluator, "execute_flight", return_value=failing_flight):
                 ret = evaluator.run_cli(
-                    ["--suite=dag_engine", "--models=qwen-moe-q6", "--units=1"]
+                    ["--suite=dag_engine", "--models=qwen-moe-q6"]
                 )
                 self.assertEqual(ret, 1)
 
@@ -1954,12 +1951,12 @@ class BenchmarkImplTest(LifecycleTestCase):
         """Scenario 17: run_cli accepts single model target via --model or --models."""
         evaluator = BenchmarkEvaluator()
         ret_model = evaluator.run_cli(
-            ["--dry-run", "--suite=cpython", "--model=deepseek-flash", "--units=1"]
+            ["--dry-run", "--suite=cpython", "--model=deepseek-flash"]
         )
         self.assertEqual(ret_model, 0)
 
         ret_models = evaluator.run_cli(
-            ["--dry-run", "--suite=cpython", "--models=deepseek-flash", "--units=1"]
+            ["--dry-run", "--suite=cpython", "--models=deepseek-flash"]
         )
         self.assertEqual(ret_models, 0)
 
@@ -2105,7 +2102,6 @@ class BenchmarkImplTest(LifecycleTestCase):
                     "--dry-run",
                     "--suite=cpython",
                     "--model=deepseek-flash",
-                    "--units=1",
                     flag,
                 ]
             )
@@ -2147,7 +2143,6 @@ class BenchmarkImplTest(LifecycleTestCase):
                     "--dry-run",
                     "--suite=cpython",
                     "--model=deepseek-flash",
-                    "--units=1",
                     "--dsh-web",
                 ]
             )
@@ -2167,7 +2162,7 @@ class BenchmarkImplTest(LifecycleTestCase):
             if "AUTOFAB_EXPERIMENT" in os.environ:
                 del os.environ["AUTOFAB_EXPERIMENT"]
             ret = evaluator.run_cli(
-                ["--dry-run", "--suite=cpython", "--model=deepseek-flash", "--units=1"]
+                ["--dry-run", "--suite=cpython", "--model=deepseek-flash"]
             )
             self.assertEqual(ret, 0)
             self.assertEqual(os.environ.get("AUTOFAB_EXPERIMENT"), "structured_blame")
@@ -2189,7 +2184,6 @@ class BenchmarkImplTest(LifecycleTestCase):
                     "--dry-run",
                     "--suite=cpython",
                     "--model=deepseek-flash",
-                    "--units=1",
                     "--no-experiment",
                 ]
             )
@@ -2214,7 +2208,6 @@ class BenchmarkImplTest(LifecycleTestCase):
                     "--dry-run",
                     "--suite=cpython",
                     "--model=deepseek-flash",
-                    "--units=1",
                     "--baseline",
                     "--harness=simulation",
                 ]
@@ -2238,7 +2231,6 @@ class BenchmarkImplTest(LifecycleTestCase):
                     "--dry-run",
                     "--suite=cpython",
                     "--model=deepseek-flash",
-                    "--units=1",
                     "--disable_experiment=structured_blame",
                 ]
             )

@@ -8,7 +8,7 @@ Given: A newly initialized directed acyclic graph containing zero nodes.
 Observed: Node `task_a` is present in the graph with 0 dependencies.
 
 2. Add node `task_b` depending on `task_a` with scheduling priority 5.
-Observed: Node `task_b` is present and depends directly on `task_a`.
+Observed: Node `task_b` is present and depends directly on `task_a`, all referenced dependencies exist, and the graph is acyclic.
 
 3. Execute topological sort on the graph.
 Observed: The returned sequence is `task_a` followed by `task_b`.

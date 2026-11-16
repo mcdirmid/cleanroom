@@ -35,7 +35,10 @@ Observed: A worker execution exception is raised.
 
 Given: A task worker state machine or fake seeded to fail on `fail_task`.
 
-1. Execute task `fail_task` with payload `error_payload`.
+1. Check test-only `is_failing_task("fail_task")`.
+Observed: Returns `True`.
+
+2. Execute task `fail_task` with payload `error_payload`.
 Observed: A worker execution exception is raised.
 
 <!-- CLEANROOM METADATA

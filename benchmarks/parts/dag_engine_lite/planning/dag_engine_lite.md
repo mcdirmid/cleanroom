@@ -18,7 +18,7 @@ By factoring graph construction, topological sorting, failure propagation polici
 - A failure policy takes the form of fail fast, continue on error, or skip downstream.
 - A node definition carries a node identifier, a zero-argument callable action, a set of upstream dependency identifiers, a scheduling priority, and a permitted retry count.
 - A node result carries a node identifier, a terminal node state, an optional returned value, an optional caught error, an elapsed duration, and an attempted retry count.
-- A DAG run report carries a total node count, succeeded node identifiers, failed node identifiers, skipped node identifiers, cancelled node identifiers, a wall clock duration, a critical path sequence of node identifiers, and a results mapping from node identifiers to node results.
+- A DAG run report carries a total node count, succeeded node identifiers, failed node identifiers, skipped node identifiers, cancelled node identifiers, a wall clock duration, a critical path sequence of node identifiers, and a results mapping from terminal node identifiers (executed, skipped, and cancelled; omitting pre-terminal nodes) to node results.
 - A directed acyclic graph maintains task nodes and directed dependency edges between prerequisites and dependents.
 - A wave scheduler partitions and coordinates graph nodes into sequential execution waves.
 - A DAG runner coordinates sequential graph execution under a configured failure policy.
@@ -35,6 +35,7 @@ By factoring graph construction, topological sorting, failure propagation polici
 - A directed acyclic graph retrieves the direct upstream dependencies of a node. [retrieve_upstream_dependencies]
 - A directed acyclic graph retrieves the direct downstream dependents of a node. [retrieve_downstream_dependents]
 - A directed acyclic graph lists all registered node identifiers. [list_all_graph_nodes]
+- A directed acyclic graph exposes test-only observability queries reporting whether all referenced dependencies exist [observe_dependencies_exist] and whether the graph is acyclic. [observe_acyclic]
 - A directed acyclic graph validates graph invariants for referenced dependency existence and directed acyclicity. [validate_graph_invariants]
 - When a referenced dependency identifier corresponds to no registered node, invariant validation raises node not found error. [raise_node_not_found_on_dangling_dependency]
 - When invariant validation detects a directed cycle, the graph raises cycle error carrying the cycle sequence. [raise_cycle_error_on_directed_cycle]

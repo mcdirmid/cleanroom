@@ -591,11 +591,10 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
-    require_arg,
+    domain, require_arg,
     sut,
     sut_state,
     synthesize_fake,
@@ -1017,7 +1016,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         text: str,
     ) -> Version:
         require(self.state.initialized)
-        require_arg(text, Domain.in_set(self.state.valid_version_texts), error=InvalidVersionError)
+        require_arg(text, self.state.valid_version_texts, error=InvalidVersionError)
         ret: Version = self.inner_parse_version(text)
         self.state.versions.append(ret)
         self.state.focus_version = ret
@@ -1037,8 +1036,8 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         v2: Version,
     ) -> int:
         require(self.state.initialized)
-        require_arg(v1, Domain.in_set(self.state.known_versions))
-        require_arg(v2, Domain.in_set(self.state.known_versions))
+        require_arg(v1, self.state.known_versions)
+        require_arg(v2, self.state.known_versions)
         ret: int = self.inner_compare_precedence(v1, v2)
         observed = (ret > 0) - (ret < 0)
         assert observed == _model_compare(v1, v2)
@@ -1057,7 +1056,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         text: str,
     ) -> VersionRange:
         require(self.state.initialized)
-        require_arg(text, Domain.in_set(self.state.valid_range_texts), error=InvalidRangeError)
+        require_arg(text, self.state.valid_range_texts, error=InvalidRangeError)
         ret: VersionRange = self.inner_parse_range(text)
         self.state.ranges.append(ret)
         assert ret.raw_text == text.strip()
@@ -1077,9 +1076,9 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         include_prerelease: bool,
     ) -> bool:
         require(self.state.initialized)
-        require_arg(version, Domain.in_set(self.state.known_versions))
-        require_arg(range_constraint, Domain.in_set(self.state.valid_ranges))
-        require_arg(include_prerelease, Domain.boolean())
+        require_arg(version, self.state.known_versions)
+        require_arg(range_constraint, self.state.valid_ranges)
+        require_arg(include_prerelease, bool)
         ret: bool = self.inner_satisfies(version, range_constraint, include_prerelease)
         assert isinstance(ret, bool)
         return ret
@@ -1100,7 +1099,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         release: PackageRelease,
     ) -> None:
         require(self.state.initialized)
-        require_arg(release, Domain.in_set(self.state.known_releases))
+        require_arg(release, self.state.known_releases)
         before = len(self.state.packages.get(release.name, []))
         ret = self.inner_register_package(release)
         releases = self.state.packages.setdefault(release.name, [])
@@ -1124,7 +1123,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     ) -> List[PackageRelease]:
         require(self.state.initialized)
         require(bool(self.state.packages))
-        require_arg(name, Domain.in_set(tuple(self.state.packages)), error=PackageNotFoundError)
+        require_arg(name, self._dom_get_releases_name, error=PackageNotFoundError)
         ret: List[PackageRelease] = self.inner_get_releases(name)
         assert ret == self.state.packages[name]
         return ret
@@ -1141,7 +1140,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         name: str,
     ) -> bool:
         require(self.state.initialized)
-        require_arg(name, Domain.type(str))
+        require_arg(name, str)
         ret: bool = self.inner_has_package(name)
         assert ret == (name in self.state.packages)
         return ret
@@ -1173,7 +1172,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     ) -> ResolutionOutcome:
         require(self.state.initialized)
         require(bool(self.state.resolver_roots))
-        require_arg(root_dependencies, Domain.in_set(self.state.resolver_roots), error=ResolutionConflictError)
+        require_arg(root_dependencies, self.state.resolver_roots, error=ResolutionConflictError)
         ret: ResolutionOutcome = self.inner_resolve(root_dependencies)
         self.state.outcomes.append(ret)
         assert {dependency.name for dependency in root_dependencies} <= set(ret.selected_versions)
@@ -1196,6 +1195,10 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     def seed_initial(self) -> None:
         """Seeds blank model state so generated transitions have reachable preconditions."""
         self.state.initialized = True
+
+    @domain(valid=lambda self: list(tuple(self.state.packages)))
+    def _dom_get_releases_name(self, val: Any) -> bool:
+        return val in tuple(self.state.packages)
 
 
 proto = SemverSolverStateMachine()

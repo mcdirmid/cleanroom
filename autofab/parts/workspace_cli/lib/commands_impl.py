@@ -366,6 +366,9 @@ class WorkspaceCommandHandler(commands.WorkspaceCommandHandler):
         summary: Optional[str] = None,
         repo_root: Optional[str] = None,
         no_verify: bool = False,
+        kind: Optional[str] = None,
+        scope: Optional[str] = None,
+        why: Optional[str] = None,
     ) -> int:
         """Verifies target and stamps in-band metadata or <ROLE>_AUDIT directly in main."""
         ws_root = os.path.realpath(find_workspace_root())
@@ -480,13 +483,20 @@ class WorkspaceCommandHandler(commands.WorkspaceCommandHandler):
                 return 1
 
         sub_coord = get_singleton(submit.SubmissionCoordinator)
-        outcome = sub_coord.submit_target_file(
+        sub_kwargs: Dict[str, Any] = dict(
             target=target,
             summary=summary,
             repo_root=main_root,
             workspace_root=ws_root,
             role_name=role_name,
         )
+        if kind is not None:
+            sub_kwargs["kind"] = kind
+        if scope is not None:
+            sub_kwargs["scope"] = scope
+        if why is not None:
+            sub_kwargs["why"] = why
+        outcome = sub_coord.submit_target_file(**sub_kwargs)
         if outcome.message:
             print(outcome.message)
 

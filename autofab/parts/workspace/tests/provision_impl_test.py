@@ -747,7 +747,8 @@ class WorkspaceProvisionImplTest(LifecycleTestCase):
 
             with open(ws_writable, "r", encoding="utf-8") as f:
                 writable_content = f.read()
-            self.assertIn("CHANGE: implement alpha", writable_content)
+            self.assertNotIn("CHANGE:", writable_content)
+            self.assertNotIn("CHANGES:", writable_content)
             self.assertNotIn("CODE_HASH:", writable_content)
             self.assertIn("- please check type hints", writable_content)
             self.assertNotIn("LAST_CLEANED:", writable_content)

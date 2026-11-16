@@ -438,12 +438,11 @@ from dataclasses import dataclass, field
 from typing import Any, Collection, Dict, List, Optional, Set, Tuple
 
 from pretense import (
-    Domain,
     Env,
     StateMachine,
     raises,
     require,
-    require_arg,
+    domain, require_arg,
     require_env,
     sut,
     sut_state,
@@ -710,7 +709,7 @@ class SemVerStateMachine(StateMachine[SemVerState]):
     def parse_version(self, text: str) -> Version:
         require_arg(
             text,
-            Domain.sampled_from(list(PARSE_RESULTS.keys())),
+            self._dom_parse_version_text,
             preferred=["1.0.0", "1.2.3"],
         )
         ret = self.inner_parse_version(text)
@@ -735,12 +734,12 @@ class SemVerStateMachine(StateMachine[SemVerState]):
     def compare_precedence(self, v1: Version, v2: Version) -> int:
         require_arg(
             v1,
-            Domain.sampled_from(list(PRECEDENCE_RANK.keys())),
+            self._dom_compare_precedence_v1,
             preferred=[V_BASE, V_NEXT],
         )
         require_arg(
             v2,
-            Domain.sampled_from(list(PRECEDENCE_RANK.keys())),
+            self._dom_compare_precedence_v2,
             preferred=[V_BASE, V_NEXT],
         )
         ret = self.inner_compare_precedence(v1, v2)
@@ -767,7 +766,7 @@ class SemVerStateMachine(StateMachine[SemVerState]):
     def parse_range(self, text: str) -> VersionRange:
         require_arg(
             text,
-            Domain.sampled_from(list(RANGE_TEXTS)),
+            self._dom_parse_range_text,
             preferred=[">=1.0.0", "^1.x"],
         )
         ret = self.inner_parse_range(text)
@@ -791,15 +790,15 @@ class SemVerStateMachine(StateMachine[SemVerState]):
     ) -> bool:
         require_arg(
             version,
-            Domain.sampled_from(list(SATISFY_VERSIONS)),
+            self._dom_satisfies_version,
             preferred=[V_BASE],
         )
         require_arg(
             range_constraint,
-            Domain.sampled_from(list(SATISFY_RANGES)),
+            self._dom_satisfies_range_constraint,
             preferred=[SATISFY_RANGES[0]],
         )
-        require_arg(include_prerelease, Domain.type(bool), preferred=[False, True])
+        require_arg(include_prerelease, bool, preferred=[False, True])
         ret = self.inner_satisfies(version, range_constraint, include_prerelease)
         expected = SATISFY_EXPECTED[(version, range_constraint, include_prerelease)]
         assert ret == expected
@@ -819,7 +818,7 @@ class SemVerStateMachine(StateMachine[SemVerState]):
     def register_package(self, release: PackageRelease) -> None:
         require_arg(
             release,
-            Domain.sampled_from(list(RELEASE_SAMPLES)),
+            self._dom_register_package_release,
             preferred=list(RELEASE_SAMPLES),
         )
         ret = self.inner_register_package(release)
@@ -835,7 +834,7 @@ class SemVerStateMachine(StateMachine[SemVerState]):
         require(bool(self.state.releases))
         require_arg(
             name,
-            Domain.in_set(self.state.releases),
+            self.state.releases,
             preferred=list(self.state.releases.keys()),
         )
         ret = self.inner_get_releases(name)
@@ -862,7 +861,7 @@ class SemVerStateMachine(StateMachine[SemVerState]):
     def has_package(self, name: str) -> bool:
         require_arg(
             name,
-            Domain.sampled_from(list(PACKAGE_NAMES)),
+            self._dom_has_package_name,
             preferred=list(PACKAGE_NAMES),
         )
         ret = self.inner_has_package(name)
@@ -891,7 +890,7 @@ class SemVerStateMachine(StateMachine[SemVerState]):
         require(bool(self.state.releases))
         require_arg(
             root_dependencies,
-            Domain.sampled_from(list(RESOLVE_CASES)),
+            self._dom_resolve_root_dependencies,
             preferred=list(RESOLVE_CASES),
         )
         ret = self.inner_resolve(root_dependencies)
@@ -923,6 +922,42 @@ class SemVerStateMachine(StateMachine[SemVerState]):
             self.inner_register_package(release)
             self.state.releases.setdefault(release.name, []).append(release)
         assert set(self.state.releases.keys()) == {"alpha", "beta", "gamma"}
+
+    @domain(valid=lambda self: list(list(PARSE_RESULTS.keys())))
+    def _dom_parse_version_text(self, val: Any) -> bool:
+        return val in list(PARSE_RESULTS.keys())
+
+    @domain(valid=lambda self: list(list(PRECEDENCE_RANK.keys())))
+    def _dom_compare_precedence_v1(self, val: Any) -> bool:
+        return val in list(PRECEDENCE_RANK.keys())
+
+    @domain(valid=lambda self: list(list(PRECEDENCE_RANK.keys())))
+    def _dom_compare_precedence_v2(self, val: Any) -> bool:
+        return val in list(PRECEDENCE_RANK.keys())
+
+    @domain(valid=lambda self: list(list(RANGE_TEXTS)))
+    def _dom_parse_range_text(self, val: Any) -> bool:
+        return val in list(RANGE_TEXTS)
+
+    @domain(valid=lambda self: list(list(SATISFY_VERSIONS)))
+    def _dom_satisfies_version(self, val: Any) -> bool:
+        return val in list(SATISFY_VERSIONS)
+
+    @domain(valid=lambda self: list(list(SATISFY_RANGES)))
+    def _dom_satisfies_range_constraint(self, val: Any) -> bool:
+        return val in list(SATISFY_RANGES)
+
+    @domain(valid=lambda self: list(list(RELEASE_SAMPLES)))
+    def _dom_register_package_release(self, val: Any) -> bool:
+        return val in list(RELEASE_SAMPLES)
+
+    @domain(valid=lambda self: list(list(PACKAGE_NAMES)))
+    def _dom_has_package_name(self, val: Any) -> bool:
+        return val in list(PACKAGE_NAMES)
+
+    @domain(valid=lambda self: list(list(RESOLVE_CASES)))
+    def _dom_resolve_root_dependencies(self, val: Any) -> bool:
+        return val in list(RESOLVE_CASES)
 
 
 proto = SemVerStateMachine()

@@ -902,7 +902,8 @@ class WorkspaceSyncImplTest(LifecycleTestCase):
 
             with open(ws_target, "r", encoding="utf-8") as f:
                 ws_content = f.read()
-            self.assertIn("CHANGE: Initial unit", ws_content)
+            self.assertNotIn("CHANGE:", ws_content)
+            self.assertNotIn("CHANGES:", ws_content)
             self.assertNotIn("CODE_HASH:", ws_content)
             self.assertNotIn("LAST_CLEANED:", ws_content)
             self.assertNotIn("LAST_CHANGED:", ws_content)

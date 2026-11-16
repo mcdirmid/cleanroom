@@ -1087,6 +1087,16 @@ class WorkspaceCheckImplTest(LifecycleTestCase):
         self.assertNotIn("# pragma: no cover", out)
         self.assertNotIn("names starting with '_'", out)
 
+    def test_extract_primary_failure_skips_zero_failed_summary(self) -> None:
+        stdout = (
+            "Summary: 1 passed, 0 failed\n"
+            "[FAIL] Coverage threshold not met: 92.5% < 100.0%\n"
+        )
+        self.assertEqual(
+            check_impl._extract_primary_failure(stdout, ""),
+            "[FAIL] Coverage threshold not met: 92.5% < 100.0%",
+        )
+
     def test_run_check_files_milestone_git_checkpoint(self) -> None:
         import subprocess
 

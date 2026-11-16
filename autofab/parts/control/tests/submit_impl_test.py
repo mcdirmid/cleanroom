@@ -310,7 +310,8 @@ class ControlSubmitImplTest(LifecycleTestCase):
 
             with open(main_file, "r", encoding="utf-8") as f:
                 mf_content = f.read()
-            self.assertIn("CHANGE: Updated x to 2", mf_content)
+            self.assertIn("CHANGES:", mf_content)
+            self.assertIn("Delta: Updated x to 2", mf_content)
             self.assertIn("LAST_CLEANED:", mf_content)
             self.assertIn("LAST_CHANGED:", mf_content)
             self.assertNotIn("CODE_HASH:", mf_content)
@@ -318,7 +319,8 @@ class ControlSubmitImplTest(LifecycleTestCase):
 
             with open(ws_file, "r", encoding="utf-8") as f:
                 wf_content = f.read()
-            self.assertIn("CHANGE: Updated x to 2", wf_content)
+            self.assertNotIn("CHANGES:", wf_content)
+            self.assertNotIn("Delta: Updated x to 2", wf_content)
             self.assertNotIn("CODE_HASH:", wf_content)
             self.assertNotIn("LAST_CLEANED:", wf_content)
             self.assertNotIn("LAST_CHANGED:", wf_content)
@@ -330,6 +332,79 @@ class ControlSubmitImplTest(LifecycleTestCase):
             self.assertEqual(
                 updated_manifest["parts/sample/lib/sample.py"]["code_hash"], new_hash
             )
+
+    def test_submit_target_file_structured_fields_and_validation(self) -> None:
+        import tempfile
+        import json
+        import os
+        from autofab.parts.metadata.lib import metadata_asm, src_metadata
+
+        metadata_asm.__initialize__(registry=self.registry)
+        with (
+            tempfile.TemporaryDirectory() as main_root,
+            tempfile.TemporaryDirectory() as ws_root,
+        ):
+            main_lib = os.path.join(main_root, "staging", "parts", "sample", "lib")
+            ws_lib = os.path.join(ws_root, "staging", "parts", "sample", "lib")
+            os.makedirs(main_lib, exist_ok=True)
+            os.makedirs(ws_lib, exist_ok=True)
+            main_file = os.path.join(main_lib, "sample.py")
+            ws_file = os.path.join(ws_lib, "sample.py")
+            with open(main_file, "w", encoding="utf-8") as f:
+                f.write("def fn():\n    return 1\n")
+            with open(ws_file, "w", encoding="utf-8") as f:
+                f.write("def fn():\n    return 2\n")
+            manifest_dir = os.path.join(ws_root, ".autofab")
+            os.makedirs(manifest_dir, exist_ok=True)
+            with open(os.path.join(manifest_dir, "pull_manifest.json"), "w", encoding="utf-8") as f:
+                json.dump(
+                    {"parts/sample/lib/sample.py": {"code_hash": src_metadata.compute_code_hash("def fn():\n    return 1\n", "sample.py")}},
+                    f,
+                )
+            with open(os.path.join(ws_root, app_info.DEFAULT_ROLE_DESCRIPTOR), "w", encoding="utf-8") as f:
+                json.dump({"role": "lib", "dir_scope": "staging"}, f)
+
+            with enter_phase(agent_session.agent_session, registry=self.registry):
+                # Reject boilerplate
+                bad = self.coordinator.submit_target_file(
+                    target=ws_file,
+                    summary="updated",
+                    repo_root=main_root,
+                    workspace_root=ws_root,
+                    role_name="lib",
+                )
+                self.assertFalse(bad.accepted)
+
+                # Reject slug leak in lib/
+                slug_leak = self.coordinator.submit_target_file(
+                    target=ws_file,
+                    summary="Return 2 for [slug:sample.fn.ret]",
+                    repo_root=main_root,
+                    workspace_root=ws_root,
+                    role_name="lib",
+                )
+                self.assertFalse(slug_leak.accepted)
+
+                # Accept structured fields
+                ok = self.coordinator.submit_target_file(
+                    target=ws_file,
+                    summary="Return 2 instead of 1 in fn",
+                    kind="behavior",
+                    scope="fn",
+                    why="Align return value with updated baseline",
+                    repo_root=main_root,
+                    workspace_root=ws_root,
+                    role_name="lib",
+                )
+                self.assertTrue(ok.accepted, ok.message)
+
+            meta = src_metadata.extract_metadata(main_file)
+            assert meta is not None
+            self.assertEqual(len(meta.changes), 1)
+            self.assertEqual(meta.changes[0].kind, "behavior")
+            self.assertEqual(meta.changes[0].scope, "fn")
+            self.assertEqual(meta.changes[0].why, "Align return value with updated baseline")
+            self.assertEqual(meta.changes[0].lines, "2")
 
     def test_submit_fails_when_init_py_modified(self) -> None:
         import tempfile

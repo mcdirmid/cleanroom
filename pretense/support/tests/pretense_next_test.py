@@ -56,7 +56,7 @@ class LRUStateMachine(StateMachine[LRUState]):
 
     @transition.seeding
     def seed(self, capacity: int, items: dict[str, Any]) -> None:
-        require_arg(capacity, Domain.integers(min_value=1), preferred=[10])
+        require_arg(capacity, Domain.integers(min_value=1))
         require_arg(items, Domain.mapping_of(Domain.text(), Domain.type(object)))
         self.state.capacity = capacity
         self.state.items = OrderedDict(list(items.items())[:capacity])
@@ -87,7 +87,7 @@ class LRUStateMachine(StateMachine[LRUState]):
     @transition(LRUProtocol.get)
     def get(self, key: str, default: Optional[Any] = None) -> Any:
         require_arg(key, Domain.text())
-        require_arg(default, Domain.type(object), preferred=[None])
+        require_arg(default, Domain.type(object))
         assert sut(LRUProtocol).size == len(self.state.items)
         ret = self.inner_get(key, default)
         if key in self.state.items:

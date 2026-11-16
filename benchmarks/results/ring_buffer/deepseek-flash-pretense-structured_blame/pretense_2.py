@@ -239,7 +239,6 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -290,7 +289,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
         self,
         item: Any,
     ) -> Optional[Any]:
-        require_arg(item, Domain.any())
+        require_arg(item, object)
         ret: Optional[Any] = self.inner_push(item)
         if len(self.state.items) >= self.state.capacity:
             evicted = self.state.items.pop(0)

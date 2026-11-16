@@ -284,12 +284,12 @@ class ToolCoverageImplTest(LifecycleTestCase):
             # Lines 5-6 raise ServiceConfigError
             owner_err, disp_err = self.evaluator.classify_span(impl_file, 5, 6)
             self.assertEqual(owner_err, "lib")
-            self.assertIn("LIB-PRAGMA-REQUIRED: raises ServiceConfigError", disp_err)
+            self.assertIn("UNCOVERED-UNCONTRACTED-RAISE: raises ServiceConfigError", disp_err)
 
             # Line 9 returns "inactive" (untested success branch)
             owner_test, disp_test = self.evaluator.classify_span(impl_file, 9, 9)
             self.assertEqual(owner_test, "test")
-            self.assertIn("TEST-COVERAGE-DEFICIT", disp_test)
+            self.assertIn("UNCOVERED-PATH", disp_test)
 
             cov = self.evaluator.evaluate_coverage(
                 target_or_impl=str(impl_file),
@@ -329,7 +329,7 @@ class ToolCoverageImplTest(LifecycleTestCase):
             )
             self.assertEqual(owner_contracted, "test")
             self.assertIn(
-                "TEST-COVERAGE-DEFICIT: missing contracted error assertion for ServiceConfigError",
+                "UNCOVERED-CONTRACTED-ERROR: raises ServiceConfigError",
                 disp_contracted,
             )
 

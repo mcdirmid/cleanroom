@@ -39,6 +39,9 @@ class SubmissionCoordinator(Singleton[AgentSessionTier], Protocol):
         repo_root: Optional[str] = None,
         workspace_root: Optional[str] = None,
         role_name: Optional[str] = None,
+        kind: Optional[str] = None,
+        scope: Optional[str] = None,
+        why: Optional[str] = None,
     ) -> SubmissionOutcome: ...
 
     # Contract: Resolves target specification to canonical or workspace file path and unit name.

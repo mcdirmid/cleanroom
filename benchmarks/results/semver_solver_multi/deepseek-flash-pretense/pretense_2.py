@@ -350,7 +350,6 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -577,7 +576,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         self,
         release: PackageRelease,
     ) -> None:
-        require_arg(release, Domain.sampled_from(SAMPLE_RELEASES))
+        require_arg(release, SAMPLE_RELEASES)
         updated: List[PackageRelease] = []
         placed = False
         for candidate in self.state.packages.get(release.name, ()):
@@ -600,7 +599,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         self,
         name: str,
     ) -> List[PackageRelease]:
-        require_arg(name, Domain.type(str), preferred=["alpha"])
+        require_arg(name, str, preferred=["alpha"])
         if name not in self.state.packages:
             missing: List[PackageRelease] = []
             with raises(PackageNotFoundError):
@@ -616,7 +615,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         self,
         name: str,
     ) -> bool:
-        require_arg(name, Domain.type(str), preferred=["alpha"])
+        require_arg(name, str, preferred=["alpha"])
         fake_ret = name in self.state.packages
         ret: bool = self.inner_has_package(name)
         assert ret == fake_ret
@@ -638,7 +637,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
             root_dependencies,
             cast(
                 "Domain[Collection[PackageDependency]]",
-                Domain.list_of(Domain.sampled_from(SAMPLE_DEPENDENCIES)),
+                list,
             ),
         )
         resolved = solve_search(root_dependencies, self.state.packages)
@@ -995,11 +994,10 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
-    require_arg,
+    domain, require_arg,
     sut,
     sut_state,
     synthesize_fake,
@@ -1218,7 +1216,7 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
         self,
         text: str,
     ) -> Version:
-        require_arg(text, Domain.sampled_from(list(SAMPLE_VERSION_TEXTS)))
+        require_arg(text, self._dom_parse_version_text)
         if not _is_valid_version_text(text):
             invalid: Version = INVALID_VERSION_PLACEHOLDER
             with raises(InvalidVersionError):
@@ -1236,8 +1234,8 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
         v1: Version,
         v2: Version,
     ) -> int:
-        require_arg(v1, Domain.sampled_from(REFERENCE_VERSIONS))
-        require_arg(v2, Domain.sampled_from(REFERENCE_VERSIONS))
+        require_arg(v1, REFERENCE_VERSIONS)
+        require_arg(v2, REFERENCE_VERSIONS)
         fake_ret = _compare_precedence(v1, v2)
         ret: int = self.inner_compare_precedence(v1, v2)
         self.state.comparison_count += 1
@@ -1251,6 +1249,10 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
         self.state.parsed_version_texts.clear()
         self.state.formatted_texts.clear()
         self.state.comparison_count = 0
+
+    @domain(valid=lambda self: list(list(SAMPLE_VERSION_TEXTS)))
+    def _dom_parse_version_text(self, val: Any) -> bool:
+        return val in list(SAMPLE_VERSION_TEXTS)
 
 
 proto = SemverCoreStateMachine()
@@ -1630,11 +1632,10 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
-    require_arg,
+    domain, require_arg,
     sut,
     sut_state,
     synthesize_fake,
@@ -2135,7 +2136,7 @@ class SemverRangeStateMachine(StateMachine[SemverRangeState]):
         self,
         text: str,
     ) -> VersionRange:
-        require_arg(text, Domain.sampled_from(list(SAMPLE_RANGE_TEXTS)))
+        require_arg(text, self._dom_parse_range_text)
         if not _is_valid_range_text(text):
             invalid: VersionRange = INVALID_RANGE_PLACEHOLDER
             with raises(InvalidRangeError):
@@ -2154,9 +2155,9 @@ class SemverRangeStateMachine(StateMachine[SemverRangeState]):
         range_constraint: VersionRange,
         include_prerelease: bool,
     ) -> bool:
-        require_arg(version, Domain.sampled_from(CANDIDATE_VERSIONS))
-        require_arg(range_constraint, Domain.sampled_from(RANGE_SAMPLES))
-        require_arg(include_prerelease, Domain.boolean())
+        require_arg(version, CANDIDATE_VERSIONS)
+        require_arg(range_constraint, RANGE_SAMPLES)
+        require_arg(include_prerelease, bool)
         fake_ret = range_satisfies(version, range_constraint.raw_text, include_prerelease)
         ret: bool = self.inner_satisfies(version, range_constraint, include_prerelease)
         self.state.satisfaction_checks += 1
@@ -2169,6 +2170,10 @@ class SemverRangeStateMachine(StateMachine[SemverRangeState]):
         self.state.known_range = KNOWN_RANGE
         self.state.parsed_range_texts.clear()
         self.state.satisfaction_checks = 0
+
+    @domain(valid=lambda self: list(list(SAMPLE_RANGE_TEXTS)))
+    def _dom_parse_range_text(self, val: Any) -> bool:
+        return val in list(SAMPLE_RANGE_TEXTS)
 
 
 proto = SemverRangeStateMachine()

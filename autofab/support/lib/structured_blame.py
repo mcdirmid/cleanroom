@@ -99,9 +99,15 @@ TEST_LEAK_PATTERNS: Sequence[re.Pattern[str]] = [
     re.compile(r"[a-zA-Z0-9_]+_pretense\.py:\d+"),
 ]
 
-# Regex for structured blame parsing from single string (supports both [viol:...] and Violation: <phrase>, optional Lines:, and optional Witness:)
+# Regex for structured blame prefix (slug + violation + facet tail)
 _RE_STRUCTURED_BLAME = re.compile(
-    r"^(\[slug:[^\]]+\])\s+(?:(\[viol:[^\]]+\])|Violation:\s+([^\n\r]+?))\s+Facet:\s+([^\n\r]+?)(?:\s+(?:\[lines:([^\]]+)\]|Lines:\s*([0-9]+(?:-[0-9]+)?)))?(?:\s+(?:\[witness:([^\]]+)\]|Witness:\s+([^\n\r]+)))?$",
+    r"^(\[slug:[^\]]+\])\s+(?:(\[viol:[^\]]+\])|Violation:\s+([^\n\r]+?))\s+Facet:\s+([^\n\r]+)$",
+    re.IGNORECASE,
+)
+
+# Order-independent optional field extractor for Lines, TargetLines, Witness, Detail (bracketed or unbracketed)
+_RE_OPTIONAL_FIELD = re.compile(
+    r"(?:^|\s)(?:\[(lines|targetlines|witness|detail):\s*([^\]]+)\]|(Lines|TargetLines|Witness|Detail):\s*)",
     re.IGNORECASE,
 )
 
@@ -115,6 +121,8 @@ class StructuredBlame:
     facet: str
     witness: Optional[str] = None
     lines: Optional[str] = None
+    target_lines: Optional[str] = None
+    detail: Optional[str] = None
 
     def to_critique_string(self) -> str:
         """Formats into canonical critique string representation."""
@@ -126,8 +134,12 @@ class StructuredBlame:
         base = f"{self.slug} {viol_str} Facet: {self.facet}"
         if self.lines:
             base += f" Lines: {self.lines}"
+        if self.target_lines:
+            base += f" TargetLines: {self.target_lines}"
         if self.witness:
             base += f" Witness: {self.witness}"
+        if self.detail:
+            base += f" Detail: {self.detail}"
         return base
 
 
@@ -143,6 +155,8 @@ def parse_structured_blame(
     facet: Optional[str] = None,
     witness: Optional[str] = None,
     lines: Optional[str] = None,
+    target_lines: Optional[str] = None,
+    detail: Optional[str] = None,
 ) -> Tuple[Optional[StructuredBlame], List[str]]:
     """Parses a structured blame critique from either explicit CLI flags or a single formatted string.
 
@@ -180,10 +194,17 @@ def parse_structured_blame(
         norm_witness = witness.strip() if witness else None
         norm_lines = lines.strip() if lines else None
         if norm_lines:
-            if norm_lines.startswith("[lines:") and norm_lines.endswith("]"):
+            if norm_lines.lower().startswith("[lines:") and norm_lines.endswith("]"):
                 norm_lines = norm_lines[7:-1].strip()
             elif norm_lines.lower().startswith("lines:"):
                 norm_lines = norm_lines[6:].strip()
+        norm_target_lines = target_lines.strip() if target_lines else None
+        if norm_target_lines:
+            if norm_target_lines.lower().startswith("[targetlines:") and norm_target_lines.endswith("]"):
+                norm_target_lines = norm_target_lines[13:-1].strip()
+            elif norm_target_lines.lower().startswith("targetlines:"):
+                norm_target_lines = norm_target_lines[12:].strip()
+        norm_detail = detail.strip() if detail else None
 
         return (
             StructuredBlame(
@@ -192,6 +213,8 @@ def parse_structured_blame(
                 facet=norm_facet,
                 witness=norm_witness,
                 lines=norm_lines,
+                target_lines=norm_target_lines,
+                detail=norm_detail,
             ),
             [],
         )
@@ -209,6 +232,8 @@ def parse_structured_blame(
             p.add_argument("--facet", dest="facet")
             p.add_argument("--witness", dest="witness")
             p.add_argument("--lines", dest="lines")
+            p.add_argument("--target-lines", dest="target_lines")
+            p.add_argument("--detail", dest="detail")
             tokens = shlex.split(clean_text)
             parsed_args, _ = p.parse_known_args(tokens)
             if parsed_args.slug and (parsed_args.viol or parsed_args.facet):
@@ -219,6 +244,8 @@ def parse_structured_blame(
                     facet=parsed_args.facet,
                     witness=parsed_args.witness,
                     lines=parsed_args.lines,
+                    target_lines=parsed_args.target_lines,
+                    detail=parsed_args.detail,
                 )
         except Exception:
             pass
@@ -227,8 +254,8 @@ def parse_structured_blame(
     if not m:
         errors.append(
             "Critique does not conform to the structured blame format: "
-            "'[slug:<spec.slug>] [viol:<prefix>.<violation>] Facet: <noun phrase> [Lines: <range>] [Witness: <values>]' or "
-            "'[slug:<spec.slug>] Violation: <noun phrase> Facet: <noun phrase> [Lines: <range>] [Witness: <values>]'. "
+            "'[slug:<spec.slug>] [viol:<prefix>.<violation>] Facet: <noun phrase> [Lines: <range>] [TargetLines: <range>] [Witness: <values>] [Detail: <sentence>]' or "
+            "'[slug:<spec.slug>] Violation: <noun phrase> Facet: <noun phrase> [Lines: <range>] [TargetLines: <range>] [Witness: <values>] [Detail: <sentence>]'. "
             "Example: '[slug:semver.range.whitespace] Violation: postcondition divergence Facet: embedded operator whitespace Lines: 84 Witness: input='>= 1.0.0''"
         )
         return None, errors
@@ -237,17 +264,36 @@ def parse_structured_blame(
     parsed_viol = (
         m.group(2).strip() if m.group(2) else f"Violation: {m.group(3).strip()}"
     )
-    parsed_facet = m.group(4).strip()
-    parsed_lines = (m.group(5) or m.group(6) or "").strip() or None
-    parsed_witness = (m.group(7) or m.group(8) or "").strip() or None
+    tail = m.group(4).strip()
+
+    field_matches = list(_RE_OPTIONAL_FIELD.finditer(tail))
+    parsed_facet = tail[: field_matches[0].start()].strip() if field_matches else tail
+    extracted: Dict[str, Optional[str]] = {
+        "lines": None,
+        "targetlines": None,
+        "witness": None,
+        "detail": None,
+    }
+    for idx, fm in enumerate(field_matches):
+        if fm.group(1):
+            key = fm.group(1).lower()
+            val = fm.group(2).strip()
+        else:
+            key = fm.group(3).lower()
+            end_pos = field_matches[idx + 1].start() if idx + 1 < len(field_matches) else len(tail)
+            val = tail[fm.end() : end_pos].strip()
+        if val:
+            extracted[key] = val
 
     return (
         StructuredBlame(
             slug=parsed_slug,
             violation=parsed_viol,
             facet=parsed_facet,
-            lines=parsed_lines,
-            witness=parsed_witness,
+            lines=extracted["lines"],
+            target_lines=extracted["targetlines"],
+            witness=extracted["witness"],
+            detail=extracted["detail"],
         ),
         [],
     )
@@ -351,6 +397,28 @@ def validate_structured_blame(
                         f"Line range '{blame.lines}' exceeds length of target file '{culprit_file}' "
                         f"({culprit_lines} lines)."
                     )
+
+    if blame.target_lines:
+        clean_tlines = blame.target_lines.strip()
+        if not re.match(r"^\d+(?:-\d+)?$", clean_tlines):
+            errors.append(
+                f"Invalid TargetLines format '{blame.target_lines}'. Must be '<line>' or '<start>-<end>'."
+            )
+        else:
+            parts = clean_tlines.split("-")
+            start_tl = int(parts[0])
+            end_tl = int(parts[1]) if len(parts) > 1 else start_tl
+            if start_tl <= 0 or end_tl < start_tl:
+                errors.append(
+                    f"Invalid TargetLines range '{blame.target_lines}' (must be positive and start <= end)."
+                )
+
+    if blame.detail:
+        clean_detail = blame.detail.strip()
+        if len(clean_detail) > 240:
+            errors.append(
+                f"Detail exceeds maximum length of 240 characters ({len(clean_detail)} chars provided)."
+            )
 
     # 5. Validate witness constraints (literal key-value pairs)
     if blame.witness:
@@ -508,7 +576,7 @@ def _discover_unit_slugs(
                 if any(
                     part in str(bench_p)
                     for part in norm_culprit.parts
-                    if part not in ("lib", "tests", "pretense")
+                    if part not in ("lib", "tests", "pretense", "pretense_intf", "pretense_impl")
                 ):
                     cand_low_dirs.append(bench_p.parent)
 

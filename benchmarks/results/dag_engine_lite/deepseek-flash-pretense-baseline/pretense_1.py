@@ -664,11 +664,10 @@ from typing import Any, Callable, Collection, Dict, List, Mapping, Optional, Seq
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
-    require_arg,
+    domain, require_arg,
     sut,
     sut_state,
     synthesize_fake,
@@ -883,14 +882,14 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         retries: int,
     ) -> None:
         require(self.state.initialized)
-        require_arg(node_id, Domain.type(str))
-        require_arg(action, Domain.any())
+        require_arg(node_id, str)
+        require_arg(action, object)
         require_arg(
             dependencies,
-            cast("Domain[Optional[Collection[str]]]", Domain.optional(Domain.list_of(Domain.type(str), max_size=3))),
+            cast("Domain[Optional[Collection[str]]]", Optional[list]),
         )
-        require_arg(priority, Domain.type(int))
-        require_arg(retries, Domain.sampled_from([0, 1, 2, 3]))
+        require_arg(priority, int)
+        require_arg(retries, self._dom_add_node_retries)
         frozen_dependencies = frozenset(dependencies) if dependencies is not None else frozenset()
         self.state.nodes[node_id] = NodeDefinition(
             node_id=node_id,
@@ -914,8 +913,8 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         downstream_id: str,
     ) -> None:
         require(self.state.initialized)
-        require_arg(upstream_id, Domain.type(str), preferred=sorted(self.state.nodes)[:3])
-        require_arg(downstream_id, Domain.type(str), preferred=sorted(self.state.nodes)[:3])
+        require_arg(upstream_id, str)
+        require_arg(downstream_id, str)
         if upstream_id not in self.state.nodes or downstream_id not in self.state.nodes:
             with raises(NodeNotFoundError):
                 self.inner_add_edge(upstream_id, downstream_id)
@@ -931,7 +930,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         node_id: str,
     ) -> None:
         require(self.state.initialized)
-        require_arg(node_id, Domain.type(str), preferred=sorted(self.state.nodes)[:3])
+        require_arg(node_id, str)
         if node_id not in self.state.nodes:
             with raises(NodeNotFoundError):
                 self.inner_remove_node(node_id)
@@ -952,7 +951,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         node_id: str,
     ) -> bool:
         require(self.state.initialized)
-        require_arg(node_id, Domain.type(str), preferred=sorted(self.state.nodes)[:3])
+        require_arg(node_id, str)
         ret: bool = self.inner_has_node(node_id)
         assert ret == (node_id in self.state.nodes)
         return ret
@@ -963,7 +962,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         node_id: str,
     ) -> Any:
         require(self.state.initialized)
-        require_arg(node_id, Domain.type(str), preferred=sorted(self.state.nodes)[:3])
+        require_arg(node_id, str)
         if node_id not in self.state.nodes:
             with raises(NodeNotFoundError):
                 self.inner_get_node(node_id)
@@ -978,7 +977,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         node_id: str,
     ) -> Any:
         require(self.state.initialized)
-        require_arg(node_id, Domain.type(str), preferred=sorted(self.state.nodes)[:3])
+        require_arg(node_id, str)
         if node_id not in self.state.nodes:
             with raises(NodeNotFoundError):
                 self.inner_get_dependencies(node_id)
@@ -993,7 +992,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         node_id: str,
     ) -> Any:
         require(self.state.initialized)
-        require_arg(node_id, Domain.type(str), preferred=sorted(self.state.nodes)[:3])
+        require_arg(node_id, str)
         if node_id not in self.state.nodes:
             with raises(NodeNotFoundError):
                 self.inner_get_dependents(node_id)
@@ -1075,7 +1074,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
             estimated_durations,
             cast(
                 "Domain[Optional[Mapping[str, float]]]",
-                Domain.optional(Domain.mapping_of(Domain.type(str), Domain.sampled_from([1.0, 2.0, 3.0]))),
+                Optional[dict],
             ),
         )
         if model_first_missing(self.state) is not None:
@@ -1113,7 +1112,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         node_id: str,
     ) -> None:
         require(self.state.initialized)
-        require_arg(node_id, Domain.in_set(self.state.nodes), preferred=sorted(self.state.nodes)[:3])
+        require_arg(node_id, self.state.nodes)
         model_sync(self.state)
         self.state.states[node_id] = NodeState.RUNNING
         ret = self.inner_mark_running(node_id)
@@ -1125,7 +1124,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         node_id: str,
     ) -> None:
         require(self.state.initialized)
-        require_arg(node_id, Domain.in_set(self.state.nodes), preferred=sorted(self.state.nodes)[:3])
+        require_arg(node_id, self.state.nodes)
         model_sync(self.state)
         self.state.states[node_id] = NodeState.SUCCEEDED
         for dependent in sorted(self.state.downstream.get(node_id, set())):
@@ -1144,8 +1143,8 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         failure_policy: FailurePolicy,
     ) -> None:
         require(self.state.initialized)
-        require_arg(node_id, Domain.in_set(self.state.nodes), preferred=sorted(self.state.nodes)[:3])
-        require_arg(failure_policy, Domain.sampled_from(list(FailurePolicy)))
+        require_arg(node_id, self.state.nodes)
+        require_arg(failure_policy, self._dom_mark_failed_failure_policy)
         model_sync(self.state)
         self.state.states[node_id] = NodeState.FAILED
         if failure_policy is FailurePolicy.FAIL_FAST:
@@ -1183,7 +1182,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         node_id: str,
     ) -> Any:
         require(self.state.initialized)
-        require_arg(node_id, Domain.in_set(self.state.nodes), preferred=sorted(self.state.nodes)[:3])
+        require_arg(node_id, self.state.nodes)
         model_sync(self.state)
         ret: NodeState = self.inner_get_state(node_id)
         assert isinstance(ret, NodeState)
@@ -1209,7 +1208,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         failure_policy: FailurePolicy,
     ) -> Any:
         require(self.state.initialized)
-        require_arg(failure_policy, Domain.sampled_from(list(FailurePolicy)))
+        require_arg(failure_policy, self._dom_run_failure_policy)
         require(model_first_missing(self.state) is None)
         require(not model_cycle(self.state))
         model_sync(self.state)
@@ -1224,6 +1223,18 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
     def seed_initial(self) -> None:
         """Seed state machine state for fake initialization."""
         self.state.initialized = True
+
+    @domain(valid=lambda self: list([0, 1, 2, 3]))
+    def _dom_add_node_retries(self, val: Any) -> bool:
+        return val in [0, 1, 2, 3]
+
+    @domain(valid=lambda self: list(list(FailurePolicy)))
+    def _dom_mark_failed_failure_policy(self, val: Any) -> bool:
+        return val in list(FailurePolicy)
+
+    @domain(valid=lambda self: list(list(FailurePolicy)))
+    def _dom_run_failure_policy(self, val: Any) -> bool:
+        return val in list(FailurePolicy)
 
 
 proto = DagEngineLiteStateMachine()

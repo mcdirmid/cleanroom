@@ -194,11 +194,10 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
-    require_arg,
+    domain, require_arg,
     sut,
     sut_state,
     synthesize_fake,
@@ -236,7 +235,7 @@ class InterInterfaceStateMachine(StateMachine[InterInterfaceState]):
         amount: int,
     ) -> None:
         require(self.state.initialized)
-        require_arg(amount, Domain.range(1, 1000), preferred=[1, 10, 100])
+        require_arg(amount, (self._dom_allocate_amount))
         ret = self.inner_allocate(amount)
         self.state.allocated = self.state.allocated + amount
         assert self.state.allocated >= amount
@@ -251,8 +250,7 @@ class InterInterfaceStateMachine(StateMachine[InterInterfaceState]):
         require(self.state.allocated > 0)
         require_arg(
             amount,
-            Domain.range(1, self.state.allocated + 1),
-            preferred=[1, 5, self.state.allocated],
+            (self._dom_release_amount),
         )
         ret = self.inner_release(amount)
         self.state.allocated = self.state.allocated - amount
@@ -269,6 +267,14 @@ class InterInterfaceStateMachine(StateMachine[InterInterfaceState]):
     def seed_initial(self) -> None:
         """Seed state machine state for fake initialization."""
         self.state.initialized = True
+
+    @domain()
+    def _dom_allocate_amount(self, x: Any) -> bool:
+        return bool(x >= 1 and x <= 1000)
+
+    @domain()
+    def _dom_release_amount(self, x: Any) -> bool:
+        return bool(x >= 1 and x <= self.state.allocated + 1)
 
 
 proto = InterInterfaceStateMachine()
@@ -516,11 +522,10 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
-    require_arg,
+    domain, require_arg,
     sut,
     sut_state,
     synthesize_fake,
@@ -563,7 +568,7 @@ class VaultStateMachine(StateMachine[VaultState]):
         amount: int,
     ) -> None:
         require(self.state.initialized)
-        require_arg(amount, Domain.range(1, 1000), preferred=[1, 10, 100])
+        require_arg(amount, (self._dom_deposit_amount))
         ret: Any = None
         if not self.state.is_active:
             with raises(VaultInactiveException):
@@ -583,8 +588,7 @@ class VaultStateMachine(StateMachine[VaultState]):
         require(self.state.balance > 0)
         require_arg(
             amount,
-            Domain.range(1, self.state.balance + 1),
-            preferred=[1, 5, self.state.balance],
+            (self._dom_withdraw_amount),
         )
         ret: Any = None
         if not self.state.is_active:
@@ -602,7 +606,7 @@ class VaultStateMachine(StateMachine[VaultState]):
         active: bool,
     ) -> None:
         require(self.state.initialized)
-        require_arg(active, Domain.boolean())
+        require_arg(active, bool)
         ret = self.inner_set_active(active)
         self.state.is_active = active
         return ret
@@ -623,6 +627,14 @@ class VaultStateMachine(StateMachine[VaultState]):
     def seed_initial(self) -> None:
         """Seed state machine state for fake initialization."""
         self.state.initialized = True
+
+    @domain()
+    def _dom_deposit_amount(self, x: Any) -> bool:
+        return bool(x >= 1 and x <= 1000)
+
+    @domain()
+    def _dom_withdraw_amount(self, x: Any) -> bool:
+        return bool(x >= 1 and x <= self.state.balance + 1)
 
 
 proto = VaultStateMachine()

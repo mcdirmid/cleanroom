@@ -18,9 +18,9 @@ Grounding gaps covered include:
 
 - Metadata placement and boundary extraction: Locates metadata comment blocks positioned at the end of files (or anywhere within the file for backward compatibility), placing newly written blocks at the bottom of files after the code body separated by a blank line, and isolating metadata content from surrounding source code.
 
-- In-band metadata grammar parsing: Parses structured metadata fields from comment content, extracting UTC ISO 8601 timestamps for last cleaned and last changed attributes, extracting single-line change summaries, code hash signatures, dirty status flags, role audit timestamps, and parsing conditional unacted feedback lists carrying timestamp, source node, and diagnostic explanation attributes.
+- In-band metadata grammar parsing: Parses structured metadata fields from comment content, extracting UTC ISO 8601 timestamps for last cleaned and last changed attributes, parsing chronological multi-entry `CHANGES:` lists carrying timestamp, kind, line spans, optional scope, delta, and optional rationale alongside legacy single-line `CHANGE:` summaries, code hash signatures, dirty status flags, role audit timestamps, and parsing conditional unacted feedback lists carrying timestamp, source node, and diagnostic explanation attributes.
 
-- In-place metadata block rewriting: Rewrites source files in-place with updated timestamps, revised change summaries, cleared last cleaned timestamps, appended unacted feedback entries, role audit stamps, or stripped feedback sections, positioning the rewritten metadata block at the bottom of the file while preserving exact source code content and line numbering.
+- In-place metadata block rewriting: Rewrites source files in-place with updated timestamps, appended or filtered `CHANGES:` entries, legacy change summaries, cleared last cleaned timestamps, appended unacted feedback entries, role audit stamps, or stripped feedback sections, positioning the rewritten metadata block at the bottom of the file while preserving exact source code content and line numbering.
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z

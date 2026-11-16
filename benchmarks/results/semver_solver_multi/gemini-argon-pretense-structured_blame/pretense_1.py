@@ -334,12 +334,11 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     Env,
     StateMachine,
     raises,
     require,
-    require_arg,
+    domain, require_arg,
     require_env,
     sut,
     sut_state,
@@ -570,9 +569,9 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         require(bool(self.state.unregistered_releases))
         require_arg(
             release,
-            Domain.type(PackageRelease),
+            PackageRelease,
             preferred=list(self.state.unregistered_releases),
-            fuzz_domain=Domain.sampled_from(self.state.unregistered_releases),
+            fuzz_domain=self.state.unregistered_releases,
         )
         ret = self.inner_register_package(release)
         current = list(self.state.releases.get(release.name, []))
@@ -596,7 +595,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         require(bool(self.state.releases))
         require_arg(
             name,
-            Domain.in_set(set(self.state.releases.keys())),
+            self._dom_get_releases_name,
             preferred=list(SAMPLE_PACKAGE_NAMES),
         )
         ret = self.inner_get_releases(name)
@@ -613,9 +612,9 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         require(self.state.initialized)
         require_arg(
             name,
-            Domain.type(str),
+            str,
             preferred=list(SAMPLE_PACKAGE_NAMES),
-            fuzz_domain=Domain.sampled_from(SAMPLE_PACKAGE_NAMES),
+            fuzz_domain=SAMPLE_PACKAGE_NAMES,
         )
         ret = self.inner_has_package(name)
         expected = name in self.state.releases
@@ -647,9 +646,9 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         require(bool(self.state.satisfiable_queries))
         require_arg(
             root_dependencies,
-            Domain.collection(Domain.type(PackageDependency)),
+            list,
             preferred=list(self.state.satisfiable_queries),
-            fuzz_domain=Domain.sampled_from(self.state.satisfiable_queries),
+            fuzz_domain=self.state.satisfiable_queries,
         )
         ret = self.inner_resolve(root_dependencies)
         expected = solve_dependencies_model(root_dependencies, self.state.releases)
@@ -670,6 +669,10 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
     def seed_initial(self) -> None:
         """Seed initial state machine state for fake initialization."""
         self.state.initialized = True
+
+    @domain(valid=lambda self: list(set(self.state.releases.keys())))
+    def _dom_get_releases_name(self, val: Any) -> bool:
+        return val in set(self.state.releases.keys())
 
 
 proto = DependencySolverStateMachine()
@@ -950,7 +953,6 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     Env,
     StateMachine,
     raises,
@@ -1090,9 +1092,9 @@ class VersionEngineStateMachine(StateMachine[VersionEngineState]):
         require(self.state.initialized)
         require_arg(
             text,
-            Domain.type(str),
+            str,
             preferred=list(SAMPLE_VERSION_STRINGS),
-            fuzz_domain=Domain.sampled_from(SAMPLE_VERSION_STRINGS),
+            fuzz_domain=SAMPLE_VERSION_STRINGS,
         )
         ret = self.inner_parse_version(text)
         expected = parse_semver_str(text)
@@ -1112,15 +1114,15 @@ class VersionEngineStateMachine(StateMachine[VersionEngineState]):
         require(self.state.initialized)
         require_arg(
             v1,
-            Domain.type(Version),
+            Version,
             preferred=list(SAMPLE_VERSIONS),
-            fuzz_domain=Domain.sampled_from(SAMPLE_VERSIONS),
+            fuzz_domain=SAMPLE_VERSIONS,
         )
         require_arg(
             v2,
-            Domain.type(Version),
+            Version,
             preferred=list(SAMPLE_VERSIONS),
-            fuzz_domain=Domain.sampled_from(SAMPLE_VERSIONS),
+            fuzz_domain=SAMPLE_VERSIONS,
         )
         ret = self.inner_compare_precedence(v1, v2)
         expected = compare_semver_precedence(v1, v2)
@@ -1602,7 +1604,6 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     Env,
     StateMachine,
     raises,
@@ -1794,9 +1795,9 @@ class RangeEngineStateMachine(StateMachine[RangeEngineState]):
         require(self.state.initialized)
         require_arg(
             text,
-            Domain.type(str),
+            str,
             preferred=list(SAMPLE_RANGE_STRINGS),
-            fuzz_domain=Domain.sampled_from(SAMPLE_RANGE_STRINGS),
+            fuzz_domain=SAMPLE_RANGE_STRINGS,
         )
         ret = self.inner_parse_range(text)
         self.state.parsed_ranges[text] = ret
@@ -1818,21 +1819,21 @@ class RangeEngineStateMachine(StateMachine[RangeEngineState]):
         require(self.state.initialized)
         require_arg(
             version,
-            Domain.type(Version),
+            Version,
             preferred=list(SAMPLE_VERSIONS),
-            fuzz_domain=Domain.sampled_from(SAMPLE_VERSIONS),
+            fuzz_domain=SAMPLE_VERSIONS,
         )
         require_arg(
             range_constraint,
-            Domain.type(VersionRange),
+            VersionRange,
             preferred=list(SAMPLE_VERSION_RANGES),
-            fuzz_domain=Domain.sampled_from(SAMPLE_VERSION_RANGES),
+            fuzz_domain=SAMPLE_VERSION_RANGES,
         )
         require_arg(
             include_prerelease,
-            Domain.type(bool),
+            bool,
             preferred=[False, True],
-            fuzz_domain=Domain.sampled_from([False, True]),
+            fuzz_domain=[False, True],
         )
         ret = self.inner_satisfies(version, range_constraint, include_prerelease)
         expected = eval_range_satisfies(version, range_constraint, include_prerelease)

@@ -1009,7 +1009,6 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -1381,7 +1380,7 @@ def _model_resolve(
 # Operational branches and contracted outcomes live naturally inside the single
 # transition body (multi-transition splitting is prohibited).
 # require_arg defines the caller precondition contract (checked at runtime on real
-# calls); use Domain.type(T) for open domains and preferred=[...] to bias fuzzing.
+# calls); use T for open domains and preferred=[...] to bias fuzzing.
 
 
 @dataclass
@@ -1412,7 +1411,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         text: str,
     ) -> Version:
         require(self.state.initialized)
-        require_arg(text, Domain.type(str), preferred=["1.0.0", "2.3.4"])
+        require_arg(text, str)
         parsed = _model_parse_version(text)
         if parsed is None:
             parsed = Version(0, 0, 0)
@@ -1427,8 +1426,8 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         v2: Version,
     ) -> int:
         require(self.state.initialized)
-        require_arg(v1, Domain.type(Version), preferred=[Version(1, 0, 0)])
-        require_arg(v2, Domain.type(Version), preferred=[Version(2, 0, 0)])
+        require_arg(v1, Version)
+        require_arg(v2, Version)
         ordering = _model_compare_versions(v1, v2)
         ret = self.inner_compare_precedence(v1, v2)
         return ret
@@ -1439,7 +1438,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         text: str,
     ) -> VersionRange:
         require(self.state.initialized)
-        require_arg(text, Domain.type(str), preferred=[">=1.0.0", "^1.2.0"])
+        require_arg(text, str)
         trimmed = text.strip()
         parsed = VersionRange(trimmed)
         ret = self.inner_parse_range(text)
@@ -1454,13 +1453,12 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         include_prerelease: bool,
     ) -> bool:
         require(self.state.initialized)
-        require_arg(version, Domain.type(Version), preferred=[Version(1, 0, 0)])
+        require_arg(version, Version)
         require_arg(
             range_constraint,
-            Domain.type(VersionRange),
-            preferred=[VersionRange(">=1.0.0")],
+            VersionRange,
         )
-        require_arg(include_prerelease, Domain.boolean(), preferred=[False])
+        require_arg(include_prerelease, bool)
         matched = _model_satisfies(version, range_constraint, include_prerelease)
         ret = self.inner_satisfies(version, range_constraint, include_prerelease)
         self.state.prerelease_flags.append(include_prerelease)
@@ -1474,8 +1472,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         require(self.state.initialized)
         require_arg(
             release,
-            Domain.type(PackageRelease),
-            preferred=[PackageRelease("alpha", Version(1, 0, 0), ())],
+            PackageRelease,
         )
         bucket = self.state.packages.setdefault(release.name, [])
         bucket.append(release)
@@ -1489,7 +1486,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         name: str,
     ) -> List[PackageRelease]:
         require(self.state.initialized)
-        require_arg(name, Domain.type(str), preferred=["alpha"])
+        require_arg(name, str)
         releases = _model_sorted_releases(self.state.packages.get(name, []))
         ret = self.inner_get_releases(name)
         return ret
@@ -1500,7 +1497,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         name: str,
     ) -> bool:
         require(self.state.initialized)
-        require_arg(name, Domain.type(str), preferred=["alpha"])
+        require_arg(name, str)
         present = name in self.state.packages
         ret = self.inner_has_package(name)
         return ret
@@ -1522,8 +1519,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         require(self.state.initialized)
         require_arg(
             root_dependencies,
-            Domain.type(Sequence[PackageDependency]),
-            preferred=[[PackageDependency("alpha", VersionRange(">=1.0.0"))]],
+            Sequence[PackageDependency],
         )
         outcome = _model_resolve(self.state.packages, root_dependencies)
         ret = self.inner_resolve(root_dependencies)

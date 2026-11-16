@@ -169,7 +169,6 @@ from typing import Any, Optional
 import unittest
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -234,8 +233,8 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
     def submit(self, task_id: str, payload: str) -> None:
         """Appends a task to the queue tail when the queue is available."""
         require_env(self.state.available, task_queue.QueueUnavailableException, task_id, payload)
-        require_arg(task_id, Domain.type(str), preferred=["task_1", "task_2"])
-        require_arg(payload, Domain.type(str), preferred=["payload_1", "payload_2"])
+        require_arg(task_id, str)
+        require_arg(payload, str)
         self.inner_submit(task_id, payload)
         self.state.pending.append((task_id, payload))
         self.state.pending_count += 1
@@ -262,8 +261,8 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
     def complete(self, task_id: str, outcome: str) -> None:
         """Records the completion outcome for a task identifier."""
         require_env(self.state.available, task_queue.QueueUnavailableException, task_id, outcome)
-        require_arg(task_id, Domain.type(str), preferred=["task_1", "task_2"])
-        require_arg(outcome, Domain.type(str), preferred=["done_1", "done_2"])
+        require_arg(task_id, str)
+        require_arg(outcome, str)
         self.inner_complete(task_id, outcome)
         self.state.outcomes[task_id] = outcome
         assert self.state.outcomes.get(task_id) == outcome
@@ -274,7 +273,7 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
     @transition(task_queue.TaskQueue.get_outcome)
     def get_outcome(self, task_id: str) -> Optional[str]:
         """Retrieves the recorded outcome for a task identifier, if any."""
-        require_arg(task_id, Domain.type(str), preferred=["task_1", "task_2"])
+        require_arg(task_id, str)
         ret = self.inner_get_outcome(task_id)
         assert ret == self.state.outcomes.get(task_id)
         return ret
@@ -298,7 +297,7 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
     @transition(task_queue.TaskQueue.set_available)
     def set_available(self, available: bool) -> None:
         """Toggles the operational availability of the queue."""
-        require_arg(available, Domain.type(bool), preferred=[True, False])
+        require_arg(available, bool)
         self.inner_set_available(available)
         self.state.available = available
         assert self.state.available == available
@@ -506,7 +505,6 @@ from typing import Any, Optional
 import unittest
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -566,8 +564,8 @@ class TaskWorkerStateMachine(StateMachine[TaskWorkerState]):
             task_id,
             payload,
         )
-        require_arg(task_id, Domain.type(str), preferred=["task_1", "task_2"])
-        require_arg(payload, Domain.type(str), preferred=["payload_1", "payload_2"])
+        require_arg(task_id, str)
+        require_arg(payload, str)
         ret = self.inner_execute(task_id, payload)
         outcome = f"PROCESSED:{payload.upper()}"
         assert ret == outcome
@@ -599,8 +597,8 @@ class TaskWorkerStateMachine(StateMachine[TaskWorkerState]):
     @transition(task_worker.TaskWorker.set_failing_task)
     def set_failing_task(self, task_id: str, failing: bool) -> None:
         """Configures whether the designated task fails during execution."""
-        require_arg(task_id, Domain.type(str), preferred=["task_1", "task_2"])
-        require_arg(failing, Domain.type(bool), preferred=[True, False])
+        require_arg(task_id, str)
+        require_arg(failing, bool)
         self.inner_set_failing_task(task_id, failing)
         if failing:
             self.state.failing.add(task_id)

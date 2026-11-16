@@ -285,7 +285,6 @@ from typing import Any, Collection, Dict, List, Optional, Set, Tuple
 import unittest
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -328,7 +327,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
 
     @transition(PackageRepository.register_package)
     def register_package(self, release: PackageRelease) -> None:
-        require_arg(release, Domain.type(PackageRelease))
+        require_arg(release, PackageRelease)
         # Postcondition: the registered release becomes retrievable by its package name.
         ret = self.inner_register_package(release)
         self.state.packages.setdefault(release.name, []).append(release)
@@ -338,7 +337,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
     @transition(PackageRepository.get_releases)
     def get_releases(self, name: str) -> List[PackageRelease]:
         require(self.state.packages)
-        require_arg(name, Domain.type(str))
+        require_arg(name, str)
         # Postcondition: releases are returned in descending precedence order for a known package.
         ret = self.inner_get_releases(name)
         assert name in self.state.packages
@@ -346,7 +345,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
 
     @transition(PackageRepository.has_package)
     def has_package(self, name: str) -> bool:
-        require_arg(name, Domain.type(str))
+        require_arg(name, str)
         # Postcondition: membership reflects whether the package is registered.
         ret = self.inner_has_package(name)
         assert ret == (name in self.state.packages)
@@ -365,7 +364,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
     ) -> ResolutionOutcome:
         require_arg(
             root_dependencies,
-            Domain.type(Collection[PackageDependency]),
+            Collection[PackageDependency],
         )
         # Postcondition: a successful resolution yields selected versions and derivation steps.
         ret: Any = self.inner_resolve(root_dependencies)
@@ -584,7 +583,6 @@ from typing import Any, List, Optional, Tuple
 import unittest
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -639,8 +637,7 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
     def parse_version(self, text: str) -> Version:
         require_arg(
             text,
-            Domain.type(str),
-            preferred=["1.0.0", "2.0.0-alpha.1+build.5"],
+            str,
         )
         # Postcondition: parsing a grammatically valid version yields an immutable Version record.
         ret: Any = self.inner_parse_version(text)
@@ -650,8 +647,8 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
 
     @transition(VersionEngine.compare_precedence)
     def compare_precedence(self, v1: Version, v2: Version) -> int:
-        require_arg(v1, Domain.type(Version))
-        require_arg(v2, Domain.type(Version))
+        require_arg(v1, Version)
+        require_arg(v2, Version)
         # Postcondition: precedence comparison yields a signed ordering integer.
         ret = self.inner_compare_precedence(v1, v2)
         self.state.comparisons.append((v1, v2, ret))
@@ -943,7 +940,6 @@ from typing import Any, List, Optional, Tuple
 import unittest
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -985,8 +981,7 @@ class SemverRangeStateMachine(StateMachine[SemverRangeState]):
     def parse_range(self, text: str) -> VersionRange:
         require_arg(
             text,
-            Domain.type(str),
-            preferred=["1.0.0", "^1.2.3", "~1.2.3", ">=1.0.0 <2.0.0"],
+            str,
         )
         # Postcondition: parsing well-formed range text yields an immutable VersionRange record.
         ret: Any = self.inner_parse_range(text)
@@ -1001,9 +996,9 @@ class SemverRangeStateMachine(StateMachine[SemverRangeState]):
         range_constraint: VersionRange,
         include_prerelease: bool,
     ) -> bool:
-        require_arg(version, Domain.type(Version))
-        require_arg(range_constraint, Domain.type(VersionRange))
-        require_arg(include_prerelease, Domain.boolean())
+        require_arg(version, Version)
+        require_arg(range_constraint, VersionRange)
+        require_arg(include_prerelease, bool)
         # Postcondition: satisfaction yields a boolean verdict for the candidate version.
         ret = self.inner_satisfies(version, range_constraint, include_prerelease)
         self.state.matches.append((version, range_constraint, ret))

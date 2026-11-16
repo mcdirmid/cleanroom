@@ -522,12 +522,11 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     Env,
     StateMachine,
     raises,
     require,
-    require_arg,
+    domain, require_arg,
     require_env,
     sut,
     sut_state,
@@ -769,17 +768,16 @@ class DAGEngineStateMachine(StateMachine[DAGEngineState]):
         retries: int,
     ) -> None:
         """Adds a task node, deferring missing dependency checks to validation and sorting."""
-        require_arg(node_id, Domain.text(min_size=1), preferred=["alpha", "beta", "gamma"])
-        require_arg(node_id, Domain.not_in(self.state.nodes), error=DuplicateNodeError)
-        require_arg(action, Domain.type(Callable), preferred=[action_succeed])
+        require_arg(node_id, str)
+        require_arg(node_id, (self._dom_add_node_node_id), error=DuplicateNodeError)
+        require_arg(action, Callable)
         require_arg(
             dependencies,
-            Domain.optional(Domain.type(Collection)),
-            preferred=[None],
-            fuzz_domain=Domain.optional(Domain.list_of(Domain.text(min_size=1))),
+            Optional[Collection],
+            fuzz_domain=Optional[list],
         )
-        require_arg(priority, Domain.type(int), preferred=[0], fuzz_domain=Domain.sampled_from([0, 1, 2]))
-        require_arg(retries, Domain.type(int), preferred=[0], fuzz_domain=Domain.sampled_from([0, 1]))
+        require_arg(priority, int, fuzz_domain=[0, 1, 2])
+        require_arg(retries, int, fuzz_domain=[0, 1])
         self.inner_add_node(node_id, action, dependencies, priority, retries)
         declared: Set[str] = set() if dependencies is None else set(dependencies)
         self.state.nodes.append(node_id)
@@ -806,8 +804,8 @@ class DAGEngineStateMachine(StateMachine[DAGEngineState]):
     def add_edge(self, upstream_id: str, downstream_id: str) -> None:
         """Adds a directed dependency edge between two registered nodes."""
         require(bool(self.state.nodes))
-        require_arg(upstream_id, Domain.in_set(self.state.nodes), error=NodeNotFoundError)
-        require_arg(downstream_id, Domain.in_set(self.state.nodes), error=NodeNotFoundError)
+        require_arg(upstream_id, self.state.nodes, error=NodeNotFoundError)
+        require_arg(downstream_id, self.state.nodes, error=NodeNotFoundError)
         self.inner_add_edge(upstream_id, downstream_id)
         self.state.upstream.setdefault(downstream_id, set()).add(upstream_id)
         self.state.downstream.setdefault(upstream_id, set()).add(downstream_id)
@@ -820,7 +818,7 @@ class DAGEngineStateMachine(StateMachine[DAGEngineState]):
     def remove_node(self, node_id: str) -> None:
         """Removes a registered node together with all of its incident dependency edges."""
         require(bool(self.state.nodes))
-        require_arg(node_id, Domain.in_set(self.state.nodes), error=NodeNotFoundError)
+        require_arg(node_id, self.state.nodes, error=NodeNotFoundError)
         self.inner_remove_node(node_id)
         upstream_ids = set(self.state.upstream.get(node_id, set()))
         downstream_ids = set(self.state.downstream.get(node_id, set()))
@@ -845,7 +843,7 @@ class DAGEngineStateMachine(StateMachine[DAGEngineState]):
     @transition(DAG.has_node)
     def has_node(self, node_id: str) -> bool:
         """Checks whether a node exists within the modeled graph."""
-        require_arg(node_id, Domain.text(min_size=1), preferred=["alpha", "beta"])
+        require_arg(node_id, str)
         ret = self.inner_has_node(node_id)
         assert ret == (node_id in self.state.nodes)
         return ret
@@ -854,7 +852,7 @@ class DAGEngineStateMachine(StateMachine[DAGEngineState]):
     def get_node(self, node_id: str) -> NodeDefinition[Any]:
         """Retrieves the registered immutable definition of a node."""
         require(bool(self.state.nodes))
-        require_arg(node_id, Domain.in_set(self.state.nodes), error=NodeNotFoundError)
+        require_arg(node_id, self.state.nodes, error=NodeNotFoundError)
         ret = self.inner_get_node(node_id)
         assert ret.node_id == node_id
         assert ret.dependencies == frozenset(self.state.declared.get(node_id, set()))
@@ -866,7 +864,7 @@ class DAGEngineStateMachine(StateMachine[DAGEngineState]):
     def get_dependencies(self, node_id: str) -> Set[str]:
         """Returns the direct upstream dependencies of a node."""
         require(bool(self.state.nodes))
-        require_arg(node_id, Domain.in_set(self.state.nodes), error=NodeNotFoundError)
+        require_arg(node_id, self.state.nodes, error=NodeNotFoundError)
         ret = self.inner_get_dependencies(node_id)
         assert ret == set(self.state.upstream.get(node_id, set()))
         return ret
@@ -875,7 +873,7 @@ class DAGEngineStateMachine(StateMachine[DAGEngineState]):
     def get_dependents(self, node_id: str) -> Set[str]:
         """Returns the direct downstream dependents of a node."""
         require(bool(self.state.nodes))
-        require_arg(node_id, Domain.in_set(self.state.nodes), error=NodeNotFoundError)
+        require_arg(node_id, self.state.nodes, error=NodeNotFoundError)
         ret = self.inner_get_dependents(node_id)
         assert ret == set(self.state.downstream.get(node_id, set()))
         return ret
@@ -937,8 +935,7 @@ class DAGEngineStateMachine(StateMachine[DAGEngineState]):
         require(not self.state.cyclic, error=CycleError)
         require_arg(
             estimated_durations,
-            Domain.optional(Domain.mapping(Domain.text(min_size=1), Domain.type(float))),
-            preferred=[None],
+            Optional[dict],
         )
         ret = self.inner_compute_critical_path(estimated_durations)
         assert isinstance(ret, tuple)
@@ -965,7 +962,7 @@ class DAGEngineStateMachine(StateMachine[DAGEngineState]):
     def mark_running(self, node_id: str) -> None:
         """Transitions a node to the RUNNING state."""
         require(bool(self.state.nodes))
-        require_arg(node_id, Domain.in_set(self.state.nodes))
+        require_arg(node_id, self.state.nodes)
         self.inner_mark_running(node_id)
         self.state.states[node_id] = NodeState.RUNNING
         assert self.state.states[node_id] is NodeState.RUNNING
@@ -974,7 +971,7 @@ class DAGEngineStateMachine(StateMachine[DAGEngineState]):
     def mark_succeeded(self, node_id: str) -> None:
         """Transitions a node to SUCCEEDED and promotes newly unblocked dependents."""
         require(bool(self.state.nodes))
-        require_arg(node_id, Domain.in_set(self.state.nodes))
+        require_arg(node_id, self.state.nodes)
         self.inner_mark_succeeded(node_id)
         self.state.states[node_id] = NodeState.SUCCEEDED
         for dependent in self.state.downstream.get(node_id, set()):
@@ -990,11 +987,10 @@ class DAGEngineStateMachine(StateMachine[DAGEngineState]):
     def mark_failed(self, node_id: str, failure_policy: FailurePolicy) -> None:
         """Transitions a node to FAILED and applies the requested failure policy."""
         require(bool(self.state.nodes))
-        require_arg(node_id, Domain.in_set(self.state.nodes))
+        require_arg(node_id, self.state.nodes)
         require_arg(
             failure_policy,
-            Domain.sampled_from(FAILURE_POLICIES),
-            preferred=[FailurePolicy.SKIP_DOWNSTREAM],
+            FAILURE_POLICIES,
         )
         self.inner_mark_failed(node_id, failure_policy)
         self.state.states[node_id] = NodeState.FAILED
@@ -1024,7 +1020,7 @@ class DAGEngineStateMachine(StateMachine[DAGEngineState]):
     def get_state(self, node_id: str) -> NodeState:
         """Retrieves the current execution state of a registered node."""
         require(bool(self.state.nodes))
-        require_arg(node_id, Domain.in_set(self.state.nodes), error=NodeNotFoundError)
+        require_arg(node_id, self.state.nodes, error=NodeNotFoundError)
         ret = self.inner_get_state(node_id)
         assert isinstance(ret, NodeState)
         self.state.states[node_id] = ret
@@ -1050,8 +1046,7 @@ class DAGEngineStateMachine(StateMachine[DAGEngineState]):
         require(not self.state.dangling, error=NodeNotFoundError)
         require_arg(
             failure_policy,
-            Domain.sampled_from(FAILURE_POLICIES),
-            preferred=[FailurePolicy.CONTINUE_ON_ERROR],
+            FAILURE_POLICIES,
         )
         ret = self.inner_run(failure_policy)
         self.state.results = dict(ret.results)
@@ -1195,6 +1190,10 @@ class DAGEngineStateMachine(StateMachine[DAGEngineState]):
             results=results,
         )
 
+    @domain()
+    def _dom_add_node_node_id(self, x: Any) -> bool:
+        return bool(x not in self.state.nodes)
+
 
 proto = DAGEngineStateMachine()
 
@@ -1307,5 +1306,5 @@ class TestDAGEngineFake(unittest.TestCase):
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-13T00:38:37Z
 # LAST_CHANGED: 2026-11-13T00:38:37Z
-# CHANGE: Resolves [from:pretense_qa] dependency collection domain over-restriction: add_node now validates dependencies with Domain.optional(Domain.type(Collection)) (accepts any collection of node identifiers, e.g. ('alpha','delta'), lists, sets, or None) instead of the closed sampled_from(DEPENDENCY_CHOICES) set, with a bounded string-list fuzz_domain for generation; likewise relaxes the action gate to Domain.type(Callable), priority/retries to Domain.type(int) with small fuzz domains, and compute_critical_path durations to an optional mapping domain; the critical path weight assertion now checks numeric type instead of non-negativity so arbitrary duration weights remain valid.
+# CHANGE: Resolves [from:pretense_qa] dependency collection domain over-restriction: add_node now validates dependencies with Optional[Collection] (accepts any collection of node identifiers, e.g. ('alpha','delta'), lists, sets, or None) instead of the closed sampled_from(DEPENDENCY_CHOICES) set, with a bounded string-list fuzz_domain for generation; likewise relaxes the action gate to Callable, priority/retries to int with small fuzz domains, and compute_critical_path durations to an optional mapping domain; the critical path weight assertion now checks numeric type instead of non-negativity so arbitrary duration weights remain valid.
 # --- END AUTOFAB METADATA ---

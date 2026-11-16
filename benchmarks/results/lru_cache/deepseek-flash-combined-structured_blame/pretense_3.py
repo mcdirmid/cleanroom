@@ -368,11 +368,10 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
-    require_arg,
+    domain, require_arg,
     sut,
     sut_state,
     synthesize_fake,
@@ -448,7 +447,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         capacity: int,
     ) -> None:
         require(self.state.initialized)
-        require_arg(capacity, Domain.range(1, 64), preferred=[1, 2, 3, 8], error=CacheCapacityError)
+        require_arg(capacity, (self._dom_configure_capacity), error=CacheCapacityError)
         ret = self.inner_configure(capacity)
         assert ret is None
         for _ in range(self.state.size - capacity):
@@ -467,8 +466,8 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         default: Optional[Any],
     ) -> Any:
         require(self.state.initialized)
-        require_arg(key, Domain.type(str), preferred=["alpha", "beta", "gamma"])
-        require_arg(default, Domain.any())
+        require_arg(key, str)
+        require_arg(default, object)
         if key in self.state.entries:
             cached = self.state.entries[key]
             hit: Any = self.inner_get(key, default)
@@ -492,8 +491,8 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         value: Any,
     ) -> Optional[Tuple[str, Any]]:
         require(self.state.initialized)
-        require_arg(key, Domain.type(str), preferred=["alpha", "beta", "gamma"])
-        require_arg(value, Domain.any())
+        require_arg(key, str)
+        require_arg(value, object)
         if key in self.state.entries:
             updated: Optional[Tuple[str, Any]] = self.inner_put(key, value)
             assert updated is None
@@ -525,8 +524,8 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         default: Optional[Any],
     ) -> Any:
         require(self.state.initialized)
-        require_arg(key, Domain.type(str), preferred=["alpha", "beta", "gamma"])
-        require_arg(default, Domain.any())
+        require_arg(key, str)
+        require_arg(default, object)
         expected = self.state.entries.get(key, default)
         inspected: Any = self.inner_peek(key, default)
         assert inspected == expected
@@ -541,7 +540,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
     ) -> Any:
         require(self.state.initialized)
         require(bool(self.state.entries), error=CacheKeyNotFoundError)
-        require_arg(key, Domain.in_set(self.state.keys), error=CacheKeyNotFoundError)
+        require_arg(key, self.state.keys, error=CacheKeyNotFoundError)
         expected = self.state.entries.get(key)
         removed: Any = self.inner_remove(key)
         assert removed == expected
@@ -632,6 +631,10 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
     def seed_initial(self) -> None:
         """Seeds a blank cache model state for fake initialization."""
         self.state.initialized = True
+
+    @domain()
+    def _dom_configure_capacity(self, x: Any) -> bool:
+        return bool(x >= 1 and x <= 64)
 
 
 proto = LruCacheStateMachine()

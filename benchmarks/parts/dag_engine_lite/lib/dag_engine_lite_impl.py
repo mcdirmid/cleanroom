@@ -44,6 +44,14 @@ class DAG(dag_engine_lite.DAG):
         # TODO_all_nodes_body
         raise NotImplementedError
 
+    def all_dependencies_exist(self) -> bool:
+        # TODO_all_dependencies_exist_body
+        raise NotImplementedError
+
+    def is_acyclic(self) -> bool:
+        # TODO_is_acyclic_body
+        raise NotImplementedError
+
     def validate(self) -> None:
         # TODO_validate_body
         raise NotImplementedError

@@ -239,6 +239,117 @@ CHANGE: helper test
         self.assertEqual(src_metadata.extract_code_body(text, "file.md"), "# Header")
         self.assertEqual(len(src_metadata.compute_code_hash(text, "file.md")), 12)
 
+    def test_structured_changes_parse_format_and_legacy(self) -> None:
+        py_text = (
+            "def foo():\n"
+            "    return 1\n\n"
+            "# --- CLEANROOM METADATA ---\n"
+            "# LAST_CLEANED: 2026-11-15T15:00:00Z\n"
+            "# LAST_CHANGED: 2026-11-15T15:00:00Z\n"
+            "# CHANGES:\n"
+            "# - [2026-11-15T14:00:00Z] [kind:new] [Lines: NEW] [Scope: foo] Delta: Initial foo\n"
+            "# - [2026-11-15T15:00:00Z] [kind:behavior] [Lines: 1-2] Delta: Return 1 | Why: Establish baseline\n"
+            "# --- END CLEANROOM METADATA ---\n"
+        )
+        meta = src_metadata.extract_metadata_from_text(py_text, "mod.py")
+        assert meta is not None
+        self.assertEqual(len(meta.changes), 2)
+        self.assertEqual(meta.changes[0].kind, "new")
+        self.assertEqual(meta.changes[0].lines, "NEW")
+        self.assertEqual(meta.changes[0].scope, "foo")
+        self.assertEqual(meta.changes[1].why, "Establish baseline")
+        self.assertEqual(meta.change_summary, "Return 1")
+
+        # Round-trip format
+        rewritten = src_metadata.rewrite_metadata_in_text(py_text, "mod.py")
+        meta2 = src_metadata.extract_metadata_from_text(rewritten, "mod.py")
+        assert meta2 is not None
+        self.assertEqual(meta2.changes, meta.changes)
+
+    def test_compute_changed_lines_excludes_metadata_and_rebases(self) -> None:
+        old = (
+            "def a():\n"
+            "    return 1\n"
+            "def b():\n"
+            "    return 2\n"
+            "\n# --- CLEANROOM METADATA ---\n"
+            "# LAST_CLEANED: 2026-11-15T14:00:00Z\n"
+            "# --- END CLEANROOM METADATA ---\n"
+        )
+        # Metadata-only change -> empty changed lines
+        meta_only = old.replace("2026-11-15T14:00:00Z", "2026-11-15T14:05:00Z")
+        self.assertEqual(src_metadata.compute_changed_lines(old, meta_only, "a.py"), "")
+        self.assertEqual(src_metadata.compute_changed_lines(None, old, "a.py"), "NEW")
+
+        # Insert 2 lines at top -> shifts lines 3-4 to 5-6
+        new = (
+            "# header\n"
+            "# comment\n"
+            "def a():\n"
+            "    return 1\n"
+            "def b():\n"
+            "    return 2\n"
+        )
+        self.assertEqual(src_metadata.compute_changed_lines(old, new, "a.py"), "1-2")
+        prior = [
+            src_metadata.ChangeEntry(
+                timestamp="2026-11-15T14:00:00Z",
+                kind="behavior",
+                lines="3-4",
+                scope="b",
+                delta="Update b",
+            )
+        ]
+        rebased = src_metadata.rebase_change_entries(prior, old, new, "a.py")
+        self.assertEqual(rebased[0].lines, "5-6")
+
+    def test_record_change_appends_caps_and_projects(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fpath = Path(tmpdir) / "cap.py"
+            fpath.write_text("x = 1\n", encoding="utf-8")
+            prior = None
+            for i in range(12):
+                new_body = f"x = {i + 1}\n"
+                fpath.write_text(new_body, encoding="utf-8")
+                self.coordinator.record_change(
+                    fpath,
+                    f"Set x to {i + 1}",
+                    kind="behavior",
+                    why="Iterate",
+                    prior_content=prior,
+                )
+                prior = fpath.read_text(encoding="utf-8")
+            meta = self.coordinator.extract_metadata(fpath)
+            assert meta is not None
+            self.assertEqual(len(meta.changes), src_metadata.MAX_CHANGE_ENTRIES)
+            self.assertEqual(meta.changes[-1].delta, "Set x to 12")
+
+            # Project with strip_changes=True
+            content = fpath.read_text(encoding="utf-8")
+            stripped = self.coordinator.project_workspace_metadata(
+                content, "cap.py", strip_changes=True
+            )
+            s_meta = self.coordinator.extract_metadata_from_text(stripped, "cap.py")
+            assert s_meta is not None
+            self.assertEqual(s_meta.changes, [])
+            self.assertIsNone(s_meta.last_cleaned)
+
+            # Project with since_timestamp
+            entries_with_distinct_ts = [
+                src_metadata.ChangeEntry(
+                    timestamp=f"2026-11-15T10:{idx:02d}:00Z",
+                    kind="behavior",
+                    lines="1",
+                    scope=None,
+                    delta=f"Step {idx}",
+                )
+                for idx in range(3)
+            ]
+            filtered = self.coordinator.filter_changes_since(
+                entries_with_distinct_ts, "2026-11-15T10:00:00Z"
+            )
+            self.assertEqual([e.delta for e in filtered], ["Step 1", "Step 2"])
+
 
 if __name__ == "__main__":
     unittest.main()

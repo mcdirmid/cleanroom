@@ -641,7 +641,6 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -978,7 +977,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     ) -> Version:
         require(self.state.initialized)
         require(self.state.version_table)
-        require_arg(text, Domain.in_set(self.state.version_table.keys()), preferred=["1.2.3"])
+        require_arg(text, self.state.version_table.keys())
         ret = self.inner_parse_version(text)
         assert ret is not None
         self.state.parsed.append(ret)
@@ -992,8 +991,8 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     ) -> int:
         require(self.state.initialized)
         require(self.state.parsed)
-        require_arg(v1, Domain.in_set(self.state.parsed))
-        require_arg(v2, Domain.in_set(self.state.parsed))
+        require_arg(v1, self.state.parsed)
+        require_arg(v2, self.state.parsed)
         ret = self.inner_compare_precedence(v1, v2)
         assert isinstance(ret, int)
         self.state.precedences.append(ret)
@@ -1006,7 +1005,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     ) -> VersionRange:
         require(self.state.initialized)
         require(self.state.range_table)
-        require_arg(text, Domain.in_set(self.state.range_table.keys()), preferred=[">=1.0.0"])
+        require_arg(text, self.state.range_table.keys())
         ret = self.inner_parse_range(text)
         assert ret is not None
         self.state.ranges.append(ret)
@@ -1022,9 +1021,9 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         require(self.state.initialized)
         require(self.state.parsed)
         require(self.state.ranges)
-        require_arg(version, Domain.in_set(self.state.parsed))
-        require_arg(range_constraint, Domain.in_set(self.state.ranges))
-        require_arg(include_prerelease, Domain.boolean())
+        require_arg(version, self.state.parsed)
+        require_arg(range_constraint, self.state.ranges)
+        require_arg(include_prerelease, bool)
         ret = self.inner_satisfies(version, range_constraint, include_prerelease)
         assert isinstance(ret, bool)
         self.state.matches.append(ret)
@@ -1037,7 +1036,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     ) -> None:
         require(self.state.initialized)
         require(self.state.catalog)
-        require_arg(release, Domain.in_set(self.state.catalog))
+        require_arg(release, self.state.catalog)
         ret = self.inner_register_package(release)
         assert ret is None
         existing = self.state.releases_by_name.get(release.name, ())
@@ -1055,7 +1054,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     ) -> List[PackageRelease]:
         require(self.state.initialized)
         require(self.state.releases_by_name)
-        require_arg(name, Domain.in_set(self.state.releases_by_name.keys()))
+        require_arg(name, self.state.releases_by_name.keys())
         ret = self.inner_get_releases(name)
         assert isinstance(ret, list)
         assert set(ret) <= set(self.state.releases_by_name[name])
@@ -1068,7 +1067,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     ) -> bool:
         require(self.state.initialized)
         require(self.state.known_names)
-        require_arg(name, Domain.in_set(self.state.known_names))
+        require_arg(name, self.state.known_names)
         ret = self.inner_has_package(name)
         assert isinstance(ret, bool)
         assert ret == (name in self.state.releases_by_name)
@@ -1091,7 +1090,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     ) -> ResolutionOutcome:
         require(self.state.initialized)
         require(self.state.dependency_sets)
-        require_arg(root_dependencies, Domain.in_set(self.state.dependency_sets))
+        require_arg(root_dependencies, self.state.dependency_sets)
         ret = self.inner_resolve(root_dependencies)
         assert ret is not None
         self.state.resolutions.append(ret)

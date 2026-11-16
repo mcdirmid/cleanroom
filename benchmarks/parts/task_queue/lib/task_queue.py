@@ -60,3 +60,9 @@ class TaskQueue(Protocol):
     def set_available(self, available: bool) -> None:
         """Test-only hook to toggle task queue availability for operational simulation."""
         ...
+
+    @operation
+    @test_only
+    def is_available(self) -> bool:
+        """Test-only query returning whether the task queue is currently available."""
+        ...

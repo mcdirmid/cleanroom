@@ -1,230 +1,170 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Optional, Sequence, Set, Tuple
+from typing import Any, Optional, Sequence
 import unittest
 
-from hypothesis import given, settings, strategies as st
-
 from pretense import (
-    Domain,
     StateMachine,
-    raises,
+    domain,
     require,
     require_arg,
+    require_env,
     sut,
-    sut_state,
     synthesize_fake,
+    test_only,
     transition,
 )
 from pretense.compiler import compile_hypothesis_test_case
-from support.lib.lifecycle import LifecycleTestCase, fake, get_singleton, system
+from support.lib.lifecycle import LifecycleRegistry, LifecycleTestCase, enter_phase, get_singleton, system
 
 # ==============================================================================
-# 1. State Machine Specification (Model & 1:1 Transitions — Interface Components)
+# PART A: INTERFACE & FAKE MODULE (pretense_intf/<name>_pretense.py)
 # ==============================================================================
 
-@dataclass
-class TargetState:
-    """Canonical model state tracking abstract collections and values."""
-    initialized: bool = True
-    items: list[Any] = field(default_factory=list)
+# 1. Stateless Interface State Machine (<Iface>StateMachine)
+# - Inherits StateMachine[Any]; NEVER accesses or mutates self.state (PRE_LINT_INTF_NO_STATE).
+# - @transition(Iface.method) 1:1 with contracted methods; @transition(name="<prop>") WITHOUT @property for properties.
+# - inner_<method> stubs use `...` (ellipsis) ONLY — never `raise NotImplementedError` (PRE_LINT_NO_RAISE).
+# - require_arg uses runtime types (int, str, float, bool, object, Enum) or @domain(valid=..., invalid=...) methods.
+
+# class TargetStateMachine(StateMachine[Any]):
+#     """Stateless behavioral contract for Target."""
+#
+#     @domain(
+#         valid=lambda self: [1, 2, 10],
+#         invalid=lambda self: [0, -1],
+#     )
+#     def positive_count(self, count: int) -> bool:
+#         return isinstance(count, int) and count > 0
+#
+#     @transition(name="size")
+#     def size(self) -> int:
+#         ret = self.inner_size()
+#         assert ret >= 0
+#         return ret
+#
+#     @transition(TargetClass.process)
+#     def process(self, item: str, count: int) -> str:
+#         require(self.inner_is_initialized())
+#         require_arg(item, str)
+#         require_arg(count, self.positive_count, error=ValueError)
+#         old_size = self.inner_size()
+#         ret = self.inner_process(item, count)
+#         assert self.inner_size() == old_size + 1
+#         assert ret == f"result_{item}_{count}"
+#         return ret
+#
+#     def inner_is_initialized(self) -> bool: ...
+#     def inner_size(self) -> int: ...
+#     def inner_process(self, item: str, count: int) -> str: ...
 
 
-class TargetStateMachine(StateMachine[TargetState]):
-    """Unified Pretense State Machine for Target."""
-
-    def __init__(
-        self,
-        state: Optional[TargetState] = None,
-        singletons: Optional[dict[type[Any], Any]] = None,
-    ) -> None:
-        super().__init__(state=state or self.make_initial_state(), singletons=singletons)
-
-    def make_initial_state(self) -> TargetState:
-        """Constructs initial model state. Open parameters may be specialized by pseudo-state machines."""
-        return TargetState()
-
-    # 1:1 Transition Pattern (1:1 with target method, natural Python branching):
-    # - require(...) inspects self.state ONLY (never method arguments, local variables, or SUT objects).
-    # - require_arg(param, domain) gates argument domains (first arg must be bare parameter name).
-    # - No while loops, lambdas, or bare try/except blocks inside transitions.
-    # - Complex algorithms (e.g. DAG engines, topological sorts) are modeled as abstract state mutations
-    #   and invariant assertions, NOT re-implemented with loops inside transitions.
-    # - Transition delegates to inner transition method: `ret = self.inner_process(item, count)`.
-    # @transition(TargetClass.process)
-    # def process(self, item: str, count: int) -> str:
-    #     require(self.state.initialized)
-    #     require_arg(item, Domain.sampled_from(["sample_1", "sample_2"]), preferred=["sample_1"])
-    #     require_arg(count, Domain.range(1, 100), preferred=[1, 10])
-    #     ret = self.inner_process(item, count)
-    #     # State mutation & postcondition assertions:
-    #     self.state.items.append(ret)
-    #     assert ret == f"result_{item}_{count}"
-    #     return ret
-    #
-    # def inner_process(self, item: str, count: int) -> str:
-    #     """Computes fake return value for synthesized fake."""
-    #     return f"result_{item}_{count}"
-
-    # Seeding Transition (Fake-only, sets up initial state outside default __init__):
-    @transition.seeding
-    def seed_initial(self) -> None:
-        """Seed initial state machine state for fake initialization."""
-        self.state.initialized = True
-
-
-proto = TargetStateMachine()
-
-
-# ==============================================================================
-# 2. State Machine Proto & Fakes (Interface Components)
-# ==============================================================================
-
-# FakeTarget = synthesize_fake(TargetStateMachine)
-
-# Single service fake factory:
+# 2. Stateful Fake State Machine & Fuzzing (<Iface>FakeStateMachine)
+# @dataclass
+# class TargetState:
+#     """Model state owned exclusively by TargetFakeStateMachine."""
+#     initialized: bool = True
+#     items: list[str] = field(default_factory=list)
+#
+#
+# class TargetFakeStateMachine(TargetStateMachine):
+#     """Stateful in-memory fake for Target."""
+#
+#     def __init__(
+#         self,
+#         state: Optional[TargetState] = None,
+#         singletons: Optional[dict[type[Any], Any]] = None,
+#     ) -> None:
+#         super().__init__(state=state or self.make_initial_state(), singletons=singletons)
+#
+#     def make_initial_state(self) -> TargetState:
+#         return TargetState()
+#
+#     @transition.seeding()
+#     def seed_initial(self) -> None:
+#         self.state.initialized = True
+#
+#     def inner_is_initialized(self) -> bool:
+#         return self.state.initialized
+#
+#     def inner_size(self) -> int:
+#         return len(self.state.items)
+#
+#     def inner_process(self, item: str, count: int) -> str:
+#         res = f"result_{item}_{count}"
+#         self.state.items.append(res)
+#         return res
+#
+#
+# FakeTarget = synthesize_fake(TargetFakeStateMachine)
+#
 # def make_target_fake(state: Optional[TargetState] = None) -> TargetClass:
-#     """Synthesizes fake instance for TargetClass."""
-#     return FakeTarget(state=state or proto.make_initial_state())
-
-# Multi-service fakes factory (when target has multiple singletons sharing state):
-# def make_target_fakes(state: Optional[TargetState] = None) -> Tuple[ServiceA, ServiceB]:
-#     """Synthesizes fake instances for component services sharing model state."""
-#     fake = FakeTarget(state=state or proto.make_initial_state())
-#     return (fake, fake)
-
-# Fake Fuzzing (Exercises synthesized fake against state machine contracts):
+#     return FakeTarget(state=state or TargetFakeStateMachine().make_initial_state())
+#
 # FakeTargetFuzzTest = compile_hypothesis_test_case(
-#     proto=proto,
-#     initial_state_factory=proto.make_initial_state,
+#     TargetFakeStateMachine,
 #     name="FakeTargetFuzzTest",
 # )
-
-
-# ==============================================================================
-# 3. Fixed Scenarios on Fake (Interface Components)
-# ==============================================================================
-
+#
 # class TestTargetFake(unittest.TestCase):
-#     """Optional fixed fake tests for transitions or branches not covered by FakeTargetFuzzTest."""
+#     """Optional fixed fake tests only for valid-transition branches not covered by FakeTargetFuzzTest."""
 #
 #     def setUp(self) -> None:
-#         # Single service:
 #         self.fake = make_target_fake()
-#         self.sm = TargetStateMachine(singletons={TargetClass: self.fake})
-#         # Multi-service:
-#         # self.fakes = make_target_fakes()
-#         # self.sm = TargetStateMachine()
 #
 #     def test_uncovered_branch(self) -> None:
-#         """Exercises edge branches or seeding transitions not reached by FakeTargetFuzzTest."""
-#         self.sm.seed_initial()
-#         # Exercise only what FakeTargetFuzzTest does not cover:
-#         # self.fake.process("sample_1", 10)
-#         # _ = self.fake.items
+#         self.assertEqual(self.fake.process("ok", 1), "result_ok_1")
 
 
 # ==============================================================================
-# 4. Implementation Pseudo State Machine (Implementation Components)
+# PART B: IMPLEMENTATION MODULE (pretense_impl/<name>_pretense.py)
 # ==============================================================================
 
-# class TargetImplPseudoStateMachine(TargetStateMachine):
-#     """Implementation pseudo-state machine for Target measuring differentials and SUT state."""
-#     # Zero state dataclasses; zero require_arg statements (domain constraints are inherited from TargetStateMachine).
-#     # NEVER declare @transition or override outer transitions (PN_IMPL_NO_OUTER_TRANSITION).
-#     # Open model parameters (e.g. initial capacity or defaults) may be specialized via property or make_initial_state:
-#     # def make_initial_state(self) -> TargetState:
-#     #     return TargetState(capacity=100)
+# 1. Stateless Implementation State Machine (<Impl>StateMachine(<Iface>StateMachine))
+# - Zero state dataclasses, zero require/require_arg, zero @transition, zero super() calls.
+# - Override inner_<method> ONLY to invoke target = sut(TargetClass).
 #
-#     # Override inner transitions ONLY to drive target and evaluate private invariant assertions:
-#     # def inner_process(self, item: str, count: int) -> str:
-#     #     target: TargetClass = sut(TargetClass)
-#     #     # Pre-state observation:
-#     #     old_size = target.size
-#     #     ret = target.process(item, count)
-#     #     # Post-state verification:
-#     #     assert target.size == old_size + 1
-#     #     return ret
+# class TargetImplStateMachine(TargetStateMachine):
+#     """Implementation binding for TargetImpl."""
+#
+#     def inner_is_initialized(self) -> bool:
+#         return True
+#
+#     def inner_size(self) -> int:
+#         return sut(TargetClass).size
+#
+#     def inner_process(self, item: str, count: int) -> str:
+#         return sut(TargetClass).process(item, count)
 
 
-# ==============================================================================
-# 5. Real Implementation Tests (Implementation Components)
-# ==============================================================================
-
+# 2. Real Implementation Tests & Fuzzing
+# - NEVER bind or access `self.real` (PN_NO_DIRECT_REAL_ACCESS). Use `self.checked = self.sm.as_checked(TargetClass, self.sut)`.
+# - Use `self.checked.violating(ExpectedError).<method>(...)` for *Error contract violations.
+# - Use `with self.assertRaises(ExpectedException):` for *Exception operational exceptions.
+#
 # class TestTargetImplReal(LifecycleTestCase):
-#     """Verifies that concrete library implementation satisfies contracts."""
+#     target = TargetImpl
 #
-#     # Target class and singletons under test are registered automatically by LifecycleTestCase.
-#     # self.sut provides the primary service under test.
 #     def setUp(self) -> None:
 #         super().setUp()
-#         # For single service:
-#         # self.real = self.sut
-#         # self.sm = TargetStateMachine(singletons={TargetClass: self.real})
-#         # self.checked = self.sm.as_checked(TargetClass, self.real)
-#         # For multi-service:
-#         # self.service_a = get_singleton(ServiceA)
-#         # self.service_b = get_singleton(ServiceB)
-#         # self.sm = TargetStateMachine(singletons={ServiceA: self.service_a, ServiceB: self.service_b})
-#         # self.checked_a = self.sm.as_checked(ServiceA, self.service_a)
-#         # self.checked_b = self.sm.as_checked(ServiceB, self.service_b)
+#         self.sm = TargetImplStateMachine(singletons={TargetClass: self.sut})
+#         self.checked = self.sm.as_checked(TargetClass, self.sut)
 #
 #     def test_real_conformance(self) -> None:
-#         # Drive operational scenarios via self.checked.<method>(*args)
-#         # to stabilize 100% statement coverage under --cov alongside fuzzing.
-#         # Operational postconditions and invariants are verified automatically by transition asserts;
-#         # fixed scenario tests should contain no redundant manual assertions (self.assertEqual, self.assertTrue).
-#         #
-#         # Contract violation testing (covering contracted *Error branches in lib):
-#         # self.checked.violating(ExpectedError).method_that_violates(...)
-#         #
-#         # Collaborator isolation: if earlier calls exhaust a collaborator (e.g. advance a scheduler to finished),
-#         # subsequent loops on that instance (e.g. runner.run()) exit immediately. Use separate test methods
-#         # (def test_<scenario>(self)) with fresh setUp() scopes or isolated SUT instances for independent flows.
-#         pass
-
-
-# ==============================================================================
-# 6. Hypothesis Stateful Fuzzing on Real Implementation (Implementation Components)
-# ==============================================================================
-
-# Pattern A: Single Singleton SUT Factory
+#         self.checked.process("a", 1)
+#         _ = self.checked.size
+#         self.checked.violating(ValueError).process("a", 0)
+#
 # def make_sut() -> TargetClass:
 #     registry = LifecycleRegistry()
-#     registry.register_singleton(TargetClass)
+#     registry.register_singleton(TargetImpl)
 #     scope = enter_phase(system, registry=registry)
 #     scope.__enter__()
 #     return get_singleton(TargetClass)
-
-# Pattern B: Multi-Singleton Aggregate SUT (delegates method lookups across services)
-# class TargetSUT:
-#     tier = system
-#     def __init__(self) -> None:
-#         self.__dict__["_services"] = ()
-#         self.registry = LifecycleRegistry()
-#         self.registry.register_singleton(ServiceA)
-#         self.registry.register_singleton(ServiceB)
-#         self.phase_scope = enter_phase(system, registry=self.registry)
-#         self.phase_scope.__enter__()
-#         self.service_a = get_singleton(ServiceA)
-#         self.service_b = get_singleton(ServiceB)
-#         self.__dict__["_services"] = (self.service_a, self.service_b)
 #
-#     def __getattr__(self, name: str) -> Any:
-#         if name.startswith("__") and name.endswith("__"):
-#             raise AttributeError(name)
-#         for service in self.__dict__.get("_services", ()):
-#             if hasattr(service, name):
-#                 return getattr(service, name)
-#         raise AttributeError(f"{type(self).__name__} has no attribute {name!r}")
-#
-# def make_sut() -> TargetSUT:
-#     return TargetSUT()
-
-# TargetFuzzTest = compile_hypothesis_test_case(
-#     proto=proto,
+# TargetImplFuzzTest = compile_hypothesis_test_case(
+#     TargetImplStateMachine,
 #     sut_factory=make_sut,
-#     initial_state_factory=proto.make_initial_state,
-#     name="TargetFuzzTest",
+#     name="TargetImplFuzzTest",
 # )

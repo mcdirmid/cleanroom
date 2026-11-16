@@ -27,7 +27,7 @@ def _extract_contracted_errors(file_path: Path | str) -> Set[str]:
         return set()
 
     candidate_dirs: List[Path] = []
-    if p.parent.name in ("lib", "tests", "pretense", "high", "planning", "scenarios"):
+    if p.parent.name in ("lib", "tests", "pretense", "pretense_intf", "pretense_impl", "high", "planning", "scenarios"):
         low_dir = p.parent.parent / "low"
         if low_dir.is_dir():
             candidate_dirs.append(low_dir)
@@ -139,7 +139,10 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
                 src = f.read()
             tree = ast.parse(src, str(src_path))
         except Exception:
-            return ("test", "TEST-COVERAGE-DEFICIT: missing unit test assertion")
+            return (
+                "test",
+                "UNCOVERED-PATH: statements not executed (auditor: determine whether test case is missing or lib branch is unreachable)",
+            )
 
         contracted_errors = _extract_contracted_errors(src_path)
 
@@ -217,15 +220,24 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
                 err_str = ", ".join(contracted_found)
                 return (
                     "test",
-                    f"TEST-COVERAGE-DEFICIT: missing contracted error assertion for {err_str}",
+                    f"UNCOVERED-CONTRACTED-ERROR: raises {err_str} not exercised (auditor: verify test coverage or reachability)",
                 )
             if uncontracted_found:
                 err_str = ", ".join(uncontracted_found)
-                return ("lib", f"LIB-PRAGMA-REQUIRED: raises {err_str}")
+                return (
+                    "lib",
+                    f"UNCOVERED-UNCONTRACTED-RAISE: raises {err_str} (auditor: determine if unreachable/dead code in lib or missing contract)",
+                )
         if has_precondition_guard:
-            return ("lib", "LIB-PRAGMA-REQUIRED: precondition guard")
+            return (
+                "lib",
+                "UNCOVERED-GUARD: precondition-like guard not executed (auditor: determine if unreachable/dead code in lib or missing test case)",
+            )
 
-        return ("test", "TEST-COVERAGE-DEFICIT: missing unit test assertion")
+        return (
+            "test",
+            "UNCOVERED-PATH: statements not executed (auditor: determine whether test case is missing or lib branch is unreachable)",
+        )
 
     # Contract: WHEN no missing spans remain, MUST return "All statements covered."; present each uncovered statement span with source lines, clamped by max_spans.
     def format_spans_report(
@@ -302,16 +314,14 @@ class CoverageEvaluator(coverage.CoverageEvaluator):
             f"{spans_detail}\n"
             f"--------------------------------------------------------------------------------\n"
             f"AGENT GUIDANCE / COVERAGE ARBITER REMINDER [EXPLAIN FEEDBACK IN TERMS OF SPECIFICATION]:\n"
-            f"• Differentiate contracted operational errors from uncontracted caller preconditions:\n"
-            f"  - Contracted operational errors (documented under Raises: in low/*.pyi) are test-owned deficits ([TEST-COVERAGE-DEFICIT]). Tests MUST assert these error conditions.\n"
-            f"  - Uncontracted caller precondition guards or unreachable defensive checks are library-owned ([LIB-PRAGMA-REQUIRED]). Instruct the library to prune dead code or wrap in 'with unreachable:' (or 'unreachable()').\n"
+            f"• Independently determine the root cause and responsible file for each uncovered span:\n"
+            f"  - Contracted behavior, postconditions, or Raises: errors not exercised by tests -> blame tests/*_test.py.\n"
+            f"  - Uncontracted precondition guards or structurally/logically unreachable defensive branches -> blame lib/*.py (to prune dead code or mark unreachable per methodology).\n"
             f"• Blame feedback MUST be provided in terms of how the file being blamed is not compliant with the common source of truth specification.\n"
             f"• Line numbers MAY be mentioned ONLY IF they reference the file being blamed.\n"
             f"• DO NOT expose details (line numbers, code snippets, or internal symbols) of other files.\n"
-            f"• Translate contracted positive-path postconditions, invariants, or success branches into missing unit test cases.\n"
-            f"• If an uncovered branch is an unreachable defensive check or caller assumption guaranteed by the specification, instruct the implementation author to prune it or mark it as unreachable (with unreachable: or unreachable()) according to the methodology.\n"
-            f"• If an uncovered span persists after tests were updated or across multiple rounds, deeply examine the library implementation: trace control flow and invariants to determine whether the span is structurally or logically unreachable; if so, blame the library rather than repeating blame to tests.\n"
-            f"• If 100% coverage appears unreachable without either testing an uncontracted precondition violation or deleting contracted behavior, use bin/fail — do not reinterpret an uncontracted *Error span as a test requirement.\n"
+            f"• If an uncovered span persists across rounds, trace control flow and invariants in lib/*.py to check whether it is unreachable before blaming tests again.\n"
+            f"• If 100% coverage appears unreachable without violating contracts, use bin/fail.\n"
             f"================================================================================\n"
         )
 

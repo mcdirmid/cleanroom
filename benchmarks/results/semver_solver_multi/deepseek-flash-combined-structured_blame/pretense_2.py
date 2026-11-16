@@ -297,7 +297,6 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -503,7 +502,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
     @transition(PackageRepository.register_package)
     def register_package(self, release: PackageRelease) -> None:
         require(self.state.initialized)
-        require_arg(release, Domain.type(PackageRelease))
+        require_arg(release, PackageRelease)
         ret = self.inner_register_package(release)
         releases = self.state.packages.setdefault(release.name, set())
         releases.add(release)
@@ -516,7 +515,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
     def get_releases(self, name: str) -> List[PackageRelease]:
         require(self.state.initialized)
         require(self.state.packages)
-        require_arg(name, Domain.in_set(sorted(self.state.packages.keys())))
+        require_arg(name, sorted(self.state.packages.keys()))
         ret: List[PackageRelease] = self.inner_get_releases(name)
         assert set(ret) == self.state.packages[name]
         return ret
@@ -524,7 +523,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
     @transition(PackageRepository.has_package)
     def has_package(self, name: str) -> bool:
         require(self.state.initialized)
-        require_arg(name, Domain.type(str))
+        require_arg(name, str)
         ret: bool = self.inner_has_package(name)
         assert ret == (name in self.state.packages)
         return ret
@@ -543,7 +542,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
     ) -> ResolutionOutcome:
         require(self.state.initialized)
         require(self.state.resolve_inputs)
-        require_arg(root_dependencies, Domain.in_set(self.state.resolve_inputs))
+        require_arg(root_dependencies, self.state.resolve_inputs)
         ret: ResolutionOutcome = self.inner_resolve(root_dependencies)
         required = {dependency.name for dependency in root_dependencies}
         assert required <= set(ret.selected_versions.keys())
@@ -804,7 +803,6 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -916,7 +914,7 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
     @transition(VersionEngine.parse_version)
     def parse_version(self, text: str) -> Version:
         require(self.state.initialized)
-        require_arg(text, Domain.sampled_from(VALID_VERSION_TEXTS))
+        require_arg(text, VALID_VERSION_TEXTS)
         ret: Version = self.inner_parse_version(text)
         self.state.last_version = ret
         self.state.parsed.append(ret)
@@ -929,8 +927,8 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
     @transition(VersionEngine.compare_precedence)
     def compare_precedence(self, v1: Version, v2: Version) -> int:
         require(self.state.initialized)
-        require_arg(v1, Domain.type(Version))
-        require_arg(v2, Domain.type(Version))
+        require_arg(v1, Version)
+        require_arg(v2, Version)
         ret: int = self.inner_compare_precedence(v1, v2)
         self.state.comparisons.append(ret)
         assert isinstance(ret, int)
@@ -1620,7 +1618,6 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -1768,7 +1765,7 @@ class SemverRangeStateMachine(StateMachine[SemverRangeState]):
     @transition(RangeEngine.parse_range)
     def parse_range(self, text: str) -> VersionRange:
         require(self.state.initialized)
-        require_arg(text, Domain.sampled_from(VALID_RANGE_TEXTS))
+        require_arg(text, VALID_RANGE_TEXTS)
         ret: VersionRange = self.inner_parse_range(text)
         self.state.ranges.append(ret)
         assert isinstance(ret, VersionRange)
@@ -1783,9 +1780,9 @@ class SemverRangeStateMachine(StateMachine[SemverRangeState]):
         include_prerelease: bool,
     ) -> bool:
         require(self.state.initialized)
-        require_arg(version, Domain.type(Version))
-        require_arg(range_constraint, Domain.sampled_from(VALID_RANGE_VALUES))
-        require_arg(include_prerelease, Domain.boolean())
+        require_arg(version, Version)
+        require_arg(range_constraint, VALID_RANGE_VALUES)
+        require_arg(include_prerelease, bool)
         ret: bool = self.inner_satisfies(version, range_constraint, include_prerelease)
         assert isinstance(ret, bool)
         return ret

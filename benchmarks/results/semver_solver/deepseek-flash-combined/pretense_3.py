@@ -695,7 +695,6 @@ from typing import Any, Collection, Dict, List, Optional, Set, Tuple
 import unittest
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -1134,8 +1133,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         require(self.state.initialized)
         require_arg(
             text,
-            Domain.sampled_from(VALID_VERSION_TEXTS),
-            preferred=["1.2.3", "2.0.0-alpha.1"],
+            VALID_VERSION_TEXTS,
         )
         version = PARSED_VERSIONS.get(text, VALUE_SURFACE_VERSION)
         self.state.versions[text] = version
@@ -1152,8 +1150,8 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         v2: Version,
     ) -> int:
         require(self.state.initialized)
-        require_arg(v1, Domain.type(Version), preferred=list(CANONICAL_VERSIONS))
-        require_arg(v2, Domain.type(Version), preferred=list(CANONICAL_VERSIONS))
+        require_arg(v1, Version)
+        require_arg(v2, Version)
         key1 = _version_key(v1.major, v1.minor, v1.patch, v1.prerelease)
         key2 = _version_key(v2.major, v2.minor, v2.patch, v2.prerelease)
         result = 0
@@ -1174,8 +1172,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         require(self.state.initialized)
         require_arg(
             text,
-            Domain.sampled_from(VALID_RANGE_TEXTS),
-            preferred=[">=1.0.0", "^1.2.3"],
+            VALID_RANGE_TEXTS,
         )
         trimmed = text.strip()
         range_constraint = VersionRange(raw_text=trimmed)
@@ -1194,15 +1191,13 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         require(self.state.initialized)
         require_arg(
             version,
-            Domain.sampled_from(CANONICAL_VERSIONS),
-            preferred=list(CANONICAL_VERSIONS),
+            CANONICAL_VERSIONS,
         )
         require_arg(
             range_constraint,
-            Domain.sampled_from(CANONICAL_RANGES),
-            preferred=list(CANONICAL_RANGES),
+            CANONICAL_RANGES,
         )
-        require_arg(include_prerelease, Domain.boolean())
+        require_arg(include_prerelease, bool)
         satisfied = _range_satisfies(
             range_constraint.raw_text,
             version,
@@ -1220,8 +1215,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         require(self.state.initialized)
         require_arg(
             release,
-            Domain.sampled_from(CANONICAL_RELEASES),
-            preferred=list(CANONICAL_RELEASES),
+            CANONICAL_RELEASES,
         )
         self.state.packages.setdefault(release.name, []).append(release)
         ret = self.inner_register_package(release)
@@ -1236,8 +1230,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         require(self.state.initialized)
         require_arg(
             name,
-            Domain.in_set(self.state.packages.keys()),
-            preferred=["alpha", "beta"],
+            self.state.packages.keys(),
         )
         releases = _sorted_releases(list(self.state.packages[name]))
         ret = self.inner_get_releases(name)
@@ -1250,7 +1243,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         name: str,
     ) -> bool:
         require(self.state.initialized)
-        require_arg(name, Domain.type(str), preferred=["alpha", "beta"])
+        require_arg(name, str)
         result = name in self.state.packages
         ret = self.inner_has_package(name)
         assert ret == result
@@ -1275,8 +1268,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         require(self.state.packages.keys() >= REQUIRED_PACKAGES)
         require_arg(
             root_dependencies,
-            Domain.sampled_from(ROOT_DEPENDENCY_SETS),
-            preferred=[ROOT_DEPENDENCY_SETS[0], ROOT_DEPENDENCY_SETS[1]],
+            ROOT_DEPENDENCY_SETS,
         )
         constraints: Dict[str, List[VersionRange]] = {}
         for dependency in root_dependencies:

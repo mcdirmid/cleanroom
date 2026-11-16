@@ -877,10 +877,9 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     require,
-    require_arg,
+    domain, require_arg,
     sut,
     sut_state,
     synthesize_fake,
@@ -952,10 +951,10 @@ class DAGStateMachine(StateMachine[DAGState]):
         priority: int,
         retries: int,
     ) -> None:
-        require_arg(node_id, Domain.text(min_size=1), preferred=["node_1"])
-        require_arg(priority, Domain.integers(min_value=0), preferred=[1])
-        require_arg(retries, Domain.integers(min_value=0, max_value=3), preferred=[0])
-        require_arg(node_id, Domain.not_in(self.state.nodes.keys()),
+        require_arg(node_id, str)
+        require_arg(priority, (self._dom_add_node_priority))
+        require_arg(retries, (self._dom_add_node_retries))
+        require_arg(node_id, (self._dom_add_node_node_id),
                     error=DuplicateNodeError)
         self.inner_add_node(node_id, action, dependencies, priority, retries)
         self.state.nodes[node_id] = NodeDefinition(
@@ -972,11 +971,11 @@ class DAGStateMachine(StateMachine[DAGState]):
 
     @transition(DAG.add_edge)
     def add_edge(self, upstream_id: str, downstream_id: str) -> None:
-        require_arg(upstream_id, Domain.text(min_size=1), preferred=["node_1"])
-        require_arg(downstream_id, Domain.text(min_size=1), preferred=["node_2"])
-        require_arg(upstream_id, Domain.in_set(self.state.nodes.keys()),
+        require_arg(upstream_id, str)
+        require_arg(downstream_id, str)
+        require_arg(upstream_id, self.state.nodes.keys(),
                     error=NodeNotFoundError)
-        require_arg(downstream_id, Domain.in_set(self.state.nodes.keys()),
+        require_arg(downstream_id, self.state.nodes.keys(),
                     error=NodeNotFoundError)
         self.inner_add_edge(upstream_id, downstream_id)
         self.state.dependents.setdefault(upstream_id, set()).add(downstream_id)
@@ -987,8 +986,8 @@ class DAGStateMachine(StateMachine[DAGState]):
 
     @transition(DAG.remove_node)
     def remove_node(self, node_id: str) -> None:
-        require_arg(node_id, Domain.text(min_size=1), preferred=["node_1"])
-        require_arg(node_id, Domain.in_set(self.state.nodes.keys()),
+        require_arg(node_id, str)
+        require_arg(node_id, self.state.nodes.keys(),
                     error=NodeNotFoundError)
         self.inner_remove_node(node_id)
         self.state.nodes.pop(node_id, None)
@@ -1010,27 +1009,27 @@ class DAGStateMachine(StateMachine[DAGState]):
 
     @transition(DAG.has_node)
     def has_node(self, node_id: str) -> bool:
-        require_arg(node_id, Domain.text(min_size=1), preferred=["node_1"])
+        require_arg(node_id, str)
         return self.inner_has_node(node_id)
 
     @transition(DAG.get_node)
     def get_node(self, node_id: str) -> NodeDefinition:
-        require_arg(node_id, Domain.text(min_size=1), preferred=["node_1"])
-        require_arg(node_id, Domain.in_set(self.state.nodes.keys()),
+        require_arg(node_id, str)
+        require_arg(node_id, self.state.nodes.keys(),
                     error=NodeNotFoundError)
         return self.inner_get_node(node_id)
 
     @transition(DAG.get_dependencies)
     def get_dependencies(self, node_id: str) -> set[str]:
-        require_arg(node_id, Domain.text(min_size=1), preferred=["node_1"])
-        require_arg(node_id, Domain.in_set(self.state.nodes.keys()),
+        require_arg(node_id, str)
+        require_arg(node_id, self.state.nodes.keys(),
                     error=NodeNotFoundError)
         return self.inner_get_dependencies(node_id)
 
     @transition(DAG.get_dependents)
     def get_dependents(self, node_id: str) -> set[str]:
-        require_arg(node_id, Domain.text(min_size=1), preferred=["node_1"])
-        require_arg(node_id, Domain.in_set(self.state.nodes.keys()),
+        require_arg(node_id, str)
+        require_arg(node_id, self.state.nodes.keys(),
                     error=NodeNotFoundError)
         return self.inner_get_dependents(node_id)
 
@@ -1074,7 +1073,7 @@ class DAGStateMachine(StateMachine[DAGState]):
 
     @transition(WaveScheduler.mark_running)
     def mark_running(self, node_id: str) -> None:
-        require_arg(node_id, Domain.text(min_size=1), preferred=["node_1"])
+        require_arg(node_id, str)
         self.inner_mark_running(node_id)
         self.state.node_states[node_id] = "running"
         assert self.state.node_states[node_id] == "running"
@@ -1082,7 +1081,7 @@ class DAGStateMachine(StateMachine[DAGState]):
 
     @transition(WaveScheduler.mark_succeeded)
     def mark_succeeded(self, node_id: str) -> None:
-        require_arg(node_id, Domain.text(min_size=1), preferred=["node_1"])
+        require_arg(node_id, str)
         self.inner_mark_succeeded(node_id)
         self.state.node_states[node_id] = "succeeded"
         assert self.state.node_states[node_id] == "succeeded"
@@ -1090,7 +1089,7 @@ class DAGStateMachine(StateMachine[DAGState]):
 
     @transition(WaveScheduler.mark_failed)
     def mark_failed(self, node_id: str, failure_policy: str) -> None:
-        require_arg(node_id, Domain.text(min_size=1), preferred=["node_1"])
+        require_arg(node_id, str)
         self.inner_mark_failed(node_id, failure_policy)
         self.state.node_states[node_id] = "failed"
         assert self.state.node_states[node_id] == "failed"
@@ -1102,7 +1101,7 @@ class DAGStateMachine(StateMachine[DAGState]):
 
     @transition(WaveScheduler.get_state)
     def get_state(self, node_id: str) -> str:
-        require_arg(node_id, Domain.text(min_size=1), preferred=["node_1"])
+        require_arg(node_id, str)
         return self.inner_get_state(node_id)
 
     @transition(WaveScheduler.get_all_states)
@@ -1208,6 +1207,18 @@ class DAGStateMachine(StateMachine[DAGState]):
             critical_path=(),
             results={},
         )
+
+    @domain()
+    def _dom_add_node_priority(self, x: Any) -> bool:
+        return bool(x >= 0)
+
+    @domain()
+    def _dom_add_node_retries(self, x: Any) -> bool:
+        return bool(x >= 0 and x <= 3)
+
+    @domain()
+    def _dom_add_node_node_id(self, x: Any) -> bool:
+        return bool(x not in self.state.nodes.keys())
 
 
 proto = DAGStateMachine()

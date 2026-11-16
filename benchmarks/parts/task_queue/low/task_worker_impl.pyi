@@ -92,11 +92,22 @@ class TaskWorker(task_worker.TaskWorker):
     @operation
     @test_only
     @override
-    def set_failing_task(self, task_id: str, failing: bool = True) -> None:
+    def set_failing_task(self, task_id: str, failing: bool) -> None:
         """Test-only hook to configure designated tasks to fail on execution.
 
         GROUNDING:
         - If failing is True, adds task_id to self._failing_tasks; else removes task_id.
+        """
+        ...
+
+    @operation
+    @test_only
+    @override
+    def is_failing_task(self, task_id: str) -> bool:
+        """Test-only query returning whether a task identifier is configured to fail.
+
+        GROUNDING:
+        - Returns task_id in self._failing_tasks.
         """
         ...
 

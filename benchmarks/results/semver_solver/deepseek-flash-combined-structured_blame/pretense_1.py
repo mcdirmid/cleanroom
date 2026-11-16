@@ -583,7 +583,6 @@ from typing import Any, Collection, Dict, List, Optional, Set, Tuple
 import unittest
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -1006,7 +1005,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     def parse_version(self, text: str) -> Version:
         """Parses a canonical SemVer string into an immutable model version."""
         require(self.state.initialized)
-        require_arg(text, Domain.in_set(VALID_VERSION_TEXTS))
+        require_arg(text, VALID_VERSION_TEXTS)
         ret: Version = self.inner_parse_version(text)
         self.state.parsed.append(ret)
         assert ret == PARSED_VERSIONS[text]
@@ -1018,8 +1017,8 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     def compare_precedence(self, v1: Version, v2: Version) -> int:
         """Compares two versions under SemVer 2.0.0 precedence rules."""
         require(self.state.initialized)
-        require_arg(v1, Domain.in_set(CORPUS_VERSIONS))
-        require_arg(v2, Domain.in_set(CORPUS_VERSIONS))
+        require_arg(v1, CORPUS_VERSIONS)
+        require_arg(v2, CORPUS_VERSIONS)
         result = _precedence(v1, v2)
         reverse = _precedence(v2, v1)
         ret: int = self.inner_compare_precedence(v1, v2)
@@ -1033,7 +1032,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     def parse_range(self, text: str) -> VersionRange:
         """Parses a contract-conforming range expression into an immutable record."""
         require(self.state.initialized)
-        require_arg(text, Domain.in_set(VALID_RANGE_TEXTS))
+        require_arg(text, VALID_RANGE_TEXTS)
         ret: VersionRange = self.inner_parse_range(text)
         self.state.ranges.append(ret)
         assert ret.raw_text == text
@@ -1048,9 +1047,9 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     ) -> bool:
         """Evaluates a candidate version against a parsed range constraint."""
         require(self.state.initialized)
-        require_arg(version, Domain.in_set(SATISFIES_VERSIONS))
-        require_arg(range_constraint, Domain.in_set(SATISFIES_RANGES))
-        require_arg(include_prerelease, Domain.boolean())
+        require_arg(version, SATISFIES_VERSIONS)
+        require_arg(range_constraint, SATISFIES_RANGES)
+        require_arg(include_prerelease, bool)
         result = _satisfies_range(version, range_constraint.raw_text, include_prerelease)
         ret: bool = self.inner_satisfies(version, range_constraint, include_prerelease)
         assert ret == result
@@ -1061,7 +1060,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     def register_package(self, release: PackageRelease) -> None:
         """Registers a release in descending precedence order and derives its request."""
         require(self.state.initialized)
-        require_arg(release, Domain.in_set(CANONICAL_RELEASES))
+        require_arg(release, CANONICAL_RELEASES)
         ret = self.inner_register_package(release)
         releases = self.state.packages.setdefault(release.name, [])
         position = len(releases)
@@ -1083,7 +1082,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     def get_releases(self, name: str) -> List[PackageRelease]:
         """Retrieves the registered releases of an existing package, highest first."""
         require(self.state.initialized)
-        require_arg(name, Domain.in_set(self.state.packages))
+        require_arg(name, self.state.packages)
         releases = list(self.state.packages[name])
         ret: List[PackageRelease] = self.inner_get_releases(name)
         assert all(release.name == name for release in ret)
@@ -1095,7 +1094,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     def has_package(self, name: str) -> bool:
         """Reports whether a package name is present in the repository index."""
         require(self.state.initialized)
-        require_arg(name, Domain.type(str))
+        require_arg(name, str)
         ret: bool = self.inner_has_package(name)
         assert ret == (name in self.state.packages)
         return ret
@@ -1115,7 +1114,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     ) -> ResolutionOutcome:
         """Computes the model's highest-precedence compatible release assignment."""
         require(self.state.initialized)
-        require_arg(root_dependencies, Domain.in_set(self.state.requests))
+        require_arg(root_dependencies, self.state.requests)
         selected: Dict[str, Version] = {}
         steps: List[str] = []
         pending: List[PackageDependency] = list(root_dependencies)

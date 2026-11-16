@@ -332,7 +332,6 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -410,7 +409,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
 
     @transition(LRUCache.configure)
     def configure(self, capacity: int) -> None:
-        require_arg(capacity, Domain.type(int), preferred=[10])
+        require_arg(capacity, int)
         ret: Any = None
         if capacity <= 0:
             with raises(CacheCapacityError):
@@ -430,8 +429,8 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
 
     @transition(LRUCache.get)
     def get(self, key: str, default: Optional[Any]) -> Any:
-        require_arg(key, Domain.type(str), preferred=["key"])
-        require_arg(default, Domain.optional(Domain.type(object)), preferred=[None])
+        require_arg(key, str)
+        require_arg(default, Optional[object])
         if key in self.state.values:
             self.state.keys.remove(key)
             self.state.keys.append(key)
@@ -450,8 +449,8 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
 
     @transition(LRUCache.put)
     def put(self, key: str, value: Any) -> Optional[Tuple[str, Any]]:
-        require_arg(key, Domain.type(str), preferred=["key"])
-        require_arg(value, Domain.any(), preferred=[1])
+        require_arg(key, str)
+        require_arg(value, object)
         if key in self.state.values:
             self.state.values[key] = value
             self.state.keys.remove(key)
@@ -479,8 +478,8 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
 
     @transition(LRUCache.peek)
     def peek(self, key: str, default: Optional[Any]) -> Any:
-        require_arg(key, Domain.type(str), preferred=["key"])
-        require_arg(default, Domain.optional(Domain.type(object)), preferred=[None])
+        require_arg(key, str)
+        require_arg(default, Optional[object])
         if key in self.state.values:
             ret = self.inner_peek(key, default)
             assert ret == self.state.values[key]
@@ -495,7 +494,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
 
     @transition(LRUCache.remove)
     def remove(self, key: str) -> Any:
-        require_arg(key, Domain.type(str), preferred=["key"])
+        require_arg(key, str)
         ret: Any = None
         if key not in self.state.values:
             with raises(CacheKeyNotFoundError):
@@ -673,5 +672,5 @@ FakeLruCacheFuzzTest = compile_hypothesis_test_case(
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-09T22:29:33Z
 # LAST_CHANGED: 2026-11-09T22:29:33Z
-# CHANGE: Added missing require_arg(value, Domain.any(), preferred=[1]) to put transition to satisfy pre.missing_require_arg feedback for the value parameter
+# CHANGE: Added missing require_arg(value, object, preferred=[1]) to put transition to satisfy pre.missing_require_arg feedback for the value parameter
 # --- END AUTOFAB METADATA ---

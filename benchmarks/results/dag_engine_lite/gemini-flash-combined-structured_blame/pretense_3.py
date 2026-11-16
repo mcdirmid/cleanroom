@@ -458,11 +458,10 @@ from typing import Any, Callable, Collection, Dict, FrozenSet, List, Mapping, Op
 import unittest
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
-    require_arg,
+    domain, require_arg,
     sut,
     sut_state,
     synthesize_fake,
@@ -702,11 +701,11 @@ class DAGEngineLiteStateMachine(StateMachine[DAGEngineLiteState]):
         retries: int,
     ) -> None:
         require(bool(self.state.available_node_ids))
-        require_arg(node_id, Domain.in_set(self.state.available_node_ids), error=dag_engine_lite.DuplicateNodeError)
-        require_arg(action, Domain.any())
-        require_arg(dependencies, Domain.optional(Domain.type(Collection[str])))
-        require_arg(priority, Domain.range(-100, 100), preferred=[0, 1, 10])
-        require_arg(retries, Domain.range(0, 5), preferred=[0, 1, 2])
+        require_arg(node_id, self.state.available_node_ids, error=dag_engine_lite.DuplicateNodeError)
+        require_arg(action, object)
+        require_arg(dependencies, Optional[Collection[str]])
+        require_arg(priority, (self._dom_add_node_priority))
+        require_arg(retries, (self._dom_add_node_retries))
         ret = self.inner_add_node(node_id, action, dependencies, priority, retries)
         frozen_deps = frozenset(dependencies) if dependencies is not None else frozenset()
         self.state.nodes[node_id] = dag_engine_lite.NodeDefinition(
@@ -748,8 +747,8 @@ class DAGEngineLiteStateMachine(StateMachine[DAGEngineLiteState]):
     @transition(dag_engine_lite.DAG.add_edge)
     def add_edge(self, upstream_id: str, downstream_id: str) -> None:
         require(bool(self.state.node_ids))
-        require_arg(upstream_id, Domain.in_set(self.state.node_ids), error=dag_engine_lite.NodeNotFoundError)
-        require_arg(downstream_id, Domain.in_set(self.state.node_ids), error=dag_engine_lite.NodeNotFoundError)
+        require_arg(upstream_id, self.state.node_ids, error=dag_engine_lite.NodeNotFoundError)
+        require_arg(downstream_id, self.state.node_ids, error=dag_engine_lite.NodeNotFoundError)
         ret = self.inner_add_edge(upstream_id, downstream_id)
         if downstream_id not in self.state.dependencies:
             self.state.dependencies[downstream_id] = set()
@@ -776,7 +775,7 @@ class DAGEngineLiteStateMachine(StateMachine[DAGEngineLiteState]):
     @transition(dag_engine_lite.DAG.remove_node)
     def remove_node(self, node_id: str) -> None:
         require(bool(self.state.node_ids))
-        require_arg(node_id, Domain.in_set(self.state.node_ids), error=dag_engine_lite.NodeNotFoundError)
+        require_arg(node_id, self.state.node_ids, error=dag_engine_lite.NodeNotFoundError)
         ret = self.inner_remove_node(node_id)
         self.state.nodes.pop(node_id, None)
         self.state.node_ids.discard(node_id)
@@ -802,7 +801,7 @@ class DAGEngineLiteStateMachine(StateMachine[DAGEngineLiteState]):
 
     @transition(dag_engine_lite.DAG.has_node)
     def has_node(self, node_id: str) -> bool:
-        require_arg(node_id, Domain.type(str))
+        require_arg(node_id, str)
         ret = self.inner_has_node(node_id)
         assert ret == (node_id in self.state.node_ids)
         return ret
@@ -813,7 +812,7 @@ class DAGEngineLiteStateMachine(StateMachine[DAGEngineLiteState]):
     @transition(dag_engine_lite.DAG.get_node)
     def get_node(self, node_id: str) -> dag_engine_lite.NodeDefinition[Any]:
         require(bool(self.state.node_ids))
-        require_arg(node_id, Domain.in_set(self.state.node_ids), error=dag_engine_lite.NodeNotFoundError)
+        require_arg(node_id, self.state.node_ids, error=dag_engine_lite.NodeNotFoundError)
         ret = self.inner_get_node(node_id)
         assert ret.node_id == node_id
         return ret
@@ -829,7 +828,7 @@ class DAGEngineLiteStateMachine(StateMachine[DAGEngineLiteState]):
     @transition(dag_engine_lite.DAG.get_dependencies)
     def get_dependencies(self, node_id: str) -> Set[str]:
         require(bool(self.state.node_ids))
-        require_arg(node_id, Domain.in_set(self.state.node_ids), error=dag_engine_lite.NodeNotFoundError)
+        require_arg(node_id, self.state.node_ids, error=dag_engine_lite.NodeNotFoundError)
         ret = self.inner_get_dependencies(node_id)
         assert ret == self.state.dependencies.get(node_id, set())
         return ret
@@ -845,7 +844,7 @@ class DAGEngineLiteStateMachine(StateMachine[DAGEngineLiteState]):
     @transition(dag_engine_lite.DAG.get_dependents)
     def get_dependents(self, node_id: str) -> Set[str]:
         require(bool(self.state.node_ids))
-        require_arg(node_id, Domain.in_set(self.state.node_ids), error=dag_engine_lite.NodeNotFoundError)
+        require_arg(node_id, self.state.node_ids, error=dag_engine_lite.NodeNotFoundError)
         ret = self.inner_get_dependents(node_id)
         assert ret == self.state.dependents.get(node_id, set())
         return ret
@@ -933,7 +932,7 @@ class DAGEngineLiteStateMachine(StateMachine[DAGEngineLiteState]):
     ) -> Tuple[List[str], float]:
         require(self.state.dependencies_exist)
         require(self.state.is_acyclic)
-        require_arg(estimated_durations, Domain.optional(Domain.type(Mapping[str, float])))
+        require_arg(estimated_durations, Optional[Mapping[str, float]])
         ret = self.inner_compute_critical_path(estimated_durations)
         assert ret[1] >= 0.0
         return ret
@@ -975,7 +974,7 @@ class DAGEngineLiteStateMachine(StateMachine[DAGEngineLiteState]):
     @transition(dag_engine_lite.WaveScheduler.mark_running)
     def mark_running(self, node_id: str) -> None:
         require(bool(self.state.node_ids))
-        require_arg(node_id, Domain.in_set(self.state.node_ids), error=dag_engine_lite.NodeNotFoundError)
+        require_arg(node_id, self.state.node_ids, error=dag_engine_lite.NodeNotFoundError)
         ret = self.inner_mark_running(node_id)
         self.state.node_states[node_id] = dag_engine_lite.NodeState.RUNNING
         assert self.state.node_states[node_id] == dag_engine_lite.NodeState.RUNNING
@@ -992,7 +991,7 @@ class DAGEngineLiteStateMachine(StateMachine[DAGEngineLiteState]):
     @transition(dag_engine_lite.WaveScheduler.mark_succeeded)
     def mark_succeeded(self, node_id: str) -> None:
         require(bool(self.state.node_ids))
-        require_arg(node_id, Domain.in_set(self.state.node_ids), error=dag_engine_lite.NodeNotFoundError)
+        require_arg(node_id, self.state.node_ids, error=dag_engine_lite.NodeNotFoundError)
         ret = self.inner_mark_succeeded(node_id)
         self.state.node_states[node_id] = dag_engine_lite.NodeState.SUCCEEDED
         for dep in self.state.dependents.get(node_id, set()):
@@ -1019,8 +1018,8 @@ class DAGEngineLiteStateMachine(StateMachine[DAGEngineLiteState]):
         failure_policy: dag_engine_lite.FailurePolicy,
     ) -> None:
         require(bool(self.state.node_ids))
-        require_arg(node_id, Domain.in_set(self.state.node_ids), error=dag_engine_lite.NodeNotFoundError)
-        require_arg(failure_policy, Domain.sampled_from(list(dag_engine_lite.FailurePolicy)))
+        require_arg(node_id, self.state.node_ids, error=dag_engine_lite.NodeNotFoundError)
+        require_arg(failure_policy, self._dom_mark_failed_failure_policy)
         ret = self.inner_mark_failed(node_id, failure_policy)
         self.state.node_states[node_id] = dag_engine_lite.NodeState.FAILED
         if failure_policy == dag_engine_lite.FailurePolicy.FAIL_FAST:
@@ -1098,7 +1097,7 @@ class DAGEngineLiteStateMachine(StateMachine[DAGEngineLiteState]):
     @transition(dag_engine_lite.WaveScheduler.get_state)
     def get_state(self, node_id: str) -> dag_engine_lite.NodeState:
         require(bool(self.state.node_ids))
-        require_arg(node_id, Domain.in_set(self.state.node_ids), error=dag_engine_lite.NodeNotFoundError)
+        require_arg(node_id, self.state.node_ids, error=dag_engine_lite.NodeNotFoundError)
         ret = self.inner_get_state(node_id)
         assert isinstance(ret, dag_engine_lite.NodeState)
         return ret
@@ -1134,7 +1133,7 @@ class DAGEngineLiteStateMachine(StateMachine[DAGEngineLiteState]):
     ) -> dag_engine_lite.DAGRunReport:
         require(self.state.dependencies_exist)
         require(self.state.is_acyclic)
-        require_arg(failure_policy, Domain.sampled_from(list(dag_engine_lite.FailurePolicy)))
+        require_arg(failure_policy, self._dom_run_failure_policy)
         ret = self.inner_run(failure_policy)
         assert isinstance(ret, dag_engine_lite.DAGRunReport)
         return ret
@@ -1202,6 +1201,22 @@ class DAGEngineLiteStateMachine(StateMachine[DAGEngineLiteState]):
             critical_path=tuple(path),
             results=results,
         )
+
+    @domain()
+    def _dom_add_node_priority(self, x: Any) -> bool:
+        return bool(x >= -100 and x <= 100)
+
+    @domain()
+    def _dom_add_node_retries(self, x: Any) -> bool:
+        return bool(x >= 0 and x <= 5)
+
+    @domain(valid=lambda self: list(list(dag_engine_lite.FailurePolicy)))
+    def _dom_mark_failed_failure_policy(self, val: Any) -> bool:
+        return val in list(dag_engine_lite.FailurePolicy)
+
+    @domain(valid=lambda self: list(list(dag_engine_lite.FailurePolicy)))
+    def _dom_run_failure_policy(self, val: Any) -> bool:
+        return val in list(dag_engine_lite.FailurePolicy)
 
 
 proto = DAGEngineLiteStateMachine()
@@ -1274,5 +1289,5 @@ class TestDAGEngineLiteFake(unittest.TestCase):
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-11T02:11:36Z
 # LAST_CHANGED: 2026-11-11T02:11:36Z
-# CHANGE: Constrain retries parameter in add_node with Domain.range(0, 5) and priority with Domain.range(-100, 100) to prevent unconstrained retry loop timeouts during fuzzing
+# CHANGE: Constrain retries parameter in add_node with (lambda x: x >= 0 and x <= 5) and priority with (lambda x: x >= -100 and x <= 100) to prevent unconstrained retry loop timeouts during fuzzing
 # --- END AUTOFAB METADATA ---

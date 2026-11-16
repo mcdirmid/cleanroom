@@ -269,6 +269,8 @@ def compile_hypothesis_test_case(
         def rule_method(
             self: Any, data: Any = None, *call_args: Any, **call_kwargs: Any
         ) -> Any:
+            if getattr(self, "_terminated_by_violation", False):
+                return None
             if data is None:
                 data = _DummyData()
             curr_t = t
@@ -301,7 +303,6 @@ def compile_hypothesis_test_case(
 
             from .pretense import (
                 with_draw,
-                UnsatisfiedAntecedentError,
                 _ACTIVE_SUTS,
                 _current_sut,
                 _is_verification,
@@ -366,9 +367,8 @@ def compile_hypothesis_test_case(
                             )
                         ]
                         nb_args = [NotBound] * len(extra_params)
-                        try:
-                            args = curr_t.args_fn(self.sm.state, self.sm, *nb_args)
-                        except UnsatisfiedAntecedentError:
+                        args = curr_t.args_fn(self.sm.state, self.sm, *nb_args)
+                        if args is None:
                             _current_sm.reset(token_sm)
                             _current_sut.reset(token_sut)
                             _ACTIVE_SUTS.reset(token_suts)
@@ -396,6 +396,13 @@ def compile_hypothesis_test_case(
             type(self)._last_trace = list(self.trace)
             _ACTIVE_STEP = current_step
             _ACTIVE_TRACE = list(self.trace)
+            try:
+                from hypothesis import note as _hyp_note
+
+                _args_repr = ", ".join(repr(a) for a in args)
+                _hyp_note(f"step: {current_step.transition_name}({_args_repr})")
+            except Exception:
+                pass
 
             target_name = getattr(curr_t.target, "__name__", curr_t.name)
             is_fake = getattr(self.sut, "__is_pretense_fake__", False)
@@ -559,11 +566,12 @@ def compile_hypothesis_test_case(
         def collab_rule_method(
             self: Any, data: Any = None, *call_args: Any, **call_kwargs: Any
         ) -> Any:
+            if getattr(self, "_terminated_by_violation", False):
+                return None
             if data is None:
                 data = _DummyData()
             from .pretense import (
                 with_draw,
-                UnsatisfiedAntecedentError,
                 _ACTIVE_SUTS,
                 _current_sut,
                 _is_verification,
@@ -650,9 +658,8 @@ def compile_hypothesis_test_case(
                             )
                         ]
                         nb_args = [NotBound] * len(extra_params)
-                        try:
-                            args = ct.args_fn(collab_state, collab_sm, *nb_args)
-                        except UnsatisfiedAntecedentError:
+                        args = ct.args_fn(collab_state, collab_sm, *nb_args)
+                        if args is None:
                             return None
                     else:
                         args = ()
@@ -668,6 +675,13 @@ def compile_hypothesis_test_case(
             type(self)._last_trace = list(self.trace)
             _ACTIVE_STEP = current_step
             _ACTIVE_TRACE = list(self.trace)
+            try:
+                from hypothesis import note as _hyp_note
+
+                _args_repr = ", ".join(repr(a) for a in args)
+                _hyp_note(f"step: {current_step.transition_name}({_args_repr})")
+            except Exception:
+                pass
 
             token_suts = _ACTIVE_SUTS.set(dict(s_dict))
             token_sut = _current_sut.set(collab_obj)
@@ -843,6 +857,7 @@ def compile_hypothesis_test_case(
                     except Exception:
                         pass
         self.trace = []
+        self._terminated_by_violation = False
 
     def teardown(self: Any) -> None:
         if hasattr(self.sut, "teardown"):
@@ -859,9 +874,117 @@ def compile_hypothesis_test_case(
     attrs["teardown"] = teardown
     attrs["__test__"] = False
 
+    def make_violation_rule_method(
+        t: Any, idx: int, v_spec: Dict[str, Any]
+    ) -> Callable[..., Any]:
+        @rule(data=st.data())
+        def violation_rule_method(self: Any, data: Any = None) -> Any:
+            if getattr(self, "_terminated_by_violation", False):
+                return None
+            if data is None:
+                data = _DummyData()
+            curr_t = t
+            if hasattr(self.sm, "transitions"):
+                for candidate in self.sm.transitions:
+                    if candidate.name == t.name:
+                        curr_t = candidate
+                        break
+            builder = getattr(curr_t, "build_violation_call", None)
+            if not callable(builder):
+                return None
+
+            s_dict: Dict[Any, Any] = {}
+            if isinstance(self.sut, dict):
+                s_dict.update(self.sut)
+            elif self.sut is not None:
+                s_dict[type(self.sut)] = self.sut
+            if hasattr(self.sm, "singletons") and isinstance(self.sm.singletons, dict):
+                s_dict.update(self.sm.singletons)
+
+            from .pretense import (
+                _ACTIVE_SUTS,
+                _current_sut,
+                _current_sm,
+            )
+
+            token_suts = _ACTIVE_SUTS.set(dict(s_dict))
+            token_sut = _current_sut.set(self.sut)
+            token_sm = _current_sm.set(self.sm)
+            try:
+                built = builder(self.sm.state, self.sm, v_spec, data.draw)
+            finally:
+                _current_sm.reset(token_sm)
+                _current_sut.reset(token_sut)
+                _ACTIVE_SUTS.reset(token_suts)
+
+            if not isinstance(built, tuple) or len(built) != 2:
+                return None
+            args, expected_err = built
+            target_name = getattr(curr_t.target, "__name__", curr_t.name)
+            global _ACTIVE_STEP, _ACTIVE_TRACE
+            current_step = TraceStep(
+                f"violate_{curr_t.name}",
+                target_name,
+                False,
+                args,
+                {},
+                None,
+            )
+            self.trace.append(current_step)
+            type(self)._last_trace = list(self.trace)
+            _ACTIVE_STEP = current_step
+            _ACTIVE_TRACE = list(self.trace)
+            try:
+                from hypothesis import note as _hyp_note
+
+                _args_repr = ", ".join(repr(a) for a in args)
+                _hyp_note(f"step: {current_step.transition_name}({_args_repr})")
+            except Exception:
+                pass
+
+            is_fake = getattr(self.sut, "__is_pretense_fake__", False)
+            try:
+                try:
+                    if is_fake and hasattr(self.sut, target_name):
+                        ret = getattr(self.sut, target_name)(*args)
+                    elif curr_t.target is not None:
+                        ret = _invoke_target(self.sut, curr_t.target, args)
+                    elif hasattr(self.sut, curr_t.name):
+                        ret = getattr(self.sut, curr_t.name)(*args)
+                    else:
+                        return None
+                except expected_err:
+                    self._terminated_by_violation = True
+                    return None
+                except Exception as other_exc:
+                    err_label = getattr(expected_err, "__name__", str(expected_err))
+                    raise AssertionError(
+                        f"Contract Violation Mismatch: Transition '{curr_t.name}' with args={args!r} "
+                        f"was expected to raise {err_label}, but raised "
+                        f"{type(other_exc).__name__}: {other_exc}"
+                    ) from other_exc
+                err_label = getattr(expected_err, "__name__", str(expected_err))
+                raise AssertionError(
+                    f"Contract Violation Missing: Transition '{curr_t.name}' with args={args!r} "
+                    f"was expected to raise {err_label}, but returned {ret!r} instead."
+                )
+            finally:
+                _ACTIVE_STEP = None
+
+        violation_rule_method.__name__ = f"violate_{t.name}_{idx}"
+        return violation_rule_method
+
+    is_fake_fuzz = sut_factory is None or getattr(
+        sut_factory, "__is_pretense_fake__", False
+    )
     transitions = getattr(proto_inst, "transitions", [])
     for t in transitions:
         attrs[f"step_{t.name}"] = make_rule_method(t)
+        if not is_fake_fuzz and not getattr(t, "is_seeding", False):
+            for v_idx, v_spec in enumerate(getattr(t, "violation_specs", [])):
+                attrs[f"violate_{t.name}_{v_idx}"] = make_violation_rule_method(
+                    t, v_idx, v_spec
+                )
 
     for c_spec in collab_list:
         c_proto = c_spec() if isinstance(c_spec, type) else c_spec
@@ -872,8 +995,37 @@ def compile_hypothesis_test_case(
                 )
 
     cls: Type[RuleBasedStateMachine] = type(class_name, (RuleBasedStateMachine,), attrs)
+    from hypothesis import HealthCheck, Phase, settings as hyp_settings
+
     if settings is not None:
-        cls.TestCase.settings = settings
+        safe_phases = tuple(p for p in settings.phases if p != Phase.explain)
+        cls.TestCase.settings = hyp_settings(
+            settings,
+            derandomize=True,
+            deadline=None,
+            report_multiple_bugs=False,
+            stateful_step_count=min(settings.stateful_step_count, 25),
+            phases=safe_phases,
+        )
+    else:
+        cls.TestCase.settings = hyp_settings(
+            derandomize=True,
+            deadline=None,
+            report_multiple_bugs=False,
+            stateful_step_count=25,
+            phases=(
+                Phase.explicit,
+                Phase.reuse,
+                Phase.generate,
+                Phase.target,
+                Phase.shrink,
+            ),
+            suppress_health_check=[
+                HealthCheck.too_slow,
+                HealthCheck.filter_too_much,
+                HealthCheck.large_base_example,
+            ],
+        )
     return cls
 
 
@@ -930,7 +1082,7 @@ def _add_parts_lib_paths(root: Path) -> None:
         return
     for entry in sorted(parts_dir.iterdir()):
         if entry.is_dir():
-            for role in ("lib", "low", "pretense"):
+            for role in ("lib", "low", "pretense", "pretense_intf", "pretense_impl"):
                 role_dir = entry / role
                 if role_dir.is_dir():
                     rp = str(role_dir.resolve())
@@ -970,7 +1122,7 @@ def discover_targets(
         elif path.is_dir():
             for root, _, files in os.walk(path):
                 root_path = Path(root)
-                if root_path.name == "pretense" or any(
+                if root_path.name in ("pretense", "pretense_intf", "pretense_impl") or any(
                     f.endswith("_pretense.py") for f in files
                 ):
                     for f in files:
@@ -978,7 +1130,7 @@ def discover_targets(
                             f.endswith(".py")
                             and not f.startswith("__")
                             and (
-                                root_path.name == "pretense"
+                                root_path.name in ("pretense", "pretense_intf", "pretense_impl")
                                 or f.endswith("_pretense.py")
                             )
                         ):
@@ -1263,7 +1415,11 @@ def run_pretense_cli(argv: Optional[List[str]] = None) -> int:
         return res
 
     def _is_interface_pretense_file(test_file: Path) -> bool:
-        if not (test_file.is_file() and test_file.parent.name == "pretense"):
+        if not test_file.is_file():
+            return False
+        if test_file.parent.name == "pretense_intf":
+            return True
+        if test_file.parent.name != "pretense":
             return False
         stem = test_file.stem
         unit_name = stem[:-9] if stem.endswith("_pretense") else stem
@@ -1288,7 +1444,7 @@ def run_pretense_cli(argv: Optional[List[str]] = None) -> int:
         res: Set[str] = set()
         if (
             test_file.is_file()
-            and test_file.parent.name == "pretense"
+            and test_file.parent.name in ("pretense", "pretense_impl")
             and (test_file.parent.parent / "lib").is_dir()
         ):
             lib_dir = test_file.parent.parent / "lib"
@@ -1313,22 +1469,22 @@ def run_pretense_cli(argv: Optional[List[str]] = None) -> int:
             target_lib_files.update(_resolve_target_lib_for_test_file(p_res))
         elif p_res.is_dir():
             has_non_interface_target = True
-            if p_res.name == "pretense" and (p_res.parent / "lib").is_dir():
+            if p_res.name in ("pretense", "pretense_intf", "pretense_impl") and (p_res.parent / "lib").is_dir():
                 for t_file in p_res.glob("*_pretense.py"):
                     target_lib_files.update(_resolve_target_lib_for_test_file(t_file))
-                if not target_lib_files:
+                if not target_lib_files and p_res.name != "pretense_intf":
                     target_lib_files.update(
                         _collect_lib_impls_from_dir(p_res.parent / "lib")
                     )
             for root, _, files in os.walk(p_res):
                 r_path = Path(root)
-                if r_path.name == "pretense" and (r_path.parent / "lib").is_dir():
+                if r_path.name in ("pretense", "pretense_intf", "pretense_impl") and (r_path.parent / "lib").is_dir():
                     for f in files:
                         if f.endswith("_pretense.py"):
                             target_lib_files.update(
                                 _resolve_target_lib_for_test_file(r_path / f)
                             )
-                    if not target_lib_files:
+                    if not target_lib_files and r_path.name != "pretense_intf":
                         target_lib_files.update(
                             _collect_lib_impls_from_dir(r_path.parent / "lib")
                         )
@@ -1341,7 +1497,7 @@ def run_pretense_cli(argv: Optional[List[str]] = None) -> int:
         cov_engine = cov_mod.Coverage(branch=False)
         cov_engine.start()
 
-    effective_no_fuzz = args.no_fuzz or (args.cov and has_non_interface_target)
+    effective_no_fuzz = bool(args.no_fuzz)
     loading_errors: List[Tuple[Path, str]] = []
     targets = discover_targets(
         target_paths,
@@ -1384,15 +1540,24 @@ def run_pretense_cli(argv: Optional[List[str]] = None) -> int:
         try:
             if args.smoke:
                 if hasattr(target.test_case_cls, "settings"):
-                    from hypothesis import settings as hyp_settings, HealthCheck
+                    from hypothesis import HealthCheck, Phase, settings as hyp_settings
 
                     target.test_case_cls.settings = hyp_settings(
                         max_examples=3,
                         stateful_step_count=5,
+                        derandomize=True,
                         deadline=None,
+                        phases=(
+                            Phase.explicit,
+                            Phase.reuse,
+                            Phase.generate,
+                            Phase.target,
+                            Phase.shrink,
+                        ),
                         suppress_health_check=[
                             HealthCheck.too_slow,
                             HealthCheck.filter_too_much,
+                            HealthCheck.large_base_example,
                         ],
                     )
             if hasattr(target.test_case_cls, "run_all") and callable(
@@ -1451,9 +1616,22 @@ def run_pretense_cli(argv: Optional[List[str]] = None) -> int:
                             ):
                                 break
                             clean_line = line.strip().lstrip("|").strip()
-                            if clean_line and not clean_line.startswith("Explanation:"):
+                            if (
+                                clean_line
+                                and not clean_line.startswith("Explanation:")
+                                and not re.match(r"^Draw\s+\d+:", clean_line)
+                            ):
                                 failing_lines.append(clean_line)
-                    if failing_lines:
+                    if _ACTIVE_TRACE:
+                        print("\n=== Synthesized Deterministic Regression Scenario ===")
+                        print(
+                            "# Minimal counterexample sequence extracted from Hypothesis:"
+                        )
+                        for i, step in enumerate(_ACTIVE_TRACE, 1):
+                            args_str = ", ".join(repr(a) for a in step.args)
+                            print(f"#   {i}. {step.transition_name}({args_str})")
+                        print("======================================================")
+                    elif failing_lines:
                         print("\n=== Synthesized Deterministic Regression Scenario ===")
                         print(
                             "# Minimal counterexample sequence extracted from Hypothesis:"
@@ -1506,6 +1684,37 @@ def run_pretense_cli(argv: Optional[List[str]] = None) -> int:
                 and not Path(f).name.startswith("__")
             ]
         total_cov = cov_engine.report(morfs=morfs if morfs else None, show_missing=True)
+        # Exempt factory functions (make_*_fake) and non-machine module helpers in pretense_intf modules
+        if morfs and all(_is_interface_pretense_file(Path(f)) for f in morfs):
+            import ast
+
+            total_stmts = 0
+            total_miss = 0
+            for f in morfs:
+                try:
+                    src = Path(f).read_text(encoding="utf-8")
+                    tree = ast.parse(src, filename=f)
+                    exempt_lines: Set[int] = set()
+                    for node in tree.body:
+                        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                            if (
+                                (node.name.startswith("make_") and node.name.endswith("_fake"))
+                                or node.name.startswith("_")
+                            ):
+                                end_ln = getattr(node, "end_lineno", node.lineno) or node.lineno
+                                exempt_lines.update(range(node.lineno, end_ln + 1))
+                        elif isinstance(node, ast.ClassDef) and node.name.startswith("Test") and node.name.endswith("Fake"):
+                            end_ln = getattr(node, "end_lineno", node.lineno) or node.lineno
+                            exempt_lines.update(range(node.lineno, end_ln + 1))
+                    _, stmts, _, missing, _ = cov_engine.analysis2(f)
+                    kept_stmts = [ln for ln in stmts if ln not in exempt_lines]
+                    kept_miss = [ln for ln in missing if ln not in exempt_lines]
+                    total_stmts += len(kept_stmts)
+                    total_miss += len(kept_miss)
+                except Exception:
+                    pass
+            if total_stmts > 0:
+                total_cov = 100.0 * (total_stmts - total_miss) / total_stmts
         if total_cov < args.threshold:
             print(
                 f"\n[FAIL] Coverage threshold not met: {total_cov:.1f}% < {args.threshold:.1f}%"

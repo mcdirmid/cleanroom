@@ -94,7 +94,7 @@ def _declared_units(repo_root: str, scope_dir: str) -> List[Tuple[str, str]]:
                 if (
                     not os.path.isdir(sub_dir)
                     or sub.startswith((".", "venv", "bazel-", "__pycache__"))
-                    or sub in ("tests", "pretense", "ext")
+                    or sub in ("tests", "pretense", "pretense_intf", "pretense_impl", "ext")
                 ):
                     continue
                 try:
@@ -931,7 +931,7 @@ All {app_info.APP_TITLE} verification and resolution in this fused role workspac
 2. Follow companion guide `{guide}` (located at `{guide}` in your workspace root; do not prefix with scope) for role auditing rules.
 3. For auditor roles, `bin/get_work` automatically executes verification checks on each dirty target.
 4. If all checks pass: `bin/get_work` automatically submits the target with audit attestation and reports 0 ready targets; conclude your round immediately with summary text and ZERO tool calls.
-5. If checks fail: Inspect the structured {app_info.APP_TITLE} Triage Summary surfaced by `bin/get_work` (which extracts the author's `# CHANGE:` header and primary failure). Stage blame attribution via `bin/blame <culprit_file> "<explanation>"`. Then commit staged blame and conclude the target via `bin/submit <target_file>`.
+5. If checks fail: Inspect the structured {app_info.APP_TITLE} Triage Summary surfaced by `bin/get_work` (including the author's scoped `CHANGES:` entries since your last audit and primary failure). Stage blame attribution via `bin/blame <culprit_file> "<explanation>"`. Then commit staged blame and conclude the target via `bin/submit <target_file>`.
 6. If target cannot be certified or an unresolvable impasse is reached: `bin/fail <target_file> "<reason>"`
 7. Mandatory Post-Completion: Call `bin/get_work` once to inspect remaining units. If all ready targets are resolved or only blocked targets remain, STOP and conclude your round immediately with summary text and ZERO further tool calls.
 """
@@ -948,7 +948,7 @@ All {app_info.APP_TITLE} verification and resolution in this fused role workspac
             workflow = f"""1. Run `bin/get_work` to inspect and pull pending work and review any unacted feedback.
 2. Follow companion guide `{guide}` (located at `{guide}` in your workspace root; do not prefix with scope) to author or update targets in scope, resolving any feedback.
 3. Run verification checks: `bin/check_files [target_file]`
-4. If checks pass and all feedback is resolved: Submit completed targets via `bin/submit <target_file> "<summary>"` (or `bin/submit <target_file>` if unmodified).
+4. If checks pass and all feedback is resolved: Submit completed targets via `bin/submit <target_file> --kind <new|contract|behavior|fix|refactor> --delta "<what changed>" --why "<local invariant or fix intent>" [--scope "<symbols>"]` (or `bin/submit <target_file>` if unmodified). Change messages alert downstream importing subagents and auditors to subtle behavioral deltas.
 5. If feedback is contested without code changes: Reject feedback via `bin/reject <target_file> "<reason>"` (strictly requires file to be unmodified).
 6. If upstream contracts are defective: Deliver blame attribution via `bin/blame <culprit_contract> "<explanation>"`.
 7. If success is impossible or an unresolvable impasse is reached: `bin/fail <target_file> "<reason>"`
@@ -1027,7 +1027,7 @@ All {app_info.APP_TITLE} target resolution must proceed through the prescribed w
         workflow = f"""1. Run `bin/get_work` to inspect and pull pending work and review any unacted feedback.
 2. Follow companion guide `{guide}` (located at `{guide}` in your workspace root; do not prefix with scope) to author or update targets in scope, resolving any feedback.
 3. Run verification checks: `bin/check_files [target_file]`
-4. If checks pass and all feedback is resolved: Submit completed targets via `bin/submit <target_file> "<summary>"` (or `bin/submit <target_file>` if unmodified, or contest incorrect feedback on unmodified files via `bin/reject <target_file> "<reason>"`).
+4. If checks pass and all feedback is resolved: Submit completed targets via `bin/submit <target_file> --kind <new|contract|behavior|fix|refactor> --delta "<what changed>" --why "<local invariant or fix intent>" [--scope "<symbols>"]` (or `bin/submit <target_file>` if unmodified, or contest incorrect feedback on unmodified files via `bin/reject <target_file> "<reason>"`). Change messages alert downstream importing subagents and auditors to subtle behavioral deltas.
 5. If success is impossible or an unresolvable impasse is reached: `bin/fail <target_file> "<reason>"`
 6. Call `bin/get_work` to inspect remaining units. If all ready targets are resolved or only blocked targets remain, STOP and conclude your round immediately without calling further tools.
 """

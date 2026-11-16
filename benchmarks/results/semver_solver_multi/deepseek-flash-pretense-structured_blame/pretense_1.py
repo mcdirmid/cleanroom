@@ -304,7 +304,6 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -341,7 +340,7 @@ from benchmark_3.parts.semver_solver_multi.lib.dependency_solver import (
 #   @transition(TargetClass.method)
 #   def method(self, arg1: str, count: int) -> ReturnType:
 #       require(self.state.initialized)
-#       require_arg(arg1, Domain.type(str), preferred=["sample"])
+#       require_arg(arg1, str, preferred=["sample"])
 #       fake_ret = ReturnType(...)
 #       ret = (fake_ret)
 #       self.state.items.append(ret)
@@ -401,7 +400,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
     @transition(PackageRepository.register_package)
     def register_package(self, release: PackageRelease) -> None:
         require(self.state.initialized)
-        require_arg(release, Domain.type(PackageRelease), preferred=SAMPLE_RELEASES)
+        require_arg(release, PackageRelease)
         fake_ret = None
         ret = self.inner_register_package(release)
         self.state.packages.setdefault(release.name, []).append(release)
@@ -412,7 +411,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
     @transition(PackageRepository.get_releases)
     def get_releases(self, name: str) -> List[PackageRelease]:
         require(self.state.initialized)
-        require_arg(name, Domain.type(str))
+        require_arg(name, str)
         fake_ret = list(self.state.packages.get(name, []))
         ret = self.inner_get_releases(name)
         assert all(release.name == name for release in ret)
@@ -421,7 +420,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
     @transition(PackageRepository.has_package)
     def has_package(self, name: str) -> bool:
         require(self.state.initialized)
-        require_arg(name, Domain.type(str))
+        require_arg(name, str)
         fake_ret = name in self.state.packages
         ret = self.inner_has_package(name)
         assert isinstance(ret, bool)
@@ -438,7 +437,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
     @transition(DependencySolver.resolve)
     def resolve(self, root_dependencies: Collection[PackageDependency]) -> ResolutionOutcome:
         require(self.state.initialized)
-        require_arg(root_dependencies, Domain.type(Collection[PackageDependency]))
+        require_arg(root_dependencies, Collection[PackageDependency])
         fake_ret = ResolutionOutcome(selected_versions={}, derivation_steps=())
         ret = self.inner_resolve(root_dependencies)
         self.state.resolutions.append(ret)
@@ -509,7 +508,7 @@ FakeDependencySolverFuzzTest = compile_hypothesis_test_case(
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-08T13:09:02Z
 # LAST_CHANGED: 2026-11-08T13:01:12Z
-# CHANGE: Open repository domains to accept all contract-conforming inputs: register_package uses Domain.type(PackageRelease) with preferred samples and get_releases uses open Domain.type(str), preventing over-restrictive precondition rejections.
+# CHANGE: Open repository domains to accept all contract-conforming inputs: register_package uses PackageRelease with preferred samples and get_releases uses open str, preventing over-restrictive precondition rejections.
 # --- END AUTOFAB METADATA ---
 
 
@@ -744,7 +743,6 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -775,7 +773,7 @@ from benchmark_3.parts.semver_solver_multi.lib.semver_core import (
 #   @transition(TargetClass.method)
 #   def method(self, arg1: str, count: int) -> ReturnType:
 #       require(self.state.initialized)
-#       require_arg(arg1, Domain.type(str), preferred=["sample"])
+#       require_arg(arg1, str, preferred=["sample"])
 #       fake_ret = ReturnType(...)
 #       ret = (fake_ret)
 #       self.state.items.append(ret)
@@ -891,7 +889,7 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
     @transition(VersionEngine.parse_version)
     def parse_version(self, text: str) -> Version:
         require(self.state.initialized)
-        require_arg(text, Domain.type(str), preferred=_VALID_VERSION_TEXTS)
+        require_arg(text, str)
         fake_ret = _parse_model_version(text)
         ret = self.inner_parse_version(text)
         self.state.parsed_versions[text] = ret
@@ -901,8 +899,8 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
     @transition(VersionEngine.compare_precedence)
     def compare_precedence(self, v1: Version, v2: Version) -> int:
         require(self.state.initialized)
-        require_arg(v1, Domain.type(Version), preferred=_SAMPLE_VERSIONS)
-        require_arg(v2, Domain.type(Version), preferred=_SAMPLE_VERSIONS)
+        require_arg(v1, Version)
+        require_arg(v2, Version)
         fake_ret = _compare_model_versions(v1, v2)
         ret = self.inner_compare_precedence(v1, v2)
         self.state.comparison_log.append((v1, v2, ret))
@@ -973,7 +971,7 @@ FakeSemverCoreFuzzTest = compile_hypothesis_test_case(
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-08T13:00:45Z
 # LAST_CHANGED: 2026-11-08T13:00:45Z
-# CHANGE: Open parse_version and compare_precedence argument domains to accept all contract-conforming inputs (Domain.type(str)/Domain.type(Version) with preferred canonical samples) instead of over-restrictive sampled sets, and make the model parser tolerant of malformed text.
+# CHANGE: Open parse_version and compare_precedence argument domains to accept all contract-conforming inputs (str/Version with preferred canonical samples) instead of over-restrictive sampled sets, and make the model parser tolerant of malformed text.
 # --- END AUTOFAB METADATA ---
 
 
@@ -1361,7 +1359,6 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -1389,7 +1386,7 @@ from benchmark_3.parts.semver_solver_multi.lib.semver_range import InvalidRangeE
 #   @transition(TargetClass.method)
 #   def method(self, arg1: str, count: int) -> ReturnType:
 #       require(self.state.initialized)
-#       require_arg(arg1, Domain.type(str), preferred=["sample"])
+#       require_arg(arg1, str, preferred=["sample"])
 #       fake_ret = ReturnType(...)
 #       ret = (fake_ret)
 #       self.state.items.append(ret)
@@ -1528,7 +1525,7 @@ class SemverRangeStateMachine(StateMachine[SemverRangeState]):
     @transition(RangeEngine.parse_range)
     def parse_range(self, text: str) -> VersionRange:
         require(self.state.initialized)
-        require_arg(text, Domain.type(str), preferred=_PARSE_RANGE_TEXTS)
+        require_arg(text, str)
         fake_ret = VersionRange(raw_text=text.strip())
         ret = self.inner_parse_range(text)
         self.state.parsed_ranges[text] = ret
@@ -1544,9 +1541,9 @@ class SemverRangeStateMachine(StateMachine[SemverRangeState]):
         include_prerelease: bool,
     ) -> bool:
         require(self.state.initialized)
-        require_arg(version, Domain.type(Version), preferred=_SAMPLE_VERSIONS)
-        require_arg(range_constraint, Domain.type(VersionRange), preferred=_SAMPLE_RANGES)
-        require_arg(include_prerelease, Domain.boolean())
+        require_arg(version, Version)
+        require_arg(range_constraint, VersionRange)
+        require_arg(include_prerelease, bool)
         fake_ret = isinstance(range_constraint.raw_text, str)
         ret = self.inner_satisfies(version, range_constraint, include_prerelease)
         self.state.match_history.append(ret)

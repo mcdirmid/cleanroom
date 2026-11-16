@@ -216,7 +216,6 @@ import unittest
 from typing import Optional
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -260,8 +259,8 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
 
     @transition(TaskQueue.submit)
     def submit(self, task_id: str, payload: str) -> None:
-        require_arg(task_id, Domain.type(str), preferred=["task-1"])
-        require_arg(payload, Domain.type(str), preferred=["payload"])
+        require_arg(task_id, str)
+        require_arg(payload, str)
         require(len(self.state.entries) < self.state.capacity)
         ret: None = None
         if not self.state.available:
@@ -288,8 +287,8 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
 
     @transition(TaskQueue.complete)
     def complete(self, task_id: str, outcome: str) -> None:
-        require_arg(task_id, Domain.type(str), preferred=["task-1"])
-        require_arg(outcome, Domain.type(str), preferred=["DONE"])
+        require_arg(task_id, str)
+        require_arg(outcome, str)
         ret: None = None
         if not self.state.available:
             with raises(QueueUnavailableException):
@@ -302,7 +301,7 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
 
     @transition(TaskQueue.get_outcome)
     def get_outcome(self, task_id: str) -> Optional[str]:
-        require_arg(task_id, Domain.type(str), preferred=["task-1"])
+        require_arg(task_id, str)
         ret = self.inner_get_outcome(task_id)
         assert ret is None or isinstance(ret, str)
         return ret
@@ -318,7 +317,7 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
 
     @transition(TaskQueue.set_available)
     def set_available(self, available: bool) -> None:
-        require_arg(available, Domain.boolean())
+        require_arg(available, bool)
         ret = self.inner_set_available(available)
         self.state.available = available
         assert self.state.available == available
@@ -598,7 +597,6 @@ import unittest
 from typing import Optional
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -644,8 +642,8 @@ class TaskWorkerStateMachine(StateMachine[TaskWorkerState]):
 
     @transition(TaskWorker.execute)
     def execute(self, task_id: str, payload: str) -> str:
-        require_arg(task_id, Domain.type(str), preferred=["task-1"])
-        require_arg(payload, Domain.type(str), preferred=["payload"])
+        require_arg(task_id, str)
+        require_arg(payload, str)
         ret: str = ""
         if (not self.state.queue_available) or (task_id in self.state.failing_tasks):
             with raises(WorkerExecutionException):
@@ -676,8 +674,8 @@ class TaskWorkerStateMachine(StateMachine[TaskWorkerState]):
 
     @transition(TaskWorker.set_failing_task)
     def set_failing_task(self, task_id: str, failing: bool) -> None:
-        require_arg(task_id, Domain.type(str), preferred=["task-1"])
-        require_arg(failing, Domain.boolean())
+        require_arg(task_id, str)
+        require_arg(failing, bool)
         ret = self.inner_set_failing_task(task_id, failing)
         if failing:
             self.state.failing_tasks.add(task_id)

@@ -155,7 +155,6 @@ from typing import Any, Optional
 import unittest
 
 from pretense import (
-    Domain,
     Env,
     StateMachine,
     raises,
@@ -327,7 +326,6 @@ from typing import Any, Optional
 import unittest
 
 from pretense import (
-    Domain,
     Env,
     StateMachine,
     raises,
@@ -390,9 +388,8 @@ class StreamWriterStateMachine(StateMachine[StreamReaderState]):
         """Buffers a non-empty payload and increments the written count."""
         require_arg(
             payload,
-            Domain.text(min_size=1),
+            str,
             error=PayloadEmptyError,
-            preferred=["alpha", "beta"],
         )
         ret = self.inner_write(payload)
         self.state.payloads.append(payload)

@@ -538,11 +538,10 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
-    require_arg,
+    domain, require_arg,
     sut,
     sut_state,
     synthesize_fake,
@@ -819,7 +818,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     ) -> Version:
         require_arg(
             text,
-            Domain.sampled_from(VALID_VERSION_TEXTS),
+            VALID_VERSION_TEXTS,
             error=InvalidVersionError,
             preferred=["1.2.3", "1.0.0-alpha.1"],
         )
@@ -847,8 +846,8 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         v1: Version,
         v2: Version,
     ) -> int:
-        require_arg(v1, Domain.sampled_from(SAMPLE_VERSION_OBJECTS), preferred=[SAMPLE_VERSIONS["1.0.0-alpha"]])
-        require_arg(v2, Domain.sampled_from(SAMPLE_VERSION_OBJECTS), preferred=[SAMPLE_VERSIONS["1.0.0"]])
+        require_arg(v1, SAMPLE_VERSION_OBJECTS, preferred=[SAMPLE_VERSIONS["1.0.0-alpha"]])
+        require_arg(v2, SAMPLE_VERSION_OBJECTS, preferred=[SAMPLE_VERSIONS["1.0.0"]])
         ret: int = self.inner_compare_precedence(v1, v2)
         key1 = _precedence_key(v1)
         key2 = _precedence_key(v2)
@@ -880,7 +879,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     ) -> VersionRange:
         require_arg(
             text,
-            Domain.sampled_from(VALID_RANGE_TEXTS),
+            VALID_RANGE_TEXTS,
             error=InvalidRangeError,
             preferred=[">=1.0.0", "^1.x"],
         )
@@ -902,9 +901,9 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         range_constraint: VersionRange,
         include_prerelease: bool,
     ) -> bool:
-        require_arg(version, Domain.sampled_from(SAMPLE_VERSION_OBJECTS), preferred=[SAMPLE_VERSIONS["1.0.0"]])
-        require_arg(range_constraint, Domain.sampled_from(SAMPLE_RANGES), preferred=[VersionRange(">=1.0.0")])
-        require_arg(include_prerelease, Domain.boolean())
+        require_arg(version, SAMPLE_VERSION_OBJECTS, preferred=[SAMPLE_VERSIONS["1.0.0"]])
+        require_arg(range_constraint, SAMPLE_RANGES, preferred=[VersionRange(">=1.0.0")])
+        require_arg(include_prerelease, bool)
         ret: bool = self.inner_satisfies(version, range_constraint, include_prerelease)
         assert isinstance(ret, bool)
         return ret
@@ -922,7 +921,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         self,
         release: PackageRelease,
     ) -> None:
-        require_arg(release, Domain.sampled_from(SAMPLE_RELEASES), preferred=[SAMPLE_RELEASES[0]])
+        require_arg(release, SAMPLE_RELEASES, preferred=[SAMPLE_RELEASES[0]])
         ret = self.inner_register_package(release)
         assert ret is None
         published = self.state.packages.setdefault(release.name, [])
@@ -945,7 +944,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         require(bool(self.state.packages))
         require_arg(
             name,
-            Domain.in_set(set(self.state.packages)),
+            self._dom_get_releases_name,
             error=PackageNotFoundError,
         )
         ret: List[PackageRelease] = self.inner_get_releases(name)
@@ -967,7 +966,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         self,
         name: str,
     ) -> bool:
-        require_arg(name, Domain.type(str), preferred=["alpha", "beta"])
+        require_arg(name, str, preferred=["alpha", "beta"])
         ret: bool = self.inner_has_package(name)
         assert isinstance(ret, bool)
         return ret
@@ -1002,7 +1001,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         require(self.state.has_plain_beta)
         require_arg(
             root_dependencies,
-            Domain.sampled_from(SAMPLE_ROOT_OPTIONS),
+            SAMPLE_ROOT_OPTIONS,
             error=ResolutionConflictError,
         )
         ret: ResolutionOutcome = self.inner_resolve(root_dependencies)
@@ -1041,9 +1040,13 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     @transition.seeding
     def seed_version(self, text: str) -> None:
         """Seeds the model with a parsed version so formatting can be modeled."""
-        require_arg(text, Domain.sampled_from(VALID_VERSION_TEXTS), preferred=["1.2.3"])
+        require_arg(text, VALID_VERSION_TEXTS, preferred=["1.2.3"])
         self.state.current_version = SAMPLE_VERSIONS[text]
         self.state.current_version_text = text
+
+    @domain(valid=lambda self: list(set(self.state.packages)))
+    def _dom_get_releases_name(self, val: Any) -> bool:
+        return val in set(self.state.packages)
 
 
 proto = SemverSolverStateMachine()

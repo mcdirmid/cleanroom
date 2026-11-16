@@ -46,6 +46,10 @@ from autofab_py.support.lib.pretense_lint import (
     check_no_call_target_in_interface,
     check_no_direct_real_access,
     check_no_direct_sm_access_in_real_tests,
+    check_no_domain,
+    check_domain_call_purity,
+    check_no_state_fixture_pool,
+    check_no_inner_call_in_assert,
     check_no_domain_any,
     check_no_local_exception_class,
     check_no_module_level_sut,
@@ -64,7 +68,6 @@ from autofab_py.support.lib.pretense_lint import (
     check_pretense_imports,
     check_pretense_next_transition,
     check_pretense_structure,
-    check_require_env_depends_on_env_state,
     check_require_env_sticks_to_exception,
     check_require_sticks_to_error,
     check_violating_sticks_to_error,
@@ -1990,38 +1993,6 @@ class PretenseLintTest(unittest.TestCase):
         errs_good = check_require_env_sticks_to_exception(tree_good, "target_pretense.py")
         self.assertEqual(len(errs_good), 0)
 
-    def test_check_require_env_depends_on_env_state(self) -> None:
-        """Verifies require_env condition must reference a declared Env[...] field."""
-        bad_code = (
-            "from dataclasses import dataclass\n"
-            "from pretense import Env, StateMachine, require_env, transition\n"
-            "@dataclass\n"
-            "class TargetState:\n"
-            "    balance: int = 0\n"
-            "    vault_active: Env[bool] = True\n"
-            "class TargetStateMachine(StateMachine[TargetState]):\n"
-            "    @transition(TargetClass.step)\n"
-            "    def step(self) -> None:\n"
-            "        require_env(self.state.balance > 0, NetworkException, 'failed')\n"
-        )
-        errs = check_require_env_depends_on_env_state(ast.parse(bad_code), "target_pretense.py")
-        self.assertTrue(any("PRE_LINT_REQUIRE_ENV_NEEDS_ENV_STATE" in e for e in errs))
-
-        good_code = (
-            "from dataclasses import dataclass\n"
-            "from pretense import Env, StateMachine, require_env, transition\n"
-            "@dataclass\n"
-            "class TargetState:\n"
-            "    balance: int = 0\n"
-            "    vault_active: Env[bool] = True\n"
-            "class TargetStateMachine(StateMachine[TargetState]):\n"
-            "    @transition(TargetClass.step)\n"
-            "    def step(self) -> None:\n"
-            "        require_env(self.state.vault_active, NetworkException, 'failed')\n"
-        )
-        errs_good = check_require_env_depends_on_env_state(ast.parse(good_code), "target_pretense.py")
-        self.assertEqual(len(errs_good), 0)
-
     def test_check_violating_sticks_to_error(self) -> None:
         """Verifies .violating(...) rejects *Exception and allows *Error."""
         bad_code = (
@@ -2256,6 +2227,193 @@ class PretenseLintTest(unittest.TestCase):
             "        self.engine = get_singleton(RangeEngine)\n"
         )
         self.assertEqual(check_setup_super_order(good, "solver_impl_pretense.py"), [])
+
+
+    def test_check_no_domain(self) -> None:
+        bad_import = ast.parse("from pretense import StateMachine, Domain, transition\n")
+        errs = check_no_domain(bad_import, "test_pretense.py")
+        self.assertTrue(any("PRE_LINT_REQUIRE_ARG_NO_DOMAIN" in e for e in errs))
+
+        bad_call = ast.parse("require_arg(x, Domain.range(1, 10))\n")
+        errs2 = check_no_domain(bad_call, "test_pretense.py")
+        self.assertTrue(any("PRE_LINT_REQUIRE_ARG_NO_DOMAIN" in e for e in errs2))
+
+        good = ast.parse("require_arg(x, int)\nrequire_arg(y, lambda v: v > 0)\n")
+        self.assertEqual(check_no_domain(good, "test_pretense.py"), [])
+
+    def test_check_domain_call_purity(self) -> None:
+        bad = ast.parse(
+            "@domain()\n"
+            "def is_valid_tok(val: str) -> bool:\n"
+            "    return helper_svc.validate(val)\n"
+        )
+        errs = check_domain_call_purity(bad, "test_pretense.py")
+        self.assertTrue(any("PRE_LINT_UNPROXIED_RECEIVER" in e for e in errs))
+
+        good = ast.parse(
+            "@domain()\n"
+            "def is_valid_tok(val: str) -> bool:\n"
+            "    return bool(re.fullmatch(r'[a-z]+', val)) and val.islower()\n"
+        )
+        self.assertEqual(check_domain_call_purity(good, "test_pretense.py"), [])
+
+        good_compiled_regex = ast.parse(
+            "@domain()\n"
+            "def is_valid_id(val: str) -> bool:\n"
+            "    return bool(_VALID_ID_RE.fullmatch(val))\n"
+        )
+        self.assertEqual(
+            check_domain_call_purity(good_compiled_regex, "test_pretense.py"), []
+        )
+
+    def test_check_no_state_fixture_pool(self) -> None:
+        bad = ast.parse("require_arg(priority, self.state.priority_options)\n")
+        errs = check_no_state_fixture_pool(bad, "test_pretense.py")
+        self.assertTrue(any("PRE_LINT_NO_STATE_FIXTURE_POOL" in e for e in errs))
+
+        good = ast.parse("require_arg(node_id, self.state.node_ids)\n")
+        self.assertEqual(check_no_state_fixture_pool(good, "test_pretense.py"), [])
+
+        # Static fixture pool disguised with a non-_pool name (only seeded, never mutated by @transition)
+        disguised = ast.parse(
+            "class SM(StateMachine):\n"
+            "    @transition.seeding\n"
+            "    def seed(self):\n"
+            "        self.state.range_texts.extend(['>=1.0.0', '^1.0.0', '~1.0.0', '1.x'])\n"
+            "    @transition(Engine.parse_range)\n"
+            "    def parse_range(self, text: str):\n"
+            "        require_arg(text, self.state.range_texts)\n"
+        )
+        disguised_errs = check_no_state_fixture_pool(disguised, "test_pretense.py")
+        self.assertTrue(any("PRE_LINT_NO_STATE_FIXTURE_POOL" in e for e in disguised_errs))
+
+        # Literal-only dummy mutation in @transition must still be rejected
+        fake_mutated = ast.parse(
+            "class SM(StateMachine):\n"
+            "    @transition(Engine.parse_range)\n"
+            "    def parse_range(self, text: str):\n"
+            "        require_arg(text, self.state.range_texts)\n"
+            "        self.state.range_texts.append('1.0.0')\n"
+        )
+        fake_mut_errs = check_no_state_fixture_pool(fake_mutated, "test_pretense.py")
+        self.assertTrue(any("PRE_LINT_NO_STATE_FIXTURE_POOL" in e for e in fake_mut_errs))
+
+        # Genuine state collection mutated dynamically by a @transition must pass
+        dynamic_state = ast.parse(
+            "class SM(StateMachine):\n"
+            "    @transition(Repo.register)\n"
+            "    def register(self, name: str):\n"
+            "        require_arg(name, str)\n"
+            "        self.state.registered_names.append(name)\n"
+            "    @transition(Repo.get)\n"
+            "    def get(self, name: str):\n"
+            "        require_arg(name, self.state.registered_names)\n"
+        )
+        self.assertEqual(check_no_state_fixture_pool(dynamic_state, "test_pretense.py"), [])
+
+    def test_check_no_inner_call_in_assert(self) -> None:
+        tautology = ast.parse(
+            "class SM(StateMachine):\n"
+            "    @transition(Engine.satisfies)\n"
+            "    def satisfies(self, v, r, inc):\n"
+            "        ret = self.inner_satisfies(v, r, inc)\n"
+            "        assert ret == self.inner_satisfies(v, r, inc)\n"
+            "        return ret\n"
+        )
+        errs = check_no_inner_call_in_assert(tautology, "test_pretense.py")
+        self.assertTrue(any("PRE_LINT_NO_INNER_CALL_IN_ASSERT" in e for e in errs))
+
+        antisymmetry = ast.parse(
+            "class SM(StateMachine):\n"
+            "    @transition(Engine.compare_precedence)\n"
+            "    def compare_precedence(self, v1, v2):\n"
+            "        ret = self.inner_compare_precedence(v1, v2)\n"
+            "        assert (ret > 0) == (self.inner_compare_precedence(v2, v1) < 0)\n"
+            "        return ret\n"
+        )
+        self.assertEqual(check_no_inner_call_in_assert(antisymmetry, "test_pretense.py"), [])
+
+    def test_check_require_arg_domain_form(self) -> None:
+        from autofab_py.support.lib.pretense_lint import check_require_arg_domain_form
+
+        bad = ast.parse(
+            "@domain(initial_edges=[1, 2])\n"
+            "def top_level_fn(x):\n"
+            "    return x > 0\n"
+            "class SM(StateMachine):\n"
+            "    def helper(self, x):\n"
+            "        return x > 0\n"
+            "    @transition(Target.op)\n"
+            "    def op(self, a, b, c, d, e):\n"
+            "        require_arg(a, lambda x: x > 0)\n"
+            "        require_arg(b, {'x', 'y'})\n"
+            "        require_arg(c, set(['x']))\n"
+            "        require_arg(d, top_level_fn)\n"
+            "        require_arg(e, self.helper)\n"
+        )
+        errs = check_require_arg_domain_form(bad, "test_pretense.py")
+        self.assertTrue(any("PRE_LINT_DOMAIN_MUST_BE_METHOD" in e for e in errs))
+        self.assertTrue(any("PRE_LINT_DOMAIN_NO_INITIAL_EDGES" in e for e in errs))
+        self.assertEqual(
+            sum(1 for e in errs if "PRE_LINT_REQUIRE_ARG_DOMAIN_FORM" in e), 5
+        )
+
+        good = ast.parse(
+            "class SM(StateMachine):\n"
+            "    @domain(valid=lambda self: [1, 2], invalid=lambda self: [-1])\n"
+            "    def is_pos(self, x: int) -> bool:\n"
+            "        return x > 0\n"
+            "    @transition(Target.op)\n"
+            "    def op(self, a: int, b: int) -> None:\n"
+            "        require_arg(a, int)\n"
+            "        require_arg(b, self.is_pos)\n"
+        )
+        self.assertEqual(check_require_arg_domain_form(good, "test_pretense.py"), [])
+
+    def test_check_stateless_intf_and_stateful_fake_split(self) -> None:
+        bad_split = ast.parse(
+            "class VaultStateMachine(StateMachine[None]):\n"
+            "    @transition(Vault.deposit)\n"
+            "    def deposit(self, amount: int) -> None:\n"
+            "        require(self.state.active)\n"
+            "        self.inner_deposit(amount)\n"
+            "    def inner_deposit(self, amount: int) -> None:\n"
+            "        raise NotImplementedError\n"
+            "class VaultFakeStateMachine(VaultStateMachine):\n"
+            "    @transition(Vault.withdraw)\n"
+            "    def withdraw(self, amount: int) -> None:\n"
+            "        require_arg(amount, int)\n"
+            "    def inner_deposit(self, amount: int) -> None:\n"
+            "        self.state.balance += amount\n"
+        )
+        errs = check_no_call_target_in_interface(
+            bad_split, "pretense_intf/vault_pretense.py", is_interface=True
+        )
+        self.assertTrue(any("PRE_LINT_INTF_NO_STATE" in e for e in errs))
+        self.assertTrue(any("PRE_LINT_FAKE_NO_OUTER_TRANSITION" in e for e in errs))
+        self.assertTrue(any("PRE_LINT_FAKE_NO_REQUIRE" in e for e in errs))
+        self.assertFalse(any("PRE_LINT_NO_STATE_MUTATION_IN_INNER" in e for e in errs))
+
+        good_split = ast.parse(
+            "class VaultStateMachine(StateMachine[None]):\n"
+            "    @transition(Vault.deposit)\n"
+            "    def deposit(self, amount: int) -> None:\n"
+            "        self.inner_deposit(amount)\n"
+            "    def inner_deposit(self, amount: int) -> None:\n"
+            "        raise NotImplementedError\n"
+            "class VaultFakeStateMachine(VaultStateMachine):\n"
+            "    @transition.seeding\n"
+            "    def seed_balance(self, bal: int) -> None:\n"
+            "        self.state.balance = bal\n"
+            "    def inner_deposit(self, amount: int) -> None:\n"
+            "        self.state.balance = self.state.balance + amount\n"
+        )
+        self.assertEqual(
+            check_no_call_target_in_interface(
+                good_split, "pretense_intf/vault_pretense.py", is_interface=True
+            ),
+            [],
+        )
 
 
 if __name__ == "__main__":

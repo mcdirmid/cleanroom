@@ -211,16 +211,26 @@ class WorkspaceToolRunner(cli_tool.WorkspaceToolRunner):
         summary: Optional[str] = None,
         repo_root: Optional[str] = None,
         no_verify: bool = False,
+        kind: Optional[str] = None,
+        scope: Optional[str] = None,
+        why: Optional[str] = None,
     ) -> int:
         """Verifies and submits target to canonical main repository."""
         with _session_context():
             handler = get_singleton(commands.WorkspaceCommandHandler)
-            return handler.run_submit(
+            kwargs: Dict[str, Any] = dict(
                 target=target,
                 summary=summary,
                 repo_root=repo_root,
                 no_verify=no_verify,
             )
+            if kind is not None:
+                kwargs["kind"] = kind
+            if scope is not None:
+                kwargs["scope"] = scope
+            if why is not None:
+                kwargs["why"] = why
+            return handler.run_submit(**kwargs)
 
     # Contract: Delegates blame attribution to WorkspaceCommandHandler.run_blame.
     def run_blame(
@@ -439,7 +449,30 @@ class WorkspaceToolRunner(cli_tool.WorkspaceToolRunner):
             "submit", help="Verify and submit target with in-band header update"
         )
         p_submit.add_argument("target", help="Target file path or unit name")
-        p_submit.add_argument("summary", nargs="?", default=None, help="Change summary")
+        p_submit.add_argument("summary", nargs="?", default=None, help="Change delta summary")
+        p_submit.add_argument(
+            "--kind",
+            choices=["new", "contract", "behavior", "fix", "refactor"],
+            default=None,
+            help="Semantic change kind (new, contract, behavior, fix, refactor)",
+        )
+        p_submit.add_argument(
+            "--delta",
+            default=None,
+            help="Concrete before->after change description local to the file",
+        )
+        p_submit.add_argument(
+            "--why",
+            default=None,
+            help="Generic local intent, invariant, or fix hypothesis",
+        )
+        p_submit.add_argument(
+            "--scope",
+            "--symbols",
+            dest="scope",
+            default=None,
+            help="Comma-separated public symbols, sections, or slugs affected",
+        )
         p_submit.add_argument(
             "--no-verify",
             action="store_true",
@@ -498,10 +531,22 @@ class WorkspaceToolRunner(cli_tool.WorkspaceToolRunner):
             help="Line number or line range within culprit file",
         )
         p_blame.add_argument(
+            "--target-lines",
+            dest="target_lines",
+            default=None,
+            help="Line number or line range within culprit file (alias for --lines)",
+        )
+        p_blame.add_argument(
             "--witness",
             dest="witness",
             default=None,
             help="Context-free input/output witness values",
+        )
+        p_blame.add_argument(
+            "--detail",
+            dest="detail",
+            default=None,
+            help="Additional concise structured diagnostic detail",
         )
         p_blame.add_argument(
             "--repo-root",
@@ -650,11 +695,15 @@ class WorkspaceToolRunner(cli_tool.WorkspaceToolRunner):
         elif args.command in ("check_files", "check-files"):
             return self.run_check_files(target=args.target, repo_root=args.repo_root)
         elif args.command == "submit":
+            effective_summary = args.delta if getattr(args, "delta", None) else args.summary
             return self.run_submit(
                 args.target,
-                summary=args.summary,
+                summary=effective_summary,
                 repo_root=args.repo_root,
                 no_verify=args.no_verify,
+                kind=getattr(args, "kind", None),
+                scope=getattr(args, "scope", None),
+                why=getattr(args, "why", None),
             )
         elif args.command in ("blame", "feedback"):
             critique = args.critique
@@ -670,13 +719,18 @@ class WorkspaceToolRunner(cli_tool.WorkspaceToolRunner):
                 if viol_val and not viol_val.startswith("[viol:"):
                     viol_val = f"[viol:{viol_val.strip('[]')}]"
                 facet_val = getattr(args, "facet", "")
-                lines_val = getattr(args, "lines", None)
+                lines_val = getattr(args, "lines", None) or getattr(
+                    args, "target_lines", None
+                )
                 witness_val = getattr(args, "witness", None)
+                detail_val = getattr(args, "detail", None)
                 critique = f"{slug_val} {viol_val} Facet: {facet_val}"
                 if lines_val:
                     critique += f" Lines: {lines_val}"
                 if witness_val:
                     critique += f" Witness: {witness_val}"
+                if detail_val:
+                    critique += f" Detail: {detail_val}"
             return self.run_blame(
                 args.culprit_file,
                 critique,

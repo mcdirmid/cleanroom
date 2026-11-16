@@ -280,11 +280,10 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
-    require_arg,
+    domain, require_arg,
     sut,
     sut_state,
     synthesize_fake,
@@ -378,7 +377,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         release: PackageRelease,
     ) -> None:
         require(self.state.initialized)
-        require_arg(release, Domain.type(PackageRelease))
+        require_arg(release, PackageRelease)
         self.state.packages.setdefault(release.name, []).append(release)
         self.state.packages[release.name].sort(key=_release_key, reverse=True)
         ret: None = self.inner_register_package(release)
@@ -391,7 +390,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         name: str,
     ) -> List[PackageRelease]:
         require(self.state.initialized)
-        require_arg(name, Domain.in_set(list(self.state.packages)), preferred=["alpha", "beta", "gamma"])
+        require_arg(name, self._dom_get_releases_name)
         fake_releases = list(self.state.packages[name])
         ret: List[PackageRelease] = self.inner_get_releases(name)
         assert [release.name for release in ret] == [release.name for release in fake_releases]
@@ -403,7 +402,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         name: str,
     ) -> bool:
         require(self.state.initialized)
-        require_arg(name, Domain.type(str), preferred=["alpha", "beta"])
+        require_arg(name, str)
         fake_member = name in self.state.packages
         ret: bool = self.inner_has_package(name)
         assert ret == fake_member
@@ -423,7 +422,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         root_dependencies: Sequence[PackageDependency],
     ) -> ResolutionOutcome:
         require(self.state.initialized)
-        require_arg(root_dependencies, Domain.type(Sequence[PackageDependency]))
+        require_arg(root_dependencies, Sequence[PackageDependency])
         selected = _model_selection(self.state.packages, root_dependencies)
         steps = tuple(f"Select {name} {version.major}.{version.minor}.{version.patch}" for name, version in sorted(selected.items()))
         fake_outcome = ResolutionOutcome(selected_versions=selected, derivation_steps=steps)
@@ -440,6 +439,10 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
     def seed_initial(self) -> None:
         """Seed state machine state for fake initialization."""
         self.state.initialized = True
+
+    @domain(valid=lambda self: list(list(self.state.packages)))
+    def _dom_get_releases_name(self, val: Any) -> bool:
+        return val in list(self.state.packages)
 
 
 proto = DependencySolverStateMachine()
@@ -712,11 +715,10 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
-    require_arg,
+    domain, require_arg,
     sut,
     sut_state,
     synthesize_fake,
@@ -814,7 +816,7 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
         text: str,
     ) -> Version:
         require(self.state.initialized)
-        require_arg(text, Domain.regex(_VERSION_TEXT_PATTERN))
+        require_arg(text, (self._dom_parse_version_text))
         fake_version = _parse_version_text(text)
         ret: Version = self.inner_parse_version(text)
         self.state.parsed_texts.append(text)
@@ -828,8 +830,8 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
         v2: Version,
     ) -> int:
         require(self.state.initialized)
-        require_arg(v1, Domain.type(Version))
-        require_arg(v2, Domain.type(Version))
+        require_arg(v1, Version)
+        require_arg(v2, Version)
         fake_comparison = _compare_versions(v1, v2)
         ret: int = self.inner_compare_precedence(v1, v2)
         self.state.compared.append((v1, v2, ret))
@@ -841,6 +843,10 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
     def seed_initial(self) -> None:
         """Seed state machine state for fake initialization."""
         self.state.initialized = True
+
+    @domain()
+    def _dom_parse_version_text(self, s: Any) -> bool:
+        return bool(bool(re.fullmatch(_VERSION_TEXT_PATTERN, s)))
 
 
 proto = SemverCoreStateMachine()
@@ -1227,11 +1233,10 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
-    require_arg,
+    domain, require_arg,
     sut,
     sut_state,
     synthesize_fake,
@@ -1532,7 +1537,7 @@ class SemverRangeStateMachine(StateMachine[SemverRangeState]):
         text: str,
     ) -> VersionRange:
         require(self.state.initialized)
-        require_arg(text, Domain.regex(_RANGE_TEXT_PATTERN))
+        require_arg(text, (self._dom_parse_range_text))
         fake_range = _make_range(text.strip())
         ret: VersionRange = self.inner_parse_range(text)
         self.state.parsed[text] = ret
@@ -1547,9 +1552,9 @@ class SemverRangeStateMachine(StateMachine[SemverRangeState]):
         include_prerelease: bool,
     ) -> bool:
         require(self.state.initialized)
-        require_arg(version, Domain.type(semver_core.Version))
-        require_arg(range_constraint, Domain.in_set(list(self.state.parsed.values())))
-        require_arg(include_prerelease, Domain.boolean())
+        require_arg(version, semver_core.Version)
+        require_arg(range_constraint, self._dom_satisfies_range_constraint)
+        require_arg(include_prerelease, bool)
         fake_match = _range_satisfies(version, range_constraint.raw_text, include_prerelease)
         ret: bool = self.inner_satisfies(version, range_constraint, include_prerelease)
         self.state.matches.append((range_constraint.raw_text, version, include_prerelease, ret))
@@ -1560,6 +1565,14 @@ class SemverRangeStateMachine(StateMachine[SemverRangeState]):
     def seed_initial(self) -> None:
         """Seed state machine state for fake initialization."""
         self.state.initialized = True
+
+    @domain()
+    def _dom_parse_range_text(self, s: Any) -> bool:
+        return bool(bool(re.fullmatch(_RANGE_TEXT_PATTERN, s)))
+
+    @domain(valid=lambda self: list(list(self.state.parsed.values())))
+    def _dom_satisfies_range_constraint(self, val: Any) -> bool:
+        return val in list(self.state.parsed.values())
 
 
 proto = SemverRangeStateMachine()

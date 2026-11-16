@@ -154,28 +154,80 @@ def _resolve_active_methodology_pkg(
     return None
 
 
-def _project_for_role_workspace(content: str, filename: str, is_writable: bool) -> str:
-    """Projects in-band metadata for role workspace: only change and feedback."""
-    meta = src_metadata.extract_metadata_from_text(content, filename)
-    if meta is None:
-        return content
-    return src_metadata.rewrite_metadata_in_text(
+def _project_for_role_workspace(
+    content: str,
+    filename: str,
+    is_writable: bool,
+    since_timestamp: Optional[str] = None,
+) -> str:
+    """Projects in-band metadata for role workspace: strips CHANGES: on writable targets, filters by timestamp on read-only."""
+    return src_metadata.project_workspace_metadata(
         content,
         filename,
-        clear_last_cleaned=True,
-        last_changed="",
-        clear_audits=True,
-        clear_dirty=True,
+        strip_changes=is_writable,
+        since_timestamp=since_timestamp,
     )
 
 
-def _copy_projected_file(src: str, dst: str, is_writable: bool) -> None:
+def _resolve_viewer_since_timestamp(
+    src_f: str,
+    rel: str,
+    scope_dir: str,
+    role_def: Any,
+) -> Optional[str]:
+    """Resolves viewer's LAST_CLEANED or <ROLE>_AUDIT timestamp for filtering read-only CHANGES:."""
+    if role_def is None:
+        return None
+    audit_tag = getattr(role_def, "audit_tag", None)
+    if audit_tag:
+        meta = src_metadata.extract_metadata(src_f)
+        return meta.audits.get(audit_tag) if meta else None
+    src_pats = getattr(role_def, "src_patterns", None) or getattr(
+        role_def, "writable_file_patterns", None
+    )
+    if not src_pats:
+        return None
+    parts = rel.replace("\\", "/").split("/")
+    if "parts" not in parts:
+        return None
+    p_idx = parts.index("parts")
+    if len(parts) <= p_idx + 2:
+        return None
+    unit_dir = "/".join(parts[: p_idx + 2])
+    stem = os.path.splitext(parts[-1])[0]
+    for sfx in ("_impl_test", "_pretense", "_test", "_impl", "_ext", "_asm"):
+        if stem.endswith(sfx):
+            stem = stem[: -len(sfx)]
+            break
+    timestamps: List[str] = []
+    for pat in src_pats:
+        if "{unit_dir}" not in pat and "{unit_name}" not in pat:
+            continue
+        cand_rel = pat.format(unit_dir=unit_dir, unit_name=stem)
+        cand_abs = os.path.join(scope_dir, cand_rel)
+        if os.path.isfile(cand_abs):
+            t_meta = src_metadata.extract_metadata(cand_abs)
+            if t_meta is None or not t_meta.last_cleaned:
+                return None
+            timestamps.append(t_meta.last_cleaned)
+    return min(timestamps) if timestamps else None
+
+
+def _copy_projected_file(
+    src: str,
+    dst: str,
+    is_writable: bool,
+    since_timestamp: Optional[str] = None,
+) -> None:
     """Copies a file into a role workspace, projecting metadata headers."""
     try:
         with open(src, "r", encoding="utf-8") as f:
             content = f.read()
         projected = _project_for_role_workspace(
-            content, os.path.basename(src), is_writable=is_writable
+            content,
+            os.path.basename(src),
+            is_writable=is_writable,
+            since_timestamp=since_timestamp,
         )
         _write_file_with_perms(dst, projected, readonly=not is_writable)
     except (UnicodeDecodeError, OSError):
@@ -644,7 +696,12 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
                     continue
                 src_f = os.path.join(scope_dir, rel)
                 dst_f = os.path.join(workspace_dir, ws_scope, rel)
-                _copy_projected_file(src_f, dst_f, is_writable=False)
+                since_ts = _resolve_viewer_since_timestamp(
+                    src_f, rel, scope_dir, role_def
+                )
+                _copy_projected_file(
+                    src_f, dst_f, is_writable=False, since_timestamp=since_ts
+                )
 
             initial_manifest: dict[str, dict[str, str]] = {}
             for rel in writable_rel:
@@ -860,6 +917,17 @@ class WorkspaceProvisioner(provision.WorkspaceProvisioner):
                         else:
                             df = os.path.join(d_lib, fname)
                             copy_file_with_perms(sf, df, readonly=True)
+
+        pretense_pyi_src = os.path.join(
+            resolved_root, "pretense", "parts", "pretense", "low", "pretense.pyi"
+        )
+        pretense_pyi_dest_dir = os.path.join(workspace_dir, "support", "lib")
+        if os.path.isfile(pretense_pyi_src) and os.path.isdir(pretense_pyi_dest_dir):
+            copy_file_with_perms(
+                pretense_pyi_src,
+                os.path.join(pretense_pyi_dest_dir, "pretense.pyi"),
+                readonly=True,
+            )
 
         scaffolder.deploy_runner_zipapps(bin_dir, role_def=role_def)
 

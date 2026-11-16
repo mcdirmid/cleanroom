@@ -56,6 +56,9 @@ class SubmissionCoordinator(Singleton[AgentSessionTier], Protocol):
         repo_root: Optional[str] = None,
         workspace_root: Optional[str] = None,
         role_name: Optional[str] = None,
+        kind: Optional[str] = None,
+        scope: Optional[str] = None,
+        why: Optional[str] = None,
     ) -> SubmissionOutcome:
         """Submits a file target after validating gating rules and updating metadata.
 

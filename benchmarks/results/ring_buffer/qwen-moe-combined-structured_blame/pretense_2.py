@@ -152,7 +152,6 @@ from typing import Any, List, Optional
 import unittest
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -222,7 +221,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
     @transition(name="push")
     def push(self, item: Any) -> Optional[Any]:
         """Appends an item with overwrite eviction on saturation."""
-        require_arg(item, Domain.any())
+        require_arg(item, object)
         ret = self.inner_push(item)
         if len(self.state.items) < self.state.capacity:
             self.state.items.append(item)

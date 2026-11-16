@@ -214,7 +214,6 @@ from typing import Any, Optional
 import unittest
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -281,7 +280,7 @@ class StreamReaderStateMachine(StateMachine[StreamReaderState]):
     @transition.seeding
     def seed_payload(self, payload: str) -> None:
         """Seed an unread payload so non-empty stream states become reachable."""
-        require_arg(payload, Domain.type(str))
+        require_arg(payload, str)
         self.state.items.append(payload)
 
 
@@ -363,7 +362,6 @@ from typing import Any, Optional
 import unittest
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -413,7 +411,7 @@ class StreamWriterStateMachine(StateMachine[StreamWriterState]):
     @transition(StreamWriter.write)
     def write(self, payload: str) -> None:
         """Buffer a non-empty payload; an empty payload is never buffered."""
-        require_arg(payload, Domain.type(str))
+        require_arg(payload, str)
         ret = self.inner_write(payload)
         assert ret is None
         if len(payload) == 0:
@@ -441,7 +439,7 @@ class StreamWriterStateMachine(StateMachine[StreamWriterState]):
     @transition.seeding
     def seed_written(self, payload: str) -> None:
         """Seed an already-written payload so non-empty writer states become reachable."""
-        require_arg(payload, Domain.type(str))
+        require_arg(payload, str)
         if len(payload) == 0:
             return
         self.state.items.append(payload)

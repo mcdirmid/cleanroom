@@ -638,7 +638,6 @@ from typing import Any, Collection, Dict, List, Optional, Set, Tuple
 import unittest
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -1136,15 +1135,7 @@ class SemVerSolverStateMachine(StateMachine[SemVerSolverState]):
     def parse_version(self, text: str) -> Version:
         require_arg(
             text,
-            Domain.type(str),
-            preferred=[
-                "1.0.0",
-                "1.2.3-alpha.1+build.1",
-                "0.1.0",
-                "2.0.0-rc.1",
-                "01.0.0",
-                "invalid",
-            ],
+            str,
         )
         expected = _model_parse_version(text)
         if expected is None:
@@ -1159,13 +1150,11 @@ class SemVerSolverStateMachine(StateMachine[SemVerSolverState]):
     def compare_precedence(self, v1: Version, v2: Version) -> int:
         require_arg(
             v1,
-            Domain.sampled_from(SAMPLE_VERSIONS),
-            preferred=[Version(1, 0, 0), Version(1, 0, 0, prerelease=("alpha", "1"))],
+            SAMPLE_VERSIONS,
         )
         require_arg(
             v2,
-            Domain.sampled_from(SAMPLE_VERSIONS),
-            preferred=[Version(2, 0, 0), Version(1, 0, 0)],
+            SAMPLE_VERSIONS,
         )
         expected = _model_compare_precedence(v1, v2)
         ret = self.inner_compare_precedence(v1, v2)
@@ -1181,16 +1170,7 @@ class SemVerSolverStateMachine(StateMachine[SemVerSolverState]):
     def parse_range(self, text: str) -> VersionRange:
         require_arg(
             text,
-            Domain.type(str),
-            preferred=[
-                ">=1.0.0 <2.0.0",
-                "^1.0.0",
-                "~1.1.0",
-                "1.*",
-                "1.0.0 - 2.0.0",
-                "1.2",
-                "",
-            ],
+            str,
         )
         expected = _model_parse_range(text)
         if expected is None:
@@ -1213,15 +1193,13 @@ class SemVerSolverStateMachine(StateMachine[SemVerSolverState]):
     ) -> bool:
         require_arg(
             version,
-            Domain.sampled_from(SAMPLE_VERSIONS),
-            preferred=[Version(1, 1, 0), Version(1, 0, 0, prerelease=("alpha", "2"))],
+            SAMPLE_VERSIONS,
         )
         require_arg(
             range_constraint,
-            Domain.sampled_from(SAMPLE_RANGES),
-            preferred=[VersionRange("^1.0.0"), VersionRange(">=1.0.0 <2.0.0")],
+            SAMPLE_RANGES,
         )
-        require_arg(include_prerelease, Domain.type(bool), preferred=[False, True])
+        require_arg(include_prerelease, bool)
         expected = _model_satisfies(version, range_constraint, include_prerelease)
         ret = self.inner_satisfies(version, range_constraint, include_prerelease)
         assert ret == expected
@@ -1231,8 +1209,7 @@ class SemVerSolverStateMachine(StateMachine[SemVerSolverState]):
     def register_package(self, release: PackageRelease) -> None:
         require_arg(
             release,
-            Domain.sampled_from(SAMPLE_RELEASES),
-            preferred=[SAMPLE_RELEASES[0], SAMPLE_RELEASES[1], SAMPLE_RELEASES[2]],
+            SAMPLE_RELEASES,
         )
         ret = self.inner_register_package(release)
         existing = list(self.state.packages.get(release.name, []))
@@ -1246,8 +1223,7 @@ class SemVerSolverStateMachine(StateMachine[SemVerSolverState]):
     def get_releases(self, name: str) -> List[PackageRelease]:
         require_arg(
             name,
-            Domain.type(str),
-            preferred=["pkg_a", "pkg_b", "unknown_pkg"],
+            str,
         )
         if name not in self.state.packages:
             with raises(PackageNotFoundError):
@@ -1262,8 +1238,7 @@ class SemVerSolverStateMachine(StateMachine[SemVerSolverState]):
     def has_package(self, name: str) -> bool:
         require_arg(
             name,
-            Domain.type(str),
-            preferred=["pkg_a", "pkg_b", "unknown_pkg"],
+            str,
         )
         expected = name in self.state.packages
         ret = self.inner_has_package(name)
@@ -1284,11 +1259,7 @@ class SemVerSolverStateMachine(StateMachine[SemVerSolverState]):
     ) -> ResolutionOutcome:
         require_arg(
             root_dependencies,
-            Domain.sampled_from(SAMPLE_ROOT_DEPS),
-            preferred=[
-                (PackageDependency("pkg_a", VersionRange("^1.0.0")),),
-                (PackageDependency("missing_pkg", VersionRange("^1.0.0")),),
-            ],
+            SAMPLE_ROOT_DEPS,
         )
         outcome, _, _ = _model_resolve(root_dependencies, self.state.packages)
         if outcome is None:

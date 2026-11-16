@@ -615,7 +615,6 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -1160,7 +1159,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     @transition(VersionEngine.parse_version)
     def parse_version(self, text: str) -> Version:
         require(self.state.initialized)
-        require_arg(text, Domain.sampled_from(_VERSION_TEXTS))
+        require_arg(text, _VERSION_TEXTS)
         ret = self.inner_parse_version(text)
         self.state.parsed_versions.append(ret)
         self.state.current_version = ret
@@ -1175,8 +1174,8 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         # the concrete integer magnitude is an implementation detail, so this
         # oracle is deliberately magnitude-agnostic.
         require(self.state.initialized)
-        require_arg(v1, Domain.sampled_from(_SAMPLE_VERSIONS))
-        require_arg(v2, Domain.sampled_from(_SAMPLE_VERSIONS))
+        require_arg(v1, _SAMPLE_VERSIONS)
+        require_arg(v2, _SAMPLE_VERSIONS)
         ret = self.inner_compare_precedence(v1, v2)
         numeric1 = (v1.major, v1.minor, v1.patch)
         numeric2 = (v2.major, v2.minor, v2.patch)
@@ -1190,7 +1189,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     @transition(VersionEngine.parse_range)
     def parse_range(self, text: str) -> VersionRange:
         require(self.state.initialized)
-        require_arg(text, Domain.sampled_from(_RANGE_TEXTS))
+        require_arg(text, _RANGE_TEXTS)
         ret = self.inner_parse_range(text)
         self.state.parsed_ranges.append(ret)
         assert ret.raw_text == text.strip()
@@ -1205,9 +1204,9 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         include_prerelease: bool,
     ) -> bool:
         require(self.state.initialized)
-        require_arg(version, Domain.sampled_from(_SAMPLE_VERSIONS))
-        require_arg(range_constraint, Domain.sampled_from(_SAMPLE_RANGES))
-        require_arg(include_prerelease, Domain.boolean())
+        require_arg(version, _SAMPLE_VERSIONS)
+        require_arg(range_constraint, _SAMPLE_RANGES)
+        require_arg(include_prerelease, bool)
         expected = _satisfies(version, range_constraint, include_prerelease)
         ret = self.inner_satisfies(version, range_constraint, include_prerelease)
         if version.prerelease and not include_prerelease:
@@ -1218,7 +1217,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     @transition(PackageRepository.register_package)
     def register_package(self, release: PackageRelease) -> None:
         require(self.state.initialized)
-        require_arg(release, Domain.sampled_from(_SAMPLE_RELEASES))
+        require_arg(release, _SAMPLE_RELEASES)
         ret = self.inner_register_package(release)
         self.state.releases.append(release)
         if release.name not in self.state.packages:
@@ -1230,7 +1229,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     @transition(PackageRepository.get_releases)
     def get_releases(self, name: str) -> List[PackageRelease]:
         require(self.state.initialized)
-        require_arg(name, Domain.in_set(self.state.packages))
+        require_arg(name, self.state.packages)
         ret = self.inner_get_releases(name)
         assert all(release.name == name for release in ret)
         assert all(
@@ -1242,7 +1241,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     @transition(PackageRepository.has_package)
     def has_package(self, name: str) -> bool:
         require(self.state.initialized)
-        require_arg(name, Domain.sampled_from(_SAMPLE_PACKAGE_NAMES))
+        require_arg(name, _SAMPLE_PACKAGE_NAMES)
         ret = self.inner_has_package(name)
         assert ret == (name in self.state.packages)
         return ret
@@ -1262,7 +1261,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         require(self.state.initialized)
         require_arg(
             root_dependencies,
-            Domain.sampled_from(_SAMPLE_DEPENDENCY_COLLECTIONS),
+            _SAMPLE_DEPENDENCY_COLLECTIONS,
         )
         ret = self.inner_resolve(root_dependencies)
         self.state.selected_versions = dict(ret.selected_versions)

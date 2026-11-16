@@ -264,11 +264,10 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
-    require_arg,
+    domain, require_arg,
     sut,
     sut_state,
     synthesize_fake,
@@ -390,7 +389,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         self,
         capacity: int,
     ) -> None:
-        require_arg(capacity, Domain.range(1, 100), preferred=[1, 2, 5])
+        require_arg(capacity, (self._dom_configure_capacity))
         ret: None = self.inner_configure(capacity)
         assert ret is None
         overflow = len(self.state.items) - capacity
@@ -410,8 +409,8 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         key: str,
         default: Optional[Any],
     ) -> Any:
-        require_arg(key, Domain.type(str), preferred=["alpha", "beta", "gamma"])
-        require_arg(default, Domain.any())
+        require_arg(key, str)
+        require_arg(default, object)
         if key in self.state.items:
             expected: Any = self.state.items[key]
         else:
@@ -433,8 +432,8 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         key: str,
         value: Any,
     ) -> Optional[Tuple[str, Any]]:
-        require_arg(key, Domain.type(str), preferred=["alpha", "beta", "gamma"])
-        require_arg(value, Domain.any())
+        require_arg(key, str)
+        require_arg(value, object)
         if key in self.state.items:
             expected: Optional[Tuple[str, Any]] = None
         elif len(self.state.items) >= self.state.capacity:
@@ -468,8 +467,8 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         key: str,
         default: Optional[Any],
     ) -> Any:
-        require_arg(key, Domain.type(str), preferred=["alpha", "beta", "gamma"])
-        require_arg(default, Domain.any())
+        require_arg(key, str)
+        require_arg(default, object)
         if key in self.state.items:
             expected: Any = self.state.items[key]
         else:
@@ -484,7 +483,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         key: str,
     ) -> Any:
         require(len(self.state.items) > 0)
-        require_arg(key, Domain.in_set(set(self.state.items)))
+        require_arg(key, self._dom_remove_key)
         if key in self.state.items:
             expected: Any = self.state.items[key]
         else:
@@ -573,6 +572,14 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
         """
         self.state.seeded = True
         assert self.state.capacity >= 1
+
+    @domain()
+    def _dom_configure_capacity(self, x: Any) -> bool:
+        return bool(x >= 1 and x <= 100)
+
+    @domain(valid=lambda self: list(set(self.state.items)))
+    def _dom_remove_key(self, val: Any) -> bool:
+        return val in set(self.state.items)
 
 
 proto = LruCacheStateMachine()

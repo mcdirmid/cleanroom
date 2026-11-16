@@ -18,7 +18,7 @@ The worker supports *executing tasks*, accepting a task identifier and string pa
 
 The worker supports *fetching and executing tasks*, requesting the next pending task from the collaborator queue via dispatch and executing it, returning the dispatched task identifier. When the queue has no pending tasks, fetching and executing raises worker error. If collaborator dispatch or completion raises queue unavailable exception, the worker raises worker execution exception.
 
-The worker supports *seeding task failures* in state machines and fakes, configuring specific task identifiers to raise worker execution exception upon execution to simulate computational failures.
+The worker supports *seeding task failures* in state machines and fakes, configuring specific task identifiers to raise worker execution exception upon execution to simulate computational failures, and exposes a test-only *is failing task* query returning whether a task identifier is configured to fail.
 
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-11-03T23:10:00Z

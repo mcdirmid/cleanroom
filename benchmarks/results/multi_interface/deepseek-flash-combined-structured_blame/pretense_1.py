@@ -188,7 +188,6 @@ from typing import Any, Optional
 import unittest
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -320,7 +319,6 @@ from typing import Any, Optional
 import unittest
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -363,7 +361,7 @@ class StreamWriterStateMachine(StateMachine[StreamReaderState]):
     @transition(StreamWriter.write)
     def write(self, payload: str) -> None:
         require(self.state.initialized)
-        require_arg(payload, Domain.type(str), preferred=["alpha", "beta", "gamma"])
+        require_arg(payload, str)
         if len(payload) > 0:
             self.state.items.append(payload)
             self.state.written_count += 1

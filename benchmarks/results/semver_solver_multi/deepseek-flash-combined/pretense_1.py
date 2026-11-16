@@ -291,7 +291,6 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 import unittest
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -531,7 +530,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         release: PackageRelease,
     ) -> None:
         require(self.state.initialized)
-        require_arg(release, Domain.sampled_from(SAMPLE_RELEASES))
+        require_arg(release, SAMPLE_RELEASES)
         fake_return = None
         ret = self.inner_register_package(release)
         registered = self.state.packages.get(release.name)
@@ -578,7 +577,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         name: str,
     ) -> List[PackageRelease]:
         require(self.state.initialized)
-        require_arg(name, Domain.in_set(self.state.packages.keys()))
+        require_arg(name, self.state.packages.keys())
         fake_return = ordered_releases(self.state.packages.get(name, []))
         ret = self.inner_get_releases(name)
         assert ret == fake_return
@@ -590,7 +589,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         name: str,
     ) -> bool:
         require(self.state.initialized)
-        require_arg(name, Domain.type(str), preferred=SAMPLE_NAMES)
+        require_arg(name, str)
         fake_return = name in self.state.packages
         ret = self.inner_has_package(name)
         assert ret == fake_return
@@ -614,7 +613,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         require(self.state.initialized)
         require_arg(
             root_dependencies,
-            Domain.sampled_from(satisfiable_requests(self.state.available_dependencies, self.state.packages)),
+            satisfiable_requests(self.state.available_dependencies, self.state.packages),
         )
         selected_versions, derivation_steps, _conflict_trail, _conflicting_packages = solve_dependencies(
             root_dependencies,
@@ -889,7 +888,6 @@ from typing import Any, List, Optional, Tuple
 import unittest
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -953,7 +951,7 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
         text: str,
     ) -> Version:
         require(self.state.initialized)
-        require_arg(text, Domain.sampled_from(VERSION_SAMPLES))
+        require_arg(text, VERSION_SAMPLES)
         core_and_build = text.partition("+")
         core = core_and_build[0].partition("-")
         numbers = core[0].split(".")
@@ -978,8 +976,8 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
         v2: Version,
     ) -> int:
         require(self.state.initialized)
-        require_arg(v1, Domain.type(Version), preferred=PREFERRED_VERSIONS)
-        require_arg(v2, Domain.type(Version), preferred=PREFERRED_VERSIONS)
+        require_arg(v1, Version)
+        require_arg(v2, Version)
         comparison = 0
         if v1.major != v2.major:
             comparison = 1 if v1.major > v2.major else -1
@@ -1346,7 +1344,6 @@ from typing import Any, List, Optional, Tuple
 import unittest
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -1723,7 +1720,7 @@ class SemverRangeStateMachine(StateMachine[SemverRangeState]):
         text: str,
     ) -> VersionRange:
         require(self.state.initialized)
-        require_arg(text, Domain.sampled_from(RANGE_SAMPLES))
+        require_arg(text, RANGE_SAMPLES)
         fake_return = VersionRange(raw_text=validate_range_text(text))
         ret = self.inner_parse_range(text)
         self.state.parsed_ranges.append(fake_return)
@@ -1738,9 +1735,9 @@ class SemverRangeStateMachine(StateMachine[SemverRangeState]):
         include_prerelease: bool,
     ) -> bool:
         require(self.state.initialized)
-        require_arg(version, Domain.type(Version), preferred=PREFERRED_VERSIONS)
-        require_arg(range_constraint, Domain.sampled_from(RANGE_CONSTRAINTS))
-        require_arg(include_prerelease, Domain.boolean())
+        require_arg(version, Version)
+        require_arg(range_constraint, RANGE_CONSTRAINTS)
+        require_arg(include_prerelease, bool)
         fake_return = version_satisfies_text(version, range_constraint.raw_text, include_prerelease)
         ret = self.inner_satisfies(version, range_constraint, include_prerelease)
         self.state.satisfaction_checks += 1

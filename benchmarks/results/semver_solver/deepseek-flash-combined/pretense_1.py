@@ -475,11 +475,10 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
-    require_arg,
+    domain, require_arg,
     sut,
     sut_state,
     synthesize_fake,
@@ -629,7 +628,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         self,
         text: str,
     ) -> Version:
-        require_arg(text, Domain.sampled_from(VALID_VERSION_TEXTS))
+        require_arg(text, VALID_VERSION_TEXTS)
         ret: Version = self.inner_parse_version(text)
         self.state.versions.append(ret)
         assert ret is not None
@@ -641,8 +640,8 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         v1: Version,
         v2: Version,
     ) -> int:
-        require_arg(v1, Domain.type(Version))
-        require_arg(v2, Domain.type(Version))
+        require_arg(v1, Version)
+        require_arg(v2, Version)
         ret: int = self.inner_compare_precedence(v1, v2)
         assert ret is not None
         return ret
@@ -652,7 +651,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         self,
         text: str,
     ) -> VersionRange:
-        require_arg(text, Domain.sampled_from(VALID_RANGE_TEXTS))
+        require_arg(text, VALID_RANGE_TEXTS)
         ret: VersionRange = self.inner_parse_range(text)
         self.state.ranges.append(ret)
         assert ret is not None
@@ -665,9 +664,9 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         range_constraint: VersionRange,
         include_prerelease: bool,
     ) -> bool:
-        require_arg(version, Domain.type(Version))
-        require_arg(range_constraint, Domain.sampled_from(VALID_RANGE_CONSTRAINTS))
-        require_arg(include_prerelease, Domain.boolean(), preferred=[True, False])
+        require_arg(version, Version)
+        require_arg(range_constraint, VALID_RANGE_CONSTRAINTS)
+        require_arg(include_prerelease, bool, preferred=[True, False])
         ret: bool = self.inner_satisfies(version, range_constraint, include_prerelease)
         assert ret is not None
         return ret
@@ -677,7 +676,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         self,
         release: PackageRelease,
     ) -> None:
-        require_arg(release, Domain.type(PackageRelease))
+        require_arg(release, PackageRelease)
         ret = self.inner_register_package(release)
         releases = self.state.packages.setdefault(release.name, [])
         releases.append(release)
@@ -693,7 +692,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         self,
         name: str,
     ) -> List[PackageRelease]:
-        require_arg(name, Domain.in_set(tuple(self.state.packages.keys())))
+        require_arg(name, self._dom_get_releases_name)
         released = list(self.state.packages[name])
         ret: List[PackageRelease] = self.inner_get_releases(name)
         assert ret is not None
@@ -704,7 +703,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         self,
         name: str,
     ) -> bool:
-        require_arg(name, Domain.type(str))
+        require_arg(name, str)
         ret: bool = self.inner_has_package(name)
         assert ret is not None
         return ret
@@ -720,12 +719,16 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         self,
         root_dependencies: Collection[PackageDependency],
     ) -> ResolutionOutcome:
-        require_arg(root_dependencies, Domain.type(Collection[PackageDependency]))
+        require_arg(root_dependencies, Collection[PackageDependency])
         outcome = ResolutionOutcome(selected_versions={}, derivation_steps=())
         ret: ResolutionOutcome = self.inner_resolve(root_dependencies)
         self.state.outcomes.append(ret)
         assert ret is not None
         return ret
+
+    @domain(valid=lambda self: list(tuple(self.state.packages.keys())))
+    def _dom_get_releases_name(self, val: Any) -> bool:
+        return val in tuple(self.state.packages.keys())
 
 
 proto = SemverSolverStateMachine()

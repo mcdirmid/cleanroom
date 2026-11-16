@@ -246,7 +246,6 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -300,7 +299,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         require(self.state.initialized)
         require_arg(
             release,
-            Domain.type(PackageRelease),
+            PackageRelease,
         )
         self.state.registered_names.append(release.name)
         ret = self.inner_register_package(release)
@@ -314,8 +313,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         require(self.state.initialized)
         require_arg(
             name,
-            Domain.type(str),
-            preferred=["pkg"],
+            str,
         )
         ret: List[PackageRelease] = self.inner_get_releases(name)
         return ret
@@ -328,8 +326,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         require(self.state.initialized)
         require_arg(
             name,
-            Domain.type(str),
-            preferred=["pkg"],
+            str,
         )
         ret: bool = self.inner_has_package(name)
         return ret
@@ -350,7 +347,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         require(self.state.initialized)
         require_arg(
             root_dependencies,
-            Domain.type(Collection[PackageDependency]),
+            Collection[PackageDependency],
         )
         self.state.resolved_names.add("resolved")
         ret: ResolutionOutcome = self.inner_resolve(root_dependencies)
@@ -635,7 +632,6 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -690,8 +686,7 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
         require(self.state.initialized)
         require_arg(
             text,
-            Domain.type(str),
-            preferred=["1.0.0", "1.2.3-alpha.1+build.7"],
+            str,
         )
         ret: Version = self.inner_parse_version(text)
         self.state.parsed_versions.append(ret)
@@ -706,11 +701,11 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
         require(self.state.initialized)
         require_arg(
             v1,
-            Domain.type(Version),
+            Version,
         )
         require_arg(
             v2,
-            Domain.type(Version),
+            Version,
         )
         ret: int = self.inner_compare_precedence(v1, v2)
         self.state.last_comparison = ret
@@ -1095,7 +1090,6 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -1141,8 +1135,7 @@ class SemverRangeStateMachine(StateMachine[SemverRangeState]):
         require(self.state.initialized)
         require_arg(
             text,
-            Domain.type(str),
-            preferred=["1.0.0", ">=1.0.0 <2.0.0", "1.x", "1.0.0 - 2.0.0", "^1.2.3", "~1.2.3"],
+            str,
         )
         self.state.parsed_ranges.append(text)
         ret: VersionRange = self.inner_parse_range(text)
@@ -1158,15 +1151,15 @@ class SemverRangeStateMachine(StateMachine[SemverRangeState]):
         require(self.state.initialized)
         require_arg(
             version,
-            Domain.type(Version),
+            Version,
         )
         require_arg(
             range_constraint,
-            Domain.type(VersionRange),
+            VersionRange,
         )
         require_arg(
             include_prerelease,
-            Domain.boolean(),
+            bool,
         )
         ret: bool = self.inner_satisfies(version, range_constraint, include_prerelease)
         return ret

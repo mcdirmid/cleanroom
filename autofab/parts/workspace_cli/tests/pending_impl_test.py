@@ -99,6 +99,22 @@ class WorkspacePendingImplTest(LifecycleTestCase):
             ["parts/dag_engine_lite/lib/dag_engine_lite_impl.py"],
         )
 
+    def test_remove_pending_target_preserves_impl_distinction(self) -> None:
+        ws_dir = os.path.join(self.test_dir, "ws_impl_distinction")
+        os.makedirs(ws_dir, exist_ok=True)
+        targets = [
+            "parts/ring_buffer/pretense/ring_buffer_pretense.py",
+            "parts/ring_buffer/pretense/ring_buffer_impl_pretense.py",
+        ]
+        self.pending_mgr.set_pending_work(ws_dir, targets)
+        self.pending_mgr.remove_pending_target(
+            ws_dir, "parts/ring_buffer/pretense/ring_buffer_pretense.py"
+        )
+        self.assertEqual(
+            list(self.pending_mgr.get_pending_work(ws_dir)),
+            ["parts/ring_buffer/pretense/ring_buffer_impl_pretense.py"],
+        )
+
     def test_clear_pending_work(self) -> None:
         ws_dir = os.path.join(self.test_dir, "ws_clear")
         os.makedirs(ws_dir, exist_ok=True)

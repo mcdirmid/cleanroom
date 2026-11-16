@@ -122,6 +122,14 @@ class DAG(Singleton[SystemTier], Protocol):
         # TODO_all_nodes_body
         ...
 
+    def all_dependencies_exist(self) -> bool:
+        # TODO_all_dependencies_exist_body
+        ...
+
+    def is_acyclic(self) -> bool:
+        # TODO_is_acyclic_body
+        ...
+
     def validate(self) -> None:
         # TODO_validate_body
         ...

@@ -608,7 +608,6 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -722,7 +721,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
 
     @transition(VersionEngine.parse_version)
     def parse_version(self, text: str) -> Version:
-        require_arg(text, Domain.sampled_from(SAMPLE_VERSION_TEXTS))
+        require_arg(text, SAMPLE_VERSION_TEXTS)
         parsed = Version(major=0, minor=0, patch=0)
         ret: Version = self.inner_parse_version(text)
         self.state.parsed_versions.append(ret)
@@ -731,15 +730,15 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
 
     @transition(VersionEngine.compare_precedence)
     def compare_precedence(self, v1: Version, v2: Version) -> int:
-        require_arg(v1, Domain.sampled_from(SAMPLE_VERSIONS))
-        require_arg(v2, Domain.sampled_from(SAMPLE_VERSIONS))
+        require_arg(v1, SAMPLE_VERSIONS)
+        require_arg(v2, SAMPLE_VERSIONS)
         ret: int = self.inner_compare_precedence(v1, v2)
         assert isinstance(ret, int)
         return ret
 
     @transition(VersionEngine.parse_range)
     def parse_range(self, text: str) -> VersionRange:
-        require_arg(text, Domain.sampled_from(SAMPLE_RANGE_TEXTS))
+        require_arg(text, SAMPLE_RANGE_TEXTS)
         parsed = VersionRange(raw_text=text.strip())
         ret: VersionRange = self.inner_parse_range(text)
         self.state.parsed_ranges.append(ret)
@@ -753,16 +752,16 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         range_constraint: VersionRange,
         include_prerelease: bool,
     ) -> bool:
-        require_arg(version, Domain.sampled_from(SAMPLE_VERSIONS))
-        require_arg(range_constraint, Domain.sampled_from(SAMPLE_RANGES))
-        require_arg(include_prerelease, Domain.boolean())
+        require_arg(version, SAMPLE_VERSIONS)
+        require_arg(range_constraint, SAMPLE_RANGES)
+        require_arg(include_prerelease, bool)
         ret: bool = self.inner_satisfies(version, range_constraint, include_prerelease)
         assert isinstance(ret, bool)
         return ret
 
     @transition(PackageRepository.register_package)
     def register_package(self, release: PackageRelease) -> None:
-        require_arg(release, Domain.sampled_from(SAMPLE_RELEASES))
+        require_arg(release, SAMPLE_RELEASES)
         ret = self.inner_register_package(release)
         self.state.registered.setdefault(release.name, []).append(release)
         no_dependencies: Tuple[PackageDependency, ...] = ()
@@ -779,7 +778,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     @transition(PackageRepository.get_releases)
     def get_releases(self, name: str) -> List[PackageRelease]:
         require(len(self.state.registered) > 0)
-        require_arg(name, Domain.in_set(self.state.registered.keys()))
+        require_arg(name, self.state.registered.keys())
         ordered = sorted(self.state.registered[name], key=_release_key, reverse=True)
         ret: List[PackageRelease] = self.inner_get_releases(name)
         assert all(release.name == name for release in ret)
@@ -787,7 +786,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
 
     @transition(PackageRepository.has_package)
     def has_package(self, name: str) -> bool:
-        require_arg(name, Domain.type(str), preferred=["alpha", "beta"])
+        require_arg(name, str)
         ret: bool = self.inner_has_package(name)
         assert isinstance(ret, bool)
         return ret
@@ -801,7 +800,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     @transition(DependencySolver.resolve)
     def resolve(self, root_dependencies: Collection[PackageDependency]) -> ResolutionOutcome:
         require(len(self.state.registered) > 0)
-        require_arg(root_dependencies, Domain.in_set(self.state.dependency_options))
+        require_arg(root_dependencies, self.state.dependency_options)
         resolved = ResolutionOutcome(
             selected_versions={},
             derivation_steps=(),
@@ -900,5 +899,5 @@ FakeSemverSolverFuzzTest = compile_hypothesis_test_case(
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-08T17:12:05Z
 # LAST_CHANGED: 2026-11-08T17:12:05Z
-# CHANGE: Resolve feedback: replace the transition-local candidates list (unresolvable by Pretense domain evaluation) with a state-derived argument domain. Model state now tracks dependency_options as a list of resolvable root-dependency sets; register_package appends the empty set and a satisfiable single-package constraint for each registered release, and resolve gates root_dependencies via Domain.in_set(self.state.dependency_options), so fuzz generation resolves the domain at generation time, never raises NameError, and only offers dependency sets whose packages exist in the repository mirror.
+# CHANGE: Resolve feedback: replace the transition-local candidates list (unresolvable by Pretense domain evaluation) with a state-derived argument domain. Model state now tracks dependency_options as a list of resolvable root-dependency sets; register_package appends the empty set and a satisfiable single-package constraint for each registered release, and resolve gates root_dependencies via self.state.dependency_options, so fuzz generation resolves the domain at generation time, never raises NameError, and only offers dependency sets whose packages exist in the repository mirror.
 # --- END AUTOFAB METADATA ---

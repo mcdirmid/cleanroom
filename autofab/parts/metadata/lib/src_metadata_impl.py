@@ -1,4 +1,5 @@
 from __future__ import annotations
+import difflib
 import hashlib
 import json
 import os
@@ -84,6 +85,81 @@ def _lookup_manifest_code_hash(
         val = entry.get("code_hash")
         return val if isinstance(val, str) and val else None
     return None
+
+
+def _extract_body_indexed_lines(
+    content: str, filename_or_ext: str
+) -> List[Tuple[int, str]]:
+    """Returns 1-based (file_line_num, line_text) pairs outside metadata boundaries."""
+    is_html = _is_html_comment_format(filename_or_ext)
+    lines = content.splitlines()
+    bounds = _extract_block_boundaries(lines, is_html)
+    if bounds is None:
+        items = [(idx + 1, line) for idx, line in enumerate(lines)]
+    else:
+        start, end = bounds
+        items = [
+            (idx + 1, line)
+            for idx, line in enumerate(lines)
+            if idx < start or idx > end
+        ]
+    while items and not items[-1][1].strip():
+        items.pop()
+    return items
+
+
+def _merge_line_spans(spans: List[Tuple[int, int]]) -> List[Tuple[int, int]]:
+    if not spans:
+        return []
+    ordered = sorted(spans)
+    merged: List[Tuple[int, int]] = [ordered[0]]
+    for s, e in ordered[1:]:
+        prev_s, prev_e = merged[-1]
+        if s <= prev_e + 1:
+            merged[-1] = (prev_s, max(prev_e, e))
+        else:
+            merged.append((s, e))
+    return merged
+
+
+def _format_spans_and_dels(
+    spans: List[Tuple[int, int]], dels: List[int]
+) -> str:
+    tokens: List[str] = []
+    for s, e in _merge_line_spans(spans):
+        tokens.append(str(s) if s == e else f"{s}-{e}")
+    seen_dels: set[int] = set()
+    for d in dels:
+        if d not in seen_dels:
+            seen_dels.add(d)
+            tokens.append(f"del@{d}")
+    return ", ".join(tokens)
+
+
+def _map_old_line_to_new(
+    old_line: int,
+    old_items: List[Tuple[int, str]],
+    new_items: List[Tuple[int, str]],
+    opcodes: List[Tuple[str, int, int, int, int]],
+) -> Tuple[Optional[int], str]:
+    """Maps a single 1-based old file line via opcodes -> (new_line_or_None, tag)."""
+    for tag, i1, i2, j1, j2 in opcodes:
+        if i1 < i2:
+            s_old = old_items[i1][0]
+            e_old = old_items[i2 - 1][0]
+            if s_old <= old_line <= e_old:
+                if tag == "equal":
+                    offset = old_line - s_old
+                    new_idx = min(j1 + offset, len(new_items) - 1)
+                    return new_items[new_idx][0], tag
+                anchor = (
+                    new_items[min(j1, len(new_items) - 1)][0]
+                    if new_items
+                    else 1
+                )
+                return anchor, tag
+    anchor = new_items[-1][0] if new_items else 1
+    return anchor, "delete"
 
 
 class SourceMetadataCoordinator(src_metadata.SourceMetadataCoordinator):
@@ -209,6 +285,9 @@ class SourceMetadataCoordinator(src_metadata.SourceMetadataCoordinator):
         stamp_audit: Optional[str] = None,
         dirty: Optional[str] = None,
         clear_dirty: bool = False,
+        changes: Optional[List[src_metadata.ChangeEntry]] = None,
+        clear_changes: bool = False,
+        append_change: Optional[src_metadata.ChangeEntry] = None,
     ) -> str:
         is_html = _is_html_comment_format(filename_or_ext)
         lines = content.splitlines()
@@ -236,11 +315,27 @@ class SourceMetadataCoordinator(src_metadata.SourceMetadataCoordinator):
         new_last_changed = (
             last_changed if last_changed is not None else existing_meta.last_changed
         )
-        new_change = (
-            change_summary
-            if change_summary is not None
-            else existing_meta.change_summary
-        )
+
+        if clear_changes:
+            new_changes: List[src_metadata.ChangeEntry] = []
+        elif changes is not None:
+            new_changes = list(changes)
+        else:
+            new_changes = list(existing_meta.changes)
+
+        if append_change is not None:
+            new_changes.append(append_change)
+            if len(new_changes) > src_metadata.MAX_CHANGE_ENTRIES:
+                new_changes = new_changes[-src_metadata.MAX_CHANGE_ENTRIES :]
+
+        if clear_changes and change_summary is None:
+            new_change = ""
+        elif change_summary is not None:
+            new_change = change_summary
+        elif new_changes:
+            new_change = new_changes[-1].delta
+        else:
+            new_change = existing_meta.change_summary
 
         if clear_feedback:
             new_feedback: List[str] = []
@@ -276,6 +371,7 @@ class SourceMetadataCoordinator(src_metadata.SourceMetadataCoordinator):
             feedback=new_feedback,
             audits=new_audits,
             dirty=new_dirty,
+            changes=new_changes,
         )
 
         new_block_lines = format_metadata_block(new_meta, is_html)
@@ -319,6 +415,9 @@ class SourceMetadataCoordinator(src_metadata.SourceMetadataCoordinator):
         stamp_audit: Optional[str] = None,
         dirty: Optional[str] = None,
         clear_dirty: bool = False,
+        changes: Optional[List[src_metadata.ChangeEntry]] = None,
+        clear_changes: bool = False,
+        append_change: Optional[src_metadata.ChangeEntry] = None,
     ) -> None:
         p = Path(file_path)
         if p.is_file():
@@ -339,6 +438,9 @@ class SourceMetadataCoordinator(src_metadata.SourceMetadataCoordinator):
             stamp_audit=stamp_audit,
             dirty=dirty,
             clear_dirty=clear_dirty,
+            changes=changes,
+            clear_changes=clear_changes,
+            append_change=append_change,
         )
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(updated, encoding="utf-8")
@@ -376,19 +478,227 @@ class SourceMetadataCoordinator(src_metadata.SourceMetadataCoordinator):
             clear_dirty=True,
         )
 
-    # Contract: Marks node changed with updated timestamps and change description.
+    # Contract: Marks node changed with updated timestamps, rebased prior spans, and bounded structured change entry.
     def record_change(
         self,
         file_path: Path | str,
         change_description: str,
+        kind: str = "behavior",
+        scope: Optional[str] = None,
+        why: Optional[str] = None,
+        prior_content: Optional[str] = None,
     ) -> None:
+        p = Path(file_path)
         now = src_metadata.current_utc_timestamp()
+        new_content = p.read_text(encoding="utf-8") if p.is_file() else ""
+        existing_meta = self.extract_metadata_from_text(new_content, p.name)
+        prior_meta = (
+            self.extract_metadata_from_text(prior_content, p.name)
+            if prior_content is not None
+            else None
+        )
+        if prior_meta and prior_meta.changes:
+            prior_entries = list(prior_meta.changes)
+        else:
+            prior_entries = list(existing_meta.changes) if existing_meta else []
+        if prior_content is not None and prior_entries:
+            prior_entries = self.rebase_change_entries(
+                prior_entries, prior_content, new_content, p.name
+            )
+        lines_spec = self.compute_changed_lines(prior_content, new_content, p.name)
+        if not lines_spec:
+            lines_spec = "NEW" if prior_content is None else ""
+        norm_kind = (kind or "behavior").strip().lower()
+        if norm_kind not in src_metadata.VALID_CHANGE_KINDS:
+            norm_kind = "behavior"
+        new_entry = src_metadata.ChangeEntry(
+            timestamp=now,
+            kind=norm_kind,
+            lines=lines_spec,
+            scope=scope.strip() if scope and scope.strip() else None,
+            delta=change_description.strip(),
+            why=why.strip() if why and why.strip() else None,
+        )
+        prior_entries.append(new_entry)
+        if len(prior_entries) > src_metadata.MAX_CHANGE_ENTRIES:
+            prior_entries = prior_entries[-src_metadata.MAX_CHANGE_ENTRIES :]
         self.update_metadata(
             file_path,
             last_cleaned=now,
             last_changed=now,
-            change_summary=change_description,
+            change_summary=new_entry.delta,
+            changes=prior_entries,
             clear_feedback=True,
+            clear_audits=True,
+            clear_dirty=True,
+        )
+
+    # Contract: Computes 1-based changed line spans between old_content and new_content code bodies.
+    def compute_changed_lines(
+        self,
+        old_content: Optional[str],
+        new_content: str,
+        filename_or_ext: str,
+    ) -> str:
+        if old_content is None:
+            return "NEW"
+        old_items = _extract_body_indexed_lines(old_content, filename_or_ext)
+        new_items = _extract_body_indexed_lines(new_content, filename_or_ext)
+        old_texts = [t for _, t in old_items]
+        new_texts = [t for _, t in new_items]
+        if old_texts == new_texts:
+            return ""
+        matcher = difflib.SequenceMatcher(None, old_texts, new_texts)
+        spans: List[Tuple[int, int]] = []
+        dels: List[int] = []
+        for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+            if tag in ("insert", "replace") and j1 < j2:
+                spans.append((new_items[j1][0], new_items[j2 - 1][0]))
+            elif tag == "delete" and i1 < i2:
+                anchor = (
+                    new_items[min(j1, len(new_items) - 1)][0]
+                    if new_items
+                    else 1
+                )
+                dels.append(anchor)
+        return _format_spans_and_dels(spans, dels)
+
+    # Contract: Rebases existing ChangeEntry line spans from old_content coordinates to new_content coordinates.
+    def rebase_change_entries(
+        self,
+        entries: List[src_metadata.ChangeEntry],
+        old_content: Optional[str],
+        new_content: str,
+        filename_or_ext: str,
+    ) -> List[src_metadata.ChangeEntry]:
+        if old_content is None or not entries:
+            return list(entries)
+        old_items = _extract_body_indexed_lines(old_content, filename_or_ext)
+        new_items = _extract_body_indexed_lines(new_content, filename_or_ext)
+        old_texts = [t for _, t in old_items]
+        new_texts = [t for _, t in new_items]
+        if old_texts == new_texts:
+            return list(entries)
+        opcodes = difflib.SequenceMatcher(None, old_texts, new_texts).get_opcodes()
+        rebased: List[src_metadata.ChangeEntry] = []
+        for entry in entries:
+            raw_lines = (entry.lines or "").strip()
+            if raw_lines in ("", "NEW", "superseded"):
+                rebased.append(entry)
+                continue
+            spans: List[Tuple[int, int]] = []
+            dels: List[int] = []
+            saw_replace = False
+            saw_delete = False
+            for tok in [t.strip() for t in raw_lines.split(",") if t.strip()]:
+                if tok.startswith("del@"):
+                    try:
+                        old_ln = int(tok[4:])
+                        new_ln, _ = _map_old_line_to_new(
+                            old_ln, old_items, new_items, opcodes
+                        )
+                        if new_ln is not None:
+                            dels.append(new_ln)
+                    except ValueError:
+                        pass
+                    continue
+                if "-" in tok:
+                    parts = tok.split("-", 1)
+                    try:
+                        s_old, e_old = int(parts[0]), int(parts[1])
+                    except ValueError:
+                        continue
+                else:
+                    try:
+                        s_old = e_old = int(tok)
+                    except ValueError:
+                        continue
+                for tag, i1, i2, j1, j2 in opcodes:
+                    if i1 >= i2:
+                        continue
+                    blk_s = old_items[i1][0]
+                    blk_e = old_items[i2 - 1][0]
+                    ov_s = max(s_old, blk_s)
+                    ov_e = min(e_old, blk_e)
+                    if ov_s > ov_e:
+                        continue
+                    if tag == "equal":
+                        new_s = new_items[min(j1 + (ov_s - blk_s), len(new_items) - 1)][0]
+                        new_e = new_items[min(j1 + (ov_e - blk_s), len(new_items) - 1)][0]
+                        spans.append((new_s, new_e))
+                    elif tag == "replace":
+                        saw_replace = True
+                    elif tag == "delete":
+                        saw_delete = True
+                        anchor = (
+                            new_items[min(j1, len(new_items) - 1)][0]
+                            if new_items
+                            else 1
+                        )
+                        dels.append(anchor)
+            if spans or dels:
+                new_lines_str = _format_spans_and_dels(spans, dels)
+            elif saw_replace:
+                new_lines_str = "superseded"
+            elif saw_delete:
+                new_lines_str = f"del@{new_items[-1][0] if new_items else 1}"
+            else:
+                new_lines_str = raw_lines
+            rebased.append(
+                src_metadata.ChangeEntry(
+                    timestamp=entry.timestamp,
+                    kind=entry.kind,
+                    lines=new_lines_str,
+                    scope=entry.scope,
+                    delta=entry.delta,
+                    why=entry.why,
+                )
+            )
+        return rebased
+
+    # Contract: Filters ChangeEntry items strictly newer than since_timestamp.
+    def filter_changes_since(
+        self,
+        entries: List[src_metadata.ChangeEntry],
+        since_timestamp: Optional[str],
+    ) -> List[src_metadata.ChangeEntry]:
+        if not since_timestamp:
+            return list(entries)
+        return [
+            e for e in entries if e.timestamp and e.timestamp > since_timestamp
+        ]
+
+    # Contract: Projects in-band metadata for a role workspace by clearing lifecycle timestamps and filtering CHANGES:.
+    def project_workspace_metadata(
+        self,
+        content: str,
+        filename_or_ext: str,
+        strip_changes: bool = False,
+        since_timestamp: Optional[str] = None,
+    ) -> str:
+        meta = self.extract_metadata_from_text(content, filename_or_ext)
+        if meta is None:
+            return content
+        if strip_changes:
+            return self.rewrite_metadata_in_text(
+                content,
+                filename_or_ext,
+                clear_last_cleaned=True,
+                last_changed="",
+                change_summary="",
+                clear_changes=True,
+                clear_audits=True,
+                clear_dirty=True,
+            )
+        filtered = self.filter_changes_since(meta.changes, since_timestamp)
+        return self.rewrite_metadata_in_text(
+            content,
+            filename_or_ext,
+            clear_last_cleaned=True,
+            last_changed="",
+            change_summary=filtered[-1].delta if filtered else "",
+            changes=filtered,
+            clear_changes=(len(filtered) == 0),
             clear_audits=True,
             clear_dirty=True,
         )

@@ -203,7 +203,6 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -224,15 +223,15 @@ from benchmark_1.parts.ring_buffer.lib.ring_buffer import BufferEmptyError, Ring
 # Operational branches and contracted exceptions (with raises(ExpectedException): ())
 # live naturally inside the single transition body (multi-transition splitting is prohibited).
 # require_arg defines the caller precondition contract (checked at runtime on real calls).
-# Use Domain.type(T) or open domain; use preferred=[...] to cluster/bias fuzz inputs without restricting the contract.
+# Use T or open domain; use preferred=[...] to cluster/bias fuzz inputs without restricting the contract.
 #
 # REFERENCE PATTERNS:
 #   # 1:1 Transition Pattern with Domain strategies and inner_transition pivot:
 #   @transition(TargetClass.method)
 #   def method(self, arg1: str, count: int) -> ReturnType:
 #       require(self.state.initialized)
-#       require_arg(arg1, Domain.type(str), preferred=["sample"])
-#       require_arg(count, Domain.range(1, 100), preferred=[10])
+#       require_arg(arg1, str, preferred=["sample"])
+#       require_arg(count, (lambda x: x >= 1 and x <= 100), preferred=[10])
 #       fake_ret = ReturnType(...)  # or None / value
 #       ret = (fake_ret)
 #       self.state.items.append(ret)
@@ -288,7 +287,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
         item: Any,
     ) -> Optional[Any]:
         require(self.state.initialized)
-        require_arg(item, Domain.any(), preferred=["alpha", "beta", 0, 1])
+        require_arg(item, object)
         was_full = len(self.state.items) >= self.state.capacity
         evicted: Optional[Any] = self.state.items[0] if was_full else None
         ret = self.inner_push(item)

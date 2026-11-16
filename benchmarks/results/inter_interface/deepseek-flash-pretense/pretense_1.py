@@ -170,11 +170,10 @@ from typing import Any, Optional
 import unittest
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
-    require_arg,
+    domain, require_arg,
     sut,
     sut_state,
     synthesize_fake,
@@ -218,7 +217,7 @@ class InterInterfaceStateMachine(StateMachine[InterInterfaceState]):
     ) -> None:
         require(self.state.initialized)
         vault = sut_state(VaultState)
-        require_arg(amount, Domain.range(1, 1000), preferred=[1, 10])
+        require_arg(amount, (self._dom_allocate_amount))
         if not vault.is_active:
             with raises(VaultInactiveException):
                 self.inner_allocate(amount)
@@ -237,7 +236,7 @@ class InterInterfaceStateMachine(StateMachine[InterInterfaceState]):
     ) -> None:
         require(self.state.initialized)
         vault = sut_state(VaultState)
-        require_arg(amount, Domain.range(1, 1000), preferred=[1, 10])
+        require_arg(amount, (self._dom_release_amount))
         if not vault.is_active:
             with raises(VaultInactiveException):
                 self.inner_release(amount)
@@ -269,6 +268,14 @@ class InterInterfaceStateMachine(StateMachine[InterInterfaceState]):
     def seed_initial(self) -> None:
         """Seed state machine state for fake initialization."""
         self.state.initialized = True
+
+    @domain()
+    def _dom_allocate_amount(self, x: Any) -> bool:
+        return bool(x >= 1 and x <= 1000)
+
+    @domain()
+    def _dom_release_amount(self, x: Any) -> bool:
+        return bool(x >= 1 and x <= 1000)
 
 
 proto = InterInterfaceStateMachine()
@@ -479,11 +486,10 @@ from typing import Any, Optional
 import unittest
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
-    require_arg,
+    domain, require_arg,
     sut,
     sut_state,
     synthesize_fake,
@@ -522,7 +528,7 @@ class VaultStateMachine(StateMachine[VaultState]):
         amount: int,
     ) -> None:
         require(self.state.initialized)
-        require_arg(amount, Domain.range(1, 1000), preferred=[1, 10, 100])
+        require_arg(amount, (self._dom_deposit_amount))
         if not self.state.is_active:
             with raises(VaultInactiveException):
                 self.inner_deposit(amount)
@@ -539,7 +545,7 @@ class VaultStateMachine(StateMachine[VaultState]):
     ) -> None:
         require(self.state.initialized)
         require(self.state.balance >= 1)
-        require_arg(amount, Domain.range(1, self.state.balance + 1), preferred=[1])
+        require_arg(amount, (self._dom_withdraw_amount))
         if not self.state.is_active:
             with raises(VaultInactiveException):
                 self.inner_withdraw(amount)
@@ -555,7 +561,7 @@ class VaultStateMachine(StateMachine[VaultState]):
         active: bool,
     ) -> None:
         require(self.state.initialized)
-        require_arg(active, Domain.boolean())
+        require_arg(active, bool)
         ret = self.inner_set_active(active)
         self.state.is_active = active
         assert ret is None
@@ -594,6 +600,14 @@ class VaultStateMachine(StateMachine[VaultState]):
     def seed_initial(self) -> None:
         """Seed state machine state for fake initialization."""
         self.state.initialized = True
+
+    @domain()
+    def _dom_deposit_amount(self, x: Any) -> bool:
+        return bool(x >= 1 and x <= 1000)
+
+    @domain()
+    def _dom_withdraw_amount(self, x: Any) -> bool:
+        return bool(x >= 1 and x <= self.state.balance + 1)
 
 
 proto = VaultStateMachine()
@@ -647,5 +661,5 @@ FakeVaultFuzzTest = compile_hypothesis_test_case(
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-04T18:40:16Z
 # LAST_CHANGED: 2026-11-04T18:40:16Z
-# CHANGE: Fixed feedback: withdraw argument domain now uses Domain.range(1, self.state.balance + 1) so the exclusive upper bound admits every valid amount from 1 through the modeled balance inclusive, including the full-balance withdraw(6) that decrements to zero and the balance==1 boundary case. The require(self.state.balance >= 1) gate still applies before the inactivity branch so no withdrawal is drawn at balance 0, keeping InsufficientFundsError unreachable during fuzzing.
+# CHANGE: Fixed feedback: withdraw argument domain now uses (lambda x: x >= 1 and x <= self.state.balance + 1) so the exclusive upper bound admits every valid amount from 1 through the modeled balance inclusive, including the full-balance withdraw(6) that decrements to zero and the balance==1 boundary case. The require(self.state.balance >= 1) gate still applies before the inactivity branch so no withdrawal is drawn at balance 0, keeping InsufficientFundsError unreachable during fuzzing.
 # --- END AUTOFAB METADATA ---

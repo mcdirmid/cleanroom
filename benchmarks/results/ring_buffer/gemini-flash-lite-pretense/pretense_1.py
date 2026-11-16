@@ -201,7 +201,6 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     call_target,
     raises,
@@ -243,7 +242,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
     @transition(RingBuffer.push)
     def push(self, item: Any) -> Optional[Any]:
         require(self.state.initialized)
-        require_arg(item, Domain.any())
+        require_arg(item, object)
         was_full = len(self.state.items) >= self.state.capacity
         oldest = self.state.items[0] if self.state.items else None
         evicted = oldest if was_full else None

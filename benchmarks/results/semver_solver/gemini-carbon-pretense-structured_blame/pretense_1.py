@@ -419,12 +419,11 @@ from typing import Any, Collection, Dict, List, Optional, Sequence, Set, Tuple
 import unittest
 
 from pretense import (
-    Domain,
     Env,
     StateMachine,
     raises,
     require,
-    require_arg,
+    domain, require_arg,
     require_env,
     sut,
     sut_state,
@@ -1022,10 +1021,9 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     def parse_version(self, text: str) -> Version:
         require_arg(
             text,
-            Domain.sampled_from(VALID_VERSION_STRINGS),
+            VALID_VERSION_STRINGS,
             error=InvalidVersionError,
-            preferred=["1.0.0", "1.0.0-beta+exp.sha.5114f85", "0.1.0"],
-            fuzz_domain=Domain.sampled_from(VALID_VERSION_STRINGS),
+            fuzz_domain=VALID_VERSION_STRINGS,
         )
         ret = self.inner_parse_version(text)
         expected = parse_semver_text(text)
@@ -1045,15 +1043,13 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     def compare_precedence(self, v1: Version, v2: Version) -> int:
         require_arg(
             v1,
-            Domain.type(Version),
-            preferred=[Version(1, 0, 0), Version(1, 0, 0, prerelease=("alpha",))],
-            fuzz_domain=Domain.sampled_from(SAMPLE_VERSIONS),
+            Version,
+            fuzz_domain=SAMPLE_VERSIONS,
         )
         require_arg(
             v2,
-            Domain.type(Version),
-            preferred=[Version(1, 0, 0), Version(2, 0, 0)],
-            fuzz_domain=Domain.sampled_from(SAMPLE_VERSIONS),
+            Version,
+            fuzz_domain=SAMPLE_VERSIONS,
         )
         ret = self.inner_compare_precedence(v1, v2)
         expected = compare_semver(v1, v2)
@@ -1072,10 +1068,9 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     def parse_range(self, text: str) -> VersionRange:
         require_arg(
             text,
-            Domain.sampled_from(VALID_RANGE_STRINGS),
+            VALID_RANGE_STRINGS,
             error=InvalidRangeError,
-            preferred=["^1.0.0", ">= 1.0.0 < 2.0.0", "  ^1.0.0  "],
-            fuzz_domain=Domain.sampled_from(VALID_RANGE_STRINGS),
+            fuzz_domain=VALID_RANGE_STRINGS,
         )
         ret = self.inner_parse_range(text)
         assert ret.raw_text == text.strip()
@@ -1093,20 +1088,17 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     ) -> bool:
         require_arg(
             version,
-            Domain.type(Version),
-            preferred=[Version(1, 2, 0), Version(1, 0, 0, prerelease=("alpha",))],
-            fuzz_domain=Domain.sampled_from(SAMPLE_VERSIONS),
+            Version,
+            fuzz_domain=SAMPLE_VERSIONS,
         )
         require_arg(
             range_constraint,
-            Domain.sampled_from(SAMPLE_RANGES),
-            preferred=[VersionRange("^1.0.0"), VersionRange(">=1.0.0-alpha <1.0.0")],
-            fuzz_domain=Domain.sampled_from(SAMPLE_RANGES),
+            SAMPLE_RANGES,
+            fuzz_domain=SAMPLE_RANGES,
         )
         require_arg(
             include_prerelease,
-            Domain.sampled_from((False, True)),
-            preferred=[False, True],
+            self._dom_satisfies_include_prerelease,
         )
         ret = self.inner_satisfies(version, range_constraint, include_prerelease)
         expected = satisfies_semver_range(version, range_constraint, include_prerelease)
@@ -1127,9 +1119,8 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     def register_package(self, release: PackageRelease) -> None:
         require_arg(
             release,
-            Domain.type(PackageRelease),
-            preferred=[SAMPLE_RELEASES[0], SAMPLE_RELEASES[3]],
-            fuzz_domain=Domain.sampled_from(SAMPLE_RELEASES),
+            PackageRelease,
+            fuzz_domain=SAMPLE_RELEASES,
         )
         ret = self.inner_register_package(release)
         existing = self.state.packages.get(release.name, [])
@@ -1145,7 +1136,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         require(bool(self.state.packages), PackageNotFoundError)
         require_arg(
             name,
-            Domain.in_set(self.state.packages),
+            self.state.packages,
             error=PackageNotFoundError,
         )
         ret = self.inner_get_releases(name)
@@ -1164,9 +1155,8 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     def has_package(self, name: str) -> bool:
         require_arg(
             name,
-            Domain.type(str),
-            preferred=["util", "missing_pkg"],
-            fuzz_domain=Domain.sampled_from((*SAMPLE_PACKAGE_NAMES, "missing_pkg")),
+            str,
+            fuzz_domain=(*SAMPLE_PACKAGE_NAMES, "missing_pkg"),
         )
         ret = self.inner_has_package(name)
         assert ret == (name in self.state.packages)
@@ -1193,11 +1183,9 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     ) -> ResolutionOutcome:
         require_arg(
             root_dependencies,
-            Domain.sampled_from(compute_satisfiable_dependency_sets(self.state.packages)),
+            compute_satisfiable_dependency_sets(self.state.packages),
             error=ResolutionConflictError,
-            fuzz_domain=Domain.sampled_from(
-                compute_satisfiable_dependency_sets(self.state.packages)
-            ),
+            fuzz_domain=compute_satisfiable_dependency_sets(self.state.packages),
         )
         ret = self.inner_resolve(root_dependencies)
         expected = solve_dependencies_model(self.state.packages, root_dependencies)
@@ -1218,6 +1206,10 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     ) -> ResolutionOutcome:
         outcome = solve_dependencies_model(self.state.packages, root_dependencies)
         return outcome if outcome is not None else ResolutionOutcome({}, ())
+
+    @domain(valid=lambda self: list((False, True)))
+    def _dom_satisfies_include_prerelease(self, val: Any) -> bool:
+        return val in (False, True)
 
 
 proto = SemverSolverStateMachine()

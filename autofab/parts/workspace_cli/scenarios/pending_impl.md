@@ -34,6 +34,9 @@ Given: a workspace directory containing `.autofab_pending_work.json` with target
 2. The caller removes `parts/other/tests/other_impl_test.py`.
    Observed: `.autofab_pending_work.json` is cleared and unlinked from disk.
 
+3. Given a buffer containing `["parts/ring_buffer/pretense/ring_buffer_pretense.py", "parts/ring_buffer/pretense/ring_buffer_impl_pretense.py"]`, the caller removes `parts/ring_buffer/pretense/ring_buffer_pretense.py`.
+   Observed: `.autofab_pending_work.json` retains `["parts/ring_buffer/pretense/ring_buffer_impl_pretense.py"]`.
+
 <!-- CLEANROOM METADATA
 LAST_CLEANED: 2026-10-15T17:42:46Z
 LAST_CHANGED: 2026-10-25T22:36:00Z

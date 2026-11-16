@@ -222,7 +222,6 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -274,7 +273,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
         self,
         item: Any,
     ) -> Optional[Any]:
-        require_arg(item, Domain.any(), preferred=["alpha", 0])
+        require_arg(item, object)
         before = len(self.state.items)
         evicted: Optional[Any] = None
         if before >= self.state.capacity:

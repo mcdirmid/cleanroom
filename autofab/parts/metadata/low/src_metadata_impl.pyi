@@ -1,7 +1,7 @@
 """Low-level implementation specification for src_metadata_impl."""
 
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 from support.lib.framework import operation, override, singleton_type
 from support.lib.lifecycle import Singleton, SystemTier
 import src_metadata
@@ -121,6 +121,9 @@ class SourceMetadataCoordinator(src_metadata.SourceMetadataCoordinator):
         stamp_audit: Optional[str] = None,
         dirty: Optional[str] = None,
         clear_dirty: bool = False,
+        changes: Optional[List[src_metadata.ChangeEntry]] = None,
+        clear_changes: bool = False,
+        append_change: Optional[src_metadata.ChangeEntry] = None,
     ) -> str:
         """Updates or injects in-band metadata block within content string.
 
@@ -146,6 +149,9 @@ class SourceMetadataCoordinator(src_metadata.SourceMetadataCoordinator):
         stamp_audit: Optional[str] = None,
         dirty: Optional[str] = None,
         clear_dirty: bool = False,
+        changes: Optional[List[src_metadata.ChangeEntry]] = None,
+        clear_changes: bool = False,
+        append_change: Optional[src_metadata.ChangeEntry] = None,
     ) -> None:
         """Rewrites file on disk in-place, updating metadata block while preserving code.
 
@@ -202,12 +208,77 @@ class SourceMetadataCoordinator(src_metadata.SourceMetadataCoordinator):
         self,
         file_path: Path | str,
         change_description: str,
+        kind: str = "behavior",
+        scope: Optional[str] = None,
+        why: Optional[str] = None,
+        prior_content: Optional[str] = None,
     ) -> None:
-        """Marks node changed with updated timestamps and change description.
+        """Marks node changed with updated timestamps, rebased prior spans, and bounded structured change entry.
 
         GROUNDING:
-        - Grounded via update_metadata with current UTC timestamp for both last cleaned and last
-          changed, clearing feedback, audits, and dirty tags.
+        - Grounded via compute_changed_lines, rebase_change_entries, and update_metadata with current
+          UTC timestamp for both last cleaned and last changed, clearing feedback, audits, and dirty tags.
+        """
+        ...
+
+    @operation
+    @override
+    def compute_changed_lines(
+        self,
+        old_content: Optional[str],
+        new_content: str,
+        filename_or_ext: str,
+    ) -> str:
+        """Computes 1-based changed line spans between old_content and new_content code bodies.
+
+        GROUNDING:
+        - Grounded via difflib.SequenceMatcher on extracted code body lines excluding metadata boundaries.
+        """
+        ...
+
+    @operation
+    @override
+    def rebase_change_entries(
+        self,
+        entries: List[src_metadata.ChangeEntry],
+        old_content: Optional[str],
+        new_content: str,
+        filename_or_ext: str,
+    ) -> List[src_metadata.ChangeEntry]:
+        """Rebases existing ChangeEntry line spans from old_content coordinates to new_content coordinates.
+
+        GROUNDING:
+        - Grounded via difflib.SequenceMatcher opcode mapping across unchanged and replaced/deleted regions.
+        """
+        ...
+
+    @operation
+    @override
+    def filter_changes_since(
+        self,
+        entries: List[src_metadata.ChangeEntry],
+        since_timestamp: Optional[str],
+    ) -> List[src_metadata.ChangeEntry]:
+        """Filters ChangeEntry items strictly newer than since_timestamp.
+
+        GROUNDING:
+        - Grounded via ISO-8601 UTC string comparison against entry.timestamp.
+        """
+        ...
+
+    @operation
+    @override
+    def project_workspace_metadata(
+        self,
+        content: str,
+        filename_or_ext: str,
+        strip_changes: bool = False,
+        since_timestamp: Optional[str] = None,
+    ) -> str:
+        """Projects in-band metadata for a role workspace by clearing lifecycle timestamps and filtering CHANGES:.
+
+        GROUNDING:
+        - Grounded via extract_metadata_from_text, filter_changes_since, and rewrite_metadata_in_text.
         """
         ...
 

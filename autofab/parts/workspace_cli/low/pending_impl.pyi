@@ -61,7 +61,7 @@ class WorkspacePendingManager(pending.WorkspacePendingManager):
         """Removes a submitted target from local pending work buffer.
 
         GROUNDING:
-        - Filters out target path or stem normalized across pretense, test, and implementation variants
+        - Filters out target path or stem normalized across pretense and test role suffixes (preserving _impl distinction)
           matching submitted target from autofab_files_ext.PENDING_WORK_FILE without wiping non-matching targets.
         """
         ...

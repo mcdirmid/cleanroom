@@ -20,6 +20,8 @@ The implementation isolates comment delimiters according to file extensions, loc
 - The source metadata coordinator locates block insertion positions at the bottom of documents. [locate_insertion_index]
 - The source metadata coordinator writes serialized content to disk with parent directory creation. [write_file_content]
 - The source metadata coordinator advances last cleaned timestamp to current UTC time. [advance_cleaned_timestamp]
+- The source metadata coordinator computes changed line spans and rebases prior change entry spans via sequence-matching opcodes on extracted code bodies. [diff_and_rebase_lines]
+- The source metadata coordinator filters and projects workspace change entries by viewer timestamp or full removal. [filter_and_project_changes]
 
 ### Woven Contracts
 

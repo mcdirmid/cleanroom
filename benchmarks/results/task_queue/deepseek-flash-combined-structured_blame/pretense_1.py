@@ -272,7 +272,6 @@ import unittest
 from typing import Any, Dict, List, Optional, Tuple
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -320,8 +319,8 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
         payload: str,
     ) -> None:
         """Appends a task to the queue tail, or raises when unavailable."""
-        require_arg(task_id, Domain.type(str), preferred=["task-1"])
-        require_arg(payload, Domain.type(str), preferred=["payload"])
+        require_arg(task_id, str)
+        require_arg(payload, str)
         if not self.state.available:
             with raises(QueueUnavailableException):
                 ret = self.inner_submit(task_id, payload)
@@ -362,8 +361,8 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
         outcome: str,
     ) -> None:
         """Records the completion outcome for a task, or raises when unavailable."""
-        require_arg(task_id, Domain.type(str), preferred=["task-1"])
-        require_arg(outcome, Domain.type(str), preferred=["done"])
+        require_arg(task_id, str)
+        require_arg(outcome, str)
         if not self.state.available:
             with raises(QueueUnavailableException):
                 ret = self.inner_complete(task_id, outcome)
@@ -380,7 +379,7 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
         task_id: str,
     ) -> Optional[str]:
         """Returns the recorded outcome for a task, else None."""
-        require_arg(task_id, Domain.type(str), preferred=["task-1"])
+        require_arg(task_id, str)
         recorded = self.state.outcomes.get(task_id)
         ret = self.inner_get_outcome(task_id)
         assert ret == recorded
@@ -404,7 +403,7 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
         available: bool,
     ) -> None:
         """Test-only hook toggling queue availability."""
-        require_arg(available, Domain.boolean())
+        require_arg(available, bool)
         ret = self.inner_set_available(available)
         self.state.available = available
         assert self.state.available == available
@@ -729,7 +728,6 @@ import unittest
 from typing import Any, Dict, Optional
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -777,8 +775,8 @@ class TaskWorkerStateMachine(StateMachine[TaskWorkerState]):
         payload: str,
     ) -> str:
         """Transforms the payload into an outcome string, or raises on failure."""
-        require_arg(task_id, Domain.type(str), preferred=["task-1"])
-        require_arg(payload, Domain.type(str), preferred=["payload"])
+        require_arg(task_id, str)
+        require_arg(payload, str)
         if self.state.failing_tasks.get(task_id, False):
             with raises(WorkerExecutionException):
                 ret = self.inner_execute(task_id, payload)
@@ -810,8 +808,8 @@ class TaskWorkerStateMachine(StateMachine[TaskWorkerState]):
         failing: bool,
     ) -> None:
         """Configures whether a designated task fails on execution."""
-        require_arg(task_id, Domain.type(str), preferred=["task-1"])
-        require_arg(failing, Domain.boolean())
+        require_arg(task_id, str)
+        require_arg(failing, bool)
         ret = self.inner_set_failing_task(task_id, failing)
         self.state.failing_tasks[task_id] = failing
         assert self.state.failing_tasks.get(task_id, False) == failing

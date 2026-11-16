@@ -198,7 +198,6 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -219,7 +218,7 @@ from benchmark_1.parts.ring_buffer.lib.ring_buffer import RingBuffer
 # Operational branches and contracted exceptions (with raises(ExpectedException): ())
 # live naturally inside the single transition body (multi-transition splitting is prohibited).
 # require_arg defines the caller precondition contract (checked at runtime on real calls).
-# Use Domain.any() for open parameters and require(...) to gate model-state preconditions.
+# Use object for open parameters and require(...) to gate model-state preconditions.
 
 @dataclass
 class RingBufferState:
@@ -245,7 +244,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
         item: Any,
     ) -> Optional[Any]:
         require(self.state.capacity > 0)
-        require_arg(item, Domain.any())
+        require_arg(item, object)
         previous_size = len(self.state.items)
         evicted: Optional[Any] = None
         if previous_size < self.state.capacity:

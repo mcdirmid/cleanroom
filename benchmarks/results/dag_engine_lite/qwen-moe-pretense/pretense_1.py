@@ -606,7 +606,6 @@ from typing import Any, Callable, Collection, Dict, FrozenSet, List, Mapping, Op
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -663,11 +662,11 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         retries: int,
     ) -> None:
         require(self.state.initialized)
-        require_arg(node_id, Domain.type(str))
-        require_arg(action, Domain.type(Callable[[], Any]))
-        require_arg(dependencies, Domain.type(Optional[Collection[str]]))
-        require_arg(priority, Domain.type(int))
-        require_arg(retries, Domain.type(int))
+        require_arg(node_id, str)
+        require_arg(action, Callable[[], Any])
+        require_arg(dependencies, Optional[Collection[str]])
+        require_arg(priority, int)
+        require_arg(retries, int)
         ret = self.inner_add_node(node_id, action, dependencies, priority, retries)
         self.state.nodes.add(node_id)
         self.state.dependencies[node_id] = frozenset(dependencies or [])
@@ -687,8 +686,8 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         downstream_id: str,
     ) -> None:
         require(self.state.initialized)
-        require_arg(upstream_id, Domain.in_set(self.state.nodes))
-        require_arg(downstream_id, Domain.in_set(self.state.nodes))
+        require_arg(upstream_id, self.state.nodes)
+        require_arg(downstream_id, self.state.nodes)
         ret = self.inner_add_edge(upstream_id, downstream_id)
         self.state.dependents.setdefault(upstream_id, set()).add(downstream_id)
         if downstream_id not in self.state.dependencies:
@@ -702,7 +701,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         node_id: str,
     ) -> None:
         require(self.state.initialized)
-        require_arg(node_id, Domain.in_set(self.state.nodes))
+        require_arg(node_id, self.state.nodes)
         ret = self.inner_remove_node(node_id)
         self.state.nodes.discard(node_id)
         self.state.dependencies.pop(node_id, None)
@@ -717,7 +716,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         node_id: str,
     ) -> bool:
         require(self.state.initialized)
-        require_arg(node_id, Domain.type(str))
+        require_arg(node_id, str)
         ret = self.inner_has_node(node_id)
         return ret
 
@@ -727,7 +726,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         node_id: str,
     ) -> NodeDefinition[Any]:
         require(self.state.initialized)
-        require_arg(node_id, Domain.in_set(self.state.nodes))
+        require_arg(node_id, self.state.nodes)
         ret = self.inner_get_node(node_id)
         return ret
 
@@ -737,7 +736,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         node_id: str,
     ) -> Set[str]:
         require(self.state.initialized)
-        require_arg(node_id, Domain.in_set(self.state.nodes))
+        require_arg(node_id, self.state.nodes)
         ret = self.inner_get_dependencies(node_id)
         return ret
 
@@ -747,7 +746,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         node_id: str,
     ) -> Set[str]:
         require(self.state.initialized)
-        require_arg(node_id, Domain.in_set(self.state.nodes))
+        require_arg(node_id, self.state.nodes)
         ret = self.inner_get_dependents(node_id)
         return ret
 
@@ -797,7 +796,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         estimated_durations: Optional[Mapping[str, float]],
     ) -> Tuple[List[str], float]:
         require(self.state.initialized)
-        require_arg(estimated_durations, Domain.type(Optional[Mapping[str, float]]))
+        require_arg(estimated_durations, Optional[Mapping[str, float]])
         nodes_list = sorted(self.state.nodes)
         total = float(len(nodes_list))
         ret = self.inner_compute_critical_path(estimated_durations)
@@ -821,7 +820,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         node_id: str,
     ) -> None:
         require(self.state.initialized)
-        require_arg(node_id, Domain.type(str))
+        require_arg(node_id, str)
         ret = self.inner_mark_running(node_id)
         self.state.node_states[node_id] = NodeState.RUNNING
         return ret
@@ -832,7 +831,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         node_id: str,
     ) -> None:
         require(self.state.initialized)
-        require_arg(node_id, Domain.type(str))
+        require_arg(node_id, str)
         ret = self.inner_mark_succeeded(node_id)
         self.state.node_states[node_id] = NodeState.SUCCEEDED
         for dependent in self.state.dependents.get(node_id, set()):
@@ -852,8 +851,8 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         failure_policy: FailurePolicy,
     ) -> None:
         require(self.state.initialized)
-        require_arg(node_id, Domain.type(str))
-        require_arg(failure_policy, Domain.type(FailurePolicy))
+        require_arg(node_id, str)
+        require_arg(failure_policy, FailurePolicy)
         ret = self.inner_mark_failed(node_id, failure_policy)
         self.state.node_states[node_id] = NodeState.FAILED
         if failure_policy == FailurePolicy.FAIL_FAST:
@@ -907,7 +906,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         node_id: str,
     ) -> NodeState:
         require(self.state.initialized)
-        require_arg(node_id, Domain.in_set(self.state.nodes))
+        require_arg(node_id, self.state.nodes)
         ret = self.inner_get_state(node_id)
         return ret
 
@@ -925,7 +924,7 @@ class DagEngineLiteStateMachine(StateMachine[DagEngineLiteState]):
         failure_policy: FailurePolicy,
     ) -> DAGRunReport:
         require(self.state.initialized)
-        require_arg(failure_policy, Domain.type(FailurePolicy))
+        require_arg(failure_policy, FailurePolicy)
         ret = self.inner_run(failure_policy)
         return ret
 

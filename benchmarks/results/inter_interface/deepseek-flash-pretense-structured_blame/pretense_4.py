@@ -155,12 +155,11 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     Env,
     StateMachine,
     raises,
     require,
-    require_arg,
+    domain, require_arg,
     require_env,
     sut,
     sut_state,
@@ -241,8 +240,7 @@ class AllocatorStateMachine(StateMachine[AllocatorState]):
         require(self.state.reserves >= 1)
         require_arg(
             amount,
-            Domain.integers(min_value=1, max_value=self.state.reserves),
-            preferred=[1, 10],
+            (self._dom_allocate_amount),
             error=AllocationLimitError,
         )
         require_env(self.state.vault_active, VaultInactiveException)
@@ -264,8 +262,7 @@ class AllocatorStateMachine(StateMachine[AllocatorState]):
         require(self.state.allocated >= 1)
         require_arg(
             amount,
-            Domain.integers(min_value=1, max_value=self.state.allocated),
-            preferred=[1],
+            (self._dom_release_amount),
             error=AllocationLimitError,
         )
         require_env(self.state.vault_active, VaultInactiveException)
@@ -281,6 +278,14 @@ class AllocatorStateMachine(StateMachine[AllocatorState]):
     def inner_release(self, amount: int) -> None:
         """Computes the fake release result (no return value)."""
         return None
+
+    @domain()
+    def _dom_allocate_amount(self, x: Any) -> bool:
+        return bool(x >= 1 and x <= self.state.reserves)
+
+    @domain()
+    def _dom_release_amount(self, x: Any) -> bool:
+        return bool(x >= 1 and x <= self.state.allocated)
 
 
 proto = AllocatorStateMachine()
@@ -484,12 +489,11 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     Env,
     StateMachine,
     raises,
     require,
-    require_arg,
+    domain, require_arg,
     require_env,
     sut,
     sut_state,
@@ -568,7 +572,7 @@ class VaultStateMachine(StateMachine[VaultState]):
     @transition(Vault.deposit)
     def deposit(self, amount: int) -> None:
         """Deposits a strictly positive amount into the vault."""
-        require_arg(amount, Domain.integers(min_value=1), preferred=[1, 10], error=InsufficientFundsError)
+        require_arg(amount, (self._dom_deposit_amount), error=InsufficientFundsError)
         require_env(self.state.active, VaultInactiveException)
         old_balance = self.state.balance
         self.inner_deposit(amount)
@@ -585,8 +589,7 @@ class VaultStateMachine(StateMachine[VaultState]):
         require(self.state.balance >= 1)
         require_arg(
             amount,
-            Domain.integers(min_value=1, max_value=self.state.balance),
-            preferred=[1],
+            (self._dom_withdraw_amount),
             error=InsufficientFundsError,
         )
         require_env(self.state.active, VaultInactiveException)
@@ -603,7 +606,7 @@ class VaultStateMachine(StateMachine[VaultState]):
     @transition(Vault.set_active)
     def set_active(self, active: bool) -> None:
         """Test-only hook toggling vault availability."""
-        require_arg(active, Domain.sampled_from([True, False]), preferred=[True])
+        require_arg(active, self._dom_set_active_active)
         self.inner_set_active(active)
         self.state.active = active
         assert bool(self.state.active) == active
@@ -611,6 +614,18 @@ class VaultStateMachine(StateMachine[VaultState]):
     def inner_set_active(self, active: bool) -> None:
         """Computes the fake availability update (no return value)."""
         return None
+
+    @domain()
+    def _dom_deposit_amount(self, x: Any) -> bool:
+        return bool(x >= 1)
+
+    @domain()
+    def _dom_withdraw_amount(self, x: Any) -> bool:
+        return bool(x >= 1 and x <= self.state.balance)
+
+    @domain(valid=lambda self: list([True, False]))
+    def _dom_set_active_active(self, val: Any) -> bool:
+        return val in [True, False]
 
 
 proto = VaultStateMachine()

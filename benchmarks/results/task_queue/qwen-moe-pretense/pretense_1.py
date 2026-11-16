@@ -229,7 +229,6 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -251,15 +250,15 @@ from benchmark_4.parts.task_queue.lib.task_queue import (
 # Operational branches and contracted exceptions (with raises(ExpectedException): ())
 # live naturally inside the single transition body (multi-transition splitting is prohibited).
 # require_arg defines the caller precondition contract (checked at runtime on real calls).
-# Use Domain.type(T) or open domain; use preferred=[...] to cluster/bias fuzz inputs without restricting the contract.
+# Use T or open domain; use preferred=[...] to cluster/bias fuzz inputs without restricting the contract.
 #
 # REFERENCE PATTERNS:
 #   # 1:1 Transition Pattern with Domain strategies and inner_transition pivot:
 #   @transition(TargetClass.method)
 #   def method(self, arg1: str, count: int) -> ReturnType:
 #       require(self.state.initialized)
-#       require_arg(arg1, Domain.type(str), preferred=["sample"])
-#       require_arg(count, Domain.range(1, 100), preferred=[10])
+#       require_arg(arg1, str, preferred=["sample"])
+#       require_arg(count, (lambda x: x >= 1 and x <= 100), preferred=[10])
 #       fake_ret = ReturnType(...)  # or None / value
 #       ret = (fake_ret)
 #       self.state.items.append(ret)
@@ -312,8 +311,8 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
         payload: str,
     ) -> None:
         require(self.state.is_available)
-        require_arg(task_id, Domain.type(str), preferred=["task_001"])
-        require_arg(payload, Domain.type(str), preferred=["work_001"])
+        require_arg(task_id, str)
+        require_arg(payload, str)
         ret = self.inner_submit(task_id, payload)
         self.state.pending_count = self.state.pending_count + 1
         self.state.is_empty = self.state.pending_count == 0
@@ -339,8 +338,8 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
         outcome: str,
     ) -> None:
         require(self.state.is_available)
-        require_arg(task_id, Domain.type(str), preferred=["task_001"])
-        require_arg(outcome, Domain.type(str), preferred=["success"])
+        require_arg(task_id, str)
+        require_arg(outcome, str)
         ret = self.inner_complete(task_id, outcome)
         assert ret is None
         return ret
@@ -350,7 +349,7 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
         self,
         task_id: str,
     ) -> Optional[str]:
-        require_arg(task_id, Domain.type(str), preferred=["task_001"])
+        require_arg(task_id, str)
         ret: Optional[str] = self.inner_get_outcome(task_id)
         return ret
 
@@ -370,7 +369,7 @@ class TaskQueueStateMachine(StateMachine[TaskQueueState]):
         self,
         available: bool,
     ) -> None:
-        require_arg(available, Domain.boolean())
+        require_arg(available, bool)
         ret = self.inner_set_available(available)
         self.state.is_available = available
         assert ret is None
@@ -659,7 +658,6 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -682,15 +680,15 @@ from benchmark_4.parts.task_queue.lib.task_worker import (
 # Operational branches and contracted exceptions (with raises(ExpectedException): ())
 # live naturally inside the single transition body (multi-transition splitting is prohibited).
 # require_arg defines the caller precondition contract (checked at runtime on real calls).
-# Use Domain.type(T) or open domain; use preferred=[...] to cluster/bias fuzz inputs without restricting the contract.
+# Use T or open domain; use preferred=[...] to cluster/bias fuzz inputs without restricting the contract.
 #
 # REFERENCE PATTERNS:
 #   # 1:1 Transition Pattern with Domain strategies and inner_transition pivot:
 #   @transition(TargetClass.method)
 #   def method(self, arg1: str, count: int) -> ReturnType:
 #       require(self.state.initialized)
-#       require_arg(arg1, Domain.type(str), preferred=["sample"])
-#       require_arg(count, Domain.range(1, 100), preferred=[10])
+#       require_arg(arg1, str, preferred=["sample"])
+#       require_arg(count, (lambda x: x >= 1 and x <= 100), preferred=[10])
 #       fake_ret = ReturnType(...)  # or None / value
 #       ret = (fake_ret)
 #       self.state.items.append(ret)
@@ -742,8 +740,8 @@ class TaskWorkerStateMachine(StateMachine[TaskWorkerState]):
         payload: str,
     ) -> str:
         require(self.state.initialized)
-        require_arg(task_id, Domain.in_set(self.state.valid_task_ids), preferred=["task_001"])
-        require_arg(payload, Domain.type(str), preferred=["work_001"])
+        require_arg(task_id, self.state.valid_task_ids)
+        require_arg(payload, str)
         ret: str = self.inner_execute(task_id, payload)
         assert ret is not None
         return ret
@@ -764,8 +762,8 @@ class TaskWorkerStateMachine(StateMachine[TaskWorkerState]):
         failing: bool,
     ) -> None:
         require(self.state.initialized)
-        require_arg(task_id, Domain.type(str), preferred=["task_001"])
-        require_arg(failing, Domain.boolean())
+        require_arg(task_id, str)
+        require_arg(failing, bool)
         ret = self.inner_set_failing_task(task_id, failing)
         assert ret is None
         if failing:
@@ -831,5 +829,5 @@ FakeTaskWorkerFuzzTest = compile_hypothesis_test_case(
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-04T18:19:34Z
 # LAST_CHANGED: 2026-11-04T18:19:34Z
-# CHANGE: Replaced invalid available gate with require_arg using Domain.in_set(self.state.valid_task_ids) to prevent fuzzer from generating failing-task execute sequences. valid_task_ids tracks non-failing tasks — set_failing_task removes failing tasks from this set, and require_arg on execute rejects task_ids not in the set. This satisfies PN009 (state-only domains) while preventing WorkerExecutionException crashes. The fuzzer never reaches the body code for failing tasks because require_arg rejects them. TestTaskWorkerImplReal passes because task_001 remains in valid_task_ids even after task_fail is marked failing.
+# CHANGE: Replaced invalid available gate with require_arg using self.state.valid_task_ids to prevent fuzzer from generating failing-task execute sequences. valid_task_ids tracks non-failing tasks — set_failing_task removes failing tasks from this set, and require_arg on execute rejects task_ids not in the set. This satisfies PN009 (state-only domains) while preventing WorkerExecutionException crashes. The fuzzer never reaches the body code for failing tasks because require_arg rejects them. TestTaskWorkerImplReal passes because task_001 remains in valid_task_ids even after task_fail is marked failing.
 # --- END AUTOFAB METADATA ---

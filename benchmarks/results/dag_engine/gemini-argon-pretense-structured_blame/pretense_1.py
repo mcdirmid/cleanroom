@@ -439,12 +439,11 @@ from typing import Any, Callable, Collection, FrozenSet, List, Mapping, Optional
 import unittest
 
 from pretense import (
-    Domain,
     Env,
     StateMachine,
     raises,
     require,
-    require_arg,
+    domain, require_arg,
     require_env,
     sut,
     sut_state,
@@ -659,40 +658,32 @@ class DAGEngineStateMachine(StateMachine[DAGEngineState]):
         require(self.state.can_add_more_nodes, error=DAGError)
         require_arg(
             node_id,
-            Domain.not_in(self.state.nodes),
+            (self._dom_add_node_node_id),
             error=DAGError,
-            preferred=["n1", "n2", "n3"],
-            fuzz_domain=Domain.sampled_from(["n1", "n2", "n3", "n4", "n5"]),
+            fuzz_domain=["n1", "n2", "n3", "n4", "n5"],
         )
         require_arg(
             action,
-            Domain.type(object),
-            preferred=[default_node_action],
-            fuzz_domain=Domain.sampled_from([default_node_action]),
+            object,
+            fuzz_domain=[default_node_action],
         )
         require_arg(
             dependencies,
-            Domain.optional(
-                Domain.collection(Domain.text(min_size=1, max_size=8))
-            ),
-            preferred=[None],
-            fuzz_domain=Domain.sampled_from([None]),
+            Optional[list],
+            fuzz_domain=[None],
         )
         require_arg(
             priority,
-            Domain.integers(min_value=-10, max_value=10),
-            preferred=[0, 1, 2],
+            (self._dom_add_node_priority),
         )
         require_arg(
             timeout_seconds,
-            Domain.optional(Domain.type(float)),
-            preferred=[None, 5.0],
-            fuzz_domain=Domain.sampled_from([None, 5.0]),
+            Optional[float],
+            fuzz_domain=[None, 5.0],
         )
         require_arg(
             retries,
-            Domain.integers(min_value=0, max_value=3),
-            preferred=[0, 1],
+            (self._dom_add_node_retries),
         )
         ret = self.inner_add_node(
             node_id, action, dependencies, priority, timeout_seconds, retries
@@ -736,12 +727,12 @@ class DAGEngineStateMachine(StateMachine[DAGEngineState]):
         require(bool(self.state.nodes), error=NodeNotFoundError)
         require_arg(
             upstream_id,
-            Domain.in_set(self.state.nodes),
+            self.state.nodes,
             error=NodeNotFoundError,
         )
         require_arg(
             downstream_id,
-            Domain.in_set(self.state.nodes),
+            self.state.nodes,
             error=NodeNotFoundError,
         )
         ret = self.inner_add_edge(upstream_id, downstream_id)
@@ -760,7 +751,7 @@ class DAGEngineStateMachine(StateMachine[DAGEngineState]):
         require(bool(self.state.nodes), error=NodeNotFoundError)
         require_arg(
             node_id,
-            Domain.in_set(self.state.nodes),
+            self.state.nodes,
             error=NodeNotFoundError,
         )
         ret = self.inner_remove_node(node_id)
@@ -783,8 +774,7 @@ class DAGEngineStateMachine(StateMachine[DAGEngineState]):
     def has_node(self, node_id: str) -> bool:
         require_arg(
             node_id,
-            Domain.text(min_size=1, max_size=8),
-            preferred=["n1", "n2", "missing"],
+            str,
         )
         ret = self.inner_has_node(node_id)
         expected = node_id in self.state.nodes
@@ -799,7 +789,7 @@ class DAGEngineStateMachine(StateMachine[DAGEngineState]):
         require(bool(self.state.nodes), error=NodeNotFoundError)
         require_arg(
             node_id,
-            Domain.in_set(self.state.nodes),
+            self.state.nodes,
             error=NodeNotFoundError,
         )
         ret = self.inner_get_node(node_id)
@@ -818,7 +808,7 @@ class DAGEngineStateMachine(StateMachine[DAGEngineState]):
         require(bool(self.state.nodes), error=NodeNotFoundError)
         require_arg(
             node_id,
-            Domain.in_set(self.state.nodes),
+            self.state.nodes,
             error=NodeNotFoundError,
         )
         ret = self.inner_get_dependencies(node_id)
@@ -834,7 +824,7 @@ class DAGEngineStateMachine(StateMachine[DAGEngineState]):
         require(bool(self.state.nodes), error=NodeNotFoundError)
         require_arg(
             node_id,
-            Domain.in_set(self.state.nodes),
+            self.state.nodes,
             error=NodeNotFoundError,
         )
         ret = self.inner_get_dependents(node_id)
@@ -927,14 +917,8 @@ class DAGEngineStateMachine(StateMachine[DAGEngineState]):
         require(self.state.is_acyclic, error=CycleError)
         require_arg(
             estimated_durations,
-            Domain.optional(
-                Domain.mapping(
-                    Domain.text(min_size=1, max_size=8),
-                    Domain.type(float),
-                )
-            ),
-            preferred=[None, {"n1": 2.0, "n2": 3.0}],
-            fuzz_domain=Domain.sampled_from([None, {"n1": 2.0, "n2": 3.0}]),
+            Optional[dict],
+            fuzz_domain=[None, {"n1": 2.0, "n2": 3.0}],
         )
         ret = self.inner_compute_critical_path(estimated_durations)
         _, expected_weight = compute_longest_path(
@@ -1023,7 +1007,7 @@ class DAGEngineStateMachine(StateMachine[DAGEngineState]):
         require(bool(self.state.nodes), error=NodeNotFoundError)
         require_arg(
             node_id,
-            Domain.in_set(self.state.nodes),
+            self.state.nodes,
             error=NodeNotFoundError,
         )
         sync_scheduler_states(self.state)
@@ -1042,7 +1026,7 @@ class DAGEngineStateMachine(StateMachine[DAGEngineState]):
         require(bool(self.state.nodes), error=NodeNotFoundError)
         require_arg(
             node_id,
-            Domain.in_set(self.state.nodes),
+            self.state.nodes,
             error=NodeNotFoundError,
         )
         sync_scheduler_states(self.state)
@@ -1068,23 +1052,12 @@ class DAGEngineStateMachine(StateMachine[DAGEngineState]):
         require(bool(self.state.nodes), error=NodeNotFoundError)
         require_arg(
             node_id,
-            Domain.in_set(self.state.nodes),
+            self.state.nodes,
             error=NodeNotFoundError,
         )
         require_arg(
             failure_policy,
-            Domain.sampled_from(
-                [
-                    FailurePolicy.FAIL_FAST,
-                    FailurePolicy.CONTINUE_ON_ERROR,
-                    FailurePolicy.SKIP_DOWNSTREAM,
-                ]
-            ),
-            preferred=[
-                FailurePolicy.FAIL_FAST,
-                FailurePolicy.SKIP_DOWNSTREAM,
-                FailurePolicy.CONTINUE_ON_ERROR,
-            ],
+            self._dom_mark_failed_failure_policy,
         )
         sync_scheduler_states(self.state)
         ret = self.inner_mark_failed(node_id, failure_policy)
@@ -1137,7 +1110,7 @@ class DAGEngineStateMachine(StateMachine[DAGEngineState]):
         require(bool(self.state.nodes), error=NodeNotFoundError)
         require_arg(
             node_id,
-            Domain.in_set(self.state.nodes),
+            self.state.nodes,
             error=NodeNotFoundError,
         )
         sync_scheduler_states(self.state)
@@ -1177,30 +1150,17 @@ class DAGEngineStateMachine(StateMachine[DAGEngineState]):
         require(self.state.can_run_cleanly, error=DAGError)
         require_arg(
             timeout_seconds,
-            Domain.optional(Domain.type(float)),
+            Optional[float],
             error=DAGTimeoutError,
-            preferred=[None, 5.0],
-            fuzz_domain=Domain.sampled_from([None, 5.0]),
+            fuzz_domain=[None, 5.0],
         )
         require_arg(
             failure_policy,
-            Domain.sampled_from(
-                [
-                    FailurePolicy.FAIL_FAST,
-                    FailurePolicy.CONTINUE_ON_ERROR,
-                    FailurePolicy.SKIP_DOWNSTREAM,
-                ]
-            ),
-            preferred=[
-                FailurePolicy.FAIL_FAST,
-                FailurePolicy.CONTINUE_ON_ERROR,
-                FailurePolicy.SKIP_DOWNSTREAM,
-            ],
+            self._dom_run_failure_policy,
         )
         require_arg(
             max_concurrency,
-            Domain.integers(min_value=1, max_value=4),
-            preferred=[1, 2],
+            (self._dom_run_max_concurrency),
         )
         sync_scheduler_states(self.state)
         ret = self.inner_run(timeout_seconds, failure_policy, max_concurrency)
@@ -1304,6 +1264,46 @@ class DAGEngineStateMachine(StateMachine[DAGEngineState]):
     @test_only
     def is_cancelled(self) -> bool:
         return self.state.cancelled
+
+    @domain()
+    def _dom_add_node_node_id(self, x: Any) -> bool:
+        return bool(x not in self.state.nodes)
+
+    @domain()
+    def _dom_add_node_priority(self, x: Any) -> bool:
+        return bool(x >= -10 and x <= 10)
+
+    @domain()
+    def _dom_add_node_retries(self, x: Any) -> bool:
+        return bool(x >= 0 and x <= 3)
+
+    @domain(valid=lambda self: list([
+                    FailurePolicy.FAIL_FAST,
+                    FailurePolicy.CONTINUE_ON_ERROR,
+                    FailurePolicy.SKIP_DOWNSTREAM,
+                ]))
+    def _dom_mark_failed_failure_policy(self, val: Any) -> bool:
+        return val in [
+                    FailurePolicy.FAIL_FAST,
+                    FailurePolicy.CONTINUE_ON_ERROR,
+                    FailurePolicy.SKIP_DOWNSTREAM,
+                ]
+
+    @domain(valid=lambda self: list([
+                    FailurePolicy.FAIL_FAST,
+                    FailurePolicy.CONTINUE_ON_ERROR,
+                    FailurePolicy.SKIP_DOWNSTREAM,
+                ]))
+    def _dom_run_failure_policy(self, val: Any) -> bool:
+        return val in [
+                    FailurePolicy.FAIL_FAST,
+                    FailurePolicy.CONTINUE_ON_ERROR,
+                    FailurePolicy.SKIP_DOWNSTREAM,
+                ]
+
+    @domain()
+    def _dom_run_max_concurrency(self, x: Any) -> bool:
+        return bool(x >= 1 and x <= 4)
 
 
 proto = DAGEngineStateMachine()

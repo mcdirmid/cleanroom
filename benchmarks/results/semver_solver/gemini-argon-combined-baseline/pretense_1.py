@@ -347,7 +347,6 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     call_target,
     raises,
@@ -825,8 +824,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         require(self.state.initialized)
         require_arg(
             text,
-            Domain.type(str),
-            preferred=_SAMPLE_VERSION_STRS[:5],
+            str,
         )
         expected = _model_parse_version(text)
         if expected is None:
@@ -843,8 +841,8 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     @transition(VersionEngine.compare_precedence)
     def compare_precedence(self, v1: Version, v2: Version) -> int:
         require(self.state.initialized)
-        require_arg(v1, Domain.in_set(self.state.valid_versions), preferred=_SAMPLE_VERSIONS[:5])
-        require_arg(v2, Domain.in_set(self.state.valid_versions), preferred=_SAMPLE_VERSIONS[:5])
+        require_arg(v1, self.state.valid_versions)
+        require_arg(v2, self.state.valid_versions)
         expected = _model_compare_precedence(v1, v2)
         ret = self.inner_compare_precedence(v1, v2)
         if expected < 0:
@@ -860,8 +858,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         require(self.state.initialized)
         require_arg(
             text,
-            Domain.type(str),
-            preferred=_SAMPLE_RANGE_STRS[:5],
+            str,
         )
         if _model_compile_range(text) is None:
             with raises(InvalidRangeError):
@@ -880,13 +877,12 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         include_prerelease: bool,
     ) -> bool:
         require(self.state.initialized)
-        require_arg(version, Domain.in_set(self.state.valid_versions), preferred=_SAMPLE_VERSIONS[:5])
+        require_arg(version, self.state.valid_versions)
         require_arg(
             range_constraint,
-            Domain.in_set(self.state.valid_ranges),
-            preferred=_SAMPLE_RANGES[:5],
+            self.state.valid_ranges,
         )
-        require_arg(include_prerelease, Domain.type(bool), preferred=[False, True])
+        require_arg(include_prerelease, bool)
         expected = _model_satisfies(version, range_constraint, include_prerelease)
         ret = self.inner_satisfies(version, range_constraint, include_prerelease)
         assert ret == expected
@@ -897,8 +893,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         require(self.state.initialized)
         require_arg(
             release,
-            Domain.in_set(self.state.valid_releases),
-            preferred=_SAMPLE_RELEASES[:4],
+            self.state.valid_releases,
         )
         ret = self.inner_register_package(release)
         releases = self.state.packages.setdefault(release.name, [])
@@ -912,8 +907,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         require(self.state.initialized)
         require_arg(
             name,
-            Domain.type(str),
-            preferred=["core", "app", "missing_pkg"],
+            str,
         )
         if name not in self.state.packages:
             with raises(PackageNotFoundError):
@@ -927,7 +921,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     @transition(PackageRepository.has_package)
     def has_package(self, name: str) -> bool:
         require(self.state.initialized)
-        require_arg(name, Domain.type(str), preferred=["core", "app", "missing"])
+        require_arg(name, str)
         expected = name in self.state.packages
         ret = self.inner_has_package(name)
         assert ret == expected
@@ -949,12 +943,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         require(self.state.initialized)
         require_arg(
             root_dependencies,
-            Domain.in_set(self.state.candidate_deps),
-            preferred=[
-                (),
-                (PackageDependency("core", VersionRange("^1.0.0")),),
-                (PackageDependency("app", VersionRange("^1.0.0")),),
-            ],
+            self.state.candidate_deps,
         )
         expected = _model_resolve(self.state.packages, root_dependencies)
         if expected is None:

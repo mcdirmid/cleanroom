@@ -262,7 +262,6 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -313,7 +312,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
 
     @transition(PackageRepository.register_package)
     def register_package(self, release: PackageRelease) -> None:
-        require_arg(release, Domain.type(PackageRelease), preferred=[_sample_release()])
+        require_arg(release, PackageRelease)
         ret = self.inner_register_package(release)
         self.state.packages.setdefault(release.name, []).append(release)
         self.state.steps.append(f"register '{release.name}'")
@@ -322,14 +321,14 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
 
     @transition(PackageRepository.get_releases)
     def get_releases(self, name: str) -> List[PackageRelease]:
-        require_arg(name, Domain.type(str), preferred=["alpha"])
+        require_arg(name, str)
         ret = self.inner_get_releases(name)
         assert isinstance(ret, list)
         return ret
 
     @transition(PackageRepository.has_package)
     def has_package(self, name: str) -> bool:
-        require_arg(name, Domain.type(str), preferred=["alpha"])
+        require_arg(name, str)
         ret = self.inner_has_package(name)
         assert isinstance(ret, bool)
         return ret
@@ -344,8 +343,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
     def resolve(self, root_dependencies: List[PackageDependency]) -> ResolutionOutcome:
         require_arg(
             root_dependencies,
-            Domain.list_of(Domain.type(PackageDependency)),
-            preferred=[[_sample_dependency()]],
+            list,
         )
         ret = self.inner_resolve(root_dependencies)
         assert isinstance(ret, ResolutionOutcome)
@@ -621,7 +619,6 @@ from typing import Any, List, Optional, Tuple
 import unittest
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -679,7 +676,7 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
 
     @transition(VersionEngine.parse_version)
     def parse_version(self, text: str) -> Version:
-        require_arg(text, Domain.type(str), preferred=["1.2.3"])
+        require_arg(text, str)
         ret = self.inner_parse_version(text)
         self.state.versions.append(ret)
         self.state.prerelease = ret.prerelease
@@ -688,8 +685,8 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
 
     @transition(VersionEngine.compare_precedence)
     def compare_precedence(self, v1: Version, v2: Version) -> int:
-        require_arg(v1, Domain.type(Version), preferred=[_version(1, 0, 0)])
-        require_arg(v2, Domain.type(Version), preferred=[_version(2, 0, 0)])
+        require_arg(v1, Version)
+        require_arg(v2, Version)
         ret = self.inner_compare_precedence(v1, v2)
         assert isinstance(ret, int)
         return ret
@@ -1037,7 +1034,6 @@ from typing import Any, List, Optional, Tuple
 import unittest
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -1082,7 +1078,7 @@ class SemverRangeStateMachine(StateMachine[SemverRangeState]):
 
     @transition(RangeEngine.parse_range)
     def parse_range(self, text: str) -> VersionRange:
-        require_arg(text, Domain.type(str), preferred=["1.x"])
+        require_arg(text, str)
         ret = self.inner_parse_range(text)
         self.state.ranges.append(ret)
         assert ret in self.state.ranges
@@ -1095,11 +1091,11 @@ class SemverRangeStateMachine(StateMachine[SemverRangeState]):
         range_constraint: VersionRange,
         include_prerelease: bool,
     ) -> bool:
-        require_arg(version, Domain.type(Version), preferred=[_version(1, 0, 0)])
+        require_arg(version, Version)
         require_arg(
-            range_constraint, Domain.type(VersionRange), preferred=[_range("1.x")]
+            range_constraint, VersionRange
         )
-        require_arg(include_prerelease, Domain.boolean(), preferred=[False])
+        require_arg(include_prerelease, bool)
         ret = self.inner_satisfies(version, range_constraint, include_prerelease)
         self.state.satisfied = ret
         assert isinstance(ret, bool)

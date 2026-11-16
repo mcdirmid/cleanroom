@@ -120,7 +120,6 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -162,7 +161,7 @@ class StreamReaderStateMachine(StateMachine):
     @transition.seeding
     def seed_payload(self, payload: str) -> None:
         """Seeds an unread payload into the buffered stream."""
-        require_arg(payload, Domain.type(str), preferred=["payload_alpha", "payload_beta"])
+        require_arg(payload, str)
         self.state.unread_payloads.append(payload)
 
     @transition(name="unread_count")
@@ -273,11 +272,10 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
-    require_arg,
+    domain, require_arg,
     sut,
     sut_state,
     synthesize_fake,
@@ -321,7 +319,7 @@ class StreamWriterStateMachine(StateMachine):
     @transition.seeding
     def seed_payload(self, payload: str) -> None:
         """Seeds an already written payload into the buffered stream."""
-        require_arg(payload, Domain.not_in([""]), preferred=["payload_alpha", "payload_beta"])
+        require_arg(payload, (self._dom_seed_payload_payload))
         self.state.unread_payloads.append(payload)
         self.state.written = self.state.written + 1
 
@@ -339,7 +337,7 @@ class StreamWriterStateMachine(StateMachine):
     @transition(StreamWriter.write)
     def write(self, payload: str) -> None:
         """Buffers a non-empty payload and increments the cumulative write count."""
-        require_arg(payload, Domain.not_in([""]), preferred=["payload_alpha", "payload_beta"], error=PayloadEmptyError)
+        require_arg(payload, (self._dom_write_payload), error=PayloadEmptyError)
         self.inner_write(payload)
         assert len(payload) > 0
         self.state.unread_payloads.append(payload)
@@ -362,6 +360,14 @@ class StreamWriterStateMachine(StateMachine):
     def inner_clear(self) -> None:
         """Fake clear is a no-op; the model state mutation happens in the transition."""
         return None
+
+    @domain()
+    def _dom_seed_payload_payload(self, x: Any) -> bool:
+        return bool(x not in [""])
+
+    @domain()
+    def _dom_write_payload(self, x: Any) -> bool:
+        return bool(x not in [""])
 
 
 proto = StreamWriterStateMachine()

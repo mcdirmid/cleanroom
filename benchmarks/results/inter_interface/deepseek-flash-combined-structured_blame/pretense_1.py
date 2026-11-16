@@ -203,11 +203,10 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
-    require_arg,
+    domain, require_arg,
     sut,
     sut_state,
     synthesize_fake,
@@ -248,7 +247,7 @@ class AllocatorStateMachine(StateMachine[AllocatorState]):
     @transition(Allocator.allocate)
     def allocate(self, amount: int) -> None:
         """Allocates funds reserved from the collaborator vault."""
-        require_arg(amount, Domain.type(int), preferred=[10])
+        require_arg(amount, int)
         before_allocated = self.state.allocated
         before_reserves = self.state.reserves
         ret: Any = None
@@ -271,7 +270,7 @@ class AllocatorStateMachine(StateMachine[AllocatorState]):
     @transition(Allocator.release)
     def release(self, amount: int) -> None:
         """Releases allocated funds back into the collaborator vault."""
-        require_arg(amount, Domain.type(int), preferred=[1])
+        require_arg(amount, int)
         before_allocated = self.state.allocated
         before_reserves = self.state.reserves
         ret: Any = None
@@ -308,7 +307,7 @@ class AllocatorStateMachine(StateMachine[AllocatorState]):
     @transition.seeding
     def seed_reserves(self, amount: int) -> None:
         """Seeds collaborator vault reserves so allocations become reachable."""
-        require_arg(amount, Domain.range(1, 100), preferred=[50])
+        require_arg(amount, (self._dom_seed_reserves_amount))
         self.state.reserves = self.state.reserves + amount
 
     @transition.seeding
@@ -320,6 +319,10 @@ class AllocatorStateMachine(StateMachine[AllocatorState]):
     def seed_active(self) -> None:
         """Synchronizes the model with an active collaborator vault."""
         self.state.vault_active = True
+
+    @domain()
+    def _dom_seed_reserves_amount(self, x: Any) -> bool:
+        return bool(x >= 1 and x <= 100)
 
 
 proto = AllocatorStateMachine()
@@ -378,7 +381,7 @@ FakeAllocatorFuzzTest = compile_hypothesis_test_case(
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-08T17:54:17Z
 # LAST_CHANGED: 2026-11-08T17:54:17Z
-# CHANGE: Model the collaborator vault reserve precondition in the Allocator interface state machine: added reserves and vault-activity model fields with seeding transitions (seed_reserves, seed_inactive, seed_active) to keep the model synchronizable, opened the amount domains to Domain.type(int), and modeled the contracted AllocationLimitError branches (amount <= 0 or exceeding available reserves on allocate; amount <= 0 or exceeding allocated on release) with VaultInactiveException on the inactive path. Only remaining static-check error is the tool-injected FEEDBACK metadata line quoting the contract slug.
+# CHANGE: Model the collaborator vault reserve precondition in the Allocator interface state machine: added reserves and vault-activity model fields with seeding transitions (seed_reserves, seed_inactive, seed_active) to keep the model synchronizable, opened the amount domains to int, and modeled the contracted AllocationLimitError branches (amount <= 0 or exceeding available reserves on allocate; amount <= 0 or exceeding allocated on release) with VaultInactiveException on the inactive path. Only remaining static-check error is the tool-injected FEEDBACK metadata line quoting the contract slug.
 # --- END AUTOFAB METADATA ---
 
 
@@ -553,7 +556,7 @@ VaultFuzzTest = compile_hypothesis_test_case(
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-08T17:52:15Z
 # LAST_CHANGED: 2026-11-08T17:51:37Z
-# CHANGE: Added a real scenario test covering the contracted invalid-amount failure witnesses (deposit 0 and -1, withdraw 0 and balance+1) guarded with self.assertRaises(InsufficientFundsError) after the interface amount domains were widened to open Domain.type(int) so those contract outcomes are reachable instead of starved. Only remaining static-check error is the tool-injected FEEDBACK metadata line quoting the contract slugs.
+# CHANGE: Added a real scenario test covering the contracted invalid-amount failure witnesses (deposit 0 and -1, withdraw 0 and balance+1) guarded with self.assertRaises(InsufficientFundsError) after the interface amount domains were widened to open int so those contract outcomes are reachable instead of starved. Only remaining static-check error is the tool-injected FEEDBACK metadata line quoting the contract slugs.
 # PRETENSE_COVERAGE_AUDIT: 2026-11-08T17:52:15Z
 # PRETENSE_QA_AUDIT: 2026-11-08T17:51:51Z
 # --- END AUTOFAB METADATA ---
@@ -571,7 +574,6 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -615,7 +617,7 @@ class VaultStateMachine(StateMachine[VaultState]):
     @transition(Vault.deposit)
     def deposit(self, amount: int) -> None:
         """Deposits a positive amount, raising when the vault is inactive."""
-        require_arg(amount, Domain.type(int), preferred=[10])
+        require_arg(amount, int)
         before = self.state.balance
         ret: Any = None
         if amount <= 0:
@@ -636,7 +638,7 @@ class VaultStateMachine(StateMachine[VaultState]):
     @transition(Vault.withdraw)
     def withdraw(self, amount: int) -> None:
         """Withdraws a positive amount bounded by the current balance."""
-        require_arg(amount, Domain.type(int), preferred=[1])
+        require_arg(amount, int)
         before = self.state.balance
         ret: Any = None
         if amount <= 0 or amount > before:
@@ -657,7 +659,7 @@ class VaultStateMachine(StateMachine[VaultState]):
     @transition(Vault.set_active)
     def set_active(self, active: bool) -> None:
         """Toggles vault availability."""
-        require_arg(active, Domain.boolean(), preferred=[True])
+        require_arg(active, bool)
         ret = self.inner_set_active(active)
         self.state.is_active = active
         assert self.state.is_active == active
@@ -749,5 +751,5 @@ FakeVaultFuzzTest = compile_hypothesis_test_case(
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-08T17:51:34Z
 # LAST_CHANGED: 2026-11-08T17:51:34Z
-# CHANGE: Widen deposit/withdraw amount domains to open Domain.type(int) so invalid-amount contract outcomes are reachable, and model the contracted InsufficientFundsError branches (amount <= 0 for deposit; amount <= 0 or amount > balance for withdraw) in the Vault model transitions, with the open-domain preferred biases retained.
+# CHANGE: Widen deposit/withdraw amount domains to open int so invalid-amount contract outcomes are reachable, and model the contracted InsufficientFundsError branches (amount <= 0 for deposit; amount <= 0 or amount > balance for withdraw) in the Vault model transitions, with the open-domain preferred biases retained.
 # --- END AUTOFAB METADATA ---

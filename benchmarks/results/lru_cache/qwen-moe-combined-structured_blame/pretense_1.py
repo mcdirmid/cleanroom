@@ -310,7 +310,6 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -357,7 +356,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
 
     @transition(LRUCache.configure)
     def configure(self, capacity: int) -> None:
-        require_arg(capacity, Domain.type(int), preferred=[10])
+        require_arg(capacity, int)
         if capacity <= 0:
             with raises(CacheCapacityError):
                 raise CacheCapacityError(f"capacity must be greater than zero, got {capacity}")
@@ -378,8 +377,8 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
     @transition(LRUCache.get)
     def get(self, key: str, default: Optional[Any]) -> Any:
         require(self.state.initialized)
-        require_arg(key, Domain.type(str), preferred=["default_key"])
-        require_arg(default, Domain.type(object), preferred=[None])
+        require_arg(key, str)
+        require_arg(default, object)
         if key in self.state.items:
             self.state.access_order.remove(key)
             self.state.access_order.append(key)
@@ -396,8 +395,8 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
     @transition(LRUCache.put)
     def put(self, key: str, value: Any) -> Optional[Tuple[str, Any]]:
         require(self.state.initialized)
-        require_arg(key, Domain.type(str), preferred=["new_key"])
-        require_arg(value, Domain.type(object), preferred=["value"])
+        require_arg(key, str)
+        require_arg(value, object)
         if key in self.state.items:
             self.state.items[key] = value
             self.state.access_order.remove(key)
@@ -423,8 +422,8 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
     @transition(LRUCache.peek)
     def peek(self, key: str, default: Optional[Any]) -> Any:
         require(self.state.initialized)
-        require_arg(key, Domain.type(str), preferred=["peek_key"])
-        require_arg(default, Domain.type(object), preferred=[None])
+        require_arg(key, str)
+        require_arg(default, object)
         if key in self.state.items:
             ret = self.inner_peek(key, default)
             assert ret == self.state.items[key]
@@ -438,7 +437,7 @@ class LruCacheStateMachine(StateMachine[LruCacheState]):
     @transition(LRUCache.remove)
     def remove(self, key: str) -> Any:
         require(self.state.initialized)
-        require_arg(key, Domain.type(str), preferred=["remove_key"])
+        require_arg(key, str)
         if key not in self.state.items:
             with raises(CacheKeyNotFoundError):
                 ret = self.inner_remove(key)

@@ -34,7 +34,10 @@ Observed: Pending count becomes 0, and get_outcome for previously completed task
 
 Given: A task queue seeded or configured as unavailable.
 
-1. Submit task `task_err` with payload `data`.
+1. Check test-only `is_available()`.
+Observed: Returns `False`.
+
+2. Submit task `task_err` with payload `data`.
 Observed: A queue unavailable exception is raised.
 
 2. Dispatch from the queue.

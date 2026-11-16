@@ -266,7 +266,6 @@ from typing import Any, Collection, Dict, List, Mapping, Optional, Sequence, Set
 import unittest
 
 from pretense import (
-    Domain,
     Env,
     StateMachine,
     raises,
@@ -504,8 +503,7 @@ class PackageRepositoryStateMachine(StateMachine[DependencySolverState]):
         """Registers a release, gating to known publication fixtures in fuzzing."""
         require_arg(
             release,
-            Domain.sampled_from(_SAMPLE_RELEASES),
-            preferred=[_RELEASE_A_1_0_0, _RELEASE_B_1_0_0],
+            _SAMPLE_RELEASES,
         )
         ret = self.inner_register_package(release)
         self.state.register_count += 1
@@ -521,7 +519,7 @@ class PackageRepositoryStateMachine(StateMachine[DependencySolverState]):
     def get_releases(self, name: str) -> List[PackageRelease]:
         """Looks up a package's releases, gating missing packages out of fuzzing."""
         require(bool(self.state.packages))
-        require_arg(name, Domain.in_set(self.state.packages), error=PackageNotFoundError)
+        require_arg(name, self.state.packages, error=PackageNotFoundError)
         ret = self.inner_get_releases(name)
         expected = _sorted_releases(self.state.packages[name])
         assert len(ret) == len(expected)
@@ -541,8 +539,7 @@ class PackageRepositoryStateMachine(StateMachine[DependencySolverState]):
         """Reports package membership within the repository."""
         require_arg(
             name,
-            Domain.sampled_from(_PACKAGE_NAME_CANDIDATES),
-            preferred=["a", "missing"],
+            _PACKAGE_NAME_CANDIDATES,
         )
         ret = self.inner_has_package(name)
         assert ret == (name in self.state.packages)
@@ -595,8 +592,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         """Resolves root dependencies, gating unsupported/unsatisfiable fixtures out of fuzzing."""
         require_arg(
             root_dependencies,
-            Domain.sampled_from(_SAMPLE_DEPENDENCY_SETS),
-            preferred=[_DEPS_B_GE_1_0_0, _DEPS_C_GE_1_0_0],
+            _SAMPLE_DEPENDENCY_SETS,
             error=ResolutionConflictError,
         )
         ret = self.inner_resolve(root_dependencies)
@@ -979,7 +975,6 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 import unittest
 
 from pretense import (
-    Domain,
     Env,
     StateMachine,
     raises,
@@ -1189,8 +1184,7 @@ class VersionEngineStateMachine(StateMachine[VersionEngineState]):
         """Parses text into a version record, gating invalid grammar out of fuzzing."""
         require_arg(
             text,
-            Domain.sampled_from(_VALID_VERSION_TEXTS),
-            preferred=["1.2.3", "1.2.3-alpha.1", "1.2.3-rc.1+build.5"],
+            _VALID_VERSION_TEXTS,
             error=InvalidVersionError,
         )
         ret = self.inner_parse_version(text)
@@ -1211,8 +1205,8 @@ class VersionEngineStateMachine(StateMachine[VersionEngineState]):
     @transition(VersionEngine.compare_precedence)
     def compare_precedence(self, v1: Version, v2: Version) -> int:
         """Compares two version records by SemVer 2.0 precedence."""
-        require_arg(v1, Domain.sampled_from(_SAMPLE_VERSIONS), preferred=[_VERSION_1_2_3])
-        require_arg(v2, Domain.sampled_from(_SAMPLE_VERSIONS), preferred=[_VERSION_1_2_4])
+        require_arg(v1, _SAMPLE_VERSIONS)
+        require_arg(v2, _SAMPLE_VERSIONS)
         ret = self.inner_compare_precedence(v1, v2)
         self.state.comparison_count += 1
         self.state.last_comparison = ret
@@ -1822,7 +1816,6 @@ from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 import unittest
 
 from pretense import (
-    Domain,
     Env,
     StateMachine,
     raises,
@@ -2209,8 +2202,7 @@ class RangeEngineStateMachine(StateMachine[RangeEngineState]):
         """Parses a range expression, gating malformed syntax out of fuzzing."""
         require_arg(
             text,
-            Domain.sampled_from(_VALID_RANGE_TEXTS),
-            preferred=["1.x", ">=1.0.0", "1.0.0 - 2.x"],
+            _VALID_RANGE_TEXTS,
             error=InvalidRangeError,
         )
         ret = self.inner_parse_range(text)
@@ -2232,13 +2224,12 @@ class RangeEngineStateMachine(StateMachine[RangeEngineState]):
         include_prerelease: bool,
     ) -> bool:
         """Evaluates constraint satisfaction, gating to modeled version/range domains."""
-        require_arg(version, Domain.sampled_from(_SAMPLE_VERSIONS), preferred=[_VERSION_1_2_3])
+        require_arg(version, _SAMPLE_VERSIONS)
         require_arg(
             range_constraint,
-            Domain.sampled_from(_SAMPLE_RANGES),
-            preferred=[_RANGE_GE_1_0_0, _RANGE_CARET_1_2_3],
+            _SAMPLE_RANGES,
         )
-        require_arg(include_prerelease, Domain.sampled_from([True, False]), preferred=[False])
+        require_arg(include_prerelease, self._dom_satisfies_include_prerelease)
         ret = self.inner_satisfies(version, range_constraint, include_prerelease)
         self.state.satisfy_count += 1
         self.state.last_result = ret
@@ -2253,6 +2244,10 @@ class RangeEngineStateMachine(StateMachine[RangeEngineState]):
     ) -> bool:
         """Computes the fake satisfaction result for a sampled version and range."""
         return model_satisfies(version, range_constraint, include_prerelease)
+
+    @domain(valid=lambda self: list([True, False]))
+    def _dom_satisfies_include_prerelease(self, val: Any) -> bool:
+        return val in [True, False]
 
 
 proto = RangeEngineStateMachine()

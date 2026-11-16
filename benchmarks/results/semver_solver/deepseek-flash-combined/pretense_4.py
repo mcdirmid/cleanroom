@@ -743,7 +743,6 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -849,7 +848,7 @@ _RANGE_EXPRESSION_STRATEGY = st.builds(
 _RANGE_EXPRESSION_DOMAIN = Domain(_RANGE_EXPRESSION_STRATEGY)
 
 # Also constrain Hypothesis type generation for VersionRange, so any other
-# Domain.type(VersionRange) (e.g. inside PackageDependency) only draws
+# VersionRange (e.g. inside PackageDependency) only draws
 # records whose raw_text is the canonical text of a conforming range.
 _RANGE_STRATEGY_REGISTRATION = st.register_type_strategy(VersionRange, _RANGE_EXPRESSION_STRATEGY)
 
@@ -907,7 +906,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     @transition(VersionEngine.parse_version)
     def parse_version(self, text: str) -> Version:
         require(self.state.initialized)
-        require_arg(text, Domain.type(str), preferred=list(_VALID_VERSION_TEXTS))
+        require_arg(text, str)
         ret: Version = self.inner_parse_version(text)
         self.state.parsed_versions.append(text)
         assert self.state.parsed_versions[-1] == text
@@ -916,8 +915,8 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     @transition(VersionEngine.compare_precedence)
     def compare_precedence(self, v1: Version, v2: Version) -> int:
         require(self.state.initialized)
-        require_arg(v1, Domain.type(Version))
-        require_arg(v2, Domain.type(Version))
+        require_arg(v1, Version)
+        require_arg(v2, Version)
         ret: int = self.inner_compare_precedence(v1, v2)
         self.state.last_comparison = ret
         assert isinstance(ret, int)
@@ -926,7 +925,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     @transition(VersionEngine.parse_range)
     def parse_range(self, text: str) -> VersionRange:
         require(self.state.initialized)
-        require_arg(text, Domain.type(str), preferred=list(_VALID_RANGE_TEXTS))
+        require_arg(text, str)
         ret: VersionRange = self.inner_parse_range(text)
         self.state.parsed_ranges.append(text)
         assert self.state.parsed_ranges[-1] == text
@@ -940,9 +939,9 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         include_prerelease: bool,
     ) -> bool:
         require(self.state.initialized)
-        require_arg(version, Domain.type(Version))
-        require_arg(range_constraint, _RANGE_EXPRESSION_DOMAIN, preferred=list(_RANGE_SAMPLES))
-        require_arg(include_prerelease, Domain.boolean(), preferred=[False])
+        require_arg(version, Version)
+        require_arg(range_constraint, _RANGE_EXPRESSION_DOMAIN)
+        require_arg(include_prerelease, bool)
         ret: bool = self.inner_satisfies(version, range_constraint, include_prerelease)
         self.state.last_satisfaction = ret
         assert isinstance(ret, bool)
@@ -951,7 +950,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     @transition(PackageRepository.register_package)
     def register_package(self, release: PackageRelease) -> None:
         require(self.state.initialized)
-        require_arg(release, Domain.type(PackageRelease), preferred=[_KNOWN_RELEASE])
+        require_arg(release, PackageRelease)
         ret = self.inner_register_package(release)
         registered = self.state.packages.setdefault(release.name, [])
         registered.append(release)
@@ -963,7 +962,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         require(self.state.initialized)
         # Open name domain: unregistered names are conforming caller inputs that
         # exercise the contract's PackageNotFoundError outcome.
-        require_arg(name, Domain.type(str), preferred=[_KNOWN_RELEASE.name])
+        require_arg(name, str)
         ret: List[PackageRelease] = self.inner_get_releases(name)
         assert set(ret) == set(self.state.packages.get(name, []))
         return ret
@@ -971,7 +970,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     @transition(PackageRepository.has_package)
     def has_package(self, name: str) -> bool:
         require(self.state.initialized)
-        require_arg(name, Domain.type(str), preferred=[_KNOWN_RELEASE.name])
+        require_arg(name, str)
         ret: bool = self.inner_has_package(name)
         assert ret == (name in self.state.packages)
         return ret
@@ -988,8 +987,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         require(self.state.initialized)
         require_arg(
             root_dependencies,
-            Domain.type(Collection[PackageDependency]),
-            preferred=[tuple()],
+            Collection[PackageDependency],
         )
         ret: ResolutionOutcome = self.inner_resolve(root_dependencies)
         self.state.resolve_calls = self.state.resolve_calls + 1
@@ -1073,5 +1071,5 @@ FakeSemverSolverFuzzTest = compile_hypothesis_test_case(
 # --- AUTOFAB METADATA ---
 # LAST_CLEANED: 2026-11-07T01:24:42Z
 # LAST_CHANGED: 2026-11-07T01:24:42Z
-# CHANGE: Enabled deterministic coverage of the PackageNotFoundError precondition: the get_releases name domain is now the open Domain.type(str) with a preferred registered name, so unregistered (but conforming) caller names are no longer rejected before dispatch and the contracted error path is reachable. Also replaced the non-comparator union fixture '1.0.0 || >=2.0.0' with the comparator-form '==1.0.0 || >=2.0.0' in the preferred range samples.
+# CHANGE: Enabled deterministic coverage of the PackageNotFoundError precondition: the get_releases name domain is now the open str with a preferred registered name, so unregistered (but conforming) caller names are no longer rejected before dispatch and the contracted error path is reachable. Also replaced the non-comparator union fixture '1.0.0 || >=2.0.0' with the comparator-form '==1.0.0 || >=2.0.0' in the preferred range samples.
 # --- END AUTOFAB METADATA ---

@@ -52,11 +52,11 @@ Given: a state transition method decorated with `@transition(TargetClass.method)
 5. The caller defines an impossible branch or block marked with `with unreachable:` or `unreachable(reason)`.
    Observed: the line or block is excluded from test coverage and raises an AssertionError if executed during fuzzing.
 
-6. The caller constrains an argument using `Domain.type` with a subscripted generic type annotation (such as `Callable[[], Any]` or `Collection[str]`).
-   Observed: `Domain.type` extracts the runtime origin to validate value conformity and generate valid samples without raising `TypeError` for subscripted generics.
+6. The caller constrains an argument using a unary boolean lambda with chained comparisons `require_arg(port, lambda x: 1 <= x <= 65535)`.
+   Observed: chained comparisons are normalized via AST parsing to `x >= 1 and x <= 65535`, and fencepost boundaries are harvested into the spatial edge buffer.
 
-7. The caller defines an argument requirement with a fuzz domain override `require_arg(arg, Domain.integers(min_value=0), fuzz_domain=Domain.integers(min_value=0, max_value=5))`.
-   Observed: during fuzz generation arguments are sampled strictly from the fuzz domain to bound generation sizes and prevent runaway iterations, while values outside the fuzz domain but within the canonical domain validate successfully during fixed scenario testing.
+7. The caller constrains an argument using direct collections, native types, or procedural recognizers decorated with `@domain(valid=..., invalid=...)`.
+   Observed: during fuzz generation candidates are sampled from stratified mixture pools across fresh generators, temporal buffers, and spatial buffers, while transition eligibility is evaluated cleanly without raising runtime exceptions during transition selection.
 
 ## Scenario 5 — State machine declaration and fake adapter
 

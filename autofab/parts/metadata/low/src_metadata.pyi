@@ -9,6 +9,28 @@ from support.lib.lifecycle import Singleton, SystemTier
 
 @data_type
 @dataclass(frozen=True)
+class ChangeEntry:
+    """Encapsulates a single timestamped structured change entry in CHANGES:.
+
+    Args:
+        timestamp: ISO 8601 UTC timestamp of submission.
+        kind: Change kind ('new', 'contract', 'behavior', 'fix', 'refactor', or 'legacy').
+        lines: 1-based changed line spans ('NEW', '42-68, 115-129', 'del@42', 'superseded', or '').
+        scope: Optional comma-separated touched symbols/sections.
+        delta: Concise before-to-after description of what changed locally.
+        why: Optional local invariant or fix intent.
+    """
+
+    timestamp: str
+    kind: str
+    lines: str
+    scope: Optional[str]
+    delta: str
+    why: Optional[str] = None
+
+
+@data_type
+@dataclass(frozen=True)
 class FileMetadata:
     """Encapsulates in-band source file metadata attributes.
 
@@ -19,6 +41,7 @@ class FileMetadata:
         feedback: Unacted diagnostic feedback items.
         audits: Role audit timestamps keyed by audit tag name.
         dirty: Optional explanation reason when node is marked dirty.
+        changes: Chronological list of structured change entries.
     """
 
     last_cleaned: Optional[str]
@@ -27,6 +50,7 @@ class FileMetadata:
     feedback: List[str]
     audits: Dict[str, str] = field(default_factory=dict)
     dirty: Optional[str] = None
+    changes: List[ChangeEntry] = field(default_factory=list)
 
 
 @singleton_type("system")
@@ -147,6 +171,9 @@ class SourceMetadataCoordinator(Singleton[SystemTier], Protocol):
         stamp_audit: Optional[str] = None,
         dirty: Optional[str] = None,
         clear_dirty: bool = False,
+        changes: Optional[List[ChangeEntry]] = None,
+        clear_changes: bool = False,
+        append_change: Optional[ChangeEntry] = None,
     ) -> str:
         """Updates or injects in-band metadata block within content string.
 
@@ -173,6 +200,9 @@ class SourceMetadataCoordinator(Singleton[SystemTier], Protocol):
         stamp_audit: Optional[str] = None,
         dirty: Optional[str] = None,
         clear_dirty: bool = False,
+        changes: Optional[List[ChangeEntry]] = None,
+        clear_changes: bool = False,
+        append_change: Optional[ChangeEntry] = None,
     ) -> None:
         """Rewrites file on disk in-place, updating metadata block while preserving code.
 
@@ -226,13 +256,80 @@ class SourceMetadataCoordinator(Singleton[SystemTier], Protocol):
         self,
         file_path: Path | str,
         change_description: str,
+        kind: str = "behavior",
+        scope: Optional[str] = None,
+        why: Optional[str] = None,
+        prior_content: Optional[str] = None,
     ) -> None:
-        """Marks node changed with updated timestamps and change description.
+        """Marks node changed with updated timestamps, rebased prior spans, and bounded structured change entry.
 
         POSTCONDITIONS:
         - MUST update last cleaned and last changed timestamps to now.
-        - MUST record change description.
+        - MUST append structured ChangeEntry (rebasing prior entries when prior_content is provided and capping to MAX_CHANGE_ENTRIES).
         - MUST clear unacted feedback, audits, and dirty tags.
+        """
+        ...
+
+    @operation
+    def compute_changed_lines(
+        self,
+        old_content: Optional[str],
+        new_content: str,
+        filename_or_ext: str,
+    ) -> str:
+        """Computes 1-based changed line spans between old_content and new_content code bodies.
+
+        POSTCONDITIONS:
+        - When old_content is None, MUST return 'NEW'.
+        - When code bodies are identical, MUST return ''.
+        - Otherwise MUST return comma-separated 1-based line spans or 'del@<line>' anchors in new_content.
+        """
+        ...
+
+    @operation
+    def rebase_change_entries(
+        self,
+        entries: List[ChangeEntry],
+        old_content: Optional[str],
+        new_content: str,
+        filename_or_ext: str,
+    ) -> List[ChangeEntry]:
+        """Rebases existing ChangeEntry line spans from old_content coordinates to new_content coordinates.
+
+        POSTCONDITIONS:
+        - MUST preserve 'NEW' and 'superseded' entries unchanged.
+        - MUST shift untouched spans by sequence-matcher opcode offsets and collapse wholly overwritten/deleted spans.
+        """
+        ...
+
+    @operation
+    def filter_changes_since(
+        self,
+        entries: List[ChangeEntry],
+        since_timestamp: Optional[str],
+    ) -> List[ChangeEntry]:
+        """Filters ChangeEntry items strictly newer than since_timestamp.
+
+        POSTCONDITIONS:
+        - When since_timestamp is None or empty, MUST return all entries.
+        - Otherwise MUST return only entries with timestamp strictly greater than since_timestamp.
+        """
+        ...
+
+    @operation
+    def project_workspace_metadata(
+        self,
+        content: str,
+        filename_or_ext: str,
+        strip_changes: bool = False,
+        since_timestamp: Optional[str] = None,
+    ) -> str:
+        """Projects in-band metadata for a role workspace by clearing lifecycle timestamps and filtering CHANGES:.
+
+        POSTCONDITIONS:
+        - MUST clear LAST_CLEANED, LAST_CHANGED, *_AUDIT, and DIRTY.
+        - When strip_changes is True, MUST remove all CHANGES: entries.
+        - When since_timestamp is provided and strip_changes is False, MUST retain only entries newer than since_timestamp.
         """
         ...
 

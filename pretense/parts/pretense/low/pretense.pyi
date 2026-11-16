@@ -33,6 +33,8 @@ P = ParamSpec("P", default=...)
 R = TypeVar("R", default=Any)
 E = TypeVar("E", default=Any)
 K = TypeVar("K", default=Any)
+S_Dom = TypeVar("S_Dom")
+T_Dom = TypeVar("T_Dom")
 V = TypeVar("V", default=Any)
 StateT = TypeVar("StateT", default=Any)
 SelfT = TypeVar("SelfT", default=Any)
@@ -87,12 +89,6 @@ class Raised(Outcome[Any]):
 @data_type
 class PretenseError(Exception):
     """Base exception for all Pretense errors."""
-    ...
-
-
-@data_type
-class UnsatisfiedAntecedentError(PretenseError):
-    """Raised when an argument domain cannot generate values in the current state."""
     ...
 
 
@@ -158,16 +154,6 @@ class PretenseRunResult:
 
 
 @data_type
-class RequiresCheck:
-    """Precondition check helper that records failure flags and reasons without exception overhead."""
-    ok: bool
-    reasons: List[str]
-
-    def __init__(self) -> None: ...
-    def __call__(self, condition: bool, reason: str = "") -> bool: ...
-
-
-@data_type
 class require:
     """Precondition requirement assertion enforcing state machine antecedents."""
     def __init__(
@@ -215,107 +201,51 @@ class require_env:
     ) -> None: ...
 
 
+class DomainWrapper(Generic[S_Dom, T_Dom]):
+    """Bound or unbound procedural domain recognizer with finite-sequence candidate producers."""
+    fn: Callable[[S_Dom, T_Dom], bool]
+    valid: Optional[Callable[[S_Dom], Sequence[T_Dom]]]
+    invalid: Optional[Callable[[S_Dom], Sequence[object]]]
+
+    def __init__(
+        self,
+        fn: Callable[[S_Dom, T_Dom], bool],
+        valid: Optional[Callable[[S_Dom], Sequence[T_Dom]]] = None,
+        invalid: Optional[Callable[[S_Dom], Sequence[object]]] = None,
+    ) -> None: ...
+    @overload
+    def __get__(self, instance: None, owner: type[S_Dom]) -> "DomainWrapper[S_Dom, T_Dom]": ...
+    @overload
+    def __get__(self, instance: S_Dom, owner: type[S_Dom]) -> "DomainWrapper[S_Dom, T_Dom]": ...
+    def __call__(self, val: object) -> bool: ...
+    def validate(self, val: object) -> bool: ...
+
+
+def domain(
+    valid: Optional[Callable[[S_Dom], Sequence[T_Dom]]] = None,
+    invalid: Optional[Callable[[S_Dom], Sequence[object]]] = None,
+) -> Callable[[Callable[[S_Dom, T_Dom], bool]], DomainWrapper[S_Dom, T_Dom]]: ...
+
+
 @data_type
 class require_arg(Generic[T]):
-    """Argument domain validation and preferred candidate binding."""
-    @overload
+    """Argument requirement validation and candidate generation binding."""
     def __init__(
         self,
-        val: Sequence[E],
-        domain: Union[Domain[Sequence[E]], Domain[List[E]], Domain[Tuple[E, ...]]],
-        preferred: Optional[Sequence[Sequence[E]]] = None,
+        val: Any,
+        requirement: Any,
         error: Optional[Union[Type[BaseException], BaseException]] = None,
         *,
-        fuzz_domain: Optional[Domain[Any]] = None,
+        fuzz_domain: Optional[Any] = None,
     ) -> None: ...
-    @overload
-    def __init__(
-        self,
-        val: Optional[Sequence[E]],
-        domain: Union[Domain[Optional[Sequence[E]]], Domain[Optional[List[E]]], Domain[Optional[Tuple[E, ...]]]],
-        preferred: Optional[Sequence[Optional[Sequence[E]]]] = None,
-        error: Optional[Union[Type[BaseException], BaseException]] = None,
-        *,
-        fuzz_domain: Optional[Domain[Any]] = None,
-    ) -> None: ...
-    @overload
-    def __init__(
-        self,
-        val: T,
-        domain: Domain[T],
-        preferred: Optional[Sequence[T]] = None,
-        error: Optional[Union[Type[BaseException], BaseException]] = None,
-        *,
-        fuzz_domain: Optional[Domain[Any]] = None,
-    ) -> None: ...
-    @overload
-    def __init__(
-        self,
-        val: T,
-        domain: Domain[T],
-        preferred: Union[Type[BaseException], BaseException],
-        *,
-        fuzz_domain: Optional[Domain[Any]] = None,
-    ) -> None: ...
-    @overload
     def __call__(
         self,
-        val: Sequence[E],
-        domain: Union[Domain[Sequence[E]], Domain[List[E]], Domain[Tuple[E, ...]]],
-        preferred: Optional[Sequence[Sequence[E]]] = None,
+        val: Any,
+        requirement: Any,
         error: Optional[Union[Type[BaseException], BaseException]] = None,
         *,
-        fuzz_domain: Optional[Domain[Any]] = None,
+        fuzz_domain: Optional[Any] = None,
     ) -> None: ...
-    @overload
-    def __call__(
-        self,
-        val: Optional[Sequence[E]],
-        domain: Union[Domain[Optional[Sequence[E]]], Domain[Optional[List[E]]], Domain[Optional[Tuple[E, ...]]]],
-        preferred: Optional[Sequence[Optional[Sequence[E]]]] = None,
-        error: Optional[Union[Type[BaseException], BaseException]] = None,
-        *,
-        fuzz_domain: Optional[Domain[Any]] = None,
-    ) -> None: ...
-    @overload
-    def __call__(
-        self,
-        val: T,
-        domain: Domain[T],
-        preferred: Optional[Sequence[T]] = None,
-        error: Optional[Union[Type[BaseException], BaseException]] = None,
-        *,
-        fuzz_domain: Optional[Domain[Any]] = None,
-    ) -> None: ...
-    @overload
-    def __call__(
-        self,
-        val: T,
-        domain: Domain[T],
-        preferred: Union[Type[BaseException], BaseException],
-        *,
-        fuzz_domain: Optional[Domain[Any]] = None,
-    ) -> None: ...
-
-
-@data_type
-class ensure:
-    """Postcondition assertion verifying invariants over model state and test singletons."""
-    def __init__(self, condition: bool, reason: str = "") -> None: ...
-    def __call__(self, condition: bool, reason: str = "") -> None: ...
-
-
-@data_type
-class call_target(Generic[R]):
-    """Pivot in an implementation pseudo state machine transition."""
-    @overload
-    def __new__(cls, target_call: Type[R]) -> R: ...
-    @overload
-    def __new__(cls, target_call: R) -> R: ...
-    @overload
-    def __call__(self, target_call: Type[R]) -> R: ...
-    @overload
-    def __call__(self, target_call: R) -> R: ...
 
 
 @data_type
@@ -334,13 +264,6 @@ class sut(Generic[T]):
 
 
 @data_type
-class sut_state:
-    """Resolves active state model for a collaborator or target."""
-    def __new__(cls, state_cls: Type[StateT]) -> StateT: ...
-    def __call__(self, state_cls: Type[StateT]) -> StateT: ...
-
-
-@data_type
 class test_only:
     """Decorator marking an interface method or property as test-only observability query."""
     def __new__(cls, fn: T) -> T: ...
@@ -349,217 +272,16 @@ class test_only:
 
 @data_type
 class unreachable:
-    """Marks an unreachable code path, impossible branch, or defensive dead-end."""
+    """Marks an unreachable code path, impossible branch, or defensive dead-end.
+
+    `__enter__()` raises `UnreachableBranchError` unconditionally on entry; always
+    place `with unreachable:` INSIDE the impossible conditional branch, never
+    wrapping an `if` block.
+    """
     def __new__(cls, reason: str = ...) -> Any: ...
     def __call__(self, reason: str = ...) -> Any: ...
     def __enter__(self) -> None: ...
     def __exit__(self, *args: Any) -> None: ...
-
-
-@data_type
-class ensure_ret(Generic[T]):
-    """Wrapped execution verifying return value against an expected domain or value."""
-    def __new__(
-        cls,
-        call_expr: T,
-        domain: Optional[Domain[T]] = None,
-        preferred: Optional[Sequence[T]] = None,
-    ) -> T: ...
-    def __init__(
-        self,
-        call_expr: T,
-        domain: Optional[Domain[T]] = None,
-        preferred: Optional[Sequence[T]] = None,
-    ) -> None: ...
-
-
-@data_type
-class ensure_raises:
-    """Wrapped execution verifying that an operation under test raises a contracted exception."""
-    def __init__(
-        self,
-        call_expr: Any,
-        exc_type: Type[BaseException],
-        match: str = "",
-    ) -> None: ...
-
-
-@data_type
-class EnsuresCheck:
-    """Postcondition check helper providing assertion checks, equality diffs, and singleton lookup."""
-    singletons: Dict[Type[Any], Any]
-
-    def __init__(self, singletons: Optional[Dict[Type[Any], Any]] = None) -> None: ...
-    def __call__(self, condition: bool, msg: str = "") -> None: ...
-    def equal(self, actual: Any, expected: Any, msg: str = "") -> None: ...
-    def get(self, singleton_type: Type[T]) -> T: ...
-
-
-@data_type
-class Domain(Generic[T_co]):
-    """Specification of an argument domain uniting generative sampling and analytical validation."""
-    strategy: Any
-    validator: Optional[Callable[[Any], bool]]
-    default: Any
-
-    def __init__(
-        self,
-        strategy: Union[Callable[..., Any], Any],
-        validator: Optional[Callable[[Any], bool]] = None,
-        default: Any = ...,
-    ) -> None: ...
-    def to_strategy(self) -> Any: ...
-    def validate(self, val: Any) -> bool: ...
-
-    @classmethod
-    def set(cls, items: Collection[T]) -> Domain[T]: ...
-    @classmethod
-    def in_set(cls, items: Collection[T]) -> Domain[T]: ...
-    @classmethod
-    def not_in(
-        cls,
-        items: Collection[T],
-        base: Optional[Any] = None,
-        base_type: Optional[Type[T]] = None,
-        prefix: str = "item_",
-    ) -> Domain[T]: ...
-    @classmethod
-    def any(cls) -> Domain[Any]: ...
-    @classmethod
-    def subset_of(cls, items: Collection[T]) -> Domain[Set[T]]: ...
-    @classmethod
-    def sampled_from(cls, items: Collection[T]) -> Domain[T]: ...
-    @classmethod
-    def just(cls, val: Union[T, Expr[T]]) -> Domain[T]: ...
-    @classmethod
-    def range(cls, start: Any, stop: Any, step: int = 1) -> Domain[int]: ...
-    @classmethod
-    def integers(cls, min_value: Optional[int] = None, max_value: Optional[int] = None) -> Domain[int]: ...
-    @classmethod
-    def regex(cls, pattern: Union[str, Any]) -> Domain[str]: ...
-    @overload
-    @classmethod
-    def type(cls, target_cls: Type[T], validator: Optional[Callable[[Any], bool]] = None, **kwargs: Any) -> Domain[T]: ...
-    @overload
-    @classmethod
-    def type(cls, target_cls: Any, validator: Optional[Callable[[Any], bool]] = None, **kwargs: Any) -> Domain[Any]: ...
-    @classmethod
-    def tuple_of(cls, *elem_domains: Any) -> Domain[Tuple[Any, ...]]: ...
-    @classmethod
-    def object(cls, target_cls: Type[T], **field_domains: Any) -> Domain[T]: ...
-    @classmethod
-    def newtype(cls, newtype_cls: Any, inner_domain: Any) -> Domain[Any]: ...
-    @classmethod
-    def list_of(cls, elem_domain: Union[Domain[E], Type[E]], min_size: int = 0, max_size: int = 5, unique: bool = False) -> Domain[List[E]]: ...
-    @classmethod
-    def collection(cls, elem_domain: Union[Domain[E], Type[E]], min_size: int = 0, max_size: int = 5, unique: bool = False) -> Domain[Collection[E]]: ...
-    @classmethod
-    def set_of(cls, elem_domain: Union[Domain[E], Type[E]], min_size: int = 0, max_size: int = 5) -> Domain[Set[E]]: ...
-    @classmethod
-    def mapping_of(cls, key_domain: Union[Domain[K], Type[K]], val_domain: Union[Domain[V], Type[V]], min_size: int = 0, max_size: int = 5) -> Domain[Dict[K, V]]: ...
-    @classmethod
-    def mapping(cls, key_domain: Union[Domain[K], Type[K]], val_domain: Union[Domain[V], Type[V]], min_size: int = 0, max_size: int = 5) -> Domain[Mapping[K, V]]: ...
-    @classmethod
-    def optional(cls, inner_domain: Union[Domain[E], Type[E]]) -> Domain[Optional[E]]: ...
-    @classmethod
-    def none(cls) -> Domain[None]: ...
-    @classmethod
-    def boolean(cls) -> Domain[bool]: ...
-    @classmethod
-    def text(cls, min_size: int = 0, max_size: Optional[int] = None, alphabet: Any = None) -> Domain[str]: ...
-    @classmethod
-    def perturb(
-        cls,
-        anchor: Any,
-        mutations: Sequence[Any],
-        validator: Callable[[Any], bool],
-    ) -> Domain[T]: ...
-    @classmethod
-    def required(cls, name: str = "") -> Domain[Any]: ...
-    @classmethod
-    def of(cls, val: Any) -> Domain[Any]: ...
-
-
-@data_type
-class Expr(Generic[T]):
-    """Lifted symbolic parameter or return outcome expression for a state transition."""
-    name: str
-    is_return: bool
-
-    def __init__(self, name: str = "", is_return: bool = False) -> None: ...
-    def constrain(self, domain_or_val: Any) -> None: ...
-    def raises(self, exc_type: Type[BaseException], match: Any = "") -> None: ...
-    def value(self) -> T: ...
-    def is_bound(self) -> bool: ...
-    def __add__(self, other: Any) -> Expr[Any]: ...
-    def __radd__(self, other: Any) -> Expr[Any]: ...
-    def __sub__(self, other: Any) -> Expr[Any]: ...
-    def __rsub__(self, other: Any) -> Expr[Any]: ...
-    def __mul__(self, other: Any) -> Expr[Any]: ...
-    def __rmul__(self, other: Any) -> Expr[Any]: ...
-    def __getattr__(self, attr: str) -> Expr[Any]: ...
-    def __getitem__(self, key: Any) -> Expr[Any]: ...
-
-
-@data_type
-class TransitionContext(Generic[Target, P, R]):
-    """Context for specifying requires, argument, return, ensures, and update handlers for a transition."""
-    updates: bool
-    target: Optional[Target]
-    check: EnsuresCheck
-
-    def requires(self, fn: Union[bool, Callable[[RequiresCheck], Any], Callable[[], bool]], reason: str = "") -> None: ...
-    def antecedent(self, predicate: Union[bool, Callable[[], bool]], reason: str = "") -> None: ...
-    def check_equal(self, actual: Any, expected: Any, msg: str = "") -> None: ...
-    def get(self, singleton_type: Type[T]) -> T: ...
-
-    def arguments(self, *domains: Any, **kw_domains: Any) -> None: ...
-
-    @overload
-    def returns(self, fn: Callable[P, Union[R, Outcome[R], Outcome[Any], None]]) -> None: ...
-
-    @overload
-    def returns(self, fn: Callable[[], Union[R, Outcome[R], Outcome[Any], None]]) -> None: ...
-
-    @overload
-    def returns(self, fn: Callable[..., Union[R, Outcome[R], Outcome[Any], None]]) -> None: ...
-
-    @overload
-    def returns(self, fn: Union[R, Outcome[R], Outcome[Any]]) -> None: ...
-
-    def ensures(self, fn: Callable[..., Any]) -> None: ...
-
-    @overload
-    def update(self, fn: Callable[Concatenate[Any, P], Any]) -> None: ...
-
-    @overload
-    def update(self, fn: Callable[[Any], Any]) -> None: ...
-
-    @overload
-    def update(self, fn: Callable[[], Any]) -> None: ...
-
-    @overload
-    def update(self, fn: Callable[..., Any]) -> None: ...
-
-    @overload
-    def consequent(self, fn: Callable[Concatenate[Any, P], Any]) -> None: ...
-
-    @overload
-    def consequent(self, fn: Callable[[Any], Any]) -> None: ...
-
-    @overload
-    def consequent(self, fn: Callable[[], Any]) -> None: ...
-
-    @overload
-    def consequent(self, fn: Callable[..., Any]) -> None: ...
-
-    def raises(self, exc_type: Type[Exception], match: str = "") -> None:
-        """Declares an expected exception outcome for this transition.
-
-        Raises:
-            ValueError: If ctx.returns has already been declared on this context.
-        """
-        ...
 
 
 @data_type
@@ -583,7 +305,7 @@ class transition:
 
     def __call__(
         self,
-        fn: Callable[..., None],
+        fn: Callable[..., Any],
     ) -> Any: ...
 
 
@@ -606,14 +328,6 @@ class Transition:
         is_seeding: bool = False,
     ) -> None: ...
 
-    def require(self, fn: Callable[..., bool]) -> Callable[..., bool]: ...
-    def requires(self, fn: Callable[..., bool]) -> Callable[..., bool]: ...
-    def arguments(self, fn: Callable[..., Any]) -> Callable[..., Any]: ...
-    def returns(self, fn: Callable[..., Any]) -> Callable[..., Any]: ...
-    def ensures(self, fn: Callable[..., Any]) -> Callable[..., Any]: ...
-    def provide(self, fn: Callable[..., None]) -> Callable[..., None]: ...
-    def update(self, fn: Callable[..., None]) -> Callable[..., None]: ...
-
 
 @data_type
 class StateMachineProto(Generic[StateT]):
@@ -633,11 +347,6 @@ class StateMachineProto(Generic[StateT]):
         name: Optional[str] = None,
     ) -> Callable[[Callable[..., Any]], Transition]:
         """Declare an object method or property transition matching an interface Protocol."""
-        ...
-
-    @operation
-    def seeding(self) -> Callable[[Callable[..., Any]], Transition]:
-        """Declare a seeding transition for environment and test configuration."""
         ...
 
     @operation
@@ -688,12 +397,7 @@ class StateMachine(Generic[StateT]):
     def as_checked(self, protocol_type: Type[T], real_instance: Optional[T] = None) -> CheckedAdapter[T]:
         """Returns a CheckedAdapter wrapping `real_instance` (and binding it into `singletons[protocol_type]` if provided)."""
         ...
-    def bind_state(self, attr_name: str, getter: Callable[[], Any]) -> None: ...
-    @overload
-    def bind(self, attr_name: str, getter: Callable[[], Any]) -> None: ...
-    @overload
     def bind(self, target: T) -> CheckedAdapter[T]: ...
-    def bind(self, target_or_attr: Any, getter: Optional[Callable[[], Any]] = None) -> Any: ...
     def make_state_machine(self, initial_state: Any) -> StateMachine: ...
     def check_invariants(self) -> None: ...
     def dispatch_transition(self, transition_name: Any, *args: Any, **kwargs: Any) -> Any: ...
@@ -772,15 +476,16 @@ class PretenseEngine(Singleton[SystemTier], Protocol):
         ...
 
 
-@data_type
-class synthesize_fake:
+def synthesize_fake(
+    machine_cls: Type[StateMachine[Any]],
+    fake_name: Optional[str] = None,
+) -> Type[Any]:
     """Synthesizes a pure in-memory test double class from a state machine.
 
     On transition calls: `require(...)` / `require_arg(...)` guard failures raise `NoMatchingTransitionError`;
     `require_env(...)` guard failures raise `exception_cls(*args, **kwargs)`.
     """
-    def __new__(cls, machine_cls: Type[StateMachine[Any]], fake_name: Optional[str] = None) -> Type[Any]: ...
-    def __call__(self, machine_cls: Type[StateMachine[Any]], fake_name: Optional[str] = None) -> Type[Any]: ...
+    ...
 
 
 @data_type
@@ -791,6 +496,7 @@ class compile_hypothesis_test_case:
         machine_cls: Type[StateMachine[Any]],
         target_cls: Optional[Type[Any]] = None,
         *,
+        sut_factory: Optional[Callable[[], Any]] = None,
         name: Optional[str] = None,
         max_examples: int = 50,
         collaborators: Optional[Sequence[Any]] = None,
@@ -800,6 +506,7 @@ class compile_hypothesis_test_case:
         machine_cls: Type[StateMachine[Any]],
         target_cls: Optional[Type[Any]] = None,
         *,
+        sut_factory: Optional[Callable[[], Any]] = None,
         name: Optional[str] = None,
         max_examples: int = 50,
         collaborators: Optional[Sequence[Any]] = None,

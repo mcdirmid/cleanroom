@@ -619,11 +619,10 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
-    require_arg,
+    domain, require_arg,
     sut,
     sut_state,
     synthesize_fake,
@@ -840,11 +839,11 @@ class DAGEngineStateMachine(StateMachine[DAGEngineState]):
         retries: int,
     ) -> None:
         """Adds a task node to the modeled graph, deferring missing dependency checks."""
-        require_arg(node_id, Domain.type(str), preferred=["alpha", "beta", "gamma"], error=DuplicateNodeError)
-        require_arg(action, Domain.any())
-        require_arg(dependencies, Domain.type(Optional[Collection[str]]))
-        require_arg(priority, Domain.integers(-3, 3))
-        require_arg(retries, Domain.integers(0, 2))
+        require_arg(node_id, str, error=DuplicateNodeError)
+        require_arg(action, object)
+        require_arg(dependencies, Optional[Collection[str]])
+        require_arg(priority, (self._dom_add_node_priority))
+        require_arg(retries, (self._dom_add_node_retries))
         ret = self.inner_add_node(node_id, action, dependencies, priority, retries)
         definition = NodeDefinition(
             node_id=node_id,
@@ -885,8 +884,8 @@ class DAGEngineStateMachine(StateMachine[DAGEngineState]):
     def add_edge(self, upstream_id: str, downstream_id: str) -> None:
         """Adds a directed dependency edge between two registered nodes."""
         require(bool(self.state.nodes))
-        require_arg(upstream_id, Domain.in_set(set(self.state.nodes)), error=NodeNotFoundError)
-        require_arg(downstream_id, Domain.in_set(set(self.state.nodes)), error=NodeNotFoundError)
+        require_arg(upstream_id, self._dom_add_edge_upstream_id, error=NodeNotFoundError)
+        require_arg(downstream_id, self._dom_add_edge_downstream_id, error=NodeNotFoundError)
         ret = self.inner_add_edge(upstream_id, downstream_id)
         self.state.upstream.setdefault(downstream_id, set()).add(upstream_id)
         self.state.downstream.setdefault(upstream_id, set()).add(downstream_id)
@@ -905,7 +904,7 @@ class DAGEngineStateMachine(StateMachine[DAGEngineState]):
     def remove_node(self, node_id: str) -> None:
         """Removes a node and purges all of its incident edges."""
         require(bool(self.state.nodes))
-        require_arg(node_id, Domain.in_set(set(self.state.nodes)), error=NodeNotFoundError)
+        require_arg(node_id, self._dom_remove_node_node_id, error=NodeNotFoundError)
         ret = self.inner_remove_node(node_id)
         for dependency in self.state.upstream.get(node_id, set()):
             self.state.downstream.setdefault(dependency, set()).discard(node_id)
@@ -933,7 +932,7 @@ class DAGEngineStateMachine(StateMachine[DAGEngineState]):
     @transition(DAG.has_node)
     def has_node(self, node_id: str) -> bool:
         """Reports whether a node identifier is registered in the modeled graph."""
-        require_arg(node_id, Domain.type(str))
+        require_arg(node_id, str)
         ret = self.inner_has_node(node_id)
         assert ret == (node_id in self.state.nodes)
         return ret
@@ -946,7 +945,7 @@ class DAGEngineStateMachine(StateMachine[DAGEngineState]):
     def get_node(self, node_id: str) -> NodeDefinition[Any]:
         """Returns the registered immutable node definition."""
         require(bool(self.state.nodes))
-        require_arg(node_id, Domain.in_set(set(self.state.nodes)), error=NodeNotFoundError)
+        require_arg(node_id, self._dom_get_node_node_id, error=NodeNotFoundError)
         ret = self.inner_get_node(node_id)
         assert ret.node_id == node_id
         return ret
@@ -959,7 +958,7 @@ class DAGEngineStateMachine(StateMachine[DAGEngineState]):
     def get_dependencies(self, node_id: str) -> Set[str]:
         """Returns the direct upstream dependency identifiers of a node."""
         require(bool(self.state.nodes))
-        require_arg(node_id, Domain.in_set(set(self.state.nodes)), error=NodeNotFoundError)
+        require_arg(node_id, self._dom_get_dependencies_node_id, error=NodeNotFoundError)
         ret = self.inner_get_dependencies(node_id)
         assert ret == set(self.state.upstream.get(node_id, set()))
         return ret
@@ -972,7 +971,7 @@ class DAGEngineStateMachine(StateMachine[DAGEngineState]):
     def get_dependents(self, node_id: str) -> Set[str]:
         """Returns the direct downstream dependent identifiers of a node."""
         require(bool(self.state.nodes))
-        require_arg(node_id, Domain.in_set(set(self.state.nodes)), error=NodeNotFoundError)
+        require_arg(node_id, self._dom_get_dependents_node_id, error=NodeNotFoundError)
         ret = self.inner_get_dependents(node_id)
         assert ret == set(self.state.downstream.get(node_id, set()))
         return ret
@@ -1070,7 +1069,7 @@ class DAGEngineStateMachine(StateMachine[DAGEngineState]):
         """Returns the longest weighted dependency path and its cumulative weight."""
         require_arg(
             estimated_durations,
-            Domain.type(Optional[Mapping[str, float]]),
+            Optional[Mapping[str, float]],
         )
         ret = self.inner_compute_critical_path(estimated_durations)
         assert all(node_id in self.state.nodes for node_id in ret[0])
@@ -1122,7 +1121,7 @@ class DAGEngineStateMachine(StateMachine[DAGEngineState]):
     def mark_running(self, node_id: str) -> None:
         """Transitions a modeled node into the RUNNING state."""
         require(bool(self.state.nodes))
-        require_arg(node_id, Domain.in_set(set(self.state.nodes)))
+        require_arg(node_id, self._dom_mark_running_node_id)
         ret = self.inner_mark_running(node_id)
         self.state.node_states[node_id] = NodeState.RUNNING
         assert ret is None
@@ -1136,7 +1135,7 @@ class DAGEngineStateMachine(StateMachine[DAGEngineState]):
     def mark_succeeded(self, node_id: str) -> None:
         """Transitions a modeled node into the SUCCEEDED state and promotes dependents."""
         require(bool(self.state.nodes))
-        require_arg(node_id, Domain.in_set(set(self.state.nodes)))
+        require_arg(node_id, self._dom_mark_succeeded_node_id)
         ret = self.inner_mark_succeeded(node_id)
         self.state.node_states[node_id] = NodeState.SUCCEEDED
         for dependent in self.state.downstream.get(node_id, set()):
@@ -1156,16 +1155,10 @@ class DAGEngineStateMachine(StateMachine[DAGEngineState]):
     def mark_failed(self, node_id: str, failure_policy: FailurePolicy) -> None:
         """Transitions a modeled node into the FAILED state and applies the failure policy."""
         require(bool(self.state.nodes))
-        require_arg(node_id, Domain.in_set(set(self.state.nodes)))
+        require_arg(node_id, self._dom_mark_failed_node_id)
         require_arg(
             failure_policy,
-            Domain.sampled_from(
-                [
-                    FailurePolicy.FAIL_FAST,
-                    FailurePolicy.CONTINUE_ON_ERROR,
-                    FailurePolicy.SKIP_DOWNSTREAM,
-                ]
-            ),
+            self._dom_mark_failed_failure_policy,
         )
         ret = self.inner_mark_failed(node_id, failure_policy)
         self.state.node_states[node_id] = NodeState.FAILED
@@ -1204,7 +1197,7 @@ class DAGEngineStateMachine(StateMachine[DAGEngineState]):
     def get_state(self, node_id: str) -> NodeState:
         """Returns the modeled execution state of a registered node."""
         require(bool(self.state.nodes))
-        require_arg(node_id, Domain.in_set(set(self.state.nodes)), error=NodeNotFoundError)
+        require_arg(node_id, self._dom_get_state_node_id, error=NodeNotFoundError)
         sync_states(self.state.nodes, self.state.upstream, self.state.node_states)
         ret = self.inner_get_state(node_id)
         assert ret == self.state.node_states.get(node_id)
@@ -1240,13 +1233,7 @@ class DAGEngineStateMachine(StateMachine[DAGEngineState]):
         require(self.state.acyclic, error=CycleError)
         require_arg(
             failure_policy,
-            Domain.sampled_from(
-                [
-                    FailurePolicy.FAIL_FAST,
-                    FailurePolicy.CONTINUE_ON_ERROR,
-                    FailurePolicy.SKIP_DOWNSTREAM,
-                ]
-            ),
+            self._dom_run_failure_policy,
         )
         sync_states(self.state.nodes, self.state.upstream, self.state.node_states)
         for node_id in self.state.nodes:
@@ -1305,6 +1292,78 @@ class DAGEngineStateMachine(StateMachine[DAGEngineState]):
             critical_path=tuple(path),
             results=results,
         )
+
+    @domain()
+    def _dom_add_node_priority(self, x: Any) -> bool:
+        return bool(x >= -3 and x <= 3)
+
+    @domain()
+    def _dom_add_node_retries(self, x: Any) -> bool:
+        return bool(x >= 0 and x <= 2)
+
+    @domain(valid=lambda self: list([
+                    FailurePolicy.FAIL_FAST,
+                    FailurePolicy.CONTINUE_ON_ERROR,
+                    FailurePolicy.SKIP_DOWNSTREAM,
+                ]))
+    def _dom_mark_failed_failure_policy(self, val: Any) -> bool:
+        return val in [
+                    FailurePolicy.FAIL_FAST,
+                    FailurePolicy.CONTINUE_ON_ERROR,
+                    FailurePolicy.SKIP_DOWNSTREAM,
+                ]
+
+    @domain(valid=lambda self: list([
+                    FailurePolicy.FAIL_FAST,
+                    FailurePolicy.CONTINUE_ON_ERROR,
+                    FailurePolicy.SKIP_DOWNSTREAM,
+                ]))
+    def _dom_run_failure_policy(self, val: Any) -> bool:
+        return val in [
+                    FailurePolicy.FAIL_FAST,
+                    FailurePolicy.CONTINUE_ON_ERROR,
+                    FailurePolicy.SKIP_DOWNSTREAM,
+                ]
+
+    @domain(valid=lambda self: list(set(self.state.nodes)))
+    def _dom_add_edge_upstream_id(self, val: Any) -> bool:
+        return val in set(self.state.nodes)
+
+    @domain(valid=lambda self: list(set(self.state.nodes)))
+    def _dom_add_edge_downstream_id(self, val: Any) -> bool:
+        return val in set(self.state.nodes)
+
+    @domain(valid=lambda self: list(set(self.state.nodes)))
+    def _dom_remove_node_node_id(self, val: Any) -> bool:
+        return val in set(self.state.nodes)
+
+    @domain(valid=lambda self: list(set(self.state.nodes)))
+    def _dom_get_node_node_id(self, val: Any) -> bool:
+        return val in set(self.state.nodes)
+
+    @domain(valid=lambda self: list(set(self.state.nodes)))
+    def _dom_get_dependencies_node_id(self, val: Any) -> bool:
+        return val in set(self.state.nodes)
+
+    @domain(valid=lambda self: list(set(self.state.nodes)))
+    def _dom_get_dependents_node_id(self, val: Any) -> bool:
+        return val in set(self.state.nodes)
+
+    @domain(valid=lambda self: list(set(self.state.nodes)))
+    def _dom_mark_running_node_id(self, val: Any) -> bool:
+        return val in set(self.state.nodes)
+
+    @domain(valid=lambda self: list(set(self.state.nodes)))
+    def _dom_mark_succeeded_node_id(self, val: Any) -> bool:
+        return val in set(self.state.nodes)
+
+    @domain(valid=lambda self: list(set(self.state.nodes)))
+    def _dom_mark_failed_node_id(self, val: Any) -> bool:
+        return val in set(self.state.nodes)
+
+    @domain(valid=lambda self: list(set(self.state.nodes)))
+    def _dom_get_state_node_id(self, val: Any) -> bool:
+        return val in set(self.state.nodes)
 
 
 proto = DAGEngineStateMachine()

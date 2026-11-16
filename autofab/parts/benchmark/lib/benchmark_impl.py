@@ -920,9 +920,10 @@ class _VerificationGate:
         if lib_path.is_dir():
             paths_to_typecheck.append(str(lib_path))
         if effective_method in ("pretense", "combined"):
-            pretense_path = repo_root / unit.unit_dir / "pretense"
-            if pretense_path.is_dir():
-                paths_to_typecheck.append(str(pretense_path))
+            for sub in ("pretense_intf", "pretense_impl", "pretense"):
+                pretense_path = repo_root / unit.unit_dir / sub
+                if pretense_path.is_dir():
+                    paths_to_typecheck.append(str(pretense_path))
         if effective_method in ("standard", "combined"):
             test_path = repo_root / unit.unit_dir / "tests"
             if test_path.is_dir():
@@ -993,7 +994,14 @@ class _VerificationGate:
         )
         if effective_method == "combined":
             pre_passed, pre_failed, pre_cov = 0, 0, 0.0
-            pretense_path = repo_root / unit.unit_dir / "pretense"
+            pretense_path = next(
+                (
+                    repo_root / unit.unit_dir / sub
+                    for sub in ("pretense_impl", "pretense")
+                    if (repo_root / unit.unit_dir / sub).is_dir()
+                ),
+                repo_root / unit.unit_dir / "pretense",
+            )
             if pretense_path.is_dir():
                 target_pretense_file = pretense_path / f"{target_stem}_pretense.py"
                 run_target = (
@@ -1060,7 +1068,14 @@ class _VerificationGate:
             outcomes.line_coverage_pct = cov_val
             outcomes.branch_coverage_pct = cov_val
         elif effective_method == "pretense":
-            pretense_path = repo_root / unit.unit_dir / "pretense"
+            pretense_path = next(
+                (
+                    repo_root / unit.unit_dir / sub
+                    for sub in ("pretense_impl", "pretense")
+                    if (repo_root / unit.unit_dir / sub).is_dir()
+                ),
+                repo_root / unit.unit_dir / "pretense",
+            )
             if pretense_path.is_dir():
                 target_pretense_file = pretense_path / f"{target_stem}_pretense.py"
                 run_target = (
@@ -1234,28 +1249,27 @@ def _has_materialized_artifacts(
         if not has_lib:
             return False
 
+        def _has_pretense_files(u_dir: Path) -> bool:
+            for sub in ("pretense_impl", "pretense_intf", "pretense"):
+                p_dir = u_dir / sub
+                if p_dir.is_dir() and any(
+                    f.is_file() and f.name.endswith("_pretense.py") and f.stat().st_size > 0
+                    for f in p_dir.iterdir()
+                ):
+                    return True
+            return False
+
         if effective_method == "combined":
             tests_dir = unit_dir / "tests"
-            pretense_dir = unit_dir / "pretense"
-            if not (tests_dir.is_dir() and pretense_dir.is_dir()):
+            if not tests_dir.is_dir():
                 return False
             has_tests = any(
                 f.is_file() and f.name.endswith("_test.py") and f.stat().st_size > 0
                 for f in tests_dir.iterdir()
             )
-            has_pretense = any(
-                f.is_file() and f.name.endswith("_pretense.py") and f.stat().st_size > 0
-                for f in pretense_dir.iterdir()
-            )
-            return has_tests and has_pretense
+            return has_tests and _has_pretense_files(unit_dir)
         elif effective_method == "pretense":
-            pretense_dir = unit_dir / "pretense"
-            if not pretense_dir.is_dir():
-                return False
-            return any(
-                f.is_file() and f.name.endswith("_pretense.py") and f.stat().st_size > 0
-                for f in pretense_dir.iterdir()
-            )
+            return _has_pretense_files(unit_dir)
         else:
             tests_dir = unit_dir / "tests"
             if not tests_dir.is_dir():
@@ -1853,7 +1867,9 @@ def _archive_flight_artifacts(
     )
     lib_dir = unit_full_dir / "lib"
     tests_dir = unit_full_dir / "tests"
-    pretense_dir = unit_full_dir / "pretense"
+    pretense_dirs = [
+        unit_full_dir / d for d in ("pretense", "pretense_intf", "pretense_impl")
+    ]
 
     # Find source lib files
     src_lib_files: List[Path] = []
@@ -1935,10 +1951,11 @@ def _archive_flight_artifacts(
                     pass
 
     if is_combined or is_pretense:
-        if pretense_dir.is_dir():
-            for p in sorted(pretense_dir.glob("*_pretense.py")):
-                if p.stat().st_size > 0:
-                    src_pretense_files.append(p)
+        for p_dir in pretense_dirs:
+            if p_dir.is_dir():
+                for p in sorted(p_dir.glob("*_pretense.py")):
+                    if p.stat().st_size > 0:
+                        src_pretense_files.append(p)
 
         if not src_pretense_files and flight_scope_dir is not None:
             try:
@@ -1957,13 +1974,14 @@ def _archive_flight_artifacts(
                     for ws_entry in ws_base.iterdir():
                         if ws_entry.is_dir() and scope_tag in ws_entry.name:
                             for sub_rel in (scope_rel, scope_tag):
-                                cand_pretense = (
-                                    ws_entry / sub_rel / "parts" / unit.task_id / "pretense"
-                                )
-                                if cand_pretense.is_dir():
-                                    for p in sorted(cand_pretense.glob("*_pretense.py")):
-                                        if p.stat().st_size > 0:
-                                            src_pretense_files.append(p)
+                                for p_sub in ("pretense", "pretense_intf", "pretense_impl"):
+                                    cand_pretense = (
+                                        ws_entry / sub_rel / "parts" / unit.task_id / p_sub
+                                    )
+                                    if cand_pretense.is_dir():
+                                        for p in sorted(cand_pretense.glob("*_pretense.py")):
+                                            if p.stat().st_size > 0:
+                                                src_pretense_files.append(p)
                                 if src_pretense_files:
                                     break
                         if src_pretense_files:
@@ -3122,12 +3140,6 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
             help="Run targeted anchor evaluation for high-tier models.",
         )
         parser.add_argument(
-            "--units",
-            type=int,
-            default=2,
-            help="Maximum benchmark units executed per model/suite.",
-        )
-        parser.add_argument(
             "--harness",
             choices=["auto", "loop", "antigravity", "dsh", "simulation"],
             default="auto",
@@ -3398,7 +3410,7 @@ class BenchmarkEvaluator(benchmark.BenchmarkEvaluator):
                 if "heapq" in u.task_id or "bisect" in u.task_id
             ]
 
-        selected_units = selected_units[: args.units]
+        selected_units = selected_units[:1]
         if not selected_units:
             print(f"[ERROR] No benchmark units resolved for suite '{args.suite}'.")
             return 1

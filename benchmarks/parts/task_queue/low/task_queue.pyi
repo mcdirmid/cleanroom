@@ -121,6 +121,12 @@ class TaskQueue(Protocol):
         """
         ...
 
+    @operation
+    @test_only
+    def is_available(self) -> bool:
+        """Test-only query returning whether the task queue is currently available."""
+        ...
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-11-03T23:10:00Z
 # LAST_CHANGED: 2026-11-03T23:10:00Z

@@ -23,7 +23,7 @@ When managing pending target state:
 
 - The pending manager serializes assigned target paths into the pending work buffer file, overwriting existing records.
 
-- The pending manager removes matching submitted or blamed target paths and unit stems from the pending work buffer file by iteratively normalizing suffixes including pretense, test, and implementation variants down to canonical unit stems, preserving unmatched entries.
+- The pending manager removes matching submitted or blamed target paths and unit stems from the pending work buffer file by iteratively normalizing role suffixes including pretense and test variants while preserving implementation (_impl) unit identity, preserving unmatched entries.
 
 - The pending manager removes the pending work buffer file completely when cleared.
 

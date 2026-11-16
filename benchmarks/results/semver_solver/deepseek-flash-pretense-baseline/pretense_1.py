@@ -433,11 +433,10 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
-    require_arg,
+    domain, require_arg,
     sut,
     sut_state,
     synthesize_fake,
@@ -606,22 +605,22 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
 
     @transition(VersionEngine.parse_version)
     def parse_version(self, text: str) -> Version:
-        require_arg(text, Domain.sampled_from(_VERSION_TEXTS))
+        require_arg(text, _VERSION_TEXTS)
         ret: Version = self.inner_parse_version(text)
         assert ret.major >= 0
         return ret
 
     @transition(VersionEngine.compare_precedence)
     def compare_precedence(self, v1: Version, v2: Version) -> int:
-        require_arg(v1, Domain.sampled_from(_VERSIONS))
-        require_arg(v2, Domain.sampled_from(_VERSIONS))
+        require_arg(v1, _VERSIONS)
+        require_arg(v2, _VERSIONS)
         ret: int = self.inner_compare_precedence(v1, v2)
         assert isinstance(ret, int)
         return ret
 
     @transition(VersionEngine.parse_range)
     def parse_range(self, text: str) -> VersionRange:
-        require_arg(text, Domain.sampled_from(_RANGE_TEXTS))
+        require_arg(text, _RANGE_TEXTS)
         ret: VersionRange = self.inner_parse_range(text)
         assert isinstance(ret.raw_text, str)
         return ret
@@ -633,16 +632,16 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         range_constraint: VersionRange,
         include_prerelease: bool,
     ) -> bool:
-        require_arg(version, Domain.sampled_from(_VERSIONS))
-        require_arg(range_constraint, Domain.sampled_from(_RANGES))
-        require_arg(include_prerelease, Domain.boolean())
+        require_arg(version, _VERSIONS)
+        require_arg(range_constraint, _RANGES)
+        require_arg(include_prerelease, bool)
         ret: bool = self.inner_satisfies(version, range_constraint, include_prerelease)
         assert isinstance(ret, bool)
         return ret
 
     @transition(PackageRepository.register_package)
     def register_package(self, release: PackageRelease) -> None:
-        require_arg(release, Domain.sampled_from(_RELEASES))
+        require_arg(release, _RELEASES)
         self.state.packages.setdefault(release.name, []).append(release)
         self.state.registered.add((release.name, release.version))
         self.state.ready = _RELEASE_KEYS.issubset(self.state.registered)
@@ -653,7 +652,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
     @transition(PackageRepository.get_releases)
     def get_releases(self, name: str) -> List[PackageRelease]:
         require(self.state.packages)
-        require_arg(name, Domain.in_set(tuple(self.state.packages.keys())))
+        require_arg(name, self._dom_get_releases_name)
         releases = list(self.state.packages[name])
         ret: List[PackageRelease] = self.inner_get_releases(name)
         assert all(release.name == name for release in ret)
@@ -661,7 +660,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
 
     @transition(PackageRepository.has_package)
     def has_package(self, name: str) -> bool:
-        require_arg(name, Domain.type(str))
+        require_arg(name, str)
         present = name in self.state.packages
         ret: bool = self.inner_has_package(name)
         assert ret is present
@@ -679,7 +678,7 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         require(self.state.ready)
         require_arg(
             root_dependencies,
-            cast(Any, Domain.list_of(Domain.sampled_from(_DEPENDENCIES))),
+            cast(Any, list),
         )
         ret: ResolutionOutcome = self.inner_resolve(root_dependencies)
         assert isinstance(ret, ResolutionOutcome)
@@ -691,6 +690,10 @@ class SemverSolverStateMachine(StateMachine[SemverSolverState]):
         self.state.packages.clear()
         self.state.registered.clear()
         self.state.ready = False
+
+    @domain(valid=lambda self: list(tuple(self.state.packages.keys())))
+    def _dom_get_releases_name(self, val: Any) -> bool:
+        return val in tuple(self.state.packages.keys())
 
 
 proto = SemverSolverStateMachine()

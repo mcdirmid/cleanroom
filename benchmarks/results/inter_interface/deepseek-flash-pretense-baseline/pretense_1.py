@@ -191,12 +191,11 @@ from typing import Any, Optional
 import unittest
 
 from pretense import (
-    Domain,
     PretenseError,
     StateMachine,
     raises,
     require,
-    require_arg,
+    domain, require_arg,
     sut,
     sut_state,
     synthesize_fake,
@@ -243,8 +242,7 @@ class InterInterfaceStateMachine(StateMachine[InterInterfaceState]):
         # PRECONDITION: positive allocation amount that fits within the collaborator reserves.
         require_arg(
             amount,
-            Domain.range(1, _available_reserves() + 1),
-            preferred=[10],
+            (self._dom_allocate_amount),
         )
         ret = self.inner_allocate(amount)
         # POSTCONDITION: a successful allocation increments the allocated total by amount.
@@ -258,8 +256,7 @@ class InterInterfaceStateMachine(StateMachine[InterInterfaceState]):
         require(self.state.allocated > 0)
         require_arg(
             amount,
-            Domain.range(1, self.state.allocated + 1),
-            preferred=[1],
+            (self._dom_release_amount),
         )
         ret = self.inner_release(amount)
         # POSTCONDITION: a successful release decrements the allocated total by amount.
@@ -273,6 +270,14 @@ class InterInterfaceStateMachine(StateMachine[InterInterfaceState]):
         ret = self.inner_allocated()
         assert ret == self.state.allocated
         return ret
+
+    @domain()
+    def _dom_allocate_amount(self, x: Any) -> bool:
+        return bool(x >= 1 and x <= _available_reserves() + 1)
+
+    @domain()
+    def _dom_release_amount(self, x: Any) -> bool:
+        return bool(x >= 1 and x <= self.state.allocated + 1)
 
 
 proto = InterInterfaceStateMachine()
@@ -503,11 +508,10 @@ from typing import Any, Optional
 import unittest
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
-    require_arg,
+    domain, require_arg,
     sut,
     sut_state,
     synthesize_fake,
@@ -543,7 +547,7 @@ class VaultStateMachine(StateMachine[VaultState]):
     @transition(Vault.deposit)
     def deposit(self, amount: int) -> None:
         # PRECONDITION: positive deposit amount; non-positive is a caller contract violation.
-        require_arg(amount, Domain.range(1, 1000), preferred=[10])
+        require_arg(amount, (self._dom_deposit_amount))
         if not self.state.is_active:
             # POSTCONDITION: an inactive vault raises VaultInactiveException.
             with raises(VaultInactiveException):
@@ -560,7 +564,7 @@ class VaultStateMachine(StateMachine[VaultState]):
     def withdraw(self, amount: int) -> None:
         # PRECONDITION: positive amount that does not exceed the current balance.
         require(self.state.balance > 0)
-        require_arg(amount, Domain.range(1, self.state.balance + 1), preferred=[1])
+        require_arg(amount, (self._dom_withdraw_amount))
         if not self.state.is_active:
             # POSTCONDITION: an inactive vault raises VaultInactiveException.
             with raises(VaultInactiveException):
@@ -575,7 +579,7 @@ class VaultStateMachine(StateMachine[VaultState]):
 
     @transition(Vault.set_active)
     def set_active(self, active: bool) -> None:
-        require_arg(active, Domain.boolean())
+        require_arg(active, bool)
         ret = self.inner_set_active(active)
         # POSTCONDITION: the availability flag is updated to the requested value.
         self.state.is_active = active
@@ -595,6 +599,14 @@ class VaultStateMachine(StateMachine[VaultState]):
         ret = self.inner_is_active()
         assert ret == self.state.is_active
         return ret
+
+    @domain()
+    def _dom_deposit_amount(self, x: Any) -> bool:
+        return bool(x >= 1 and x <= 1000)
+
+    @domain()
+    def _dom_withdraw_amount(self, x: Any) -> bool:
+        return bool(x >= 1 and x <= self.state.balance + 1)
 
 
 proto = VaultStateMachine()

@@ -310,7 +310,6 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -415,7 +414,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         release: PackageRelease,
     ) -> None:
         require(self.state.initialized)
-        require_arg(release, Domain.sampled_from(SAMPLE_RELEASES), preferred=[SAMPLE_RELEASES[1]])
+        require_arg(release, SAMPLE_RELEASES)
         releases = self.state.packages.get(release.name, [])
         if release not in releases:
             releases.append(release)
@@ -440,7 +439,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         name: str,
     ) -> List[PackageRelease]:
         require(self.state.initialized)
-        require_arg(name, Domain.in_set(self.state.packages.keys()))
+        require_arg(name, self.state.packages.keys())
         releases = list(self.state.packages[name])
         ret = self.inner_get_releases(name)
         assert len(ret) > 0
@@ -454,7 +453,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         name: str,
     ) -> bool:
         require(self.state.initialized)
-        require_arg(name, Domain.type(str), preferred=["core", "app", "util", "missing"])
+        require_arg(name, str)
         expected = name in self.state.packages
         ret = self.inner_has_package(name)
         assert ret == expected
@@ -477,7 +476,7 @@ class DependencySolverStateMachine(StateMachine[DependencySolverState]):
         require(self.state.resolvable)
         require_arg(
             root_dependencies,
-            Domain.list_of(Domain.sampled_from(self.state.root_candidates)),
+            list,
         )
         selected: Dict[str, Version] = {}
         steps: List[str] = []
@@ -875,7 +874,6 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -1023,7 +1021,7 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
         text: str,
     ) -> Version:
         require(self.state.initialized)
-        require_arg(text, Domain.sampled_from(VERSION_TEXTS), preferred=["1.2.3", "1.0.0-alpha"])
+        require_arg(text, VERSION_TEXTS)
         parsed = PARSED_VERSIONS[text.strip()]
         ret = self.inner_parse_version(text)
         self.state.parsed.append(ret)
@@ -1037,8 +1035,8 @@ class SemverCoreStateMachine(StateMachine[SemverCoreState]):
         v2: Version,
     ) -> int:
         require(self.state.initialized)
-        require_arg(v1, Domain.sampled_from(SAMPLE_VERSIONS), preferred=[SAMPLE_VERSIONS[1]])
-        require_arg(v2, Domain.sampled_from(SAMPLE_VERSIONS), preferred=[SAMPLE_VERSIONS[4]])
+        require_arg(v1, SAMPLE_VERSIONS)
+        require_arg(v2, SAMPLE_VERSIONS)
         fake_ret = _precedence_sign(v1, v2)
         ret = self.inner_compare_precedence(v1, v2)
         self.state.comparisons.append(ret)
@@ -1436,7 +1434,6 @@ import unittest
 from hypothesis import given, settings, strategies as st
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -1749,7 +1746,7 @@ class SemverRangeStateMachine(StateMachine[SemverRangeState]):
         text: str,
     ) -> VersionRange:
         require(self.state.initialized)
-        require_arg(text, Domain.sampled_from(RANGE_TEXTS), preferred=["^1.2.3", ">=1.0.0 <2.0.0"])
+        require_arg(text, RANGE_TEXTS)
         parsed = PARSED_RANGES[text]
         ret = self.inner_parse_range(text)
         self.state.parsed_ranges.append(ret)
@@ -1764,9 +1761,9 @@ class SemverRangeStateMachine(StateMachine[SemverRangeState]):
         include_prerelease: bool,
     ) -> bool:
         require(self.state.initialized)
-        require_arg(version, Domain.sampled_from(SAMPLE_VERSIONS), preferred=[SAMPLE_VERSIONS[3]])
-        require_arg(range_constraint, Domain.sampled_from(SAMPLE_RANGES), preferred=[SAMPLE_RANGES[11]])
-        require_arg(include_prerelease, Domain.boolean())
+        require_arg(version, SAMPLE_VERSIONS)
+        require_arg(range_constraint, SAMPLE_RANGES)
+        require_arg(include_prerelease, bool)
         fake_result = _satisfies_text(version, range_constraint.raw_text, include_prerelease)
         ret = self.inner_satisfies(version, range_constraint, include_prerelease)
         self.state.matches.append(ret)

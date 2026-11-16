@@ -168,7 +168,6 @@ from typing import Any, List, Optional
 import unittest
 
 from pretense import (
-    Domain,
     StateMachine,
     raises,
     require,
@@ -267,7 +266,7 @@ class RingBufferStateMachine(StateMachine[RingBufferState]):
 
     @transition("push")
     def push(self, item: Any) -> Optional[Any]:
-        require_arg(item, Domain.type(int), preferred=[1, 2, 3])
+        require_arg(item, int)
         was_full = len(self.state.items) == self.state.capacity
         ret = self.inner_push(item)
         if was_full:

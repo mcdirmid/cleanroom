@@ -142,6 +142,17 @@ class TaskQueue(task_queue.TaskQueue):
         """
         ...
 
+    @operation
+    @test_only
+    @override
+    def is_available(self) -> bool:
+        """Test-only query returning whether the task queue is currently available.
+
+        GROUNDING:
+        - Returns self._is_available.
+        """
+        ...
+
 # --- CLEANROOM METADATA ---
 # LAST_CLEANED: 2026-11-03T23:10:00Z
 # LAST_CHANGED: 2026-11-03T23:10:00Z
