@@ -108,7 +108,7 @@
     - [TODO 17 [DONE]: Typed `@domain` Method Decorator Without `Any`, Finite-Sequence `valid`/`invalid`, and Ban on Lambdas/Fixed Sets](#todo-17-done-typed-domain-method-decorator-without-any-finite-sequence-validinvalid-and-ban-on-lambdasfixed-sets)
     - [TODO 18 [DONE]: Stateless Interface State Machine / Fake / Impl Split (`pretense_intf` & `pretense_impl`) and Cross-Testing](#todo-18-done-stateless-interface-state-machine--fake--impl-split-pretense_intf--pretense_impl-and-cross-testing)
     - [TODO 19 [TODO]: Port Existing Pretense Code in `benchmarks/results/` and Validate via Cross-Test](#todo-19-todo-port-existing-pretense-code-in-benchmarksresults-and-validate-via-cross-test)
-    - [TODO 20 [TODO]: Automated Auditing of Independent Pretense Interface State Machines (`pretense_intf2` / `pretense_intf_qa`)](#todo-20-todo-automated-auditing-of-independent-pretense-interface-state-machines-pretense_intf2--pretense_intf_qa)
+    - [TODO 20 [TODO]: Automated Auditing of Independent Pretense Interface State Machines (`pretense2` / `pretense_cross_qa`)](#todo-20-todo-automated-auditing-of-independent-pretense-interface-state-machines-pretense2--pretense_cross_qa)
 17. [Post-Split Hardening & Regression Prevention [DONE]](#17-post-split-hardening--regression-prevention-done)
 18. [Current Architecture & Legacy Purge Summary [DONE]](#18-current-architecture--legacy-purge-summary-done)
     - [TODO 21 [DONE]: Re-Unify `pretense_intf` and `pretense_impl` into `pretense/` with Multi-Guide Provisioning & Per-Target Guide Selection](#todo-21-done-re-unify-pretense_intf-and-pretense_impl-into-pretense-with-multi-guide-provisioning--per-target-guide-selection)
@@ -2077,12 +2077,12 @@ Following empirical Pretense benchmark runs (`ring_buffer`, `multi_interface`, `
   1. Port all existing Pretense modules in `benchmarks/results/` to the **TODO 17** (`@domain` method decorator, finite-sequence `valid`/`invalid`, no `Any`, no `draw`, no `initial_edges`, no fixed sets/lambdas) and **TODO 18** (stateless `<Iface>StateMachine` + co-located `<Iface>FakeStateMachine` + `<Impl>StateMachine`, `@test_only` env guards without `self.bind`) designs.
   2. Validate the ported benchmark artifacts by running cross-tests across independent `benchmarks/results/` runs for the same benchmark (swapping `IfaceSM_A` $\leftrightarrow$ `IfaceSM_B` against both fakes and implementations) and verifying all valid cross-tests pass and any validator discrepancies surface cleanly.
 
-### TODO 20 [TODO]: Automated Auditing of Independent Pretense Interface State Machines (`pretense_intf2` / `pretense_intf_qa`)
+### TODO 20 [TODO]: Automated Auditing of Independent Pretense Interface State Machines (`pretense2` / `pretense_cross_qa`)
 
 - **Status**: **TODO** *(Deferred from TODO 18; updated for unified `pretense/` layout from TODO 21)*
 - **Requirements**:
-  1. Introduce a second independent interface authoring role (`pretense_intf2`, blind to `pretense` interface modules under `pretense/*_pretense.py`) producing `(IfaceSM_B, FakeSM_B)` alongside `pretense`'s `(IfaceSM_A, FakeSM_A)`.
-  2. Introduce an automated interface cross-test auditor (`pretense_intf_qa`) that swaps `IfaceSM_A` $\leftrightarrow$ `IfaceSM_B` as the base class of `FakeSM_A` and `FakeSM_B` (and integrates with `pretense_qa` for `<Impl>StateMachine` base-class swapping), routing blame to whichever `pretense/<iface>_pretense.py` module diverges from `low/*.pyi` (e.g., forged `require_arg`/`@domain` recognizers or missing preconditions).
+  1. Introduce a second independent interface authoring role (`pretense2`, `active_component_types = ["interface"]`, blind to `pretense/*_pretense.py`, writing `{unit_dir}/pretense/{unit_name}_pretense2.py`) producing `(IfaceSM_B, FakeSM_B)` alongside `pretense`'s `(IfaceSM_A, FakeSM_A)`.
+  2. Introduce an automated interface cross-test auditor (`pretense_cross_qa`) that swaps `IfaceSM_A` $\leftrightarrow$ `IfaceSM_B` as the base class of `FakeSM_A` and `FakeSM_B` (and integrates with `pretense_qa` for `<Impl>StateMachine` base-class swapping), routing blame to whichever `pretense/<iface>_pretense*.py` module diverges from `low/*.pyi` (e.g., forged `require_arg`/`@domain` recognizers or missing preconditions).
 
 ---
 
