@@ -546,6 +546,56 @@ active_component_types = ["implementation"]
             self.assertIn("//pkg/parts/gadget:gadget#pretense", fb_labels)
             self.assertIn("//pkg/parts/gadget:gadget#pretense", star_labels)
 
+    def test_component_overrides_merged_into_target_manifest(self) -> None:
+        from pathlib import Path
+
+        pkg_dir = Path(self.test_dir) / "pkg_override"
+        (pkg_dir / "parts" / "widget" / "high").mkdir(parents=True)
+        (pkg_dir / "parts" / "widget" / "high" / "widget.md").write_text(
+            "# widget interface component\n", encoding="utf-8"
+        )
+        (pkg_dir / "parts" / "widget" / "high" / "widget_impl.md").write_text(
+            "# widget_impl implementation component\nimplements: widget\n",
+            encoding="utf-8",
+        )
+        (pkg_dir / "parts" / app_info.DEFAULT_CONFIG_FILE).write_text(
+            'methodology = "//."\n', encoding="utf-8"
+        )
+        (Path(self.test_dir) / app_info.DEFAULT_ROLES_FILE).write_text(
+            '[roles.low]\nsrc_pattern = "{unit_dir}/low/{unit_name}.pyi"\n\n'
+            '[roles.lib]\nsrc_pattern = "{unit_dir}/lib/{unit_name}.py"\n\n'
+            '[roles.pretense]\n'
+            'src_pattern = "{unit_dir}/pretense/{unit_name}_pretense.py"\n'
+            'active_component_types = ["interface", "implementation"]\n\n'
+            '[roles.pretense.interface]\n'
+            'guide = "guides/pretense_intf.md"\n'
+            'verify_template = "lint --interface {unit_name}"\n\n'
+            '[roles.pretense.implementation]\n'
+            'guide = "guides/pretense_impl.md"\n'
+            'verify_template = "lint --implementation {unit_name}"\n'
+            'silent_cross_role_deps = ["lib"]\n',
+            encoding="utf-8",
+        )
+        with enter_phase("system", registry=self.registry) as scope:
+            loader = scope.get_singleton(UvManifestLoader)
+            intf_manifest = loader.retrieve_manifest(
+                _make_dag_node("//pkg_override/parts/widget:widget", "pretense")
+            )
+            impl_manifest = loader.retrieve_manifest(
+                _make_dag_node("//pkg_override/parts/widget:widget_impl", "pretense")
+            )
+            assert intf_manifest is not None
+            assert impl_manifest is not None
+            self.assertEqual(str(intf_manifest.guide_target), "guides/pretense_intf.md")
+            self.assertEqual(
+                str(intf_manifest.verification_check), "lint --interface widget"
+            )
+            self.assertEqual(str(impl_manifest.guide_target), "guides/pretense_impl.md")
+            self.assertEqual(
+                str(impl_manifest.verification_check),
+                "lint --implementation widget_impl",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

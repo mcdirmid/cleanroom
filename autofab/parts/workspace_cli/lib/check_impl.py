@@ -1853,7 +1853,12 @@ class WorkspaceChecker(check.WorkspaceChecker):
 
             active_unit = u_name or unit_name
             target_basename = os.path.basename(target_path)
-            active_ctype = _classify_unit_type(active_unit) if active_unit else ""
+            unit_for_ctype = (
+                active_unit[:-9]
+                if active_unit and active_unit.endswith("_pretense")
+                else active_unit
+            )
+            active_ctype = _classify_unit_type(unit_for_ctype) if unit_for_ctype else ""
             target_kind = (
                 active_ctype if target_basename.endswith("_pretense.py") else ""
             )

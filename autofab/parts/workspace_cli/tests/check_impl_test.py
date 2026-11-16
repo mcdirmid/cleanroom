@@ -23,6 +23,7 @@ from autofab.parts.workspace_cli.lib import (
 from autofab.parts.workspace.lib import (
     provision,
     role_registry,
+    roles,
     sync,
 )
 
@@ -1491,6 +1492,80 @@ class WorkspaceCheckImplTest(LifecycleTestCase):
         self.assertIn(target_file, self.fake_pending.pending)
         self.assertNotIn("Triage Summary", out)
         self.assertNotIn("AssertionError: test failure", out)
+
+    def test_get_work_and_check_files_select_component_override(self) -> None:
+        role_pretense = role_registry.RoleDefinition(
+            role_name="pretense",
+            guide_path="",
+            writable_file_patterns=["pretense/*_pretense.py"],
+            readonly_file_patterns=["low/*.pyi"],
+            feedback_role_deps=[],
+            src_pattern="{unit_dir}/pretense/{unit_name}_pretense.py",
+            active_component_types=["interface", "implementation"],
+            component_overrides={
+                "interface": roles.ComponentRoleOverrides(
+                    guide_path="guides/pretense_intf.md",
+                    verify_template="echo INTF_MARKER_{unit_name} && exit 1",
+                ),
+                "implementation": roles.ComponentRoleOverrides(
+                    guide_path="guides/pretense_impl.md",
+                    verify_template="echo IMPL_OK_{unit_name}",
+                ),
+            },
+        )
+        self.fake_reg.roles.append(role_pretense)
+        os.makedirs(os.path.join(self.test_dir, "guides"), exist_ok=True)
+        with open(os.path.join(self.test_dir, "guides", "pretense_intf.md"), "w", encoding="utf-8") as f:
+            f.write("# intf\n")
+        with open(os.path.join(self.test_dir, "guides", "pretense_impl.md"), "w", encoding="utf-8") as f:
+            f.write("# impl\n")
+        meta_file = os.path.join(self.test_dir, ".autofab_role.json")
+        with open(meta_file, "w", encoding="utf-8") as f:
+            json.dump({"role": "pretense", "parts_dir": "parts/test_pkg"}, f)
+        pretense_dir = os.path.join(self.test_dir, "parts", "test_pkg", "pretense")
+        os.makedirs(pretense_dir, exist_ok=True)
+        intf_file = os.path.join(pretense_dir, "foo_pretense.py")
+        impl_file = os.path.join(pretense_dir, "foo_impl_pretense.py")
+        for p in (intf_file, impl_file):
+            with open(p, "w", encoding="utf-8") as f:
+                f.write("# pretense\n")
+        self.fake_work.ready_items = [
+            {
+                "role": "pretense",
+                "target_file": "parts/test_pkg/pretense/foo_pretense.py",
+                "contract_files": [],
+                "reasons": ["missing"],
+            },
+            {
+                "role": "pretense",
+                "target_file": "parts/test_pkg/pretense/foo_impl_pretense.py",
+                "contract_files": [],
+                "reasons": ["missing"],
+            },
+        ]
+        import io
+        from unittest.mock import patch
+
+        with patch("sys.stdout", new_callable=io.StringIO) as mock_out:
+            ret = self.checker.run_get_work(dir_scope="test_pkg")
+            out = mock_out.getvalue()
+        self.assertEqual(ret, 0)
+        self.assertIn("guides/pretense_intf.md", out)
+        self.assertIn("guides/pretense_impl.md", out)
+
+        with patch("sys.stdout", new_callable=io.StringIO) as mock_chk:
+            ret_intf = self.checker.run_check_files(
+                "parts/test_pkg/pretense/foo_pretense.py"
+            )
+            ret_impl = self.checker.run_check_files(
+                "parts/test_pkg/pretense/foo_impl_pretense.py"
+            )
+            out_chk = mock_chk.getvalue()
+        self.assertEqual(ret_intf, 1)
+        self.assertEqual(ret_impl, 0)
+        self.assertIn("[interface] (foo_pretense.py)", out_chk)
+        self.assertIn("INTF_MARKER_", out_chk)
+        self.assertIn("[implementation] (foo_impl_pretense.py)", out_chk)
 
 
 if __name__ == "__main__":

@@ -2415,6 +2415,23 @@ class PretenseLintTest(unittest.TestCase):
             [],
         )
 
+    def test_reject_legacy_pretense_intf_and_pretense_impl_dirs(self) -> None:
+        tree = ast.parse("class FooStateMachine(StateMachine[None]): pass\n")
+        intf_errs = check_pretense_structure(
+            tree, "parts/pkg/pretense_intf/foo_pretense.py", is_interface=True
+        )
+        impl_errs = check_pretense_structure(
+            tree, "parts/pkg/pretense_impl/foo_impl_pretense.py", is_interface=False
+        )
+        self.assertTrue(
+            any("no longer supported" in e for e in intf_errs),
+            f"Expected rejection for pretense_intf/: {intf_errs}",
+        )
+        self.assertTrue(
+            any("no longer supported" in e for e in impl_errs),
+            f"Expected rejection for pretense_impl/: {impl_errs}",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1621,22 +1621,16 @@ Upon DAG convergence, the benchmark verification gate (`_VerificationGate`) vali
 
 ### TODO 11 [TODO]: `@test_only` Environmental Guards & `_ext` Termination (Supersedes `self.bind` / `Env[T]`)
 
-- **Status**: **TODO** (Punted until end-to-end `_ext` examples are added; `self.bind(...)` and `Env[T]` field markers are superseded by `TODO 18`'s contracted `@test_only` method delegation).
-- **Observation from `inter_interface` Benchmark**: `inter_interface` converged without using `self.bind(...)` because `TestAllocatorImplReal` exercised the `VaultInactiveException` path directly via `self.checked.violating(VaultInactiveException).allocate(10)` (bypassing `require_env` + `self.bind` wiring), and `require_env(...)` currently accepts any boolean expression without distinguishing **environmental state** from core interface state.
+- **Status**: **TODO** (Punted until end-to-end `_ext` examples are added; `self.bind(...)` and `Env[T]` field markers were superseded by `TODO 18`'s contracted `@test_only` method delegation).
 - **Requirements**:
-  1. **Explicit Env State Syntax on `<Target>State`**:
-     - Introduce explicit syntax (e.g., an annotation such as `Env[T]` / `Annotated[T, EnvState]` or a dataclass field marker `env_field(...)`) to distinguish virtual/environmental state fields on `<Target>State` dataclasses from normal domain/interface state.
-     - Export the marker from `pretense` (`pretense/parts/pretense/low/pretense.pyi` and `lib/pretense.py`).
-  2. **Linter Enforcement on `require_env(...)` and `.violating(...)`**:
-     - **`require_env(...)` Must Depend on Env State**: Lint rule requiring the condition passed to `require_env(...)` to reference at least one declared env-state field on `self.state` (preventing `require_env` from gating on ordinary domain state or constants).
-     - **`.violating(...)` Restricted to `*Error`**: Lint rule (`PRE_LINT_VIOLATING_MUST_BE_ERROR`) banning `*Exception` arguments to `.violating(...)`, ensuring operational `*Exception` paths can only be exercised by genuinely driving the bound environmental/collaborator state rather than bypassing `self.bind` via `.violating(...)`.
-  3. **Mandatory `self.bind(...)` in Implementation Pseudo-State Machines**:
-     - In implementation `pretense/*_pretense.py` modules, every env-state field inherited from implemented interfaces must be bound via `self.bind(...)` in `__init__` to env state (or observable state) of imported collaborator components (`self.sut_state(...)` / `self.sut(...)`), rather than left as an ungrounded independent field.
-  4. **Termination at `_ext` Components (Deferred / Punted)**:
-     - Binding chains walk from implemented interfaces to imported collaborator interfaces until reaching **unimplemented external components** (`_ext` components, which have no implementation `pretense/*_pretense.py` and directly model external/hardware/OS boundaries).
-     - At `_ext` components, env state is legitimately rooted as un-bound external state. End-to-end `_ext` component workflows are not yet exercised in the current benchmarks, so full `_ext` termination enforcement is **punted for now** until end-to-end `_ext` examples exist.
-  5. **Guide & Linter Updates**:
-     - Update `autofab_py/guides/pretense.md` (preserving the strict 20,480-byte limit) to document the env-state annotation syntax, `require_env` env-state dependency rule, `.violating(*Error)` restriction, and mandatory `self.bind` wiring in `ImplPseudoStateMachine`.
+  1. **Linter Enforcement on `require_env(...)` and `.violating(...)`**:
+     - **`require_env(...)` Must Delegate to `@test_only` Guards**: Lint rule requiring `require_env(...)` conditions in `<Iface>StateMachine` to invoke a contracted `@test_only` query (`self.inner_<guard>()`) rather than ordinary domain state or constants.
+     - **`.violating(...)` Restricted to `*Error`**: Lint rule (`PRE_LINT_VIOLATING_MUST_BE_ERROR`) banning `*Exception` arguments to `.violating(...)`, ensuring operational `*Exception` paths can only be exercised by genuinely driving the collaborator/environmental state rather than bypassing guards via `.violating(...)`.
+  2. **Termination at `_ext` Components (Deferred / Punted)**:
+     - Environmental guard delegation chains walk from implemented interfaces to imported collaborator interfaces until reaching **unimplemented external components** (`_ext` components, which have no implementation `pretense/*_pretense.py` and directly model external/hardware/OS boundaries).
+     - At `_ext` components, environmental state is legitimately rooted in the external fake (`<Ext>FakeStateMachine`). End-to-end `_ext` component workflows are not yet exercised in the current benchmarks, so full `_ext` termination enforcement is **punted for now** until end-to-end `_ext` examples exist.
+  3. **Guide & Linter Updates**:
+     - Update `autofab_py/guides/pretense_intf.md` and `autofab_py/guides/pretense_impl.md` (preserving the strict 20,480-byte limit) to document `@test_only` environmental guard enforcement, `.violating(*Error)` restriction, and `_ext` termination.
      - Implement corresponding AST checks in `autofab_py/support/lib/pretense_lint.py` and unit tests in `autofab_py/support/tests/pretense_lint_test.py`.
 
 ### Combined Fixed + Fuzz Coverage Measurement on `lib/*.py`

@@ -14,6 +14,7 @@ from autofab.parts.workspace.lib import (
     provision,
     provision_impl,
     role_registry,
+    roles,
     scaffold,
     stub,
 )
@@ -1019,6 +1020,60 @@ class WorkspaceProvisionImplTest(LifecycleTestCase):
             self.assertEqual(os.stat(support_dir).st_mode & 0o777, 0o755)
             self.assertEqual(os.stat(low_dir).st_mode & 0o777, 0o755)
             self.assertEqual(os.stat(lib_dir).st_mode & 0o777, 0o755)
+
+    def test_commission_copies_component_override_guides(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = os.path.join(tmp_dir, "repo")
+            scope_parts = os.path.join(repo_root, "test_scope", "parts", "alpha")
+            os.makedirs(os.path.join(scope_parts, "high"), exist_ok=True)
+            os.makedirs(os.path.join(repo_root, "guides"), exist_ok=True)
+            with open(os.path.join(repo_root, "pyproject.toml"), "w", encoding="utf-8") as f:
+                f.write("[project]\nname = 'test'\n")
+            with open(os.path.join(repo_root, "guides", "intf.md"), "w", encoding="utf-8") as f:
+                f.write("# intf guide\n")
+            with open(os.path.join(repo_root, "guides", "impl.md"), "w", encoding="utf-8") as f:
+                f.write("# impl guide\n")
+            with open(os.path.join(scope_parts, "high", "alpha.md"), "w", encoding="utf-8") as f:
+                f.write("# alpha interface component\n")
+            with open(os.path.join(repo_root, "test_scope", app_info.DEFAULT_CONFIG_FILE), "w", encoding="utf-8") as f:
+                f.write(f'methodology = "{app_info.DEFAULT_ROLES_FILE}"\n')
+            with open(os.path.join(repo_root, app_info.DEFAULT_ROLES_FILE), "w", encoding="utf-8") as f:
+                f.write(
+                    "[methodology]\nname = 'python'\n\n"
+                    "[roles.low]\nname = 'low'\nsrc_pattern = '{unit_dir}/low/{unit_name}.pyi'\n\n"
+                    "[roles.pretense]\nname = 'pretense'\n"
+                    "src_pattern = '{unit_dir}/pretense/{unit_name}_pretense.py'\n"
+                    "active_component_types = ['interface', 'implementation']\n\n"
+                    "[roles.pretense.interface]\nguide = 'guides/intf.md'\n\n"
+                    "[roles.pretense.implementation]\nguide = 'guides/impl.md'\n"
+                )
+            self.ws_registry.roles.append(
+                roles.RoleDefinition(
+                    role_name="pretense",
+                    guide_path="",
+                    writable_file_patterns=["pretense/*_pretense.py"],
+                    readonly_file_patterns=["guides/*.md", "low/*.pyi"],
+                    feedback_role_deps=[],
+                    src_pattern="{unit_dir}/pretense/{unit_name}_pretense.py",
+                    active_component_types=["interface", "implementation"],
+                    component_overrides={
+                        "interface": roles.ComponentRoleOverrides(
+                            guide_path="guides/intf.md"
+                        ),
+                        "implementation": roles.ComponentRoleOverrides(
+                            guide_path="guides/impl.md"
+                        ),
+                    },
+                )
+            )
+            desc = self.provisioner.commission(
+                role_name="pretense",
+                dir_scope="test_scope",
+                repo_root=repo_root,
+            )
+            ws_dir = desc.workspace_dir
+            self.assertTrue(os.path.isfile(os.path.join(ws_dir, "guides", "intf.md")))
+            self.assertTrue(os.path.isfile(os.path.join(ws_dir, "guides", "impl.md")))
 
 
 if __name__ == "__main__":
